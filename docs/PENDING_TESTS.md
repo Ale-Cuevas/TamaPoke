@@ -1,25 +1,25 @@
 # Pending tests
 
-Written, compiled, unit-tested and rendered on a PC, but not yet run on a real
-ESP32-S3-Touch-AMOLED-2.16. Work through it top to bottom when the board
-arrives; the step-by-step checks are in [DEVICE_TESTS.md](DEVICE_TESTS.md).
+First run on a real ESP32-S3-Touch-AMOLED-2.16 on 2026-11-04: bring-up and
+game work. The open items are the ones not tried yet; the step-by-step checks
+are in [DEVICE_TESTS.md](DEVICE_TESTS.md).
 Write the result on each line: a tick, or what you saw.
 
 | # | Check | Details | Result |
 |---|---|---|---|
-| 1 | PMU found, voltages plausible (bring-up) | [Power](DEVICE_TESTS.md#power-axp2101) | |
-| 2 | Panel lights, colours right, no offset (bring-up) | [Display](DEVICE_TESTS.md#display-co5300-480x480) | |
-| 3 | Touch found, dots under the finger (bring-up) | [Touch](DEVICE_TESTS.md#touch-cst9220) | |
-| 4 | RTC keeps time across reset (bring-up) | [RTC](DEVICE_TESTS.md#rtc-pcf85063) | |
-| 5 | BOOT, USER, PWR register (bring-up) | [Buttons](DEVICE_TESTS.md#buttons) | |
-| 6 | microSD mounts over SDMMC 1-bit, or only over SPI (bring-up) | [microSD](DEVICE_TESTS.md#microsd-sdmmc-1-bit-spi-fallback) | |
-| 7 | Round UI centred, black border clean, 40 MHz QSPI clean | [Display and round frame](DEVICE_TESTS.md#display-and-round-frame) | |
-| 8 | Every button, swipe and dialog lands where drawn | [Touch](DEVICE_TESTS.md#touch) | |
-| 9 | Battery and streak status row inside the circle | [Status row](DEVICE_TESTS.md#status-row) | |
-| 10 | PWR key, dimming, light-sleep wake, battery reading | [Power, sleep, buttons](DEVICE_TESTS.md#power-sleep-buttons) | |
-| 11 | Save, RTC aging, sound, sprites from the card | [Save, time, sound, SD](DEVICE_TESTS.md#save-time-sound-sd) | |
+| 1 | PMU found, voltages plausible (bring-up) | [Power](DEVICE_TESTS.md#power-axp2101) | AXP2101 0x4A; VBUS 4.84 V, SYS 4.41 V, batt 4.20 V 90 % charging. USB unplug: pending |
+| 2 | Panel lights, colours right, no offset (bring-up) | [Display](DEVICE_TESTS.md#display-co5300-480x480) | ✓ colours, corners, text, 2 px border (a 1 px line doesn't show) |
+| 3 | Touch found, dots under the finger (bring-up) | [Touch](DEVICE_TESTS.md#touch-cst9220) | ✓ dots under the finger, corners (22,19)…(459,462), drag unbroken |
+| 4 | RTC keeps time across reset (bring-up) | [RTC](DEVICE_TESTS.md#rtc-pcf85063) | settime ✓, ticks; survives RESET: check in the game |
+| 5 | BOOT, USER, PWR register (bring-up) | [Buttons](DEVICE_TESTS.md#buttons) | ✓ all three up at boot, down/up on press |
+| 6 | microSD mounts over SDMMC 1-bit, or only over SPI (bring-up) | [microSD](DEVICE_TESTS.md#microsd-sdmmc-1-bit-spi-fallback) | ✓ SDMMC 1-bit (30 GB card, 303 files) |
+| 7 | Round UI centred, black border clean, 40 MHz QSPI clean | [Display and round frame](DEVICE_TESTS.md#display-and-round-frame) | ✓ at 40 MHz |
+| 8 | Every button, swipe and dialog lands where drawn | [Touch](DEVICE_TESTS.md#touch) | ✓ buttons, pet, swipes, keyboard, minigame; settings buttons and two fingers not tried |
+| 9 | Battery and streak status row inside the circle | [Status row](DEVICE_TESTS.md#status-row) | streak needs a 1+ day streak: pending |
+| 10 | PWR key, dimming, light-sleep wake, battery reading | [Power, sleep, buttons](DEVICE_TESTS.md#power-sleep-buttons) | ✓ PWR, 90 s dim, runs on battery; light-sleep wake, % vs bring-up: pending |
+| 11 | Save, RTC aging, sound, sprites from the card | [Save, time, sound, SD](DEVICE_TESTS.md#save-time-sound-sd) | ✓ save, clock across restart, sound, sprites; power-off aging, USB upload: pending |
 
 Questions only the board can answer:
-- Where is the USB-C port relative to the screen's top? ____
+- Where is the USB-C port relative to the screen's top? Bottom edge (buttons on top).
 - Does the RTC keep time with no USB and no battery? ____
 - Is 80 MHz QSPI also clean on this panel (about 10 ms faster per frame)? ____

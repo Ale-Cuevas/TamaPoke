@@ -130,7 +130,12 @@ void pollTouch() {
   const uint8_t points = touch.getPoint(x, y, touch.getSupportTouchPoint());
   for (uint8_t i = 0; i < points; i++) {
     Serial.printf("[touch] #%u x=%d y=%d\n", i, x[i], y[i]);
-    if (displayOk) panel->fillCircle(x[i], y[i], 4, i == 0 ? RGB565_CYAN : RGB565_MAGENTA);
+    if (displayOk) {
+      // 8x8 square on even coordinates (CO5300 window alignment, see the frame).
+      const int16_t dx = constrain(x[i] - 4, 0, BOARD_LCD_WIDTH - 8) & ~1;
+      const int16_t dy = constrain(y[i] - 4, 0, BOARD_LCD_HEIGHT - 8) & ~1;
+      panel->fillRect(dx, dy, 8, 8, i == 0 ? RGB565_CYAN : RGB565_MAGENTA);
+    }
   }
 }
 
@@ -146,7 +151,10 @@ void initImu() {
   imu.configGyroscope(SensorQMI8658::GYR_RANGE_256DPS, SensorQMI8658::GYR_ODR_896_8Hz, SensorQMI8658::LPF_MODE_0);
   imu.enableAccelerometer();
   imu.enableGyroscope();
-  Serial.printf("[imu] QMI8658 ok, chip id 0x%02X\n", imu.getChipID());
+  // SensorLib's getChipID() reads the revision register (0x01), not WHO_AM_I
+  // (0x00, always 0x05): print both so the log matches the datasheet.
+  Serial.printf("[imu] QMI8658 ok, who-am-i 0x%02X, revision 0x%02X\n",
+                (unsigned)imu.whoAmI(), (unsigned)imu.getChipID());
 }
 
 // Read-only: the RTC is never written unless asked to over serial, so a
@@ -285,7 +293,13 @@ void drawTestScreen() {
   const int16_t w = panel->width();
   const int16_t h = panel->height();
   const int16_t m = 24;
-  panel->drawRect(0, 0, w, h, RGB565_WHITE);
+  // 2 px white frame, not drawRect(): the CO5300 takes address windows that
+  // start on an even pixel and span an even count, so 1 px lines may not show.
+  const int16_t b = 2;
+  panel->fillRect(0, 0, w, b, RGB565_WHITE);      // top
+  panel->fillRect(0, h - b, w, b, RGB565_WHITE);  // bottom
+  panel->fillRect(0, 0, b, h, RGB565_WHITE);      // left
+  panel->fillRect(w - b, 0, b, h, RGB565_WHITE);  // right
   panel->fillRect(0, 0, m, m, RGB565_RED);          // top-left
   panel->fillRect(w - m, 0, m, m, RGB565_GREEN);    // top-right
   panel->fillRect(0, h - m, m, m, RGB565_BLUE);     // bottom-left
