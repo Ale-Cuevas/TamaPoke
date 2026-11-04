@@ -186,6 +186,25 @@ class TestSketchSanity(unittest.TestCase):
                          'llaves descompensadas en TamaPoke.ino')
 
 
+class TestImuReplay(unittest.TestCase):
+    """imu_replay.py lee lo que saca IMULOG tal cual, sin limpiarlo a mano."""
+
+    def test_lee_una_captura_de_imulog_con_su_marca_de_fin(self):
+        import imu_replay
+        fd, path = tempfile.mkstemp(suffix='.csv')
+        try:
+            with os.fdopen(fd, 'w') as fh:
+                fh.write('t_ms,ax_mg,ay_mg,az_mg,steps\n'
+                         '42044,-49,-32,1020,0\n'
+                         'cargado /mons/ps007.bin (106 KB)\n'
+                         '42061,-50,-31,1016,0\n'
+                         '[imulog] end\n')
+            self.assertEqual(imu_replay.load(path),
+                             [(42.044, -0.049, -0.032, 1.02), (42.061, -0.05, -0.031, 1.016)])
+        finally:
+            os.remove(path)
+
+
 
 class TestBuffersDeTexto(unittest.TestCase):
     """Cada snprintf(buf, sizeof(buf), T(S_x), ...) cabe en su buffer en TODOS los idiomas.
@@ -199,7 +218,7 @@ class TestBuffersDeTexto(unittest.TestCase):
 
       %u / %d  -> 5 cifras (todos los argumentos son de 16 bits o menos)
       %lu      -> 10 cifras
-      %s       -> lo que declare ARGS_S; un %s sin declarar hace fallar el
+      %s       -> lo que declare ARGS_S (nombre, apodo, baya, objeto...); un %s sin declarar hace fallar el
                   test, para que quien lo anada piense cuanto puede ocupar
     """
 
@@ -209,6 +228,7 @@ class TestBuffersDeTexto(unittest.TestCase):
         'S_INFO_FMT': ('baya',),
         'S_FAREWELL_BTN': ('nombre_o_apodo',),
         'S_RUNAWAY_BTN': ('nombre_o_apodo',),
+        'S_USE_FMT': ('objeto',),
     }
     CIFRAS = {'u': 5, 'd': 5, 'lu': 10}
     ESPEC = re.compile(r'%0?\d*(lu|u|d|s)')
@@ -272,6 +292,8 @@ class TestBuffersDeTexto(unittest.TestCase):
             elif arg == 'baya':
                 total += max(self.bytes_literal(self.LIT[b][li]) for b in
                              ('S_BERRY_UNK', 'S_BERRY_RED', 'S_BERRY_BLUE', 'S_BERRY_GREEN'))
+            elif arg == 'objeto':  # nombre de un objeto de la mochila
+                total += max(self.bytes_literal(self.LIT[o][li]) for o in self.LIT if o.startswith('S_IT_'))
         return total
 
     def test_cada_texto_formateado_cabe_en_su_buffer_en_todos_los_idiomas(self):

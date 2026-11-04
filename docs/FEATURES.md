@@ -9,11 +9,15 @@ except where a dependency is named.
 
 | Task | What | Needs | Release |
 |---|---|---|---|
-| [1. Steps](#task-1-steps) | Steps counted from the IMU feed the pet: walk care and found items | — | 1.20 |
-| [2. Easter eggs](#task-2-easter-eggs) | Shake to wake, face-down lights out, tilt & slide | Task 1's IMU module | 1.21 |
+| [1. Steps](#task-1-steps) | Steps counted from the IMU feed the pet: walk care and found items | — | 1.20 (built) |
+| [2. Easter eggs](#task-2-easter-eggs) | Shake to wake, face-down lights out, tilt & slide | Task 1's IMU module | 1.20 (built, with Task 1) |
 | [3. Link](#task-3-link-playdates-and-battles) | Two nearby boards meet for playdates and battles | 3c gifts need Task 1's Backpack | 1.22+ |
 
-Written 2026-11-04. Nothing here is implemented yet. Every gameplay number is a
+Written 2026-11-04. **Tasks 1 and 2 are built in v1.20** (one branch,
+`feature/step-counting`, one release): host-tested and rendered, not yet checked
+on the board (`DEVICE_TESTS.md`, Steps and Motion). Where the build had to
+decide something this spec left open, it says so under "Built in v1.20" at the
+end of each task. Task 3 is not started. Every gameplay number is a
 **starting value** held in one named constant, meant to be tuned after playing
 with it; the constants tables list them. Requirements are numbered (FR-1.1, …)
 so commits and tests can point at them.
@@ -311,6 +315,41 @@ pending, FIFO reads and samples per second, acceleration), `IMULOG <s>`
 - Should steps taken while the pet sleeps count toward finds? This spec says
   no (the pet is asleep), but players who walk at night lose them.
 
+### Built in v1.20
+
+Files: `steps.h` (`StepCounter`), `motion.h` (the detectors and `ImuPipeline`,
+which feeds them in order), `imu.cpp` / `imu.h` (QMI8658 setup, the chunked FIFO
+reader, timestamps), `Pet::addSteps()` and the Backpack in `pet.cpp`, the WALK
+page and the popups in `TamaPoke.ino`. Decisions the spec left open:
+- **Port fidelity:** the C++ counter gives the prototype's counts on every
+  capture, ±1 (`test_steps.cpp`). Accuracy against hand-counted steps is still
+  the device test's.
+- **Timestamps:** samples are spread evenly between the previous read and this
+  one; after a FIFO overflow or a gap that doesn't match the sample count, they
+  are laid back from now at the measured 59.5 Hz, never before the last one.
+- **WALK page** shows the pet's steps plus those the IMU counted but hasn't
+  handed over yet (up to 30 s), so it moves while you look at it.
+- **Goal:** the banner and the streak day are given whatever the pet is doing
+  (the streak still needs a hatched pet, as `registerCare()` does); the +10 JOY
+  and the bonus find only with the pet hatched and awake, like every walk reward.
+- **Finds past the daily cap** don't carry over: the steps toward the next find
+  start from 0 once the cap is reached.
+- **Backpack full:** the find still counts; the popup says the Backpack is full
+  and the item is lost.
+- **Items:** using one is a tap, so it saves at once and counts as a day of care.
+  A Golden Berry closes the card so you see the pet eat it. Vitamins can't be
+  used once that training is at 100, so none are wasted.
+- **Shiny Charm:** `Pet::shinyOdds(charm)` holds the odds formula, so the ×3 and
+  the 1/8 floor are tested directly; `newEgg()` consumes the charm.
+- **Saves:** every `addSteps()` with steps sets `pendingSave`; the loop flushes it
+  once the screen dims, as before (NVS rewrites only the keys that changed).
+- **Bond cap:** `bondDay` resets the daily cap in `addBond()` and
+  `registerCare()`; `bondToday` is saved too, so a restart doesn't reopen it.
+- **400 kHz I2C** is `BOARD_I2C_HZ` in the board header, set right after
+  `Wire.begin()` (SensorLib's `begin()` doesn't change the clock).
+- **Hardware pedometer switch:** `IMU_HW_PEDOMETER` in `imu.cpp` turns the chip's
+  engine back on and prints its count next to ours in the `IMU` command.
+
 ## Task 2: Easter eggs
 
 ### Goal
@@ -458,6 +497,25 @@ README: a `<details>` block, "Secrets (spoilers)", with the three tricks.
   (Task 1 measures it)? If it does, read every 2 s; the FIFO holds about 2.1 s.
 - Should face-down in the daytime also put the pet down for a nap? This spec
   says no.
+
+### Built in v1.20
+
+- **Where a shake does something to the pet:** only on the home screen. With the
+  stat card, gallery, keyboard or clock open it only keeps the screen awake (the
+  pet isn't on screen), as in the minigame, the bag, an evolution or a ceremony.
+- **Face-down** is ignored during the starter choice, the minigame, the bag, an
+  evolution and a ceremony. Picking the board up lights the screen whenever the
+  detector had seen it face-down, also when the screen had dimmed on its own.
+- **Face-down detector:** besides Z ≤ −0.8 g and X, Y within 0.3 g, "still" means
+  |a| within 0.15 g of 1 g for the whole 3 s; leaving needs Z above −0.5 g for
+  120 ms, so a knock on the table doesn't count as a pick-up.
+- **Tilt** uses a 250 ms low-pass, a 5° hysteresis on both thresholds, and the
+  500 ms hold for starting to walk or slide (going level, or from sliding back to
+  walking, is immediate). The pet only follows it when it is happy and nothing
+  else is going on (not eating, sad, asleep, bathing or showing an emote).
+  Walking downhill is 50 px/s, sliding 150 px/s.
+- **Emotes** (`Pet::emote()`): the anger mark, the dizzy stars and wobble and the
+  egg wobble last `EMOTE_MS`; the status line says "Grumpy!" / "So dizzy...".
 
 ## Task 3: Link: playdates and battles
 

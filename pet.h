@@ -34,6 +34,40 @@ enum : uint8_t { CER_NONE = 0, CER_FAREWELL, CER_RUNAWAY, CER_RELEASE };
 
 enum PetMood : uint8_t { MOOD_HAPPY, MOOD_SAD, MOOD_EATING, MOOD_SLEEPING };
 
+// --- pasos (docs/FEATURES.md, Tarea 1). Valores de partida, para afinar jugando.
+#define STEP_GOAL 3000            // meta diaria
+#define STEPS_PER_JOY 100         // +1 felicidad cada 100 pasos...
+#define STEP_JOY_DAY_CAP 30       // ...como mucho +30 al dia
+#define STEPS_PER_WEIGHT 250      // -1 de peso cada 250 pasos
+#define STEPS_PER_BOND 1000       // +1 de vinculo cada 1000 (con el tope diario de addBond)
+#define GOAL_JOY 10               // premio de la meta
+#define FIND_MIN_STEPS 800        // pasos premiados entre dos hallazgos (al azar entre MIN y MAX)
+#define FIND_MAX_STEPS 1200
+#define FINDS_PER_DAY 5           // tope de hallazgos al dia (el de la meta incluido)
+#define ODDS_BERRY 55             // probabilidad de cada objeto (%)
+#define ODDS_VITAMIN 35
+#define ODDS_CHARM 10
+#define ITEM_MAX 9                // tope de cada objeto en la mochila
+#define GOLDEN_FOOD 50            // baya dorada
+#define GOLDEN_JOY 15
+#define VITAMIN_TRAIN 3           // vitaminas: +3 de entrenamiento
+#define CHARM_SHINY_MULT 3        // amuleto: el siguiente huevo, x3 de probabilidad shiny
+#define FOUND_QUEUE 6             // hallazgos que esperan a que se encienda la pantalla
+
+// objetos de la mochila (del jugador). El amuleto no se usa a mano: se lleva.
+enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_COUNT };
+
+// --- trucos del IMU (Tarea 2)
+#define GRUMPY_JOY 5                 // despertarlo agitando: -5 felicidad...
+#define GRUMPY_COOLDOWN_MS 60000UL   // ...y otro despertar en 60 s no resta mas
+#define EMOTE_MS 3000UL              // enfado, mareo, huevo que se tambalea
+#define DIZZY_SHAKES 3               // 3 sacudidas en 2 minutos...
+#define DIZZY_WINDOW_MS 120000UL
+#define DIZZY_JOY 3                  // ...restan 3 de felicidad...
+#define DIZZY_COOLDOWN_MS 600000UL   // ...como mucho cada 10 minutos
+
+enum : uint8_t { EMOTE_NONE = 0, EMOTE_ANGRY, EMOTE_DIZZY, EMOTE_WOBBLE };
+
 // medallas del individuo (bitmask)
 enum : uint16_t {
   MED_LV10 = 1 << 0, MED_LV25 = 1 << 1, MED_LV50 = 1 << 2,
@@ -78,6 +112,14 @@ public:
   uint16_t lastMilestone = 0;  // hito de racha ya celebrado
   uint16_t gameHi = 0;     // record del minijuego (del jugador)
   uint16_t strHi = 0;      // record de golpes al saco
+  // pasos (del jugador: sobreviven a un huevo nuevo y a un reinicio)
+  uint32_t stepsToday = 0;   // desde la medianoche local (el mismo dia que la racha)
+  uint32_t stepsTotal = 0;   // de toda la vida
+  uint32_t stepDay = 0;      // dia al que pertenecen stepsToday y los topes diarios
+  uint8_t findsToday = 0;    // hallazgos de hoy (FINDS_PER_DAY como mucho)
+  uint8_t stepJoyToday = 0;  // felicidad ganada hoy caminando (STEP_JOY_DAY_CAP)
+  uint32_t goalDay = 0;      // ultimo dia en que se alcanzo la meta
+  uint8_t items[IT_COUNT] = { 0 };  // mochila; items[IT_CHARM] es 0 o 1
 
   void begin();                 // carga estado de NVS (o crea el primer huevo)
   void update(uint32_t nowMs);  // llamar en cada loop()
@@ -162,6 +204,36 @@ public:
   bool showMedal() const { return timeLeft(medalUntil) > 0; }
   bool showMilestone() const { return timeLeft(milestoneUntil) > 0; }
   int careBonus() const;  // mejora del huevo por racha + vinculo
+  int shinyOdds(bool charm) const;  // denominador de la tirada shiny del huevo
+
+  // --- pasos y mochila (Tarea 1). addSteps() nunca escribe en flash: marca el
+  // guardado pendiente y el loop lo vuelca con la pantalla atenuada.
+  void addSteps(uint32_t n, uint32_t day);  // n pasos contados; day = dayNumber() (0 = sin reloj)
+  uint32_t dayNumber() const { return today(); }
+  uint32_t stepsOn(uint32_t day) const { return day == stepDay ? stepsToday : 0; }  // "hoy" visto desde day
+  bool goalDoneOn(uint32_t day) const { return day && goalDay == day; }
+  // efecto de usar un objeto de la mochila (false = no se pudo: dormido, huevo, no hay)
+  bool canUseItem(uint8_t it) const;
+  bool useItem(uint8_t it);
+  uint8_t itemCount() const;  // objetos en la mochila, amuleto incluido
+  // hallazgos pendientes de mostrar (cola en RAM, se pierde al reiniciar; el
+  // objeto ya esta en la mochila). full = la mochila estaba llena.
+  bool hasFound() const { return foundN > 0; }
+  uint8_t peekFound(bool *full = nullptr) const {
+    if (full) *full = foundN && foundFull[0];
+    return foundN ? foundQ[0] : (uint8_t)IT_COUNT;
+  }
+  void popFound();
+  // banner de la meta pendiente de mostrar (lo recoge la UI con la pantalla encendida)
+  bool takeGoalBanner() { bool g = goalBanner; goalBanner = false; return g; }
+
+  // --- trucos del IMU (Tarea 2): sin guardado inmediato
+  void wakeGrumpy();     // agitar con el bicho dormido: se despierta de mal humor
+  void shaken();         // agitar con el bicho despierto: se marea (o el huevo se tambalea)
+  void sleepDeferred();  // boca abajo de noche: a dormir (toggleLight sin guardar al momento)
+  uint8_t emote() const { return timeLeft(emoteUntil) ? emoteKind : (uint8_t)EMOTE_NONE; }
+  float emoteT() const { return 1.0f - (float)timeLeft(emoteUntil) / (float)EMOTE_MS; }
+  void clearEmote() { emoteUntil = 0; }  // (renderizador del PC: cada escena empieza limpia)
 
   // guardado periodico diferido: tick() marca pendiente y el loop lo vuelca
   // cuando la pantalla esta atenuada/apagada (la escritura a flash congela
@@ -190,13 +262,35 @@ private:
   uint16_t goodTicks = 0;  // racha bien cuidado: forja la DEF
   uint32_t ceremonyUntil = 0;
   uint8_t bondToday = 0;       // tope diario de subida de vinculo
+  uint32_t bondDay = 0;        // dia de bondToday: el tope vuelve a 0 a medianoche
   uint32_t medalUntil = 0;     // celebracion de medalla en pantalla
   uint32_t milestoneUntil = 0; // celebracion de hito de racha
+  // pasos: restos hacia el siguiente punto de cada premio (nada se pierde entre lecturas)
+  uint16_t joyRem = 0, weightRem = 0, bondRem = 0;
+  uint16_t findRem = 0;        // pasos premiados hacia el siguiente hallazgo
+  uint16_t findAt = 0;         // ...y a cuantos toca (FIND_MIN..FIND_MAX; 0 = sin sortear)
+  uint8_t foundQ[FOUND_QUEUE];
+  bool foundFull[FOUND_QUEUE];
+  uint8_t foundN = 0;
+  bool goalBanner = false;
+  // trucos del IMU
+  uint8_t emoteKind = EMOTE_NONE;
+  uint32_t emoteUntil = 0;
+  uint32_t lastGrumpy = 0;     // millis del ultimo despertar que resto felicidad...
+  bool grumpied = false;       // ...si lo hubo
+  uint32_t shakeAt[DIZZY_SHAKES] = { 0 };  // ultimas sacudidas con el bicho despierto
+  uint8_t shakeN = 0;
+  uint32_t lastDizzyPenalty = 0;
+  bool dizzyPenalized = false;
 
   uint32_t today() const { return lastSeenEpoch ? lastSeenEpoch / 86400 : 0; }
-  void registerCare();   // primer cuidado del dia: racha + vinculo
+  void registerCare(bool saveNow = true);   // primer cuidado del dia: racha + vinculo
   void addBond(uint8_t amt);
-  void checkMedals();
+  void checkMedals(bool saveNow = true);
+  void persist(bool now) { if (now) save(); else pendingSave = true; }
+  void rollStepDay(uint32_t day);
+  void findItem();
+  void startEmote(uint8_t kind) { emoteKind = kind; emoteUntil = millis() + EMOTE_MS; }
   void tick();
   void hatch();
   void registerSpecies(int16_t dex);

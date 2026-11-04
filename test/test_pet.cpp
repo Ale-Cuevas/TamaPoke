@@ -936,3 +936,442 @@ TEST(save, el_autoguardado_se_marca_y_se_vuelca) {
   p.flushSave();
   CHECK(!p.savePending());
 }
+
+// ---------------------------------------------------------------- pasos (Tarea 1)
+static const uint32_t DIA = 20000;  // un dia cualquiera (numero de dia unix)
+
+// mascota recien nacida con reloj, sin hallazgos ni cacas por medio
+static void makeWalker(Pet &p, int16_t dex = 4) {
+  makePet(p, dex);
+  p.setClock(DIA * 86400 + 10 * 3600);
+  p.flushSave();
+}
+
+// lo que hay ahora mismo en la "NVS" (un reinicio lo leeria asi)
+static uint32_t savedStepsToday() {
+  Pet b;
+  b.begin();
+  return b.stepsToday;
+}
+
+TEST(steps, felicidad_peso_y_vinculo_por_pasos_con_restos) {
+  Pet p;
+  makeWalker(p);
+  setStats(p, 80, 50, 80, 100);
+  p.weight = 20;
+  mockForceRandom(400);  // primer hallazgo a 1200 pasos: lejos
+  p.addSteps(99, DIA);
+  CHECK_EQ(p.joy, (uint8_t)50);  // 99: aun no
+  p.addSteps(1, DIA);
+  CHECK_EQ(p.joy, (uint8_t)51);  // el resto no se pierde entre lecturas
+  p.addSteps(150, DIA);          // 250 en total
+  CHECK_EQ(p.joy, (uint8_t)52);
+  CHECK_EQ(p.weight, (uint8_t)19);
+  CHECK_EQ(p.bond, (uint8_t)0);
+  p.addSteps(750, DIA);          // 1000 en total
+  CHECK_EQ(p.bond, (uint8_t)1);
+  CHECK_EQ(p.weight, (uint8_t)16);
+  CHECK_EQ(p.joy, (uint8_t)60);
+  CHECK_EQ(p.stepsToday, (uint32_t)1000);
+  CHECK_EQ(p.stepsTotal, (uint32_t)1000);
+  CHECK_EQ(p.energy, (uint8_t)80);  // caminar no gasta energia
+}
+
+TEST(steps, la_felicidad_por_pasos_tiene_tope_diario) {
+  Pet p;
+  makeWalker(p);
+  setStats(p, 80, 10, 80, 100);
+  mockForceRandom(400);
+  for (int i = 0; i < 40; i++) p.addSteps(100, DIA);  // 4000 pasos: 40 puntos, tope 30
+  CHECK_EQ(p.stepJoyToday, (uint8_t)STEP_JOY_DAY_CAP);
+  CHECK_EQ(p.joy, (uint8_t)(10 + STEP_JOY_DAY_CAP + GOAL_JOY));
+}
+
+TEST(steps, huevo_o_dormido_cuentan_pasos_sin_premio) {
+  mockNvsReset();
+  Pet egg;
+  egg.begin();
+  egg.chooseStarter(4);
+  egg.setClock(DIA * 86400);
+  egg.addSteps(1500, DIA);
+  CHECK(egg.isEgg());
+  CHECK_EQ(egg.stepsToday, (uint32_t)1500);
+  CHECK_EQ(egg.findsToday, (uint8_t)0);
+
+  Pet p;
+  makeWalker(p);
+  setStats(p, 80, 50, 80, 100);
+  p.toggleLight();  // a dormir
+  p.addSteps(2000, DIA);
+  CHECK_EQ(p.joy, (uint8_t)50);
+  CHECK_EQ(p.findsToday, (uint8_t)0);
+  CHECK_EQ(p.stepsToday, (uint32_t)2000);
+  CHECK_EQ(p.stepsTotal, (uint32_t)2000);
+}
+
+TEST(steps, a_medianoche_hoy_vuelve_a_cero_y_el_total_no) {
+  Pet p;
+  makeWalker(p);
+  setStats(p, 80, 10, 80, 100);
+  mockForceRandom(0);
+  for (int i = 0; i < 40; i++) p.addSteps(100, DIA);  // agota felicidad y hallazgos
+  CHECK_EQ(p.stepJoyToday, (uint8_t)STEP_JOY_DAY_CAP);
+  CHECK_EQ(p.findsToday, (uint8_t)FINDS_PER_DAY);
+  p.addSteps(10, DIA + 1);
+  CHECK_EQ(p.stepsToday, (uint32_t)10);
+  CHECK_EQ(p.stepsTotal, (uint32_t)4010);
+  CHECK_EQ(p.findsToday, (uint8_t)0);
+  CHECK_EQ(p.stepJoyToday, (uint8_t)0);
+  CHECK_EQ(p.stepsOn(DIA + 1), (uint32_t)10);
+  CHECK_EQ(p.stepsOn(DIA + 2), (uint32_t)0);  // otro dia sin pasos aun: 0
+  p.addSteps(0, DIA + 2);                     // cero pasos tambien pasan el dia
+  CHECK_EQ(p.stepsToday, (uint32_t)0);
+}
+
+TEST(steps, la_meta_salta_una_vez_al_dia_con_regalo_y_racha) {
+  Pet p;
+  makeWalker(p);
+  setStats(p, 80, 40, 80, 100);
+  mockForceRandom(400);  // hallazgos cada 1200 pasos
+  p.addSteps(2999, DIA);
+  CHECK(!p.goalDoneOn(DIA));
+  CHECK_EQ(p.findsToday, (uint8_t)2);
+  CHECK_EQ(p.streak, (uint16_t)0);
+  uint8_t joy = p.joy;
+  p.flushSave();
+  p.addSteps(1, DIA);
+  CHECK(p.goalDoneOn(DIA));
+  CHECK(p.takeGoalBanner());
+  CHECK(!p.takeGoalBanner());
+  CHECK_EQ(p.joy, (uint8_t)(joy + 1 + GOAL_JOY));  // el paso 3000 completa un punto, mas la meta
+  CHECK_EQ(p.findsToday, (uint8_t)3);  // el regalo de la meta
+  CHECK_EQ(p.streak, (uint16_t)1);     // cuenta como dia de cuidado
+  CHECK_MSG(p.savePending() && savedStepsToday() < 3000, "la meta no escribe en flash al momento");
+  joy = p.joy;
+  p.addSteps(1000, DIA);
+  CHECK(!p.takeGoalBanner());  // no repite el mismo dia
+  CHECK_EQ(p.joy, (uint8_t)joy);
+  p.setClock((DIA + 1) * 86400 + 3600);  // el reloj (lastSeenEpoch) y el dia van juntos
+  p.addSteps(3000, DIA + 1);
+  CHECK(p.takeGoalBanner());   // al dia siguiente, otra vez
+  CHECK_EQ(p.streak, (uint16_t)2);
+}
+
+TEST(steps, hallazgo_al_umbral_sorteado) {
+  Pet p;
+  makeWalker(p);
+  mockForceRandom(0);  // umbral 800, baya dorada
+  p.addSteps(799, DIA);
+  CHECK(!p.hasFound());
+  p.addSteps(1, DIA);
+  CHECK(p.hasFound());
+  bool full = true;
+  CHECK_EQ(p.peekFound(&full), (uint8_t)IT_GOLDEN);
+  CHECK(!full);
+  CHECK_EQ(p.items[IT_GOLDEN], (uint8_t)1);
+  p.popFound();
+  CHECK(!p.hasFound());
+  p.addSteps(1600, DIA);  // dos mas en una sola lectura: se encolan
+  CHECK_EQ(p.findsToday, (uint8_t)3);
+  CHECK(p.hasFound());
+  p.popFound();
+  CHECK(p.hasFound());
+  p.popFound();
+  CHECK(!p.hasFound());
+}
+
+TEST(steps, tope_de_hallazgos_al_dia) {
+  Pet p;
+  makeWalker(p);
+  mockForceRandom(0);
+  p.addSteps(2900, DIA);  // 3 hallazgos, sin la meta
+  p.addSteps(20000, DIA + 1);  // otro dia: cap de 5, el regalo de la meta incluido
+  CHECK_EQ(p.findsToday, (uint8_t)FINDS_PER_DAY);
+  CHECK_EQ(p.itemCount(), (uint8_t)(3 + FINDS_PER_DAY));
+}
+
+TEST(steps, probabilidades_de_cada_objeto) {
+  Pet p;
+  makeWalker(p);
+  mockForceRandom(54);  // < 55: baya
+  p.addSteps(FIND_MIN_STEPS + 54, DIA);
+  CHECK_EQ(p.items[IT_GOLDEN], (uint8_t)1);
+  mockForceRandom(60);  // 55..89: vitamina (random(3) forzado = 2: carburante)
+  p.addSteps(FIND_MIN_STEPS + 60, DIA);
+  CHECK_EQ(p.items[IT_CARBOS], (uint8_t)1);
+  mockForceRandom(95);  // 90..99: amuleto
+  p.addSteps(FIND_MIN_STEPS + 95, DIA);
+  CHECK_EQ(p.items[IT_CHARM], (uint8_t)1);
+  p.addSteps(FIND_MIN_STEPS + 95, DIA + 1);  // el segundo amuleto se vuelve baya (otro dia: sin la meta)
+  CHECK_EQ(p.items[IT_CHARM], (uint8_t)1);
+  CHECK_EQ(p.items[IT_GOLDEN], (uint8_t)2);
+}
+
+TEST(steps, las_tres_vitaminas_salen_con_el_azar_real) {
+  Pet p;
+  makeWalker(p);
+  for (uint32_t d = 0; d < 60; d++) p.addSteps(6000, DIA + d);
+  CHECK(p.items[IT_PROTEIN] > 0);
+  CHECK(p.items[IT_IRON] > 0);
+  CHECK(p.items[IT_CARBOS] > 0);
+}
+
+TEST(steps, la_mochila_tiene_tope_por_objeto) {
+  Pet p;
+  makeWalker(p);
+  p.items[IT_GOLDEN] = ITEM_MAX;
+  mockForceRandom(0);
+  p.addSteps(800, DIA);
+  CHECK_EQ(p.items[IT_GOLDEN], (uint8_t)ITEM_MAX);
+  bool full = false;
+  CHECK_EQ(p.peekFound(&full), (uint8_t)IT_GOLDEN);
+  CHECK(full);
+}
+
+TEST(steps, addSteps_nunca_escribe_en_flash) {
+  Pet p;
+  makeWalker(p);
+  CHECK(!p.savePending());
+  mockForceRandom(0);
+  p.addSteps(900, DIA);  // con hallazgo
+  CHECK(p.savePending());
+  CHECK_EQ(savedStepsToday(), (uint32_t)0);
+  p.flushSave();
+  CHECK_EQ(savedStepsToday(), (uint32_t)900);
+}
+
+TEST(items, baya_dorada_y_vitaminas) {
+  Pet p;
+  makeWalker(p);
+  setStats(p, 30, 40, 80, 100);
+  p.items[IT_GOLDEN] = 1;
+  p.items[IT_PROTEIN] = 1;
+  p.items[IT_IRON] = 1;
+  p.items[IT_CARBOS] = 1;
+  CHECK(p.useItem(IT_GOLDEN));
+  CHECK_EQ(p.fullness, (uint8_t)(30 + GOLDEN_FOOD));
+  CHECK_EQ(p.joy, (uint8_t)(40 + GOLDEN_JOY));
+  CHECK(p.showHeart());
+  CHECK_EQ(p.items[IT_GOLDEN], (uint8_t)0);
+  CHECK(!p.useItem(IT_GOLDEN));  // ya no queda
+  uint8_t a = p.trAtk, d = p.trDef, s = p.trSpe;
+  CHECK(p.useItem(IT_PROTEIN));
+  CHECK(p.useItem(IT_IRON));
+  CHECK(p.useItem(IT_CARBOS));
+  CHECK_EQ(p.trAtk, (uint8_t)(a + VITAMIN_TRAIN));
+  CHECK_EQ(p.trDef, (uint8_t)(d + VITAMIN_TRAIN));
+  CHECK_EQ(p.trSpe, (uint8_t)(s + VITAMIN_TRAIN));
+  CHECK_EQ(p.itemCount(), (uint8_t)0);
+}
+
+TEST(items, topes_y_cuando_no_se_pueden_usar) {
+  Pet p;
+  makeWalker(p);
+  p.items[IT_PROTEIN] = 2;
+  p.trAtk = 99;
+  CHECK(p.useItem(IT_PROTEIN));
+  CHECK_EQ(p.trAtk, (uint8_t)100);
+  CHECK(!p.canUseItem(IT_PROTEIN));  // entrenamiento al maximo: no se gasta
+  CHECK_EQ(p.items[IT_PROTEIN], (uint8_t)1);
+  p.items[IT_CHARM] = 1;
+  CHECK(!p.useItem(IT_CHARM));  // el amuleto no se usa a mano
+  p.items[IT_GOLDEN] = 1;
+  p.toggleLight();
+  CHECK(!p.useItem(IT_GOLDEN));  // dormido no come
+  CHECK(!p.useItem(IT_COUNT));
+}
+
+TEST(items, el_amuleto_lo_gasta_el_siguiente_huevo_y_no_el_inicial) {
+  // primera partida: el amuleto no se toca al elegir inicial
+  mockNvsReset();
+  Pet a;
+  a.items[IT_CHARM] = 1;
+  a.begin();  // newEgg() del inicial
+  CHECK(a.awaitingStarter());
+  CHECK_EQ(a.items[IT_CHARM], (uint8_t)1);
+
+  Pet p;
+  makeWalker(p);
+  p.items[IT_CHARM] = 1;
+  p.release();
+  mockAdvanceMillis(CEREMONY_MS + 1);
+  p.update(millis());  // fin de la ceremonia: huevo nuevo
+  CHECK(p.isEgg());
+  CHECK_EQ(p.items[IT_CHARM], (uint8_t)0);
+
+  // x3: 1/16 en vez de 1/48 tras una liberacion, sin racha ni vinculo
+  CHECK_EQ(p.shinyOdds(false), 48);
+  CHECK_EQ(p.shinyOdds(true), 16);
+  p.lastEnd = CER_FAREWELL;  // 1/24 -> 1/8, el suelo de siempre
+  CHECK_EQ(p.shinyOdds(true), 8);
+  p.streak = 30;             // racha y vinculo a tope: 1/10, y con amuleto el suelo
+  p.bond = 100;
+  CHECK_EQ(p.shinyOdds(false), 10);
+  CHECK_EQ(p.shinyOdds(true), 8);
+  // la tirada usa ese denominador: con 0 forzado sale shiny
+  p.items[IT_CHARM] = 1;
+  mockForceRandom(0);
+  p.newEgg();
+  mockClearForcedRandom();
+  CHECK_EQ(p.items[IT_CHARM], (uint8_t)0);
+  p.eggTap(); p.eggTap(); p.eggTap();
+  CHECK(p.shiny);
+}
+
+TEST(items, la_simulacion_de_huevos_no_gasta_el_amuleto) {
+  Pet p;
+  makeWalker(p);
+  p.items[IT_CHARM] = 1;
+  for (int i = 0; i < 20; i++) p.pickEggSpecies();  // comando EGGS
+  CHECK_EQ(p.items[IT_CHARM], (uint8_t)1);
+}
+
+TEST(steps, mochila_y_pasos_sobreviven_a_un_reinicio_y_a_un_huevo_nuevo) {
+  Pet a;
+  makeWalker(a);
+  mockForceRandom(0);
+  a.addSteps(1234, DIA);
+  a.items[IT_IRON] = 4;
+  a.flushSave();
+
+  Pet b;
+  b.begin();
+  CHECK_EQ(b.stepsToday, (uint32_t)1234);
+  CHECK_EQ(b.stepsTotal, (uint32_t)1234);
+  CHECK_EQ(b.stepDay, DIA);
+  CHECK_EQ(b.findsToday, (uint8_t)1);
+  CHECK_EQ(b.items[IT_GOLDEN], (uint8_t)1);
+  CHECK_EQ(b.items[IT_IRON], (uint8_t)4);
+  b.release();
+  mockAdvanceMillis(CEREMONY_MS + 1);
+  b.update(millis());  // huevo nuevo
+  CHECK(b.isEgg());
+  CHECK_EQ(b.stepsToday, (uint32_t)1234);
+  CHECK_EQ(b.items[IT_IRON], (uint8_t)4);
+}
+
+TEST(steps, los_restos_sobreviven_a_un_reinicio) {
+  Pet a;
+  makeWalker(a);
+  setStats(a, 80, 50, 80, 100);
+  mockForceRandom(400);
+  a.addSteps(1234, DIA);  // 12 puntos de felicidad y 34 pasos de resto
+  CHECK_EQ(a.joy, (uint8_t)62);
+  a.flushSave();
+  Pet b;
+  b.begin();
+  b.addSteps(66, DIA);    // 34 + 66 = otro punto
+  CHECK_EQ(b.joy, (uint8_t)63);
+  CHECK_EQ(b.stepJoyToday, (uint8_t)13);
+}
+
+TEST(steps, un_guardado_antiguo_carga_con_todo_a_cero) {
+  Pet a;
+  makePet(a, 4);  // guardado de la v1.19: sin claves de pasos
+  Pet b;
+  b.begin();
+  CHECK_EQ(b.stepsToday, (uint32_t)0);
+  CHECK_EQ(b.stepsTotal, (uint32_t)0);
+  CHECK_EQ(b.itemCount(), (uint8_t)0);
+}
+
+TEST(care, el_tope_diario_de_vinculo_vuelve_a_cero_a_medianoche) {
+  Pet p;
+  makeWalker(p);
+  for (int i = 0; i < 20; i++) p.play();
+  CHECK_EQ(p.bond, (uint8_t)24);  // 20 del tope + 4 del primer cuidado del dia
+  p.setClock((DIA + 1) * 86400 + 3600);
+  p.addSteps(1000, DIA + 1);  // +1 de vinculo caminando, sin cuidado previo hoy
+  CHECK_EQ(p.bond, (uint8_t)25);
+}
+
+// ---------------------------------------------------------------- trucos del IMU (Tarea 2)
+TEST(imu, agitarlo_dormido_lo_despierta_de_mal_humor) {
+  Pet p;
+  makeWalker(p);
+  setStats(p, 80, 50, 80, 100);
+  p.toggleLight();
+  uint16_t streak = p.streak;
+  p.wakeGrumpy();
+  CHECK(!p.sleeping);
+  CHECK_EQ(p.joy, (uint8_t)(50 - GRUMPY_JOY));
+  CHECK_EQ(p.emote(), (uint8_t)EMOTE_ANGRY);
+  CHECK_EQ(p.streak, streak);  // sin credito de cuidado
+  mockAdvanceMillis(EMOTE_MS + 1);
+  CHECK_EQ(p.emote(), (uint8_t)EMOTE_NONE);
+  // otra vez antes de 60 s: no resta mas
+  p.sleepDeferred();
+  p.wakeGrumpy();
+  CHECK_EQ(p.joy, (uint8_t)(50 - GRUMPY_JOY));
+  mockAdvanceMillis(GRUMPY_COOLDOWN_MS);
+  p.sleepDeferred();
+  p.wakeGrumpy();
+  CHECK_EQ(p.joy, (uint8_t)(50 - 2 * GRUMPY_JOY));
+  p.wakeGrumpy();  // ya despierto: nada
+  CHECK_EQ(p.joy, (uint8_t)(50 - 2 * GRUMPY_JOY));
+}
+
+TEST(imu, tres_sacudidas_en_dos_minutos_marean_y_restan) {
+  Pet p;
+  makeWalker(p);
+  setStats(p, 80, 50, 80, 100);
+  p.shaken();
+  CHECK_EQ(p.emote(), (uint8_t)EMOTE_DIZZY);
+  mockAdvanceMillis(30000);
+  p.shaken();
+  CHECK_EQ(p.joy, (uint8_t)50);
+  mockAdvanceMillis(30000);
+  p.shaken();
+  CHECK_EQ(p.joy, (uint8_t)(50 - DIZZY_JOY));
+  for (int i = 0; i < 6; i++) { mockAdvanceMillis(20000); p.shaken(); }
+  CHECK_MSG(p.joy == 50 - DIZZY_JOY, "como mucho una vez cada 10 minutos");
+  mockAdvanceMillis(DIZZY_COOLDOWN_MS);
+  p.shaken(); p.shaken(); p.shaken();
+  CHECK_EQ(p.joy, (uint8_t)(50 - 2 * DIZZY_JOY));
+}
+
+TEST(imu, sacudidas_espaciadas_no_restan) {
+  Pet p;
+  makeWalker(p);
+  setStats(p, 80, 50, 80, 100);
+  for (int i = 0; i < 6; i++) { p.shaken(); mockAdvanceMillis(70000); }
+  CHECK_EQ(p.joy, (uint8_t)50);
+}
+
+TEST(imu, el_huevo_se_tambalea) {
+  mockNvsReset();
+  Pet p;
+  p.begin();
+  p.chooseStarter(4);
+  p.shaken();
+  CHECK_EQ(p.emote(), (uint8_t)EMOTE_WOBBLE);
+  CHECK(p.isEgg());
+}
+
+TEST(imu, boca_abajo_lo_duerme_sin_guardar_al_momento) {
+  Pet p;
+  makeWalker(p);
+  p.flushSave();
+  p.sleepDeferred();
+  CHECK(p.sleeping);
+  CHECK(p.savePending());
+  Pet b;
+  b.begin();
+  CHECK_MSG(!b.sleeping, "no escribe en flash hasta flushSave()");
+  p.flushSave();
+  Pet c;
+  c.begin();
+  CHECK(c.sleeping);
+}
+
+TEST(imu, nada_de_esto_en_una_ceremonia) {
+  Pet p;
+  makeWalker(p);
+  setStats(p, 80, 50, 80, 100);
+  p.release();
+  p.shaken();
+  p.sleepDeferred();
+  CHECK(!p.sleeping);
+  CHECK_EQ(p.emote(), (uint8_t)EMOTE_NONE);
+  CHECK_EQ(p.joy, (uint8_t)50);
+}

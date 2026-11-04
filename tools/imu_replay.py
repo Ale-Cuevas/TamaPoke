@@ -5,7 +5,8 @@ The captures in test/data/imu/ were recorded on an AMOLED-2.16 with the
 bring-up firmware's IMU probe (accel +-4 g, 62.5 Hz, low-pass filter off),
 as t_ms,ax_mg,ay_mg,az_mg,steps. This is the prototype behind the numbers in
 docs/FEATURES.md ("Measured on the board"): a software step counter and a
-shake detector, to be ported to motion.h / steps.h in C++ for Tasks 1 and 2.
+shake detector, ported to C++ in steps.h / motion.h (v1.20). test/test_steps.cpp
+checks the port gives the same counts on these captures.
 
     python3 tools/imu_replay.py test/data/imu/*.csv
 
@@ -16,7 +17,6 @@ Shake: on any one axis (gravity removed), SHAKE_REV direction reversals beyond
 SHAKE_G, each within SHAKE_GAP_S of the previous one. A shake pauses the step
 counter for a second.
 """
-import csv
 import math
 import sys
 
@@ -35,12 +35,18 @@ SHAKE_HOLD_S = 1.0  # steps paused after a shake
 
 
 def load(path):
+    """t_ms,ax_mg,ay_mg,az_mg[,steps] rows as (s, g, g, g). Like test/imu_data.h,
+    any line that isn't a sample is skipped: the header, the game's closing
+    `[imulog] end`, log lines copied along from a serial monitor."""
+    samples = []
     with open(path) as f:
-        rows = list(csv.DictReader(f))
-    return [
-        (int(r["t_ms"]) / 1000, int(r["ax_mg"]) / 1000, int(r["ay_mg"]) / 1000, int(r["az_mg"]) / 1000)
-        for r in rows
-    ]
+        for line in f:
+            try:
+                t, x, y, z = (int(v) for v in line.split(",")[:4])
+            except ValueError:
+                continue
+            samples.append((t / 1000, x / 1000, y / 1000, z / 1000))
+    return samples
 
 
 def replay(samples):
