@@ -33,6 +33,7 @@
 #include "audio.h"
 #include "blit.h"
 #include "power.h"
+#include "button.h"
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
@@ -237,6 +238,8 @@ void setup() {
   // INT activo-bajo: salta cuando hay datos. Gatea las lecturas I2C (ver loop)
   pinMode(BOARD_TP_INT, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(BOARD_TP_INT), touchIsr, FALLING);
+  // tecla USER = atras (ver onBack). Pull-up externo de 10K: baja al pulsar
+  pinMode(BOARD_BTN_USER, INPUT);
 
   pet.begin();
   sdBegin();
@@ -311,6 +314,8 @@ void loop() {
   wasRunReady = runReady;
 
   handleTouch();
+  static KeyDebounce backKey;  // tecla USER = atras
+  if (backKey.update(digitalRead(BOARD_BTN_USER) == BOARD_BTN_PRESSED_LEVEL, millis())) onBack();
   handleSerial();
   ensureMon();
 
@@ -435,6 +440,7 @@ void idleWait(PowerCtx c) {
     c.usb = usbPresentNow();
     if (!lightSleepAllowed(c)) { delay(idleDelayMs(c)); return; }
     if (digitalRead(BOARD_TP_INT) == LOW) { gTouchIrq = true; delay(1); return; }  // toque pendiente: no se duerme
+    if (digitalRead(BOARD_BTN_USER) == BOARD_BTN_PRESSED_LEVEL) { delay(1); return; }  // tecla USER pulsada
     uint32_t ms = POWER_SLEEP_MS;
     uint32_t iv = frameIntervalMs(c);
     if (iv) {  // pantalla encendida: hasta el proximo frame
@@ -443,8 +449,12 @@ void idleWait(PowerCtx c) {
     }
     esp_sleep_enable_timer_wakeup((uint64_t)ms * 1000);
     gpio_wakeup_enable((gpio_num_t)BOARD_TP_INT, GPIO_INTR_LOW_LEVEL);
+    // la tecla USER tambien despierta: una pulsacion corta cabe entera en un sueno de 200 ms
+    gpio_wakeup_enable((gpio_num_t)BOARD_BTN_USER, GPIO_INTR_LOW_LEVEL);
     esp_sleep_enable_gpio_wakeup();
     esp_light_sleep_start();
+    gpio_wakeup_disable((gpio_num_t)BOARD_BTN_USER);
+    gpio_set_intr_type((gpio_num_t)BOARD_BTN_USER, GPIO_INTR_DISABLE);  // sin interrupcion: se lee en el loop
     // la interrupcion del tactil vuelve a ser por flanco (como la dejo attachInterrupt); un toque
     // que ya haya bajado la linea se registra a mano
     gpio_wakeup_disable((gpio_num_t)BOARD_TP_INT);
@@ -526,6 +536,9 @@ void handleSerial() {
     Serial.println("DONE");
   } else if (line == "BEEP") {
     sfxPlay(SFX_HATCH);  // prueba de audio
+    Serial.println("DONE");
+  } else if (line == "BACK") {
+    onBack();               // como pulsar la tecla USER
     Serial.println("DONE");
   } else if (line == "ABANDON") {
     pet.dbgRunawayReady();  // fuerza el estado "lista para escaparse" (test del boton)
@@ -697,6 +710,41 @@ void onSwipe(int dir) {
     galleryPage = np;
     galleryDirty = true;
   }
+}
+
+// tecla USER = atras: cierra la capa de arriba (en el mismo orden que onTap y render),
+// con el mismo codigo con que se cierra cada pantalla al tocar o deslizar. Sin sonido,
+// como al cerrar con el dedo.
+void onBack() {
+  if (screenOff || dimStage > 0) {  // a oscuras solo despierta (como el primer toque)
+    screenOff = false;
+    wakeUI();
+    return;
+  }
+  wakeUI();
+  if (pet.awaitingStarter()) return;  // hay que elegir inicial
+  if (sackOpen) {                     // abandona (sin premio si aun corre el tiempo)
+    sackOpen = false;
+    return;
+  }
+  if (galleryOpen) {
+    if (galleryDetail) {  // detalle -> rejilla
+      galleryDetail = 0;
+      galleryDirty = true;
+    } else {              // rejilla -> fuera
+      galleryOpen = false;
+    }
+    galleryPmd.unload();
+    return;
+  }
+  if (kbOpen) { kbOpen = false; return; }        // descarta el nombre y vuelve a la ficha
+  if (clockOpen) { clockOpen = false; return; }  // sin aplicar la hora, como al deslizar
+  if (pet.ceremony) return;                      // durante la despedida no hay vuelta atras
+  if (cardOpen) { cardOpen = false; return; }
+  if (gameOpen) { gameOpen = false; return; }    // abandona sin premio, como tocar la cabecera
+  if (choiceKind) { choiceKind = 0; return; }    // ni evoluciona ni rechaza: el boton sigue ahi
+  if (confirmUntil) { confirmUntil = 0; return; }  // "soltar?": NO
+  if (feedMenuUntil) { feedMenuUntil = 0; return; }
 }
 
 void onTap(int16_t x, int16_t y) {

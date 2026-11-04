@@ -101,11 +101,14 @@ same game image and loads the sprites over USB.
 - [x] PWR short press turns the screen off and on; holding it 4 s powers the board off and the RTC keeps the time.
 - [ ] After 90 s untouched the screen dims, after 5 min it is almost off; a touch wakes it (the waking touch does nothing else). (90 s dim and touch wake ✓; 5 min not tried)
 - [ ] On battery with the screen off, it still wakes on a touch (light sleep).
+- [x] USER = back. A press (or `BACK` over serial) closes: gallery detail → grid → home; the stat card from any page; the rename keyboard (the name is not saved, back on the card); the clock screen (time not applied); the minigame and the bag (no reward); the feed menu and the release, evolve and farewell dialogs (the evolve/farewell button stays). On the home screen and during the starter choice or a farewell it does nothing.
+- [ ] USER on a dim screen (90 s) only wakes it. On battery with the screen off (PWR), a short USER press wakes it too (light sleep).
 - [ ] Battery percentage close to the bring-up `[pmu]` reading; the charging bolt shows within a few seconds of plugging USB in.
 
 ### Save, time, sound, SD
 - [x] Note the stats, restart the board: pet, stats, language and sound setting come back.
 - [ ] Set the clock, restart: still right (from the RTC). Power off for N minutes: the pet aged about N minutes. (restart ✓; power-off aging not tried)
 - [x] Sound: the boot jingle, taps and eating; no hiss when the pet sleeps (amplifier off).
+- [ ] Volume at -10 dB (DAC register 0x32 = 0xAB in `audio.cpp`): about half as loud as before, still clear. Too quiet or loud: change it in steps of 2 (1 dB).
 - [ ] Sprites load from the card (`cargado /mons/p025.bin` in the log); `python3 tools/send_sd.py` and the web installer's "Load sprites" can write to the card over USB. (loading ✓: `cargado /mons/ps007.bin`, 151 thumbnails; writing over USB not tried)
 - [ ] Without a card, the nine built-in sprites still work.
