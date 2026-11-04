@@ -8,7 +8,7 @@ Write the result on each line: a tick, or what you saw.
 | # | Check | Details | Result |
 |---|---|---|---|
 | 1 | PMU found, voltages plausible (bring-up) | [Power](DEVICE_TESTS.md#power-axp2101) | AXP2101 0x4A; VBUS 4.84 V, SYS 4.41 V, batt 4.20 V 90 % charging. USB unplug: pending |
-| 2 | Panel lights, colours right, no offset (bring-up) | [Display](DEVICE_TESTS.md#display-co5300-480x480) | ✓ colours, corners, text, 2 px border (a 1 px line doesn't show) |
+| 2 | Panel lights, colours right, no offset (bring-up) | [Display](DEVICE_TESTS.md#display-co5300-480x480) | ✓ colours, corners, text, 2 px border (a 1 px edge frame doesn't show; alignment probe: pending) |
 | 3 | Touch found, dots under the finger (bring-up) | [Touch](DEVICE_TESTS.md#touch-cst9220) | ✓ dots under the finger, corners (22,19)…(459,462), drag unbroken |
 | 4 | RTC keeps time across reset (bring-up) | [RTC](DEVICE_TESTS.md#rtc-pcf85063) | settime ✓, ticks; survives RESET: check in the game |
 | 5 | BOOT, USER, PWR register (bring-up) | [Buttons](DEVICE_TESTS.md#buttons) | ✓ all three up at boot, down/up on press |

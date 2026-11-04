@@ -83,7 +83,7 @@
 #define BOARD_BTN_PRESSED_LEVEL 0
 // PWR (Key1) goes to the AXP2101 PWRON pin. A BSS138 driven from PWRON
 // pulls SYS_OUT (GPIO16, 10K pull-up) low while the key is up, so GPIO16
-// should read HIGH while PWR is held [sch]. Not yet verified on the device.
+// reads HIGH while PWR is held [sch]; confirmed on the board (2026-11-04).
 #define BOARD_BTN_PWR_SENSE 16
 #define BOARD_BTN_PWR_PRESSED_LEVEL 1
 

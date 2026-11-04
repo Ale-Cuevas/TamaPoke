@@ -134,7 +134,11 @@ sound and sprites all work. Results and the checks still open are in
 [DEVICE_TESTS.md](DEVICE_TESTS.md), with a one-line list in
 [PENDING_TESTS.md](PENDING_TESTS.md).
 
-One thing the board taught: the CO5300 drops drawing windows that don't start
-on an even pixel and span an even count. A 1 px `drawRect()` never shows. The
-game only sends aligned windows (the full-screen clear and the 466x466 frame
-at (6, 6)); the bring-up's frame and touch dots are now 2 px aligned too.
+One open question from the board: a 1 px `drawRect()` frame along the panel's
+edges never showed, while a 2 px `fillRect()` frame did. Either the CO5300
+drops drawing windows that don't start on an even pixel and span an even
+count (the rule Waveshare's LVGL demo follows), or the outermost pixel sits
+under the glass. The bring-up now draws a 1 px and a 2 px line mid-screen to
+tell which. The game is safe either way: it only sends aligned windows (the
+full-screen clear and the 466x466 frame at (6, 6)), and it never draws on the
+panel's outermost pixels.

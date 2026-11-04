@@ -293,13 +293,19 @@ void drawTestScreen() {
   const int16_t w = panel->width();
   const int16_t h = panel->height();
   const int16_t m = 24;
-  // 2 px white frame, not drawRect(): the CO5300 takes address windows that
-  // start on an even pixel and span an even count, so 1 px lines may not show.
+  // 2 px white frame, not drawRect(): a 1 px frame along the edges never
+  // showed on the board (CO5300 window alignment or the glass mask; the
+  // probe below tells which), while this one shows on all four edges.
   const int16_t b = 2;
   panel->fillRect(0, 0, w, b, RGB565_WHITE);      // top
   panel->fillRect(0, h - b, w, b, RGB565_WHITE);  // bottom
   panel->fillRect(0, 0, b, h, RGB565_WHITE);      // left
   panel->fillRect(w - b, 0, b, h, RGB565_WHITE);  // right
+  // Alignment probe, away from the edges: the upper line is 1 px tall (an
+  // unaligned window), the lower one 2 px. Only the lower one visible = the
+  // CO5300 drops unaligned windows; both visible = the edge pixel is masked.
+  panel->drawFastHLine(96, 420, 288, RGB565_WHITE);
+  panel->fillRect(96, 432, 288, 2, RGB565_WHITE);
   panel->fillRect(0, 0, m, m, RGB565_RED);          // top-left
   panel->fillRect(w - m, 0, m, m, RGB565_GREEN);    // top-right
   panel->fillRect(0, h - m, m, m, RGB565_BLUE);     // bottom-left

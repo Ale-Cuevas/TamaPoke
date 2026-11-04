@@ -40,8 +40,10 @@ same game image and loads the sprites over USB.
 - [x] `[lcd] CO5300 ok, 480x480`
 - [x] Full red, then green, then blue (red and blue swapped = wrong colour order).
 - [x] White 2 px border visible on all four edges (a missing edge or a band of noise = wrong offset).
-  (The first version drew a 1 px `drawRect()`, which did not show at all: the CO5300 drops address
-  windows that don't start on an even pixel and span an even count. The game only sends aligned ones.)
+  (The first version drew a 1 px `drawRect()`, which did not show at all: either the CO5300 drops
+  unaligned windows or the edge pixel is under the glass. The next check tells which.)
+- [ ] Alignment probe, two white lines near the bottom: the upper is 1 px, the lower 2 px. Does the
+  upper one show? ____ (no = the CO5300 drops unaligned windows; yes = the edge pixel is masked)
 - [x] Corners: red top-left, green top-right, blue bottom-left, yellow bottom-right. Where is the USB-C port? **bottom edge; the buttons are on the top edge**
 - [x] Text reads left to right, not mirrored.
 
