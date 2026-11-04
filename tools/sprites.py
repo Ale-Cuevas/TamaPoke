@@ -505,6 +505,75 @@ def icon_clean():
     return g.rows()
 
 
+# ------------------------------------------------- objetos de la mochila (pasos)
+
+def icon_golden():
+    # baya dorada: la baya de siempre, en oro y con destellos
+    g = G(16)
+    g.disk(8, 9.5, 5.2, 4.8, 'f', 'Y')
+    g.px(8, 3, 'C'); g.px(8, 4, 'C')
+    g.px(10, 3, 'g'); g.px(11, 3, 'g'); g.px(11, 2, 'g')
+    g.outline()
+    g.px(6, 7, 'w'); g.px(5, 8, 'w')
+    g.px(1, 3, 'f'); g.px(2, 2, 'w'); g.px(3, 3, 'f'); g.px(2, 4, 'f')
+    g.px(14, 12, 'w'); g.px(13, 13, 'f'); g.px(15, 13, 'f')
+    return g.rows()
+
+
+def _vitamin(body, shade):
+    # frasco de vitamina: tapon, cuello, cuerpo del color y etiqueta blanca
+    g = G(16)
+    g.rect(6, 1, 9, 2, 'c')
+    g.rect(7, 3, 8, 3, 'y')
+    g.disk(7.5, 9.5, 5.0, 5.6, body, shade)
+    g.rect(4, 4, 11, 4, body)
+    g.outline()
+    g.rect(4, 8, 11, 10, 'w')
+    g.rect(6, 9, 9, 9, shade)
+    g.px(5, 6, 'w')
+    return g.rows()
+
+
+def icon_protein():
+    return _vitamin('r', 'R')  # ataque: rojo
+
+
+def icon_iron():
+    return _vitamin('s', 'S')  # defensa: gris hierro
+
+
+def icon_carbos():
+    return _vitamin('g', 'G')  # velocidad: verde
+
+
+def icon_charm():
+    # amuleto shiny: medallon lavanda colgado de un cordon, con una estrella
+    g = G(16)
+    g.disk(8, 9.5, 5.4, 5.4, 'l', 'L')
+    g.outline()
+    g.px(7, 2, 'k'); g.px(8, 2, 'k'); g.px(6, 3, 'k'); g.px(9, 3, 'k')
+    g.px(6, 4, 'k'); g.px(9, 4, 'k')
+    g.rect(8, 6, 8, 13, 'f')
+    g.rect(5, 9, 11, 10, 'f')
+    g.rect(7, 8, 9, 11, 'f')
+    g.px(8, 9, 'w'); g.px(8, 10, 'w')
+    g.px(13, 3, 'w'); g.px(14, 4, 'f'); g.px(12, 4, 'f'); g.px(13, 5, 'f')
+    return g.rows()
+
+
+def icon_flag():
+    # banderin de la meta de pasos
+    g = G(16)
+    g.rect(3, 1, 4, 14, 'C')
+    for y in range(2, 9):
+        w = 9 - abs(y - 5) * 2
+        g.rect(5, y, 5 + w, y, 'r')
+    g.outline()
+    g.rect(6, 4, 7, 4, 'w')
+    g.rect(1, 14, 7, 14, 'k')
+    return g.rows()
+
+
 SPRITES = {
     "CHARMANDER": charmander(),
     "CHARMELEON": charmeleon(),
@@ -522,6 +591,12 @@ SPRITES = {
     "ICON_BERRY_B": icon_berry_blue(),
     "ICON_BERRY_G": icon_berry_green(),
     "ICON_CANDY": icon_candy(),
+    "ICON_GOLDEN": icon_golden(),
+    "ICON_PROTEIN": icon_protein(),
+    "ICON_IRON": icon_iron(),
+    "ICON_CARBOS": icon_carbos(),
+    "ICON_CHARM": icon_charm(),
+    "ICON_FLAG": icon_flag(),
     "EGG": egg(),
     "POOP": poop(),
     "HEART": heart(),

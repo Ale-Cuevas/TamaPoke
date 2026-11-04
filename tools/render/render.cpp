@@ -25,6 +25,9 @@ HardwareSerial Serial;
 EspClass ESP;
 TwoWire Wire;
 SDMMCFS SD_MMC;
+extern bool gStubImuPresent;  // stubs.cpp: el IMU de mentira
+extern int8_t gStubTiltSide;
+extern bool gStubTiltSlide;
 
 // ---- PNG -------------------------------------------------------------------
 
@@ -131,8 +134,33 @@ static void resetUi() {
   choiceKind = 0;
   pet.sleeping = false;
   pet.ceremony = CER_NONE;
+  // paseo e IMU (v1.20)
+  itemConfirm = 0;
+  goalBannerUntil = 0;
+  foundShown = false;
+  while (pet.hasFound()) pet.popFound();
+  pet.takeGoalBanner();
+  pet.clearEmote();
+  pet.stepsToday = pet.stepsTotal = 0;
+  pet.findsToday = 0;
+  pet.goalDay = 0;
+  memset(pet.items, 0, sizeof(pet.items));
+  gStubImuPresent = true;
+  gStubTiltSide = 0;
+  gStubTiltSlide = false;
   screenKeyValid = false;
   if (gLang != LANG_EN) { setLang(LANG_EN); applyLangFont(); }
+}
+
+// steps and Backpack for the WALK page scenes
+static void walker(uint32_t today, uint32_t total, uint8_t finds, std::initializer_list<uint8_t> items) {
+  pet.stepDay = pet.dayNumber();
+  pet.stepsToday = today;
+  pet.stepsTotal = total;
+  pet.findsToday = finds;
+  int i = 0;
+  for (uint8_t n : items) pet.items[i++] = n;
+  if (today >= STEP_GOAL) pet.goalDay = pet.dayNumber();
 }
 
 // a hatched pet of the given species, healthy, `hour` o'clock
@@ -204,6 +232,45 @@ static const std::vector<Scene> &scenes() {
     { "sack", [] { pokemon(66, 13); startSack(); sackHits = 12; }, 3 },
     { "home-ja", [] { pokemon(25, 13); setLang(LANG_JA); applyLangFont(); } },
     { "home-streak", [] { pokemon(130, 16); pet.streak = 365; } },  // widest status row
+    // steps and the Backpack (Task 1)
+    { "walk-empty", [] { pokemon(25, 13); cardOpen = true; cardPage = 4; } },
+    { "walk-mid", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 0 }); cardOpen = true; cardPage = 4; } },
+    { "walk-goal", [] { pokemon(25, 13); walker(3512, 61200, 4, { 4, 0, 9, 1, 1 }); cardOpen = true; cardPage = 4; } },
+    { "walk-confirm", [] {
+       pokemon(25, 13);
+       walker(1840, 52310, 2, { 2, 1, 0, 3, 0 });
+       cardOpen = true;
+       cardPage = 4;
+       itemConfirm = IT_GOLDEN + 1;
+       itemConfirmUntil = millis() + 10000;
+     } },
+    { "walk-noimu", [] { pokemon(25, 13); gStubImuPresent = false; cardOpen = true; cardPage = 4; } },
+    { "walk-ja", [] {
+       pokemon(25, 13);
+       walker(1840, 52310, 2, { 2, 1, 0, 3, 1 });
+       cardOpen = true;
+       cardPage = 4;
+       setLang(LANG_JA);
+       applyLangFont();
+     } },
+    { "found", [] { pokemon(25, 13); pet.addSteps(FIND_MAX_STEPS, pet.dayNumber()); }, 2 },
+    { "goal", [] {
+       pokemon(7, 10);
+       pet.lastCareDay = pet.dayNumber();  // already cared for today: no streak/medal banner on top
+       pet.addSteps(STEP_GOAL, pet.dayNumber());
+     }, 2 },
+    // motion easter eggs (Task 2)
+    { "grumpy", [] { pokemon(133, 23); pet.sleeping = true; pet.wakeGrumpy(); }, 4 },
+    { "dizzy", [] { pokemon(25, 13); pet.shaken(); }, 4 },
+    { "egg-wobble", [] {
+       resetUi();
+       if (pet.awaitingStarter()) pet.chooseStarter(4);
+       pet.speciesId = -1;
+       pet.lastSeenEpoch = epochAt(10);
+       pet.shaken();
+     }, 3 },
+    { "tilt-walk", [] { pokemon(25, 13); gStubTiltSide = 1; }, 8 },
+    { "tilt-slide", [] { pokemon(25, 13); gStubTiltSide = -1; gStubTiltSlide = true; }, 8 },
   };
   return s;
 }

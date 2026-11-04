@@ -25,6 +25,7 @@
 #define STEP_ENTRY 4            // pasos seguidos antes de empezar a contar
 #define STEP_SLOW_TAU_MS 1000.0f  // media lenta: la gravedad en |a|
 #define STEP_FAST_TAU_MS 60.0f    // suavizado de la senal de paso
+#define STEP_FLUSH_MS 30000UL     // cada cuanto pasan los pasos contados a Pet::addSteps()
 
 struct StepCounter {
   uint32_t total = 0;  // pasos contados desde reset()

@@ -19,7 +19,11 @@ Write the result on each line: a tick, or what you saw.
 | 10 | PWR key, dimming, light-sleep wake, battery reading | [Power, sleep, buttons](DEVICE_TESTS.md#power-sleep-buttons) | ✓ PWR, 90 s dim, runs on battery; light-sleep wake, % vs bring-up: pending |
 | 11 | Save, RTC aging, sound, sprites from the card | [Save, time, sound, SD](DEVICE_TESTS.md#save-time-sound-sd) | ✓ save, clock across restart, sound, sprites; power-off aging, USB upload: pending |
 | 12 | USER key = back on every screen; volume at -10 dB | [Power, sleep, buttons](DEVICE_TESTS.md#power-sleep-buttons), [Save, time, sound, SD](DEVICE_TESTS.md#save-time-sound-sd) | ✓ back; waking from dim and from light sleep, volume: pending |
-| 13 | IMU probe: chip, axes, filter, FIFO, hardware pedometer (bring-up) | [IMU](DEVICE_TESTS.md#imu-qmi8658-not-used-by-the-game-yet) | QMI8658A, axes and FIFO ✓; hardware pedometer counts 0 (steps go to software); walks with steps counted by hand: pending |
+| 13 | IMU probe: chip, axes, filter, FIFO, hardware pedometer (bring-up) | [IMU](DEVICE_TESTS.md#imu-qmi8658-as-the-game-uses-it-from-v120) | QMI8658A, axes and FIFO ✓; hardware pedometer counts 0 (steps go to software); walks with steps counted by hand: pending |
+| 14 | v1.20 steps: FIFO rate, 400 kHz I2C (touch, sound), ±10 % over 100 steps (pocket, hand), shaking adds none, PWR-off walk, restart, midnight | [Steps](DEVICE_TESTS.md#steps) | pending |
+| 15 | v1.20 WALK page, goal banner, find popup, using items | [Steps](DEVICE_TESTS.md#steps) | pending |
+| 16 | v1.20 motion: shake to wake (and not in a pocket), grumpy / dizzy, face-down, tilt both ways | [Motion](DEVICE_TESTS.md#motion) | pending |
+| 17 | v1.20 8 h battery drain, screen off, against v1.19 | [Steps](DEVICE_TESTS.md#steps) | pending |
 
 Questions only the board can answer:
 - Where is the USB-C port relative to the screen's top? Bottom edge (buttons on top).

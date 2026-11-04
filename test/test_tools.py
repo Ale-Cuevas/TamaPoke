@@ -199,7 +199,7 @@ class TestBuffersDeTexto(unittest.TestCase):
 
       %u / %d  -> 5 cifras (todos los argumentos son de 16 bits o menos)
       %lu      -> 10 cifras
-      %s       -> lo que declare ARGS_S; un %s sin declarar hace fallar el
+      %s       -> lo que declare ARGS_S (nombre, apodo, baya, objeto...); un %s sin declarar hace fallar el
                   test, para que quien lo anada piense cuanto puede ocupar
     """
 
@@ -209,6 +209,7 @@ class TestBuffersDeTexto(unittest.TestCase):
         'S_INFO_FMT': ('baya',),
         'S_FAREWELL_BTN': ('nombre_o_apodo',),
         'S_RUNAWAY_BTN': ('nombre_o_apodo',),
+        'S_USE_FMT': ('objeto',),
     }
     CIFRAS = {'u': 5, 'd': 5, 'lu': 10}
     ESPEC = re.compile(r'%0?\d*(lu|u|d|s)')
@@ -272,6 +273,8 @@ class TestBuffersDeTexto(unittest.TestCase):
             elif arg == 'baya':
                 total += max(self.bytes_literal(self.LIT[b][li]) for b in
                              ('S_BERRY_UNK', 'S_BERRY_RED', 'S_BERRY_BLUE', 'S_BERRY_GREEN'))
+            elif arg == 'objeto':  # nombre de un objeto de la mochila
+                total += max(self.bytes_literal(self.LIT[o][li]) for o in self.LIT if o.startswith('S_IT_'))
         return total
 
     def test_cada_texto_formateado_cabe_en_su_buffer_en_todos_los_idiomas(self):

@@ -233,6 +233,7 @@ public:
   void sleepDeferred();  // boca abajo de noche: a dormir (toggleLight sin guardar al momento)
   uint8_t emote() const { return timeLeft(emoteUntil) ? emoteKind : (uint8_t)EMOTE_NONE; }
   float emoteT() const { return 1.0f - (float)timeLeft(emoteUntil) / (float)EMOTE_MS; }
+  void clearEmote() { emoteUntil = 0; }  // (renderizador del PC: cada escena empieza limpia)
 
   // guardado periodico diferido: tick() marca pendiente y el loop lo vuelca
   // cuando la pantalla esta atenuada/apagada (la escritura a flash congela

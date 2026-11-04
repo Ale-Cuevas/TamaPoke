@@ -60,6 +60,12 @@ enum StrId : uint8_t {
   S_EVO_Q, S_EVO_KEEP, S_FAR_Q, S_FAR_GO, S_FAR_STAY,
   S_CHOOSE_STARTER,  // titulo de la eleccion del inicial (primera vez)
   S_NO_SPRITES, S_LOAD_SPRITES,  // aviso cuando falta el sprite en la SD
+  // pasos y mochila (v1.20): ficha WALK, hallazgos, meta, trucos del IMU
+  S_WALK, S_STEPS_FMT, S_STEPS_TOTAL_FMT, S_FINDS_FMT, S_BACKPACK, S_NO_IMU,
+  S_GOAL_DONE, S_FOUND, S_BACKPACK_FULL, S_USE_FMT, S_CHARM_HELD, S_BACKPACK_EMPTY,
+  S_GRUMPY, S_DIZZY,
+  // nombres de los objetos, en el orden de IT_* (pet.h)
+  S_IT_GOLDEN, S_IT_PROTEIN, S_IT_IRON, S_IT_CARBOS, S_IT_CHARM,
   STR_COUNT
 };
 

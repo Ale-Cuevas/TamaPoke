@@ -1,7 +1,7 @@
 # TamaPoke
 
 ![Board](https://img.shields.io/badge/board-ESP32--S3%20AMOLED%202.16-E7352C?logo=espressif&logoColor=white)
-![Firmware](https://img.shields.io/badge/firmware-v1.19-8A2BE2)
+![Firmware](https://img.shields.io/badge/firmware-v1.20-8A2BE2)
 [![CI](https://github.com/Ale-Cuevas/TamaPoke/actions/workflows/ci.yml/badge.svg)](https://github.com/Ale-Cuevas/TamaPoke/actions/workflows/ci.yml)
 ![Code](https://img.shields.io/badge/code-MIT-blue)
 ![Languages](https://img.shields.io/badge/languages-8-FFCB05)
@@ -35,6 +35,14 @@ checked on the PC. **Tested on a real 2.16" board on 2026-11-04**: bring-up and
 game work; the results and the few checks still open are in
 [docs/DEVICE_TESTS.md](docs/DEVICE_TESTS.md) (summary in
 [docs/PENDING_TESTS.md](docs/PENDING_TESTS.md)).
+
+**v1.20: steps and motion tricks.** The board's QMI8658 IMU now counts steps
+in software (walk care, a daily goal, items found on walks, a Backpack, and a
+5th **WALK** page on the stat card showing today's steps), and the board reacts
+to being shaken, laid face-down or tilted. Built, host-tested against real
+captures from the board and rendered on the PC; the on-board checks (step
+accuracy, battery drain, 400 kHz I2C) are listed in
+[docs/DEVICE_TESTS.md](docs/DEVICE_TESTS.md#steps).
 
 The game itself runs on the 1.75" hardware upstream. Implemented: the 151 +
 shinies animated from microSD, full life cycle (egg by rarity → evolution → farewell/release/runaway, each gated
@@ -133,7 +141,56 @@ After any ending, a **new egg** appears.
 
 ### Battle stats
 ATK / DEF / SPD = real **Gen-1 base** × genes + level + training (STRENGTH ← bag,
-SPEED ← minigame, DEFENSE ← 12 h of unbroken good care). *(Battles: on the roadmap.)*
+SPEED ← minigame, DEFENSE ← 12 h of unbroken good care; vitamins from walks add
++3 each). *(Battles: on the roadmap.)*
+
+### Steps, finds & the Backpack (v1.20)
+
+![The WALK page with today's steps and the Backpack, a find, and the pet sliding on a tilted board](docs/images/walk-216.png)
+
+Carry the board in a pocket, a bag or your hand: the IMU counts steps whenever
+the board is on, screen lit, dimmed, off (PWR) or asleep. Steps only start
+counting after **4 in a row**, and shaking the board pauses the counter, so
+waving it around doesn't farm anything.
+- **Steps today** (reset at local midnight) and a **lifetime total** belong to
+  you, not to the pet: they survive a new egg and a restart.
+- While the pet is **hatched and awake**, walking is care: **+1 JOY per 100
+  steps** (at most +30 a day), **−1 weight per 250**, **+1 bond per 1000** (the
+  daily bond cap still applies). Walking costs no energy.
+- **Daily goal: 3000 steps.** The first time each day: +10 JOY, a bonus find,
+  and the day counts toward your **streak** (a banner and a jingle when you next
+  look at the screen).
+- **Finds:** every 800–1200 rewarded steps the pet finds something (at most 5 a
+  day, the goal's bonus included). A popup shows it next time the screen is on;
+  tap to dismiss.
+
+  | Item | Odds | Use |
+  |---|---|---|
+  | Golden Berry | 55 % | +50 FOOD, +15 JOY, a heart |
+  | Protein / Iron / Carbos | 35 % (1/3 each) | +3 ATK / DEF / SPD training (cap 100) |
+  | Shiny Charm | 10 % | Held, not used: the **next egg** gets ×3 shiny odds (never better than 1/8). One at a time; a second one becomes a Golden Berry. |
+
+- The **Backpack** holds up to 9 of each item. Open it on the stat card's 5th
+  page, **WALK** (swipe up, then left four times): today's steps with a ring
+  toward the goal, the total, today's finds, and the items. Tap an item to use it.
+
+<details>
+<summary>Secrets (spoilers)</summary>
+
+- **Shake it.** On a dim or dark screen, a shake wakes the screen like a touch
+  (not after you switched it off with PWR). With the screen on, a sleeping pet
+  wakes up **grumpy** (−5 JOY, an anger mark) and an awake one gets **dizzy**
+  (stars and a wobble; three shakes in 2 minutes cost −3 JOY). The egg wobbles.
+  A jog with the board in your pocket never wakes the pet: the first shake only
+  lights the screen.
+- **Lay it face-down** for 3 s. At night (20:00–06:00) the pet goes to bed and
+  the screen goes dark; in the daytime only the screen goes dark. Pick it up and
+  the screen comes back.
+- **Tilt it** sideways on the home screen: past 20° the pet walks downhill,
+  past 45° it slides there with a surprised "!". Level it and it goes back to
+  wandering.
+
+</details>
 
 ## Hardware
 
@@ -143,7 +200,7 @@ SPEED ← minigame, DEFENSE ← 12 h of unbroken good care). *(Battles: on the r
   - Capacitive touch **CST9220** (I2C, address 0x5A)
   - **AXP2101** (power management + battery + PWR button), **PCF85063** (RTC),
     microSD slot (SDMMC 1-bit), **ES8311** audio codec (→ amplifier → speaker),
-    QMI8658 IMU (unused)
+    QMI8658 IMU (steps and the motion tricks, v1.20)
   - All pins and addresses in [`board_amoled_216.h`](board_amoled_216.h), each
     tagged with its source (Waveshare's [demo repo](https://github.com/waveshareteam/ESP32-S3-Touch-AMOLED-2.16),
     schematic and ESP-IDF board package)
@@ -284,9 +341,9 @@ If one bottoms out it counts as a *slip-up*.
 **Touch gestures:**
 - Tap the creature = pet it (+happiness, bond).
 - Horizontal swipe = open the **Pokédex / gallery**.
-- Vertical swipe up = open the **stat card** (4 pages: Profile / Battle / Medals /
-  Progress; swipe between them; tap the name on Profile to rename; on Battle the
-  "Train strength" button opens the bag).
+- Vertical swipe up = open the **stat card** (5 pages: Profile / Battle / Medals /
+  Progress / Walk; swipe between them; tap the name on Profile to rename; on Battle the
+  "Train strength" button opens the bag; on Walk, tap a Backpack item to use it).
 - Swipe down = **set the clock** and pick the **language** + sound on/off.
 - Long press (3 s) on the creature = **release** dialog.
 
@@ -404,6 +461,9 @@ beach, forest, volcano, mountain, snow). Sleeping forces night.
 - `roundmask.h` / `ui_frame.h` — the round frame (pure code, tested on the PC) and its geometry
 - `board_amoled_216.h` — every pin and I2C address of the board, with sources
 - `rtcbat.h` / `rtcbat.cpp` — PCF85063 RTC + AXP2101 PMU (battery, brightness, PWR button)
+- `imu.h` / `imu.cpp` — QMI8658 accelerometer: configuration and its own chunked FIFO reader
+- `steps.h` / `motion.h` — the software step counter and the shake / face-down / tilt detectors
+  (pure code, tested on the PC against captures from the board in `test/data/imu/`)
 - `audio.h` / `audio.cpp` — ES8311 + I2S + Game-Boy-style tone synth (non-blocking task)
 - `i18n.h` / `i18n.cpp` — the 8-language string tables
 - `dex.h` — GENERATED (`gen_dex.py`): the 151 table
@@ -443,6 +503,8 @@ What the firmware does to save power (the policy is in `power.h`, covered by `te
   after a power-up so the start is not cut.
 - **Low battery (< 20 %, not charging):** brightness capped (100, then 60 under 10 %) and frames twice as slow.
 - **Battery reads over I2C** every 10 s instead of 2 s when the screen is off or almost off.
+- **IMU:** accelerometer only (gyro off) at 62.5 Hz. Its FIFO holds about 2 s, so it is read once a second
+  while the screen is dark (about 10 ms awake at 400 kHz I2C) and every 100 ms while it is lit.
 - The pet walks by real time, so lower frame rates do not slow it down.
 
 ## Serial console (115200, debug)
@@ -452,7 +514,10 @@ What the firmware does to save power (the policy is in `power.h`, covered by `te
 runaway-ready state) · `WIPE` (factory reset → new game) · `BEEP` (audio test) ·
 `REG` (Pokédex) · `EGGS` (simulate 20 eggs) · `GAL` (gallery) · `CAREDAY` ·
 `TIME <epoch>` / `RTCSET <epoch>` · `HEALTH` (uptime + heap for the soak test) ·
-`LS` / `PUT` (SD files).
+`LS` / `PUT` (SD files) · `STEPS <n>` (add n steps through the IMU's path) ·
+`IMU` (FIFO reads, samples/s, acceleration, tilt) · `IMULOG <s>` (stream samples
+as CSV, the `test/data/imu/` format; any key stops it) · `SHAKE` /
+`FACEDOWN` / `FACEDOWN 0` (inject the motion events).
 
 To test fast: lower `PET_TICK_MS`, `MINUTES_PER_LEVEL` and `FAREWELL_AGE_MIN` in `pet.h`.
 
@@ -460,9 +525,10 @@ To test fast: lower `PET_TICK_MS`, `MINUTES_PER_LEVEL` and `FAREWELL_AGE_MIN` in
 
 Specified in [docs/FEATURES.md](docs/FEATURES.md), each one its own task:
 
-- **Steps** — steps counted from the IMU feed the pet: walk care and items
-  found on walks, kept in a Backpack.
-- **Easter eggs** — shake to wake, face-down lights out, tilt & slide.
+- ~~**Steps**~~ — done in v1.20: steps counted from the IMU feed the pet:
+  walk care and items found on walks, kept in a Backpack.
+- ~~**Easter eggs**~~ — done in v1.20: shake to wake, face-down lights out,
+  tilt & slide.
 - **Link** — two nearby boards meet over ESP-NOW for playdates (visit & play,
   gifts, friendship egg) and battles (auto-battle with a tap-charged special
   attack, ATK/DEF/SPD and Gen 1 types, PMD Attack/Hurt animations). Starts with

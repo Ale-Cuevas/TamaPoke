@@ -5,7 +5,8 @@ The captures in test/data/imu/ were recorded on an AMOLED-2.16 with the
 bring-up firmware's IMU probe (accel +-4 g, 62.5 Hz, low-pass filter off),
 as t_ms,ax_mg,ay_mg,az_mg,steps. This is the prototype behind the numbers in
 docs/FEATURES.md ("Measured on the board"): a software step counter and a
-shake detector, to be ported to motion.h / steps.h in C++ for Tasks 1 and 2.
+shake detector, ported to C++ in steps.h / motion.h (v1.20). test/test_steps.cpp
+checks the port gives the same counts on these captures.
 
     python3 tools/imu_replay.py test/data/imu/*.csv
 

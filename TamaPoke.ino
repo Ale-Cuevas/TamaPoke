@@ -34,10 +34,12 @@
 #include "blit.h"
 #include "power.h"
 #include "button.h"
+#include "imu.h"    // pasos y trucos de movimiento (QMI8658); SensorLib queda en imu.cpp
+#include "steps.h"  // STEP_FLUSH_MS
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.19"
+#define FW_VERSION "1.20"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -86,7 +88,13 @@ bool cardOpen = false;        // ficha del bicho (deslizar vertical)
 bool kbOpen = false;          // teclado para renombrar al bicho
 char nameBuf[12] = "";
 uint8_t nameLen = 0;
-uint8_t cardPage = 0;         // 0 perfil, 1 stats+medallas
+uint8_t cardPage = 0;         // 0 perfil, 1 combate, 2 medallas, 3 progreso, 4 paseo
+#define CARD_PAGES 5
+uint8_t itemConfirm = 0;      // pagina de paseo: objeto de la mochila a confirmar + 1 (0 = ninguno)
+uint32_t itemConfirmUntil = 0;
+uint32_t goalBannerUntil = 0; // banner de la meta de pasos en pantalla hasta este millis
+bool foundShown = false;      // el ultimo frame enseno un hallazgo: un toque lo cierra
+static_assert(S_IT_CHARM - S_IT_GOLDEN == IT_CHARM - IT_GOLDEN, "nombres de objeto en el orden de IT_*");
 bool clockOpen = false;       // pantalla de ajuste de hora (deslizar abajo)
 int clockH = 12, clockM = 0;  // hora en edicion
 
@@ -206,6 +214,9 @@ void setup() {
   // tactil; el cuelgue del tactil dormido se resuelve gateando por INT, ver
   // handleTouch).
   Wire.setTimeOut(50);
+  // 400 kHz (board_amoled_216.h): un segundo de muestras del IMU se lee en ~10 ms
+  // en vez de 36. SensorLib llama a Wire.begin() sin tocar el reloj: se queda asi.
+  Wire.setClock(BOARD_I2C_HZ);
 
   // En la AMOLED-2.16 no se toca ningun rail del AXP2101: la demo de Waveshare
   // deja todos en su valor de arranque y el panel funciona asi. (En la 1.75 el
@@ -249,6 +260,7 @@ void setup() {
   rtcBegin();
   batBegin();
   pwrSetup();
+  imuBegin();  // sin IMU, la pagina de paseo lo dice y nada mas cambia
   uint32_t e = rtcEpoch();
   if (e == 0) {
     // Sin pila de respaldo, el PCF85063 pierde la hora al cortar la
@@ -318,6 +330,7 @@ void loop() {
   if (backKey.update(digitalRead(BOARD_BTN_USER) == BOARD_BTN_PRESSED_LEVEL, millis())) onBack();
   handleSerial();
   ensureMon();
+  imuTick(now);  // pasos, sacudidas, boca abajo
 
   // pulsacion corta del PWR: pantalla on/off
   static uint32_t lastPwr = 0;
@@ -386,6 +399,50 @@ void loop() {
   // cede la CPU en los pases que no dibujan: sin esto el loop gira a pleno rendimiento
   // entre frames; 1 ms no se nota en el tactil (se lee cada 20 ms) y el frame no se retrasa
   if (!drewFrame) idleWait(pc);
+}
+
+// ---------- IMU: pasos y trucos de movimiento (docs/FEATURES.md, Tareas 1 y 2) ----------
+
+void onShake();
+void onFaceDown(bool down);
+
+// lee el FIFO (cada 100 ms encendida, cada segundo a oscuras), pasa los pasos al
+// bicho cada 30 s y atiende los eventos. Nada de esto escribe en flash al momento.
+void imuTick(uint32_t now) {
+  if (!imuPresent()) return;
+  imuPoll(now, !screenOff && dimStage < DIM_OFF);
+  static uint32_t lastFlush = 0;
+  if (now - lastFlush >= STEP_FLUSH_MS) {
+    lastFlush = now;
+    pet.addSteps(imuTakeSteps(), pet.dayNumber());  // con 0 pasos tambien pasa el dia
+  }
+  if (imuTakeShakes()) onShake();
+  int8_t fd = imuTakeFaceDown();
+  if (fd) onFaceDown(fd > 0);
+}
+
+// Sacudida (FR-2.1). A oscuras solo enciende la pantalla, como un toque: asi un
+// trote con la placa en el bolsillo nunca despierta al bicho. Con la pantalla
+// encendida, el dormido se despierta de mal humor y el despierto se marea.
+void onShake() {
+  if (screenOff) return;  // apagada con PWR: se respeta
+  if (dimStage > 0) { wakeUI(); return; }
+  wakeUI();
+  if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen) return;
+  if (galleryOpen || cardOpen || kbOpen || clockOpen) return;  // el bicho no esta en pantalla
+  if (pet.sleeping) pet.wakeGrumpy();
+  else pet.shaken();  // tambien el huevo: se tambalea
+}
+
+// Boca abajo y quieta 3 s (FR-2.2): de noche el bicho se va a dormir; de dia solo
+// se apaga la pantalla. Al levantarla se enciende (y quien se durmio sigue dormido).
+void onFaceDown(bool down) {
+  if (screenOff) return;
+  if (!down) { wakeUI(); return; }
+  if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen) return;
+  int h = sceneHour();
+  if ((h >= 20 || h < 6) && !pet.isEgg() && !pet.sleeping) pet.sleepDeferred();
+  lastInteract = millis() - POWER_DIM2_MS - 1;  // casi apagada, como tras 5 min sin tocar
 }
 
 // estado de consumo actual (ver power.h)
@@ -469,6 +526,12 @@ void idleWait(PowerCtx c) {
 
 void handleSerial() {
   if (!Serial.available()) return;
+  if (imuLogging()) {  // IMULOG en marcha: cualquier tecla lo para
+    imuLog(0);
+    while (Serial.available()) Serial.read();
+    Serial.println("DONE");
+    return;
+  }
   String line = Serial.readStringUntil('\n');
   line.trim();
   if (line.length() == 0) return;
@@ -559,6 +622,24 @@ void handleSerial() {
                   (unsigned long)(millis() / 1000), ESP.getFreeHeap(),
                   ESP.getMinFreeHeap(), sdReady, pmd.loaded || mon.loaded);
     Serial.println("DONE");
+  } else if (line.startsWith("STEPS ")) {  // pasos inyectados por el mismo camino que el IMU
+    long n = line.substring(6).toInt();
+    if (n > 0) pet.addSteps((uint32_t)n, pet.dayNumber());
+    Serial.printf("steps today=%lu total=%lu finds=%u goal=%d\n", (unsigned long)pet.stepsToday,
+                  (unsigned long)pet.stepsTotal, pet.findsToday, pet.goalDoneOn(pet.dayNumber()) ? 1 : 0);
+    Serial.println("DONE");
+  } else if (line == "IMU") {
+    imuReport();
+    Serial.println("DONE");
+  } else if (line.startsWith("IMULOG")) {  // IMULOG <s>: muestras en CSV (cualquier tecla para)
+    long secs = line.length() > 6 ? line.substring(7).toInt() : 10;
+    imuLog((uint32_t)(secs > 0 ? secs : 10) * 1000UL);
+  } else if (line == "SHAKE") {            // como una sacudida de verdad
+    onShake();
+    Serial.println("DONE");
+  } else if (line.startsWith("FACEDOWN")) {  // FACEDOWN: boca abajo; FACEDOWN 0: la levantan
+    onFaceDown(!(line.length() > 9 && line.substring(9).toInt() == 0));
+    Serial.println("DONE");
   } else if (line == "STATS") {
     Serial.printf("spec=%d nv=%u com=%u fel=%u ene=%u lim=%u desc=%u sd=%d mon=%d bat=%d usb=%d rtc=%u\n",
                   pet.speciesId, pet.level(), pet.fullness, pet.joy, pet.energy,
@@ -571,6 +652,9 @@ void handleSerial() {
     Serial.printf("shiny=%d streak=%u/%u bond=%u medals=0x%X(%u) nick=%s\n",
                   pet.shiny, pet.streak, pet.bestStreak, pet.bond, pet.medals,
                   pet.totalMedals, pet.nick);
+    Serial.printf("steps=%lu/%lu finds=%u bpack=%u/%u/%u/%u charm=%u imu=%d\n", (unsigned long)pet.stepsToday,
+                  (unsigned long)pet.stepsTotal, pet.findsToday, pet.items[IT_GOLDEN], pet.items[IT_PROTEIN],
+                  pet.items[IT_IRON], pet.items[IT_CARBOS], pet.items[IT_CHARM], imuPresent() ? 1 : 0);
     Serial.println("DONE");
   }
 }
@@ -664,7 +748,7 @@ void onSwipeV(int dir) {
   if (gameOpen || galleryOpen || kbOpen || sackOpen || pet.ceremony) return;
   if (clockOpen) { clockOpen = false; return; }
   if (cardOpen) {
-    if (dir < 0) cardOpen = false;  // arriba cierra la ficha
+    if (dir < 0) { cardOpen = false; itemConfirm = 0; }  // arriba cierra la ficha
     return;
   }
   if (dir > 0) {                    // deslizar abajo: ajustar hora
@@ -679,9 +763,10 @@ void onSwipeV(int dir) {
 void onSwipe(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
   if (gameOpen || kbOpen || clockOpen) return;
-  if (cardOpen) {  // dentro de la ficha: cambiar entre las 4 paginas
+  if (cardOpen) {  // dentro de la ficha: cambiar entre las CARD_PAGES paginas
     int p = (int)cardPage + (dir > 0 ? -1 : 1);  // izquierda avanza
-    cardPage = p < 0 ? 0 : (p > 3 ? 3 : p);
+    cardPage = p < 0 ? 0 : (p > CARD_PAGES - 1 ? CARD_PAGES - 1 : p);
+    itemConfirm = 0;
     return;
   }
   if (!galleryOpen) {
@@ -740,11 +825,13 @@ void onBack() {
   if (kbOpen) { kbOpen = false; return; }        // descarta el nombre y vuelve a la ficha
   if (clockOpen) { clockOpen = false; return; }  // sin aplicar la hora, como al deslizar
   if (pet.ceremony) return;                      // durante la despedida no hay vuelta atras
+  if (cardOpen && itemConfirm) { itemConfirm = 0; return; }  // "usar objeto?": NO
   if (cardOpen) { cardOpen = false; return; }
   if (gameOpen) { gameOpen = false; return; }    // abandona sin premio, como tocar la cabecera
   if (choiceKind) { choiceKind = 0; return; }    // ni evoluciona ni rechaza: el boton sigue ahi
   if (confirmUntil) { confirmUntil = 0; return; }  // "soltar?": NO
   if (feedMenuUntil) { feedMenuUntil = 0; return; }
+  if (foundShown) { pet.popFound(); foundShown = false; return; }  // cierra el hallazgo
 }
 
 void onTap(int16_t x, int16_t y) {
@@ -774,6 +861,7 @@ void onTap(int16_t x, int16_t y) {
   }
   if (pet.ceremony) return;  // durante la despedida no hay botones
   if (cardOpen) {
+    if (cardPage == 4) { walkTap(x, y); return; }  // paseo: mochila
     if (cardPage == 0 && y < 84) openKeyboard();  // tocar el nombre = renombrar
     else if (cardPage == 1 && y >= 300 && y <= 340 && x >= 96 && x <= 370) {
       cardOpen = false;            // boton ENTRENAR FUERZA
@@ -815,6 +903,12 @@ void onTap(int16_t x, int16_t y) {
       sfxPlay(SFX_EAT);
     }
     feedMenuUntil = 0;
+    return;
+  }
+  if (foundShown) {          // hallazgo del paseo en pantalla: un toque lo cierra
+    pet.popFound();
+    foundShown = false;
+    sfxPlay(SFX_TAP);
     return;
   }
   if (pet.isEgg()) {
@@ -1130,6 +1224,7 @@ static bool staticScreen() {
   if (kbOpen || clockOpen) return true;
   return cardOpen && cardPage != 0;  // la pagina 0 tiene el retrato animado
 }
+uint32_t walkStepsToday();
 static uint32_t mixKey(uint32_t h, uint32_t v) { return (h ^ v) * 16777619u; }
 static uint32_t screenKey() {
   uint32_t h = 2166136261u;
@@ -1150,6 +1245,11 @@ static uint32_t screenKey() {
                         (uint32_t)pet.fullness, (uint32_t)pet.joy, (uint32_t)pet.energy, (uint32_t)pet.hygiene,
                         (uint32_t)pet.berryKnown, (uint32_t)pet.strHi, (uint32_t)gLang })
       h = mixKey(h, v);
+    // pagina de paseo: sin estos campos no se repintaria al llegar pasos
+    for (uint32_t v : { walkStepsToday(), pet.stepsTotal, (uint32_t)pet.findsToday, pet.stepDay, pet.goalDay,
+                        (uint32_t)imuPresent(), (uint32_t)itemConfirm, pet.dayNumber() })
+      h = mixKey(h, v);
+    for (uint8_t n : pet.items) h = mixKey(h, n);
     for (const char *c = pet.nick; *c; c++) h = mixKey(h, (uint8_t)*c);
   }
   return h;
@@ -1159,6 +1259,8 @@ uint32_t lastScreenKey = 0;
 
 // Dibuja un frame y devuelve true si lo ha volcado al panel.
 bool render() {
+  if (itemConfirm && !timeLeft(itemConfirmUntil)) itemConfirm = 0;  // antes de la clave: asi se repinta
+  foundShown = false;  // lo vuelve a poner drawWalkNews() si el hallazgo sigue en pantalla
   if (staticScreen()) {
     uint32_t k = screenKey();
     if (screenKeyValid && k == lastScreenKey) return false;
@@ -1215,6 +1317,8 @@ bool render() {
   if (pet.isEgg()) {
     drawHeader(T(S_EGG_HDR), inkColor(), eggMsg());
     int s = 5, x = CX - 16 * s, y = PET_CY - 16 * s;
+    if (pet.emote() == EMOTE_WOBBLE)  // agitado: se tambalea y se va calmando
+      x += (int)(8.0f * (1.0f - pet.emoteT()) * sinf(millis() * 0.035f));
     drawMap(SPR_EGG, SPRITE_H, x, y, s, false);
     if (pet.eggCracks() >= 1)
       for (auto &c : CRACK1) gfx->fillRect(x + c[0] * s, y + c[1] * s, s, s, INK_K);
@@ -1259,6 +1363,11 @@ bool render() {
     setCur(320, 130);
     printT("Zz");
   }
+
+  // noticias del paseo (meta y hallazgos), por encima de todo lo de la pantalla
+  // principal (tambien del boton de evolucion: un toque cierra antes el hallazgo)
+  // y por debajo de los dialogos, que las aplazan (drawWalkNews mira si hay alguno)
+  drawWalkNews();
 
   // selector de comida
   if (feedMenuUntil) {
@@ -1777,6 +1886,11 @@ void clockTap(int16_t x, int16_t y) {
   if (y >= 340 && y <= 388 && x >= 133 && x <= 333) { applyClock(); return; }
 }
 
+// iconos de la mochila, en el orden de IT_* (pet.h)
+static const char *const *const ITEM_ICON[IT_COUNT] = {
+  SPR_ICON_GOLDEN, SPR_ICON_PROTEIN, SPR_ICON_IRON, SPR_ICON_CARBOS, SPR_ICON_CHARM,
+};
+
 // llama + numero de racha arriba a la izquierda
 // insignia de racha (llama + dias). Ancho en px, 0 si no hay racha.
 int streakBadgeW() {
@@ -1823,6 +1937,58 @@ void drawCelebration() {
   setSize(2);
   setCur(centerX(l2, 2), 212);
   printT(l2);
+}
+
+// Noticias del paseo sobre la pantalla principal: el banner de la meta (4,5 s) y
+// los hallazgos (hasta que se toca). Esperan a que la pantalla este encendida y
+// no haya otro dialogo, medalla o animacion encima (FR-1.4 / FR-1.5).
+void drawWalkNews() {
+  uint32_t now = millis();
+  bool busy = screenOff || dimStage != DIM_AWAKE || choiceKind || confirmUntil || feedMenuUntil ||
+              pet.evolving() || bathUntil || pet.showMedal() || pet.showMilestone();
+  if (!busy && !timeLeft(goalBannerUntil) && pet.takeGoalBanner()) {
+    goalBannerUntil = now + 4500;
+    sfxPlay(SFX_MEDAL);
+  }
+  if (timeLeft(goalBannerUntil)) {
+    char l2[32];
+    snprintf(l2, sizeof(l2), T(S_STEPS_FMT), (unsigned long)STEP_GOAL);
+    gfx->fillRoundRect(73, 150, 320, 96, 16, UI_BAR_WARN);
+    gfx->drawRoundRect(73, 150, 320, 96, 16, UI_INK);
+    drawMap(SPR_ICON_FLAG, 16, 88, 166, 2, false);
+    gfx->setTextColor(UI_INK);
+    setSize(3);
+    setCur(centerX(T(S_GOAL_DONE), 3), 176);
+    printT(T(S_GOAL_DONE));
+    setSize(2);
+    setCur(centerX(l2, 2), 212);
+    printT(l2);
+    return;
+  }
+  static bool wasShown = false;
+  if (busy || !pet.hasFound()) { wasShown = false; return; }
+  bool full = false;
+  uint8_t it = pet.peekFound(&full);
+  if (!wasShown) sfxPlay(SFX_MEDAL);  // suena una vez por hallazgo
+  wasShown = true;
+  foundShown = true;
+  int by = 138, bh = full ? 140 : 124;
+  gfx->fillRoundRect(73, by, 320, bh, 16, UI_BAR_WARN);
+  gfx->drawRoundRect(73, by, 320, bh, 16, UI_INK);
+  gfx->setTextColor(UI_INK);
+  setSize(3);
+  setCur(centerX(T(S_FOUND), 3), by + 14);
+  printT(T(S_FOUND));
+  drawMap(ITEM_ICON[it], 16, CX - 24, by + 44, 3, false);
+  const char *nm = T((StrId)(S_IT_GOLDEN + it));
+  setSize(2);
+  setCur(centerX(nm, 2), by + 98);
+  printT(nm);
+  if (full) {
+    gfx->setTextColor(UI_BAR_BAD);
+    setCur(centerX(T(S_BACKPACK_FULL), 2), by + 118);
+    printT(T(S_BACKPACK_FULL));
+  }
 }
 
 // medallas en la ficha: badge con etiqueta, color si conseguida
@@ -2007,18 +2173,168 @@ void renderCardProgress() {
   printT(ms);
 }
 
+// pagina 4: paseo (FR-1.7). Pasos de hoy con un anillo hacia la meta, el total,
+// los hallazgos de hoy y la mochila; tocar un objeto pide confirmacion y lo usa.
+#define WALK_RING_Y 140
+#define WALK_RING_R 60   // radio exterior del anillo (el interior, 13 px menos)
+#define WALK_SLOT_Y 262
+#define WALK_SLOT_W 64
+#define WALK_SLOT_H 62
+#define WALK_SLOT_GAP 8
+#define WALK_SLOT_X (CX - (IT_COUNT * WALK_SLOT_W + (IT_COUNT - 1) * WALK_SLOT_GAP) / 2)
+
+// pasos de hoy en pantalla: los del bicho mas los que el IMU aun no le ha pasado
+uint32_t walkStepsToday() { return pet.stepsOn(pet.dayNumber()) + imuStepsPending(); }
+
+// un mapa de caracteres pintado de un solo color (objeto que no se tiene)
+void drawMapTint(const char *const *map, int n, int x, int y, int s, uint16_t col) {
+  for (int r = 0; r < n; r++) {
+    const char *row = map[r];
+    forRuns(n, [&](int c) { return charKey(row[c], true); },
+            [&](int c0, int len, int) { gfx->fillRect(x + c0 * s, y + r * s, len * s, s, col); });
+  }
+}
+
+void renderCardWalk() {
+  gfx->setTextColor(UI_INK);
+  setSize(3);
+  setCur(centerX(T(S_WALK), 3), 40);
+  printT(T(S_WALK));
+
+  uint32_t day = pet.dayNumber();
+  if (!imuPresent()) {  // FR-1.9: sin IMU lo dice y nada mas cambia
+    gfx->setTextColor(UI_TRACK);
+    setSize(2);
+    setCur(centerX(T(S_NO_IMU), 2), WALK_RING_Y - 8);
+    printT(T(S_NO_IMU));
+  } else {
+    uint32_t st = walkStepsToday();
+    bool done = pet.goalDoneOn(day) || st >= STEP_GOAL;
+    gfx->fillArc(CX, WALK_RING_Y, WALK_RING_R, WALK_RING_R - 13, 0, 360, UI_TRACK);
+    float frac = st >= STEP_GOAL ? 1.0f : (float)st / STEP_GOAL;
+    if (frac >= 1.0f) gfx->fillArc(CX, WALK_RING_Y, WALK_RING_R, WALK_RING_R - 13, 0, 360, UI_BAR_OK);
+    else if (frac > 0.003f)  // de las 12 en el sentido de las agujas del reloj
+      gfx->fillArc(CX, WALK_RING_Y, WALK_RING_R, WALK_RING_R - 13, 270, 270 + 360 * frac, 0x4C98);
+    char num[12];
+    snprintf(num, sizeof(num), "%lu", (unsigned long)st);
+    uint8_t ns = strlen(num) <= 5 ? 3 : 2;
+    gfx->setTextColor(UI_INK);
+    setSize(ns);
+    setCur(centerX(num, ns), WALK_RING_Y - (ns == 3 ? 18 : 14));
+    printT(num);
+    char goal[10];
+    snprintf(goal, sizeof(goal), "/%u", (unsigned)STEP_GOAL);
+    gfx->setTextColor(UI_TRACK);
+    setSize(2);
+    setCur(centerX(goal, 2), WALK_RING_Y + 12);
+    printT(goal);
+    if (done) drawMap(SPR_ICON_FLAG, 16, CX + 50, WALK_RING_Y - 70, 2, false);
+
+    char tot[32];
+    snprintf(tot, sizeof(tot), T(S_STEPS_TOTAL_FMT), (unsigned long)(pet.stepsTotal + imuStepsPending()));
+    gfx->setTextColor(UI_INK);
+    setCur(centerX(tot, 2), 212);
+    printT(tot);
+    char fnd[32];
+    snprintf(fnd, sizeof(fnd), T(S_FINDS_FMT), (unsigned)(pet.stepDay == day ? pet.findsToday : 0),
+             (unsigned)FINDS_PER_DAY);
+    setCur(centerX(fnd, 2), 236);
+    printT(fnd);
+  }
+
+  // mochila: una casilla por objeto, con su cuenta; el amuleto, enmarcado si se lleva
+  for (int i = 0; i < IT_COUNT; i++) {
+    int x = WALK_SLOT_X + i * (WALK_SLOT_W + WALK_SLOT_GAP), y = WALK_SLOT_Y;
+    uint8_t n = pet.items[i];
+    bool held = (i == IT_CHARM) && n;
+    gfx->fillRoundRect(x, y, WALK_SLOT_W, WALK_SLOT_H, 10, n ? UI_WHITE : UI_BG_DAY);
+    gfx->drawRoundRect(x, y, WALK_SLOT_W, WALK_SLOT_H, 10, held ? UI_BAR_WARN : (n ? UI_INK : UI_TRACK));
+    if (held) gfx->drawRoundRect(x + 1, y + 1, WALK_SLOT_W - 2, WALK_SLOT_H - 2, 9, UI_BAR_WARN);
+    if (n) drawMap(ITEM_ICON[i], 16, x + (WALK_SLOT_W - 32) / 2, y + 6, 2, false);
+    else drawMapTint(ITEM_ICON[i], 16, x + (WALK_SLOT_W - 32) / 2, y + 6, 2, UI_TRACK);
+    char c[6];
+    snprintf(c, sizeof(c), "x%u", n);
+    gfx->setTextColor(n ? UI_INK : UI_TRACK);
+    setSize(2);
+    setCur(x + (WALK_SLOT_W - textW(c, 2)) / 2, y + 42);
+    printT(c);
+  }
+  const char *hint = pet.items[IT_CHARM] ? T(S_CHARM_HELD) : (pet.itemCount() == 0 ? T(S_BACKPACK_EMPTY) : nullptr);
+  if (hint) {
+    gfx->setTextColor(pet.items[IT_CHARM] ? UI_INK : UI_TRACK);
+    setSize(2);
+    setCur(centerX(hint, 2), 336);
+    printT(hint);
+  }
+
+  // "usar objeto?" (mismo dialogo que "soltar?")
+  if (itemConfirm) {
+    uint8_t it = itemConfirm - 1;
+    gfx->fillRoundRect(94, 168, 278, 152, 16, UI_WHITE);
+    gfx->drawRoundRect(94, 168, 278, 152, 16, UI_INK);
+    drawMap(ITEM_ICON[it], 16, CX - 16, 176, 2, false);
+    char q[48];
+    snprintf(q, sizeof(q), T(S_USE_FMT), T((StrId)(S_IT_GOLDEN + it)));
+    gfx->setTextColor(UI_INK);
+    setSize(2);
+    setCur(centerX(q, 2), 218);
+    printT(q);
+    gfx->fillRoundRect(118, 252, 100, 52, 12, UI_BAR_OK);
+    gfx->setTextColor(UI_WHITE);
+    setCur(118 + (100 - textW(T(S_YES), 2)) / 2, 270);
+    printT(T(S_YES));
+    gfx->fillRoundRect(248, 252, 100, 52, 12, UI_BAR_BAD);
+    setCur(248 + (100 - textW(T(S_NO), 2)) / 2, 270);
+    printT(T(S_NO));
+  }
+}
+
+// toques en la pagina de paseo: la fila de la mochila no cierra la ficha
+void walkTap(int16_t x, int16_t y) {
+  if (itemConfirm) {
+    uint8_t it = itemConfirm - 1;
+    itemConfirm = 0;
+    if (timeLeft(itemConfirmUntil) && x >= 118 && x <= 218 && y >= 252 && y <= 304) {
+      if (pet.useItem(it)) {
+        sfxPlay(it == IT_GOLDEN ? SFX_EAT : SFX_LEVEL);
+        if (it == IT_GOLDEN) cardOpen = false;  // a ver como se la come
+      } else {
+        sfxPlay(SFX_DENY);
+      }
+    }
+    return;
+  }
+  if (y >= WALK_SLOT_Y && y < WALK_SLOT_Y + WALK_SLOT_H) {
+    if (x < WALK_SLOT_X) return;
+    int i = (x - WALK_SLOT_X) / (WALK_SLOT_W + WALK_SLOT_GAP);
+    int xi = (x - WALK_SLOT_X) % (WALK_SLOT_W + WALK_SLOT_GAP);
+    if (i >= IT_COUNT || xi >= WALK_SLOT_W) return;
+    if (pet.canUseItem(i)) {
+      itemConfirm = i + 1;
+      itemConfirmUntil = millis() + 10000;
+      sfxPlay(SFX_TAP);
+    } else if (pet.items[i]) {
+      sfxPlay(SFX_DENY);  // el amuleto se lleva, no se usa; o dormido, o entrenamiento al maximo
+    }
+    return;
+  }
+  cardOpen = false;
+}
+
 void renderCard() {
   gfx->fillScreen(RGB565_BLACK);
   gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
   if (cardPage == 0) renderCardProfile();
   else if (cardPage == 1) renderCardStats();
   else if (cardPage == 2) renderCardMedals();
-  else renderCardProgress();
+  else if (cardPage == 3) renderCardProgress();
+  else renderCardWalk();
 
-  // indicador de 4 paginas + ayuda
-  for (int i = 0; i < 4; i++) {
-    if (i == cardPage) gfx->fillCircle(194 + i * 26, 374, 5, UI_INK);
-    else gfx->drawCircle(194 + i * 26, 374, 4, UI_INK);
+  // indicador de paginas + ayuda
+  for (int i = 0; i < CARD_PAGES; i++) {
+    int dx = CX - (CARD_PAGES - 1) * 13 + i * 26;
+    if (i == cardPage) gfx->fillCircle(dx, 374, 5, UI_INK);
+    else gfx->drawCircle(dx, 374, 4, UI_INK);
   }
   gfx->setTextColor(UI_TRACK);
   setSize(2);
@@ -2462,7 +2778,7 @@ void drawPet() {
   }
   const Species &sp = SPECIES[fi];
   int s = sp.scale;
-  int x = CX - 16 * s;
+  int x = CX - 16 * s + dizzyWobble(millis());
   int y = PET_CY - 16 * s;
 
   // animacion de evolucion: alterna la silueta de la forma anterior y la nueva
@@ -2492,6 +2808,7 @@ void drawPet() {
   else if (m == MOOD_SAD) overlayMouth(sp, x, y, s, false);
 
   if (pet.showHeart()) drawMap(SPR_HEART, 32, x + 20 * s, y - 2 * s, 2, false);
+  drawEmote(x + 16 * s, y + 2 * s);
 }
 
 // ---------- escena de bano ----------
@@ -2596,6 +2913,54 @@ void drawPmdAct(uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool 
   drawPmdActM(pmd, actId, cx, groundY, t, loop, sil, maxS);
 }
 
+// ---------- reacciones al movimiento (Tarea 2) ----------
+
+// marca de enfado (cuatro esquinas hacia fuera) centrada en (cx, cy)
+void drawAngerMark(int cx, int cy) {
+  uint16_t red = C565(0xe2, 0x2c, 0x2c);
+  for (int sx = -1; sx <= 1; sx += 2)
+    for (int sy = -1; sy <= 1; sy += 2) {
+      int x0 = cx + sx * 4, y0 = cy + sy * 4;
+      gfx->fillRect(sx > 0 ? x0 : x0 - 9, sy > 0 ? y0 : y0 - 3, 10, 4, red);  // brazo horizontal
+      gfx->fillRect(sx > 0 ? x0 : x0 - 3, sy > 0 ? y0 : y0 - 9, 4, 10, red);  // brazo vertical
+    }
+}
+
+// tres estrellas girando sobre la cabeza (mareo)
+void drawDizzyStars(int cx, int cy, uint32_t now) {
+  for (int i = 0; i < 3; i++) {
+    float a = now * 0.007f + i * 2.0944f;
+    int x = cx + (int)(44 * cosf(a)), y = cy + (int)(11 * sinf(a));
+    uint16_t c = (i == 1) ? UI_WHITE : C565(0xff, 0xdc, 0x4a);
+    gfx->fillRect(x - 1, y - 6, 3, 13, c);
+    gfx->fillRect(x - 6, y - 1, 13, 3, c);
+    gfx->fillRect(x - 2, y - 2, 5, 5, c);
+  }
+}
+
+// emote encima del bicho: (cx, headY) es el centro de su cabeza mas o menos
+void drawEmote(int cx, int headY) {
+  uint8_t e = pet.emote();
+  if (e == EMOTE_ANGRY) drawAngerMark(cx + 46, headY - 8);
+  else if (e == EMOTE_DIZZY) drawDizzyStars(cx, headY - 18, millis());
+}
+
+// alto en pantalla del sprite PMD en reposo, de los pies hacia arriba (para
+// poner los emotes sobre la cabeza); misma escala que drawPmdActM
+int pmdIdleHeight() {
+  const PmdAct &a = pmd.acts[PMD_IDLE];
+  if (!a.h) return 140;
+  int s = 170 / a.h;
+  s = s < 2 ? 2 : (s > 5 ? 5 : s);
+  return (a.base ? a.base : a.h) * s;
+}
+
+// desplazamiento del vaiven del mareo, que se va calmando
+int dizzyWobble(uint32_t now) {
+  if (pet.emote() != EMOTE_DIZZY) return 0;
+  return (int)(7.0f * (1.0f - pet.emoteT()) * sinf(now * 0.03f));
+}
+
 // elige el siguiente capricho del bicho cuando esta contento
 void behNext() {
   uint32_t now = millis();
@@ -2638,6 +3003,7 @@ void drawPetPMD() {
   PetMood m = pet.mood();
   uint8_t act;
   bool loop = true;
+  int8_t surprised = 0;  // resbalando por la inclinacion: lado hacia el que va
   if (m == MOOD_SLEEPING && pmd.has(PMD_SLEEP)) {
     act = PMD_SLEEP;
     beh.mode = 0;
@@ -2646,6 +3012,31 @@ void drawPetPMD() {
     beh.t0 = 0;
   } else if (m == MOOD_SAD && pmd.has(PMD_HURT)) {
     act = PMD_HURT;
+  } else if (imuPresent() && imuTiltSide() && !bathUntil && pet.emote() == EMOTE_NONE) {
+    // inclinada (FR-2.3): camina hacia el lado bajo; de mas, resbala sorprendido
+    // con el frame de andar quieto. Al nivelarla, vuelve a pasear enseguida.
+    int8_t side = imuTiltSide();
+    bool slide = imuTiltSlide();
+    static uint32_t tiltLast = 0;
+    uint32_t dt = (tiltLast && now - tiltLast < 400) ? now - tiltLast : 100;
+    tiltLast = now;
+    float edge = side > 0 ? 334 : 132;
+    float d = edge - beh.x;
+    float step = (slide ? 150.0f : 50.0f) * dt / 1000.0f;
+    if (step > fabsf(d)) step = fabsf(d);
+    beh.x += d > 0 ? step : -step;
+    beh.mode = 0;
+    beh.until = now + 800;  // nivelada, mira al frente un momento y sigue con lo suyo
+    walkLast = 0;
+    act = side > 0 ? PMD_WALKR : PMD_WALKL;
+    if (!pmd.has(act)) act = PMD_IDLE;
+    if (slide) {
+      beh.t0 = now;  // frame 0 del paseo, sin dar pasos
+      loop = false;
+      surprised = side;
+    } else if (fabsf(d) < 1) {
+      act = PMD_IDLE;  // en el borde: espera
+    }
   } else {
     // contento: el planificador decide (idle / paseo / gesto)
     if (now > beh.until) behNext();
@@ -2674,16 +3065,26 @@ void drawPetPMD() {
     if (!pmd.has(act)) act = PMD_IDLE;
   }
 
-  drawPmdAct(act, (int)beh.x, PET_GROUND, now - beh.t0, loop || act == PMD_IDLE, false, 5);
+  int px = (int)beh.x + dizzyWobble(now);
+  drawPmdAct(act, px, PET_GROUND, now - beh.t0, loop || act == PMD_IDLE, false, 5);
 
   if (pet.showHeart()) drawMap(SPR_HEART, 32, (int)beh.x + 50, PET_GROUND - 190, 2, false);
+  int head = PET_GROUND - pmdIdleHeight() + 24;
+  if (head < 130) head = 130;  // sin pisar la cabecera
+  drawEmote(px, head);
+  if (surprised) {  // "!" de sorpresa, por detras de la marcha
+    setSize(4);
+    gfx->setTextColor(UI_BAR_BAD);
+    setCur(px + (surprised > 0 ? -60 : 40), head - 30);
+    printT("!");
+  }
 }
 
 // sprite animado desde la SD: zoom entero por pixel, frames a su ritmo
 void drawPetSD() {
   int s = mon.scale;
   int w = mon.w * s, h = mon.h * s;
-  int x = CX - w / 2;
+  int x = CX - w / 2 + dizzyWobble(millis());
   int y = PET_CY - h / 2;
 
   bool sil = false;
@@ -2704,6 +3105,7 @@ void drawPetSD() {
 
   // emotes en vez de expresiones (los sprites importados no tienen anclas)
   if (pet.showHeart()) drawMap(SPR_HEART, 32, x + w - 30, y - 50, 2, false);
+  drawEmote(x + w / 2, y + 10);
 }
 
 // ojo cerrado: borra el ojo 3x4 y dibuja el parpado
@@ -2794,6 +3196,8 @@ const char *eggMsg() {
 const char *statusMsg() {
   if (pet.evolving()) return T(S_EVOLVING);
   if (bathUntil) return "Splish splash!";  // onomatopeya universal
+  if (pet.emote() == EMOTE_ANGRY) return T(S_GRUMPY);
+  if (pet.emote() == EMOTE_DIZZY) return T(S_DIZZY);
   if (pet.sleeping) return "Zzz...";
   if (pet.eating()) return T(S_EATING);
   if (pet.showHeart()) return T(S_LIKES);

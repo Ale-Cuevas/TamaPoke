@@ -8,7 +8,51 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.20] - 2026-11-04
+
+Steps and the motion tricks, from the board's QMI8658 IMU (Tasks 1 and 2 of
+[docs/FEATURES.md](docs/FEATURES.md), shipped together). Saves from v1.19 load
+as they are: the new counters and the Backpack start at zero.
+
 ### Added
+
+- **Steps.** The accelerometer runs all the time (±8 g, 62.5 Hz, gyro and the
+  chip's low-pass filter off) and the game reads its FIFO with its own chunked
+  reader, once a second while the screen is dark and every 100 ms while it is
+  lit. Steps are counted in software (`steps.h`; the chip's pedometer counts
+  nothing on this board): 4 in a row before counting starts, and a shake pauses
+  it. Steps today (reset at midnight) and a lifetime total are the player's.
+- **Walk care** while the pet is hatched and awake: +1 JOY per 100 steps (max
+  +30 a day), −1 weight per 250, +1 bond per 1000. A **daily goal** of 3000
+  steps gives +10 JOY, a bonus find and a day of streak, with a banner.
+- **Finds and the Backpack.** Every 800–1200 rewarded steps (max 5 a day) the
+  pet finds a Golden Berry, a vitamin (Protein / Iron / Carbos: +3 ATK / DEF /
+  SPD training) or a Shiny Charm (×3 shiny odds for the next egg). A popup shows
+  each find; the Backpack holds 9 of each.
+- **WALK page**, the stat card's 5th: steps today with a ring toward the goal,
+  the total, today's finds and the Backpack; tap an item to use it. Without an
+  IMU it says so.
+- **Motion tricks** (`motion.h`): shake to light the screen, and with it lit to
+  wake a sleeping pet (grumpy) or make an awake one dizzy; lay the board
+  face-down for 3 s to put the screen (and at night the pet) to sleep; tilt it
+  and the pet walks or slides downhill. Spoilers in the README.
+- New icons (Golden Berry, the three vitamins, Shiny Charm, goal flag) in
+  `tools/sprites.py`, and the new texts in all 8 languages.
+- Serial: `STEPS <n>`, `IMU`, `IMULOG <s>`, `SHAKE`, `FACEDOWN [0]`; `STATS`
+  prints the steps and the Backpack.
+- Tests: `test/test_steps.cpp` and `test/test_motion.cpp` run the detectors on
+  the recorded captures in `test/data/imu/` and on synthetic signals; the walk
+  rules, the Backpack, the charm and the reactions are in `test/test_pet.cpp`.
+  Render scenes for the WALK page, the popups and the reactions.
+
+### Changed
+
+- **I2C at 400 kHz** (`BOARD_I2C_HZ`), up from Wire's 100 kHz default, so a
+  second of IMU samples reads in about 10 ms instead of 36.
+- The daily bond cap now resets at midnight (`bondDay`); before, yesterday's
+  cap held until the first care of the day.
+
+### Added (since 1.19, before the steps)
 
 - **USER button = back.** It closes the screen or dialog on top: gallery detail →
   grid → home, stat card, rename keyboard (name not saved), clock screen (time not
@@ -18,7 +62,7 @@ keeps your Pokémon.
 
 - **Feature spec** ([docs/FEATURES.md](docs/FEATURES.md)) for the next three
   tasks: steps counted from the IMU, motion easter eggs, and playdates and
-  battles between two boards. Nothing of it is implemented yet.
+  battles between two boards. The first two are in this release.
 
 - **Bring-up: IMU probe.** After the Phase 1 checks the bring-up firmware runs
   the QMI8658 the way the steps and motion features will, shows it in big type,
@@ -28,7 +72,7 @@ keeps your Pokémon.
   `test/data/imu/` and `tools/imu_replay.py` replays them through the prototype
   step and shake detectors.
 
-### Changed
+### Changed (since 1.19, before the steps)
 
 - **Quieter sound:** the DAC volume drops from 0 dB to -10 dB (about half as
   loud).

@@ -35,6 +35,11 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Evolucionar?", "Mantener forma", "Despedirse?", "Despedirse", "Quedaros juntos",
     "Elige tu inicial",
     "Sin sprites", "C\240rgalos en la SD",
+    // pasos y mochila (v1.20)
+    "PASEO", "%lu PASOS", "TOTAL %lu", "HALLAZGOS %u/%u", "MOCHILA", "Sin sensor de pasos",
+    "META!", "HALLAZGO!", "Mochila llena", "Usar %s?", "Amuleto: huevo shiny", "Vac\241a: sal a pasear!",
+    "Est\240 enfadado!", "Qu\202 mareo...",
+    "BAYA DORADA", "PROTEINA", "HIERRO", "CARBURANTE", "AMULETO IRIS",
   },
   // ---------------- EN ----------------
   {
@@ -64,6 +69,11 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Evolve?", "Keep form", "Say goodbye?", "Goodbye", "Stay together",
     "Choose your starter",
     "No sprites", "Load them onto the SD",
+    // pasos y mochila (v1.20)
+    "WALK", "%lu STEPS", "TOTAL %lu", "FINDS %u/%u", "BACKPACK", "No step sensor",
+    "GOAL!", "FOUND!", "Backpack full", "Use %s?", "Charm: shinier egg", "Empty: go for a walk!",
+    "Grumpy!", "So dizzy...",
+    "GOLDEN BERRY", "PROTEIN", "IRON", "CARBOS", "SHINY CHARM",
   },
   // ---------------- FR ----------------
   {
@@ -93,6 +103,11 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "\220voluer?", "Garder forme", "Dire adieu?", "Adieu", "Rester ensemble",
     "Choisis ton starter",
     "Pas de sprites", "Charge-les sur la SD",
+    // pasos y mochila (v1.20)
+    "BALADE", "%lu PAS", "TOTAL %lu", "TROUV\220S %u/%u", "SAC \205 DOS", "Pas de capteur",
+    "OBJECTIF!", "TROUV\220!", "Sac plein", "Utiliser %s?", "Charme: oeuf chroma", "Vide: va te balader!",
+    "Grognon!", "Tout \202tourdi...",
+    "BAIE DOR\220E", "PROT\220INE", "FER", "CARBONE", "CHARME CHROMA",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -127,6 +142,11 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Entwickeln?", "Form behalten", "Abschied?", "Leb wohl", "Zusammen bleiben",
     "W\204hle deinen Starter",
     "Keine Sprites", "Auf die SD laden",
+    // pasos y mochila (v1.20)
+    "SPAZIERGANG", "%lu SCHRITTE", "GESAMT %lu", "FUNDE %u/%u", "RUCKSACK", "Kein Sensor",
+    "ZIEL!", "GEFUNDEN!", "Rucksack voll", "%s nutzen?", "Pin: Ei schillert", "Leer: geh spazieren!",
+    "Grummelig!", "Schwindelig...",
+    "GOLDBEERE", "PROTEIN", "EISEN", "CARBON", "SCHILLERPIN",
   },
   // ---------------- IT ----------------
   {
@@ -156,6 +176,11 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Evolvere?", "Mantieni forma", "Salutare?", "Addio", "Restare insieme",
     "Scegli l'iniziale",
     "Senza sprite", "Caricali sulla SD",
+    // pasos y mochila (v1.20)
+    "PASSEGGIATA", "%lu PASSI", "TOTALE %lu", "TROVATI %u/%u", "ZAINO", "Nessun sensore",
+    "OBIETTIVO!", "TROVATO!", "Zaino pieno", "Usare %s?", "Amuleto: uovo shiny", "Vuoto: fai due passi!",
+    "Arrabbiato!", "Che capogiro...",
+    "BACCA D'ORO", "PROTEINA", "FERRO", "CARBURANTE", "CROMAMULETO",
   },
   // ---------------- PT ----------------
   {
@@ -185,6 +210,11 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Evoluir?", "Manter forma", "Despedir?", "Adeus", "Ficar juntos",
     "Escolhe o inicial",
     "Sem sprites", "Carrega-os no SD",
+    // pasos y mochila (v1.20)
+    "PASSEIO", "%lu PASSOS", "TOTAL %lu", "ACHADOS %u/%u", "MOCHILA", "Sem sensor",
+    "META!", "ACHOU!", "Mochila cheia", "Usar %s?", "Amuleto: ovo shiny", "Vazia: vai passear!",
+    "Zangado!", "Que tontura...",
+    "BAGA DOURADA", "PROTEINA", "FERRO", "CARBOS", "AMULETO BRILHANTE",
   },
   // ---------------- JA ----------------
   {
@@ -237,6 +267,11 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "さいしょのポケモンをえらぶ",
 
     "スプライトなし", "SDにいれてください",
+    // pasos y mochila (v1.20)
+    "さんぽ", "%lu ほ", "ごうけい %lu", "みつけた %u/%u", "リュック", "センサーなし",
+    "もくひょう！", "みつけた！", "リュックがいっぱい", "%sをつかう？", "おまもり: いろちがい", "からっぽ: さんぽしよう！",
+    "ぷんぷん！", "くらくら...",
+    "きんのみ", "プロテイン", "アイアン", "カーボス", "ひかるおまもり",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -271,6 +306,11 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "진화할까요?", "형태 유지", "작별할까요?", "작별", "계속 함께",
     "스타터를 선택하세요",
     "스프라이트 없음", "SD 카드에 넣어주세요",
+    // pasos y mochila (v1.20)
+    "산책", "%lu 걸음", "누적 %lu", "발견 %u/%u", "배낭", "센서 없음",
+    "목표 달성!", "발견!", "배낭이 가득", "%s 사용?", "부적: 이로치 알", "비었어요: 산책하자!",
+    "화났어!", "어지러워...",
+    "황금열매", "프로테인", "아이언", "카보스", "빛나는부적",
   },
 };
 

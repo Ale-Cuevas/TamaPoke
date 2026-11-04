@@ -53,7 +53,7 @@ same game image and loads the sprites over USB.
   (Corner taps: (22,19), (454,25), (24,469), (459,462). Flags unchanged.)
 - [x] A slow drag leaves a continuous trail.
 
-### IMU (QMI8658, not used by the game yet)
+### IMU (QMI8658, as the game uses it from v1.20)
 - [x] `[imu] QMI8658 ok, who-am-i 0x05, revision 0x..`; flat, face up, about 0 0 +1 g. (0.02 0.03 1.05 g;
   revision 0x7C. Before the who-am-i fix the log said `chip id 0x7C`: SensorLib's `getChipID()` reads the revision)
 
@@ -129,3 +129,41 @@ yellow label to `/imu/` on the SD card, USER picks the label, a 1 s USER hold sw
 - [ ] Volume at -10 dB (DAC register 0x32 = 0xAB in `audio.cpp`): about half as loud as before, still clear. Too quiet or loud: change it in steps of 2 (1 dB).
 - [ ] Sprites load from the card (`cargado /mons/p025.bin` in the log); `python3 tools/send_sd.py` and the web installer's "Load sprites" can write to the card over USB. (loading ✓: `cargado /mons/ps007.bin`, 151 thumbnails; writing over USB not tried)
 - [ ] Without a card, the nine built-in sprites still work.
+
+### Steps
+(v1.20, [FEATURES.md Task 1](FEATURES.md#task-1-steps).) Serial: `IMU` shows FIFO reads, samples per second
+and the steps not yet handed to the pet; `STATS` shows steps today/total and the Backpack.
+- [ ] Boot log: `[imu] QMI8658 ok: +-8 g, 62.5 Hz, sin LPF, FIFO stream 128`. `IMU` a minute later: about
+  59.5 samples/s, `err=0`, `ovf=0`, the read under 15 ms (`read=...us`).
+- [ ] **400 kHz I2C** (`BOARD_I2C_HZ`): touch still lands where drawn (buttons, swipes, the minigame), the sound
+  still plays, the battery reading and the RTC are unchanged. If not, set it back to `100000` and note it: ____
+- [ ] 100 real steps, counted by hand, board in a trouser pocket: the WALK page (stat card, 5th page) counts
+  them within ±10 %: ____ . Same in hand: ____ . Same in a bag: ____
+- [ ] 10 s of hard shaking: at most a few steps and no find.
+- [ ] Screen off with PWR, on battery, a 200-step walk: the steps are there when the screen comes back.
+- [ ] Today's steps and the Backpack survive a restart (re-upload) once the screen has dimmed (the save is
+  deferred until then).
+- [ ] Midnight: `RTCSET` to 23:59:30 of today, wait a minute: steps today back to 0, the total kept.
+- [ ] `STEPS 3000` with the pet awake: the goal banner and jingle on the lit screen, JOY +10, streak +1 that
+  day, a bonus find. `STEPS 900` again: a find popup; tap dismisses it. Use a Golden Berry and a vitamin from
+  the WALK page (confirm dialog, YES and NO; USER closes it).
+- [ ] No visible stall while walking with the screen lit (steps are only saved with the screen dimmed).
+- [ ] 8 h battery drain, screen off, against v1.19: ____ % vs ____ %.
+- [ ] `IMULOG 15` streams CSV that `tools/imu_replay.py` reads; any key stops it. Record a few walks with the
+  steps counted by hand into `test/data/imu/` for the accuracy test.
+
+### Motion
+(v1.20, [FEATURES.md Task 2](FEATURES.md#task-2-easter-eggs).) `SHAKE` and `FACEDOWN` / `FACEDOWN 0` inject
+the events without moving the board.
+- [ ] On battery, screen near-off (5 min, light sleep): a shake lights the screen within about a second. A
+  second shake wakes a sleeping pet, grumpy (anger mark, −5 JOY, deny sound).
+- [ ] With the screen on and the pet awake: a shake makes it dizzy (stars, wobble); three in 2 minutes cost
+  3 JOY once. The egg wobbles.
+- [ ] Screen off with PWR: a shake does nothing.
+- [ ] 2 minutes of walking with the board in a pocket, screen near-off: the screen never wakes.
+- [ ] Face-down at 21:00 (`RTCSET`): after 3 s the pet sleeps and the screen goes dark; picking it up lights
+  it, the pet still asleep. In the daytime only the screen goes dark.
+- [ ] Tilt left and right on the home screen: the pet walks downhill both ways (left is left), slides with a
+  "!" past about 45°, and wanders again when level.
+- [ ] 8 h battery drain with the motion checks on (the same firmware as the steps test: one figure covers
+  both).

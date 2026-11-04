@@ -76,6 +76,7 @@ class HardwareSerial : public Print {
   void setTxTimeoutMs(uint32_t) {}
   void setTimeout(unsigned long) {}
   int available() { return 0; }
+  int read() { return -1; }
   size_t readBytes(uint8_t *, size_t) { return 0; }
   size_t readBytes(char *, size_t) { return 0; }
   String readStringUntil(char) { return String(""); }

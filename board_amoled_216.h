@@ -52,6 +52,12 @@
 // --- Shared I2C bus: touch, PMIC, IMU, RTC, audio codecs --------------------
 #define BOARD_I2C_SDA 15  // [demo][sch]
 #define BOARD_I2C_SCL 14
+// Bus clock. Wire's default is 100 kHz, where one second of IMU samples (60
+// x 6 bytes out of the FIFO) takes 36 ms to read; every chip on this bus
+// (CST9220, AXP2101, QMI8658, PCF85063, ES8311, ES7210) is rated for 400 kHz
+// fast mode. Raised for the step counter (v1.20): if touch or sound misbehave
+// on a board, drop it back to 100000 (docs/DEVICE_TESTS.md, Steps).
+#define BOARD_I2C_HZ 400000
 
 #define BOARD_I2C_ADDR_TOUCH 0x5A   // CST9220, CST92XX_SLAVE_ADDRESS [lib]
 #define BOARD_I2C_ADDR_PMIC 0x34    // AXP2101_SLAVE_ADDRESS [lib]
@@ -69,8 +75,14 @@
 #define BOARD_TP_MIRROR_Y false
 
 // --- IMU: QMI8658 -----------------------------------------------------------
-#define BOARD_IMU_INT1 17  // [sch]
-#define BOARD_IMU_INT2 21
+// A QMI8658A (WHO_AM_I 0x05, REVISION_ID 0x7C), measured 2026-11-04.
+#define BOARD_IMU_INT1 17  // [sch]; rests low, pulses on activity events (unused)
+#define BOARD_IMU_INT2 21  // floats unless enabled: don't use it as is
+// Accelerometer axes with the USB-C at the bottom, measured on the board:
+// +X = screen right, +Y = screen top (the buttons' edge), +Z = out of the
+// screen. Lowering the right side reads X negative. motion.h's tilt uses this
+// sign so another board (the 1.75) can map its own.
+#define BOARD_IMU_X_RIGHT_DOWN_SIGN -1
 
 // --- RTC: PCF85063ATL -------------------------------------------------------
 #define BOARD_RTC_INT 13  // [sch]
