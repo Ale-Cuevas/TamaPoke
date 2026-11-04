@@ -595,7 +595,7 @@ void handleTouch() {
   if (Wire.endTransmission() != 0) return;  // no responde: se reintenta en 20 ms
   // getPoint() copia TODOS los dedos que reporta el chip (hasta 2), pida los que
   // pida: con un int16_t suelto, dos dedos escribian fuera de la variable
-  int16_t xs[TOUCH_MAX_POINTS], ys[TOUCH_MAX_POINTS];
+  int16_t xs[TOUCH_MAX_POINTS] = { 0 }, ys[TOUCH_MAX_POINTS] = { 0 };
   bool pressed = touch.getPoint(xs, ys, 1) > 0;
   // del panel de 480x480 al lienzo de 466x466 donde vive la UI (round_display.h)
   int16_t x = panelToUi(xs[0]), y = panelToUi(ys[0]);
