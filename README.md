@@ -293,6 +293,12 @@ If one bottoms out it counts as a *slip-up*.
 **Physical PWR button:** short = screen on/off · long (4 s) = full power-off
 (the RTC stays alive, so time passes even while it's off).
 
+**Physical USER button:** back. It closes whatever is open on top: gallery
+detail → grid → home, stat card, rename keyboard (without saving the name),
+clock screen (without applying the time), the minigame or the bag (quit, no
+reward), and the feed / release / evolve / farewell dialogs. On a dim or dark
+screen the first press only wakes it.
+
 ## Decisions: you choose, and you watch
 
 The three life-cycle endings and evolution **don't happen on their own** — when

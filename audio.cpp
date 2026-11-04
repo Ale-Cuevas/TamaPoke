@@ -94,7 +94,9 @@ static bool es8311Init() {
   esW(0x0D, 0x01); esW(0x15, 0x40); esW(0x37, 0x08); esW(0x45, 0x00);
 
   // volumen + unmute
-  esW(0x32, 0xBF);                                    // volumen DAC ~0 dB
+  // volumen DAC: pasos de 0.5 dB, 0xBF = 0 dB. 0xAB = -10 dB (la mitad de fuerte
+  // al oido); para ajustarlo, cada 2 unidades es 1 dB
+  esW(0x32, 0xAB);
   { uint8_t r = esR(0x31); r &= 0x9F; esW(0x31, r); }  // unmute
   return true;
 }

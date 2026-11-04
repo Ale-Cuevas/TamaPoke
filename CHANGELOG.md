@@ -6,6 +6,21 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [Unreleased]
+
+### Added
+
+- **USER button = back.** It closes the screen or dialog on top: gallery detail →
+  grid → home, stat card, rename keyboard (name not saved), clock screen (time not
+  applied), minigame and bag (quit without reward), and the feed / release /
+  evolve / farewell dialogs. On a dim or dark screen the first press only wakes it,
+  and it also wakes the board from light sleep. `BACK` over serial does the same.
+
+### Changed
+
+- **Quieter sound:** the DAC volume drops from 0 dB to -10 dB (about half as
+  loud).
+
 ## [1.19] - 2026-11-04
 
 The port to the **Waveshare ESP32-S3-Touch-AMOLED-2.16** (square 480x480
