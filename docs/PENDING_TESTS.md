@@ -19,6 +19,7 @@ Write the result on each line: a tick, or what you saw.
 | 10 | PWR key, dimming, light-sleep wake, battery reading | [Power, sleep, buttons](DEVICE_TESTS.md#power-sleep-buttons) | ✓ PWR, 90 s dim, runs on battery; light-sleep wake, % vs bring-up: pending |
 | 11 | Save, RTC aging, sound, sprites from the card | [Save, time, sound, SD](DEVICE_TESTS.md#save-time-sound-sd) | ✓ save, clock across restart, sound, sprites; power-off aging, USB upload: pending |
 | 12 | USER key = back on every screen; volume at -10 dB | [Power, sleep, buttons](DEVICE_TESTS.md#power-sleep-buttons), [Save, time, sound, SD](DEVICE_TESTS.md#save-time-sound-sd) | ✓ back; waking from dim and from light sleep, volume: pending |
+| 13 | IMU probe: chip, axes, filter, FIFO, hardware pedometer (bring-up) | [IMU](DEVICE_TESTS.md#imu-qmi8658-not-used-by-the-game-yet) | QMI8658A, axes and FIFO ✓; hardware pedometer counts 0 (steps go to software); walks with steps counted by hand: pending |
 
 Questions only the board can answer:
 - Where is the USB-C port relative to the screen's top? Bottom edge (buttons on top).

@@ -16,6 +16,18 @@ keeps your Pokémon.
   evolve / farewell dialogs. On a dim or dark screen the first press only wakes it,
   and it also wakes the board from light sleep. `BACK` over serial does the same.
 
+- **Feature spec** ([docs/FEATURES.md](docs/FEATURES.md)) for the next three
+  tasks: steps counted from the IMU, motion easter eggs, and playdates and
+  battles between two boards. Nothing of it is implemented yet.
+
+- **Bring-up: IMU probe.** After the Phase 1 checks the bring-up firmware runs
+  the QMI8658 the way the steps and motion features will, shows it in big type,
+  records labelled 15 s captures to the SD card (BOOT; USER picks the label) and
+  dumps registers or tests the FIFO over serial. What it found is in
+  `docs/FEATURES.md` ("Measured on the board"); the captures are in
+  `test/data/imu/` and `tools/imu_replay.py` replays them through the prototype
+  step and shake detectors.
+
 ### Changed
 
 - **Quieter sound:** the DAC volume drops from 0 dB to -10 dB (about half as
