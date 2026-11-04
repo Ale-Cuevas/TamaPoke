@@ -22,6 +22,9 @@ the round 1.75". Details and sources: [docs/AMOLED-2.16.md](docs/AMOLED-2.16.md)
   panel offsets 0/0 and MADCTL 0xA0; CST9220 touch with its own axis mapping,
   converted to the game's coordinates; no PMU rail is touched (the 1.75" needed
   BLDO1 for the panel); 4.2 V charge target as in Waveshare's demo.
+- QSPI clock back to 40 MHz, the speed Waveshare's demo runs this panel at
+  (`BOARD_LCD_QSPI_HZ`). The 1.75" ran at 80 MHz, about 10 ms faster per
+  frame; it can return once the 2.16" panel is shown to be clean at 80 MHz.
 - Built with PlatformIO (`platformio.ini`), with the platform, core and every
   library pinned. arduino-cli still builds it, with the same versions in CI.
 

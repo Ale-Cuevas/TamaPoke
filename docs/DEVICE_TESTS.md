@@ -67,7 +67,8 @@ same game image and loads the sprites over USB.
 - [ ] The circle's edge looks smooth, not stepped; the black corners are fully off.
 - [ ] The black border on the left/top (6 px) and right/bottom (8 px) is not noticeable.
 - [ ] No tearing or flashes while the pet walks, during the minigame or the evolution animation.
-- [ ] At 80 MHz QSPI the picture is clean. If there is noise or shifted lines, set `BOARD_LCD_QSPI_HZ` to `40000000` and note it here: ____
+- [ ] At the default 40 MHz QSPI the picture is clean.
+- [ ] Optional, for about 10 ms less per frame: set `BOARD_LCD_QSPI_HZ` to `80000000` in `board_amoled_216.h`, flash, and repeat the checks above (no noise, shifted lines or flashes, including the minigame). If clean, keep 80 MHz and note it here: ____
 
 ### Touch
 - [ ] On the starter screen, each row picks its starter.

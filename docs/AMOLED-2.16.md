@@ -70,7 +70,7 @@ source. The two boards turn out to share most of their wiring.
 |---|---|---|---|
 | Panel | CO5300 466x466, column offset 6 | CO5300 480x480, offsets 0, MADCTL 0xA0 | demo, BSP |
 | Panel bus | QSPI: CS 12, SCLK 38, D0-D3 4-7, RST 39 | same | demo |
-| QSPI clock | 80 MHz | 80 MHz (`BOARD_LCD_QSPI_HZ`; 40 MHz if the panel shows noise) | TamaPoke 1.75 |
+| QSPI clock | 80 MHz | 40 MHz (`BOARD_LCD_QSPI_HZ`; 80 MHz once tested on the board) | demo |
 | Panel power | `pmuEnablePanel()` turned AXP2101 BLDO1 on | no rail touched | demo, BSP |
 | Touch | CST9217 at 0x5A, INT 11, RST 40, mirror X+Y | CST9220 at 0x5A, same pins, swap XY + mirror X | demo |
 | I2C | SDA 15, SCL 14 | same | demo |

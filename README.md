@@ -138,7 +138,7 @@ SPEED ← minigame, DEFENSE ← 12 h of unbroken good care). *(Battles: on the r
 
 - Board: **[Waveshare ESP32-S3-Touch-AMOLED-2.16](https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.16)**
   (ESP32-S3R8, 16 MB flash, 8 MB PSRAM)
-  - 2.16" square 480×480 AMOLED, **CO5300** driver (QSPI, 80 MHz)
+  - 2.16" square 480×480 AMOLED, **CO5300** driver (QSPI, 40 MHz as in Waveshare's demo)
   - Capacitive touch **CST9220** (I2C, address 0x5A)
   - **AXP2101** (power management + battery + PWR button), **PCF85063** (RTC),
     microSD slot (SDMMC 1-bit), **ES8311** audio codec (→ amplifier → speaker),

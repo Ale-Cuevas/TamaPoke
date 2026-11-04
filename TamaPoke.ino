@@ -210,9 +210,10 @@ void setup() {
   // deja todos en su valor de arranque y el panel funciona asi. (En la 1.75 el
   // panel colgaba de BLDO1 y habia que encenderlo aqui.)
 
-  // QSPI a 80MHz (por defecto 40): el flush del framebuffer es el cuello de
-  // botella del fps (~56ms a 40MHz). Si el panel mostrara basura, bajar
-  // BOARD_LCD_QSPI_HZ a 40M en board_amoled_216.h.
+  // QSPI a BOARD_LCD_QSPI_HZ (40MHz, como la demo de Waveshare de la 2.16). En
+  // la 1.75 iba a 80MHz: el flush del framebuffer es el cuello de botella del
+  // fps (~56ms a 40MHz, ~46ms a 80MHz). Subirlo a 80M en board_amoled_216.h
+  // cuando se compruebe en la placa que el panel no muestra basura.
   if (!gfx->begin(BOARD_LCD_QSPI_HZ)) Serial.println("gfx->begin() fallo");
   roundDisplayBegin(bus, panel, roundCanvas);  // orientacion, borde negro y marco redondo
   panel->setBrightness(180);

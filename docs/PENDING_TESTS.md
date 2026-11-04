@@ -13,7 +13,7 @@ Write the result on each line: a tick, or what you saw.
 | 4 | RTC keeps time across reset (bring-up) | [RTC](DEVICE_TESTS.md#rtc-pcf85063) | |
 | 5 | BOOT, USER, PWR register (bring-up) | [Buttons](DEVICE_TESTS.md#buttons) | |
 | 6 | microSD mounts over SDMMC 1-bit (bring-up) | [microSD](DEVICE_TESTS.md#microsd-sdmmc-1-bit) | |
-| 7 | Round UI centred, black border clean, 80 MHz QSPI clean | [Display and round frame](DEVICE_TESTS.md#display-and-round-frame) | |
+| 7 | Round UI centred, black border clean, 40 MHz QSPI clean | [Display and round frame](DEVICE_TESTS.md#display-and-round-frame) | |
 | 8 | Every button, swipe and dialog lands where drawn | [Touch](DEVICE_TESTS.md#touch) | |
 | 9 | Battery and streak status row inside the circle | [Status row](DEVICE_TESTS.md#status-row) | |
 | 10 | PWR key, dimming, light-sleep wake, battery reading | [Power, sleep, buttons](DEVICE_TESTS.md#power-sleep-buttons) | |
@@ -22,4 +22,4 @@ Write the result on each line: a tick, or what you saw.
 Questions only the board can answer:
 - Where is the USB-C port relative to the screen's top? ____
 - Does the RTC keep time with no USB and no battery? ____
-- Is 80 MHz QSPI clean on this panel, or does it need 40 MHz? ____
+- Is 80 MHz QSPI also clean on this panel (about 10 ms faster per frame)? ____

@@ -40,11 +40,14 @@
 // change both together.
 #define BOARD_LCD_MADCTL_REG 0x36
 #define BOARD_LCD_MADCTL_VALUE 0xA0
-// QSPI clock. Waveshare's demo uses the library default (40 MHz); TamaPoke ran
-// the same CO5300 controller at 80 MHz on the 1.75" board, where the frame
-// transfer is what limits the frame rate. If the 2.16" panel ever shows noise
-// or shifted lines, drop this to 40000000 (docs/DEVICE_TESTS.md).
-#define BOARD_LCD_QSPI_HZ 80000000
+// QSPI clock: 40 MHz, what Waveshare's demo runs this panel at (it calls
+// gfx->begin() with no speed, i.e. the library's ESP32QSPI_FREQUENCY) [demo].
+// On the 1.75" board TamaPoke ran the same CO5300 controller at 80 MHz: the
+// frame flush went from ~56 to ~46 ms (most of it is fixed overhead, not the
+// transfer) and the frame from ~84 to ~69 ms. The game's frame pacing (85 ms
+// in the minigame) was tuned at 40 MHz. 80000000 is worth trying once the
+// 2.16" panel is shown to be clean at it (docs/DEVICE_TESTS.md).
+#define BOARD_LCD_QSPI_HZ 40000000
 
 // --- Shared I2C bus: touch, PMIC, IMU, RTC, audio codecs --------------------
 #define BOARD_I2C_SDA 15  // [demo][sch]
