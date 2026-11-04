@@ -53,9 +53,26 @@ same game image and loads the sprites over USB.
   (Corner taps: (22,19), (454,25), (24,469), (459,462). Flags unchanged.)
 - [x] A slow drag leaves a continuous trail.
 
-### IMU (QMI8658, not used by the game)
+### IMU (QMI8658, not used by the game yet)
 - [x] `[imu] QMI8658 ok, who-am-i 0x05, revision 0x..`; flat, face up, about 0 0 +1 g. (0.02 0.03 1.05 g;
   revision 0x7C. Before the who-am-i fix the log said `chip id 0x7C`: SensorLib's `getChipID()` reads the revision)
+
+IMU probe (after the Phase 1 lines, the bring-up shows a big IMU panel: BOOT records a 15 s capture of the
+yellow label to `/imu/` on the SD card, USER picks the label, a 1 s USER hold switches configuration; serial
+`imudump`, `imuregs`, `imufifo <s>`, `imulog <s>`). Results and captures: [FEATURES.md](FEATURES.md#measured-on-the-board).
+- [x] Revision 0x7C is the QMI8658**A** (the C reads 0x79).
+- [x] Axes: +X screen right, +Y screen top (buttons), +Z out of the screen. Face-down Z -1.00 g; upright Y +1.01 g;
+  tilting the top right drives X negative.
+- [x] Accel low-pass filter: SensorLib's default (mode 0) cuts at about 1.7 Hz at 62.5 Hz. Every capture lost
+  everything above 3 Hz until it was turned off (`LPF_OFF`).
+- [ ] Hardware pedometer counts steps. (**Fails:** 0 steps over 20-step walks in pocket and hand and a run, with
+  LPF off, LPF mode 3, and the SensorLib example's exact settings; registers read back right. The game counts
+  steps in software instead.)
+- [x] FIFO delivers every sample. (SensorLib's `readFromFifo()` fails with `ESP_ERR_INVALID_ARG`, a 768-byte
+  read against Wire's 128-byte buffer; the probe's chunked reader got 59.5 samples/s, 36 ms per second of data at
+  100 kHz I2C.)
+- [x] Soft reset clears the step counter (datasheet 11.6; also back to 0 after a restart).
+- [ ] Walk captures with the steps counted by hand, to measure the software step counter's accuracy: ____
 
 ### RTC (PCF85063)
 - [x] `[rtc] PCF85063 ok, running` (unset, 2000-01-22, ticking)

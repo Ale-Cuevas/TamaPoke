@@ -410,7 +410,8 @@ beach, forest, volcano, mountain, snow). Sleeping forces night.
 - `species.h` — GENERATED (`sprites.py`): fallback sprites, UI icons, colours
 - `platformio.ini` — pinned build (`tamapoke` and `bringup` envs)
 - `bringup/` — hardware test firmware for a new board
-- `docs/` — the 2.16" port notes and the on-device test checklist
+- `docs/` — the 2.16" port notes, the on-device test checklist and the feature
+  spec (`FEATURES.md`)
 - `tools/` — pipeline: `dex_data.py` (data), `dex_stats.py`, `dex_names.py` +
   `gen_names.py` (localized names), `gen_dex.py`,
   `sprites.py` (workshop), `pack_pmd.py` / `make_thumbs.py`
@@ -457,9 +458,16 @@ To test fast: lower `PET_TICK_MS`, `MINUTES_PER_LEVEL` and `FAREWELL_AGE_MIN` in
 
 ## Roadmap
 
-- **Wild encounters / battle** — designed (see project memory): resolution by
-  ATK/DEF/SPD with PMD Attack/Hurt animations, trainer rank as endgame. Style
-  still to pick (auto / timing / turn-based).
+Specified in [docs/FEATURES.md](docs/FEATURES.md), each one its own task:
+
+- **Steps** — steps counted from the IMU feed the pet: walk care and items
+  found on walks, kept in a Backpack.
+- **Easter eggs** — shake to wake, face-down lights out, tilt & slide.
+- **Link** — two nearby boards meet over ESP-NOW for playdates (visit & play,
+  gifts, friendship egg) and battles (auto-battle with a tap-charged special
+  attack, ATK/DEF/SPD and Gen 1 types, PMD Attack/Hurt animations). Starts with
+  a practice battle on one board; includes a build for the round 1.75" board.
+- **Wild encounters** — later, reusing the battle engine.
 - **Soak test** 24–48 h (instrumentation ready: `HEALTH` command/heartbeat).
 
 *(Done: 3D-printed case [published on MakerWorld](https://makerworld.com/es/models/2937822-tamapoke-a-pokemon-pokeball-tamagotchi); repo public with the browser installer + one-click sprite bundle.)*
