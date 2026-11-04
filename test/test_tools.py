@@ -186,6 +186,25 @@ class TestSketchSanity(unittest.TestCase):
                          'llaves descompensadas en TamaPoke.ino')
 
 
+class TestImuReplay(unittest.TestCase):
+    """imu_replay.py lee lo que saca IMULOG tal cual, sin limpiarlo a mano."""
+
+    def test_lee_una_captura_de_imulog_con_su_marca_de_fin(self):
+        import imu_replay
+        fd, path = tempfile.mkstemp(suffix='.csv')
+        try:
+            with os.fdopen(fd, 'w') as fh:
+                fh.write('t_ms,ax_mg,ay_mg,az_mg,steps\n'
+                         '42044,-49,-32,1020,0\n'
+                         'cargado /mons/ps007.bin (106 KB)\n'
+                         '42061,-50,-31,1016,0\n'
+                         '[imulog] end\n')
+            self.assertEqual(imu_replay.load(path),
+                             [(42.044, -0.049, -0.032, 1.02), (42.061, -0.05, -0.031, 1.016)])
+        finally:
+            os.remove(path)
+
+
 
 class TestBuffersDeTexto(unittest.TestCase):
     """Cada snprintf(buf, sizeof(buf), T(S_x), ...) cabe en su buffer en TODOS los idiomas.
