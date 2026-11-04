@@ -55,9 +55,12 @@ same game image and loads the sprites over USB.
 - [ ] BOOT (GPIO0), USER (GPIO18), PWR (GPIO16 sense) all `up` at boot.
 - [ ] Each short press logs `down` then `up`. If PWR reads inverted, fix `BOARD_BTN_PWR_PRESSED_LEVEL`. Don't hold PWR (the PMU may cut power).
 
-### microSD (SDMMC 1-bit)
-- [ ] With a FAT card holding the sprites: `[sd] card ok, ... MB, N files in /mons`.
-- [ ] Without a card: `[sd] no card`, everything else still works.
+### microSD (SDMMC 1-bit, SPI fallback)
+- [ ] With a FAT card holding the sprites: `[sd] card ok over SDMMC 1-bit, ... MB, N files in /mons`.
+  If instead it logs `trying SPI` and then `card ok over SPI`, the slot only works
+  over SPI: the game's `sdBegin()` (`sdmon.cpp`) has to move to `SD` on HSPI
+  before Phase 2's sprite checks can pass. Mode that mounted: ____
+- [ ] Without a card: both modes report `no card or not FAT`, everything else still works.
 
 ## Phase 2: the game (`tamapoke` env)
 

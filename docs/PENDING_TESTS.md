@@ -12,7 +12,7 @@ Write the result on each line: a tick, or what you saw.
 | 3 | Touch found, dots under the finger (bring-up) | [Touch](DEVICE_TESTS.md#touch-cst9220) | |
 | 4 | RTC keeps time across reset (bring-up) | [RTC](DEVICE_TESTS.md#rtc-pcf85063) | |
 | 5 | BOOT, USER, PWR register (bring-up) | [Buttons](DEVICE_TESTS.md#buttons) | |
-| 6 | microSD mounts over SDMMC 1-bit (bring-up) | [microSD](DEVICE_TESTS.md#microsd-sdmmc-1-bit) | |
+| 6 | microSD mounts over SDMMC 1-bit, or only over SPI (bring-up) | [microSD](DEVICE_TESTS.md#microsd-sdmmc-1-bit-spi-fallback) | |
 | 7 | Round UI centred, black border clean, 40 MHz QSPI clean | [Display and round frame](DEVICE_TESTS.md#display-and-round-frame) | |
 | 8 | Every button, swipe and dialog lands where drawn | [Touch](DEVICE_TESTS.md#touch) | |
 | 9 | Battery and streak status row inside the circle | [Status row](DEVICE_TESTS.md#status-row) | |

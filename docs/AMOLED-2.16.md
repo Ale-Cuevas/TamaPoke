@@ -83,18 +83,19 @@ source. The two boards turn out to share most of their wiring.
 
 Sources:
 - **demo**: [waveshareteam/ESP32-S3-Touch-AMOLED-2.16](https://github.com/waveshareteam/ESP32-S3-Touch-AMOLED-2.16)
-  at `225a62b` (`examples/arduino`).
+  at `225a62b` (`examples/arduino`). The CO5300 driver in Arduino_GFX 1.6.9
+  is byte-identical to the copy the demo ships.
 - **BSP**: Waveshare's ESP-IDF board package,
   [Waveshare-ESP32-components](https://github.com/waveshareteam/Waveshare-ESP32-components)
-  `bsp/esp32_s3_touch_amoled_2_16` at `23a6012`. Its CO5300 driver in
-  Arduino_GFX 1.6.9 is byte-identical to the copy in the demo.
+  `bsp/esp32_s3_touch_amoled_2_16` at `23a6012`.
 - **schematic**: `schematic/ESP32-S3-Touch-AMOLED-2.16-Schematic.pdf` in the demo repo.
 - **lib**: default addresses in SensorLib 0.3.3 / XPowersLib 0.2.6, the
   versions the demo ships.
 
 Note on the microSD: the schematic labels its lines for SPI (MOSI 1, SCK 2,
 MISO 3, CS 41), but Waveshare's own BSP mounts the card over SDMMC in 1-bit
-mode on the same wires, which is what TamaPoke already did on the 1.75".
+mode on the same wires, which is what TamaPoke already did on the 1.75". The
+bring-up firmware tries SDMMC first and then SPI, so the first flash settles it.
 
 ### Fixed along the way
 

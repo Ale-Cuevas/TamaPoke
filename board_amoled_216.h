@@ -109,10 +109,17 @@
 // over SDMMC in 1-bit mode on the same wires: CLK 2, CMD 1, D0 3 [bsp]
 // (waveshareteam/Waveshare-ESP32-components, bsp/esp32_s3_touch_amoled_2_16,
 // checked at 23a6012). TamaPoke uses SDMMC 1-bit, as it did on the 1.75".
+// Neither mode has run on a board yet: the bring-up firmware tries SDMMC
+// first, then SPI on HSPI, and logs which one mounted.
 #define BOARD_SD_CLK 2   // SPI SCK  [sch][bsp]
 #define BOARD_SD_CMD 1   // SPI MOSI [sch][bsp]
 #define BOARD_SD_D0 3    // SPI MISO [sch][bsp]
 #define BOARD_SD_D3 41   // SPI CS; unused in 1-bit SDMMC mode [sch]
+// The same four wires named for SPI mode (the bring-up's fallback):
+#define BOARD_SD_SCK BOARD_SD_CLK
+#define BOARD_SD_MOSI BOARD_SD_CMD
+#define BOARD_SD_MISO BOARD_SD_D0
+#define BOARD_SD_CS BOARD_SD_D3
 
 // --- UART0 (header) ---------------------------------------------------------
 #define BOARD_UART_TX 43  // [sch]

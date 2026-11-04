@@ -13,7 +13,9 @@
 #include "../board_amoled_216.h"  // before XPowersLib: it selects the PMIC driver
 #include <XPowersLib.h>
 #include <FS.h>
+#include <SD.h>
 #include <SD_MMC.h>
+#include <SPI.h>
 #include <TouchDrvCSTXXX.hpp>
 #include <SensorQMI8658.hpp>
 #include <SensorPCF85063.hpp>
@@ -33,7 +35,7 @@ bool displayOk = false;
 bool touchOk = false;
 bool imuOk = false;
 bool rtcOk = false;
-bool sdOk = false;
+const char *sdMode = nullptr;  // "SDMMC 1-bit", "SPI", or nullptr (no card)
 volatile bool touchPending = false;
 
 struct ButtonInput {
@@ -122,7 +124,9 @@ void pollTouch() {
   interrupts();
   if (!pending) return;
 
-  int16_t x[2], y[2];
+  // getPoint() writes every finger the chip reports (CST92XX_MAX_FINGER_NUM,
+  // 2) whatever count it is asked for: the arrays must hold that many.
+  int16_t x[2] = {0}, y[2] = {0};
   const uint8_t points = touch.getPoint(x, y, touch.getSupportTouchPoint());
   for (uint8_t i = 0; i < points; i++) {
     Serial.printf("[touch] #%u x=%d y=%d\n", i, x[i], y[i]);
@@ -156,22 +160,41 @@ void initRtc() {
   Serial.printf("[rtc] PCF85063 ok, %s\n", rtc.isRunning() ? "running" : "STOPPED");
 }
 
-// SDMMC 1-bit on CLK 2 / CMD 1 / D0 3, as Waveshare's board package and the
-// game do. Read-only: never formats the card (the game does that if needed).
+uint32_t countSprites(fs::FS &fs) {
+  uint32_t n = 0;
+  File dir = fs.open("/mons");
+  if (dir && dir.isDirectory()) {
+    for (File f = dir.openNextFile(); f; f = dir.openNextFile()) n++;
+  }
+  return n;
+}
+
+// Settles how the slot is wired: SDMMC 1-bit on CLK 2 / CMD 1 / D0 3, as
+// Waveshare's board package and the game do, then SPI on HSPI, as the
+// schematic labels the same lines. If only SPI mounts, the game's sdBegin()
+// has to move to SPI. Read-only: never formats the card (the game does that
+// if needed).
 void initSd() {
   SD_MMC.setPins(BOARD_SD_CLK, BOARD_SD_CMD, BOARD_SD_D0);
-  sdOk = SD_MMC.begin("/sdcard", true /* 1-bit */, false /* don't format */);
-  if (!sdOk) {
-    Serial.println("[sd] no card, or not FAT formatted");
+  if (SD_MMC.begin("/sdcard", true /* 1-bit */, false /* don't format */)) {
+    sdMode = "SDMMC 1-bit";
+    Serial.printf("[sd] card ok over SDMMC 1-bit, %llu MB, %u files in /mons\n",
+                  SD_MMC.cardSize() / (1024ULL * 1024ULL), countSprites(SD_MMC));
     return;
   }
-  uint32_t sprites = 0;
-  File dir = SD_MMC.open("/mons");
-  if (dir && dir.isDirectory()) {
-    for (File f = dir.openNextFile(); f; f = dir.openNextFile()) sprites++;
+  Serial.println("[sd] SDMMC 1-bit: no card or not FAT; trying SPI");
+
+  static SPIClass sdSpi(HSPI);  // the display's QSPI bus owns SPI2/FSPI
+  sdSpi.begin(BOARD_SD_SCK, BOARD_SD_MISO, BOARD_SD_MOSI, BOARD_SD_CS);
+  if (SD.begin(BOARD_SD_CS, sdSpi) && SD.cardType() != CARD_NONE) {
+    sdMode = "SPI";
+    Serial.printf("[sd] card ok over SPI, %llu MB, %u files in /mons\n",
+                  SD.cardSize() / (1024ULL * 1024ULL), countSprites(SD));
+    return;
   }
-  Serial.printf("[sd] card ok, %llu MB, %u files in /mons\n",
-                SD_MMC.cardSize() / (1024ULL * 1024ULL), sprites);
+  SD.end();
+  sdSpi.end();
+  Serial.println("[sd] SPI: no card or not FAT");
 }
 
 void initButtons() {
@@ -280,7 +303,7 @@ void drawTestScreen() {
   panel->setCursor(m + 8, m + 92);
   panel->printf("Touch: %s", touchOk ? "ok, draw here" : "MISSING");
   panel->setCursor(m + 8, m + 116);
-  panel->printf("SD: %s", sdOk ? "ok" : "no card");
+  panel->printf("SD: %s", sdMode ? sdMode : "no card");
 }
 
 void setup() {
