@@ -1,21 +1,19 @@
 #!/bin/bash
-# Regenera web/firmware/tamapoke.bin (firmware combinado) para el instalador web.
+# Regenera web/firmware/tamapoke.bin (firmware combinado, se graba en 0x0) para
+# el instalador web, y web/sprites.pak.
 # Uso: bash tools/build_web.sh
+#
+# Compila con PlatformIO (env tamapoke, versiones fijadas en platformio.ini). La
+# plataforma ya fusiona bootloader (0x0), particiones (0x8000), boot_app0
+# (0xe000) y la app (0x10000) en firmware.factory.bin, con la misma tabla de
+# particiones que el FQBN de arduino-cli (app3M_fat9M_16MB).
 set -e
 cd "$(dirname "$0")/.."
-FQBN="esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB"
 
 echo "Compilando..."
-arduino-cli compile --fqbn "$FQBN" --export-binaries .
+pio run -e tamapoke
 
-B=build/esp32.esp32.esp32s3
-echo "Fusionando binarios..."
-esptool.py --chip esp32s3 merge-bin -o web/firmware/tamapoke.bin \
-  0x0     "$B/TamaPoke.ino.bootloader.bin" \
-  0x8000  "$B/TamaPoke.ino.partitions.bin" \
-  0xe000  "$B/boot_app0.bin" \
-  0x10000 "$B/TamaPoke.ino.bin"
-
+cp .pio/build/tamapoke/firmware.factory.bin web/firmware/tamapoke.bin
 echo "OK -> web/firmware/tamapoke.bin ($(du -h web/firmware/tamapoke.bin | cut -f1))"
 
 echo "Empaquetando sprites..."

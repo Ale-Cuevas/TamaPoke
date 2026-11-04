@@ -1,5 +1,5 @@
 #include "audio.h"
-#include "pin_config.h"
+#include "board_amoled_216.h"
 #include <Arduino.h>
 #include <Wire.h>
 #include <ESP_I2S.h>
@@ -13,7 +13,7 @@
 // bloquear el loop de juego.
 // ---------------------------------------------------------------------------
 
-#define ES8311_ADDR 0x18
+#define ES8311_ADDR BOARD_I2C_ADDR_ES8311  // 0x18
 #define SAMPLE_RATE 16000
 
 static I2SClass i2s;
@@ -41,7 +41,7 @@ static void updateAmplifierPower() {
   if (want != last) {
     last = want;
     if (want == HIGH) gAmpOnAt = millis();
-    digitalWrite(PA, want);
+    digitalWrite(BOARD_AUDIO_PA, want);
   }
 }
 
@@ -162,10 +162,10 @@ static void audioTask(void *) {
 
 void audioBegin() {
   // I2S primero: arranca el MCLK que necesita el códec para engancharse
-  pinMode(PA, OUTPUT);
-  digitalWrite(PA, LOW);   // hasta saber si el sonido esta activado
+  pinMode(BOARD_AUDIO_PA, OUTPUT);
+  digitalWrite(BOARD_AUDIO_PA, LOW);   // hasta saber si el sonido esta activado
 
-  i2s.setPins(I2S_BCK_IO, I2S_WS_IO, I2S_DO_IO, I2S_DI_IO, I2S_MCK_IO);
+  i2s.setPins(BOARD_I2S_BCLK, BOARD_I2S_LRCK, BOARD_I2S_DOUT, BOARD_I2S_DIN, BOARD_I2S_MCLK);
   if (!i2s.begin(I2S_MODE_STD, SAMPLE_RATE, I2S_DATA_BIT_WIDTH_16BIT,
                  I2S_SLOT_MODE_STEREO, I2S_STD_SLOT_BOTH)) {
     Serial.println("I2S begin fallo");

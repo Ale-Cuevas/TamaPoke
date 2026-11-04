@@ -1,29 +1,42 @@
 # TamaPoke
 
-[![Flash in browser](https://img.shields.io/badge/flash-in%20browser-FF6B00?logo=googlechrome&logoColor=white)](https://socquique.github.io/TamaPoke/web/)
-[![MakerWorld](https://img.shields.io/badge/MakerWorld-3D%20case-00AE42?logo=bambulab&logoColor=white)](https://makerworld.com/es/models/2937822-tamapoke-a-pokemon-pokeball-tamagotchi)
-![Board](https://img.shields.io/badge/board-ESP32--S3%20round%20AMOLED-E7352C?logo=espressif&logoColor=white)
-![Firmware](https://img.shields.io/badge/firmware-v1.17-8A2BE2)
-[![CI](https://github.com/socquique/TamaPoke/actions/workflows/ci.yml/badge.svg)](https://github.com/socquique/TamaPoke/actions/workflows/ci.yml)
+![Board](https://img.shields.io/badge/board-ESP32--S3%20AMOLED%202.16-E7352C?logo=espressif&logoColor=white)
+![Firmware](https://img.shields.io/badge/firmware-v1.19-8A2BE2)
+[![CI](https://github.com/Ale-Cuevas/TamaPoke/actions/workflows/ci.yml/badge.svg)](https://github.com/Ale-Cuevas/TamaPoke/actions/workflows/ci.yml)
 ![Code](https://img.shields.io/badge/code-MIT-blue)
 ![Languages](https://img.shields.io/badge/languages-8-FFCB05)
-[![Stars](https://img.shields.io/github/stars/socquique/TamaPoke?style=flat&logo=github&color=yellow)](https://github.com/socquique/TamaPoke/stargazers)
 
 A gen-1-Pokémon-inspired tamagotchi for the
-**Waveshare ESP32-S3-Touch-AMOLED-1.75** (round 466×466 AMOLED, CO5300 driver
-over QSPI, CST9217 touch over I2C). Raise any of the 151, evolve it, train it
+**Waveshare ESP32-S3-Touch-AMOLED-2.16** (square 480×480 AMOLED, CO5300 driver
+over QSPI, CST9220 touch over I2C). Raise any of the 151, evolve it, train it
 and complete them all (shinies included).
 
-> **Personal, non-commercial fan project.** Code is MIT; the sprites are from
-> PMD SpriteCollab (CC BY-NC, Pokémon © Nintendo/Game Freak), and the 3D case is
-> CC BY-NC-SA. See **[License](#license)** and **Credits**.
+This is a port of [socquique/TamaPoke](https://github.com/socquique/TamaPoke),
+which was designed for the round **AMOLED-1.75**. The round screen is kept: the
+game draws its original 466×466 UI and the display layer centres it on the
+square panel inside a smooth round frame, with the rest of the panel black (on
+an AMOLED, black pixels are simply off). How and why:
+**[docs/AMOLED-2.16.md](docs/AMOLED-2.16.md)**.
 
-🔴 **3D-printed Pokéball case + print profiles → [on MakerWorld](https://makerworld.com/es/models/2937822-tamapoke-a-pokemon-pokeball-tamagotchi)** · flash it in your browser → **[web installer](https://socquique.github.io/TamaPoke/web/)**
+![TamaPoke on the AMOLED-2.16: main screen by day and at night, stat card, Pokédex, minigame and settings](docs/images/screens-216.png)
+
+<sub>Rendered from the real firmware drawing code by `tools/render/render.sh`:
+these are the pixels the panel receives.</sub>
+
+> **Personal, non-commercial fan project.** Code is MIT; the sprites are from
+> PMD SpriteCollab (CC BY-NC, Pokémon © Nintendo/Game Freak). See
+> **[License](#license)** and **Credits**.
 
 ## Status
 
-Running on hardware. Implemented: the 151 + shinies animated from microSD, full
-life cycle (egg by rarity → evolution → farewell/release/runaway, each gated
+**AMOLED-2.16 port (v1.19):** builds (PlatformIO and arduino-cli, pinned
+versions), passes the host test suite, and every screen has been rendered and
+checked on the PC. It has **not run on a 2.16" board yet**: the checklist for
+the first flash is in [docs/DEVICE_TESTS.md](docs/DEVICE_TESTS.md) (summary in
+[docs/PENDING_TESTS.md](docs/PENDING_TESTS.md)).
+
+The game itself runs on the 1.75" hardware upstream. Implemented: the 151 +
+shinies animated from microSD, full life cycle (egg by rarity → evolution → farewell/release/runaway, each gated
 behind a decision dialog), bred-Pokédex with gallery, battle stats (genes +
 training), retention hooks (streak / bond / medals / name), biome + real-time
 backgrounds, ball minigame, training bag, animated bath, RTC with offline
@@ -123,6 +136,26 @@ SPEED ← minigame, DEFENSE ← 12 h of unbroken good care). *(Battles: on the r
 
 ## Hardware
 
+- Board: **[Waveshare ESP32-S3-Touch-AMOLED-2.16](https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.16)**
+  (ESP32-S3R8, 16 MB flash, 8 MB PSRAM)
+  - 2.16" square 480×480 AMOLED, **CO5300** driver (QSPI, 40 MHz as in Waveshare's demo)
+  - Capacitive touch **CST9220** (I2C, address 0x5A)
+  - **AXP2101** (power management + battery + PWR button), **PCF85063** (RTC),
+    microSD slot (SDMMC 1-bit), **ES8311** audio codec (→ amplifier → speaker),
+    QMI8658 IMU (unused)
+  - All pins and addresses in [`board_amoled_216.h`](board_amoled_216.h), each
+    tagged with its source (Waveshare's [demo repo](https://github.com/waveshareteam/ESP32-S3-Touch-AMOLED-2.16),
+    schematic and ESP-IDF board package)
+- Optional battery: a protected single-cell 3.7 V LiPo with an MX1.25 2-pin
+  plug. Check the plug's polarity against the board's silkscreen first.
+- A microSD card for the sprites (any small class-10 card; the firmware formats
+  it to FAT if needed).
+- The [3D-printed Pokéball case](https://makerworld.com/es/models/2937822-tamapoke-a-pokemon-pokeball-tamagotchi)
+  from upstream is made for the round 1.75" board and does not fit the 2.16".
+
+<details>
+<summary>The original board (upstream TamaPoke ≤ v1.18)</summary>
+
 - Board: [ESP32-S3-Touch-AMOLED-1.75](https://www.waveshare.com/wiki/ESP32-S3-Touch-AMOLED-1.75)
   — get the **Standard** (no case) or **-G** (GPS, also fits) version; **not the "-B"**
   (ships with a protective case that won't fit). The separate "1.75**C**" is a different board.
@@ -133,36 +166,79 @@ SPEED ← minigame, DEFENSE ← 12 h of unbroken good care). *(Battles: on the r
 - **AXP2101** (power management + battery + PWR button), **PCF85063** (RTC),
   microSD slot, **ES8311** audio codec (→ amplifier → external speaker on the
   MX1.25 connector)
-- Pins taken from the [official Waveshare repo](https://github.com/waveshareteam/ESP32-S3-Touch-AMOLED-1.75) (see `pin_config.h`)
+- Pins taken from the [official Waveshare repo](https://github.com/waveshareteam/ESP32-S3-Touch-AMOLED-1.75)
 
-## Libraries (Arduino IDE / arduino-cli)
+</details>
 
-| Library | Author | Use |
-|---|---|---|
-| GFX Library for Arduino (`Arduino_GFX`) | moononournation | CO5300 over QSPI + framebuffer in PSRAM |
-| SensorLib | Lewis He | CST9217 touch + PCF85063 RTC |
-| XPowersLib | Lewis He | AXP2101 PMU (battery, brightness, PWR button) |
-| U8g2 | olikraus | CJK glyphs (`unifont_t_japanese3`, the only Japanese subset that also carries `！？。、「」`; `unifont_t_korean2` for Hangul, 2350 syllables against korean1's 478); only the font data is used, not its display driver |
-| ESP_I2S (bundled in the ESP32 core) | Espressif | I2S to the ES8311 codec |
+## Libraries
 
-## IDE setup / build
+Pinned in [`platformio.ini`](platformio.ini) and in CI; SensorLib and XPowersLib
+are the versions Waveshare's 2.16" demo ships.
 
-- Board: **ESP32S3 Dev Module** · Flash **16MB** · PSRAM **OPI PSRAM**
-  (required: the 466×466×16-bit framebuffer ≈ 434 KB lives in PSRAM) ·
-  Partition Scheme with FAT (e.g. `16M Flash (3MB APP/9MB FATFS)`) ·
-  USB CDC On Boot **Enabled**
+| Library | Version | Author | Use |
+|---|---|---|---|
+| GFX Library for Arduino (`Arduino_GFX`) | 1.6.9 | moononournation | CO5300 over QSPI + framebuffer in PSRAM |
+| SensorLib | 0.3.3 | Lewis He | CST9220 touch + PCF85063 RTC |
+| XPowersLib | 0.2.6 | Lewis He | AXP2101 PMU (battery, brightness, PWR button) |
+| U8g2 | 2.36.18 | olikraus | CJK glyphs (`unifont_t_japanese3`, the only Japanese subset that also carries `！？。、「」`; `unifont_t_korean2` for Hangul, 2350 syllables against korean1's 478); only the font data is used, not its display driver |
+| ESP_I2S (bundled in the ESP32 core) | core 3.3.11 | Espressif | I2S to the ES8311 codec |
+
+## Build and flash
+
+### PlatformIO (recommended)
+
+Everything is pinned (platform, arduino-esp32 core, libraries), so a build today
+is the build CI checked.
 
 ```bash
-FQBN="esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB"
-arduino-cli compile --fqbn "$FQBN" .
-arduino-cli upload -p /dev/cu.usbmodemXXXX --fqbn "$FQBN" .
+pio run -e tamapoke -t upload      # build + flash the game
+pio device monitor -e tamapoke     # serial console (115200)
+pio run -e bringup -t upload       # hardware test firmware: flash this first on a new board
 ```
 
-### Easiest install: the web installer
+The `bringup` env (`bringup/main.cpp`) tests each chip on its own: panel colours
+and corners, touch dots, PMU, IMU, RTC, buttons and microSD, with a log over
+USB. What to look for: [docs/DEVICE_TESTS.md](docs/DEVICE_TESTS.md).
+
+If the upload can't find the board: hold **BOOT**, tap **RESET**, release BOOT,
+upload again.
+
+### Arduino IDE / arduino-cli
+
+- Board: **ESP32S3 Dev Module** (core **3.3.11**) · Flash **16MB** · PSRAM
+  **OPI PSRAM** (required: the 466×466×16-bit framebuffer ≈ 434 KB lives in
+  PSRAM) · Partition Scheme with FAT (e.g. `16M Flash (3MB APP/9MB FATFS)`) ·
+  USB CDC On Boot **Enabled**
+- Libraries at the versions in the table above.
+
+```bash
+arduino-cli lib install "GFX Library for Arduino@1.6.9" "SensorLib@0.3.3" "XPowersLib@0.2.6" "U8g2@2.36.18"
+FQBN="esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB"
+arduino-cli compile --fqbn "$FQBN" .
+arduino-cli upload -p /dev/ttyACM0 --fqbn "$FQBN" .
+```
+
+### Web installer
 
 `web/index.html` flashes the firmware (ESP Web Tools) and pushes the sprites to
-the SD over Web Serial, no Arduino needed. Serve it over HTTPS or `localhost`
-(secure context) and open it in **Chrome/Edge**. See [`web/README.md`](web/README.md).
+the SD over Web Serial, no toolchain needed. Serve it over HTTPS or `localhost`
+(secure context) and open it in **Chrome/Edge**:
+
+```bash
+cd web && python3 -m http.server 8000    # then open http://localhost:8000
+```
+
+`web/firmware/tamapoke.bin` is the v1.19 image for the AMOLED-2.16
+(`bash tools/build_web.sh` rebuilds it). See [`web/README.md`](web/README.md).
+
+### See the screens without a board
+
+```bash
+tools/render/render.sh             # every screen -> .pio/render/screens/*.png
+```
+
+Compiles the real sketch and drawing code for the PC and saves each screen as
+the 480×480 image the panel would show. See [`tools/render/README.md`](tools/render/README.md).
 
 ### Generate and load the sprites yourself
 
@@ -317,16 +393,22 @@ beach, forest, volcano, mountain, snow). Sleeping forces night.
 - `TamaPoke.ino` — init, game loop, render of every screen, gestures, serial console, audio
 - `pet.h` / `pet.cpp` — pet state and logic (stats, evolution, life cycle, streak/bond/medals, NVS)
 - `sdmon.h` / `sdmon.cpp` — TPK1 (animated) and TPK2 (PMD) sprites + thumbnails, and file reception over USB (PUT/LS)
+- `round_display.h` — the 466×466 canvas on the 480×480 panel, with the round frame
+- `roundmask.h` / `ui_frame.h` — the round frame (pure code, tested on the PC) and its geometry
+- `board_amoled_216.h` — every pin and I2C address of the board, with sources
 - `rtcbat.h` / `rtcbat.cpp` — PCF85063 RTC + AXP2101 PMU (battery, brightness, PWR button)
 - `audio.h` / `audio.cpp` — ES8311 + I2S + Game-Boy-style tone synth (non-blocking task)
 - `i18n.h` / `i18n.cpp` — the 8-language string tables
 - `dex.h` — GENERATED (`gen_dex.py`): the 151 table
 - `species.h` — GENERATED (`sprites.py`): fallback sprites, UI icons, colours
-- `pin_config.h` — the board's official pins
+- `platformio.ini` — pinned build (`tamapoke` and `bringup` envs)
+- `bringup/` — hardware test firmware for a new board
+- `docs/` — the 2.16" port notes and the on-device test checklist
 - `tools/` — pipeline: `dex_data.py` (data), `dex_stats.py`, `dex_names.py` +
   `gen_names.py` (localized names), `gen_dex.py`,
   `sprites.py` (workshop), `pack_pmd.py` / `make_thumbs.py`
-  (packers), `pack_bundle.py` (web bundle), `send_sd.py` (SD upload), `touch_log.py`
+  (packers), `pack_bundle.py` (web bundle), `send_sd.py` (SD upload), `touch_log.py`,
+  `render/` (renders the screens on the PC)
 - `tools/sdcard/mons/` — the generated .bin files (animated, shiny, PMD, thumbnails)
 - `web/` — the browser installer (ESP Web Tools + Web Serial sprite loader)
 

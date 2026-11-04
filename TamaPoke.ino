@@ -1,9 +1,15 @@
 // TamaPoke - tamagotchi pixel art inspirado en la gen 1
-// para Waveshare ESP32-S3-Touch-AMOLED-1.75
+// para Waveshare ESP32-S3-Touch-AMOLED-2.16 (AMOLED cuadrada de 480x480). La UI
+// se diseno para la pantalla redonda de 466x466 de la AMOLED-1.75: se sigue
+// dibujando en ese espacio y round_display.h la coloca en el centro del panel
+// con un marco redondo negro.
 //
 // Librerias (Library Manager o repo de Waveshare):
 //   - "GFX Library for Arduino" (moononournation), con soporte CO5300 QSPI
-//   - "SensorLib" (Lewis He), driver tactil CST9217
+//   - "SensorLib" (Lewis He), driver tactil CST9220 (TouchDrvCST92xx)
+//   - "XPowersLib" (Lewis He), PMU AXP2101
+//   - "U8g2" (olikraus), solo los datos de las fuentes CJK
+// Versiones fijadas en platformio.ini (y en la CI para arduino-cli).
 //
 // Placa: ESP32S3 Dev Module | Flash 16MB | PSRAM: OPI PSRAM | USB CDC On Boot: Enabled
 //
@@ -16,7 +22,8 @@
 #include <U8g2lib.h>  // fuentes CJK (japones); ver applyLangFont()
 #include <esp_sleep.h>
 #include <driver/gpio.h>
-#include "pin_config.h"
+#include "board_amoled_216.h"
+#include "round_display.h"
 #include "species.h"
 #include "dex.h"
 #include "pet.h"
@@ -29,20 +36,23 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.18"
+#define FW_VERSION "1.19"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
-  LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
+  BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
 Arduino_CO5300 *panel = new Arduino_CO5300(
-  bus, LCD_RESET, 0 /*rotation*/, LCD_WIDTH, LCD_HEIGHT, 6, 0, 0, 0);
-// Framebuffer completo en PSRAM: dibujamos todo y hacemos flush() (sin parpadeo)
-Arduino_Canvas *gfx = new Arduino_Canvas(LCD_WIDTH, LCD_HEIGHT, panel);
+  bus, BOARD_LCD_RESET, 0 /*rotation*/, BOARD_LCD_WIDTH, BOARD_LCD_HEIGHT,
+  BOARD_LCD_COL_OFFSET, BOARD_LCD_ROW_OFFSET, BOARD_LCD_COL_OFFSET, BOARD_LCD_ROW_OFFSET);
+// Framebuffer de 466x466 en PSRAM: dibujamos todo y hacemos flush() (sin
+// parpadeo). RoundCanvas lo vuelca centrado en el panel de 480x480 con el marco
+// redondo aplicado (round_display.h).
+RoundCanvas *roundCanvas = new RoundCanvas(panel);
+Arduino_Canvas *gfx = roundCanvas;
 
 TouchDrvCST92xx touch;
 // fuente CJK activa: de momento siempre false, la carga llegara con el
 // soporte de japones/coreano/chino (ver PR #13)
 bool gCjkFont = false;
-#define TOUCH_ADDR 0x5A  // CST9217
 Pet pet;
 
 // sprite animado de la SD para la especie actual (si existe el archivo)
@@ -103,6 +113,11 @@ float sackShake = 0;
 uint8_t sackGain = 0;
 bool sackNewHi = false;
 
+// definidas al final; se declaran aqui porque el conversor .ino de PlatformIO no
+// genera prototipos para funciones que devuelven punteros
+const char *eggMsg();
+const char *statusMsg();
+
 // las 9 especies con sprite propio en flash (respaldo sin SD): dex -> indice
 int flashIdxForDex(int16_t dex) {
   static const int8_t IDX[10] = { -1, 3, 4, 5, 0, 1, 2, 6, 7, 8 };
@@ -137,6 +152,9 @@ static const uint8_t CRACK2[][2] = { {11,13},{12,14},{11,15},{20,12},{19,13},{20
 static const uint16_t STARS[][2] = { {120,140},{330,120},{370,210},{95,230},{280,90},{160,95} };
 
 bool wasPressed = false;
+// puntos que getPoint() puede llegar a escribir: el CST92xx reporta hasta 2
+// (CST92XX_MAX_FINGER_NUM en SensorLib, protegido); 5 cubre cualquier CSTxxx
+#define TOUCH_MAX_POINTS 5
 // eleccion de inicial (primera partida): Bulbasaur / Charmander / Squirtle, 3 filas
 static const int16_t STARTER_DEX[3] = { 1, 4, 7 };
 #define STARTER_ROW_Y 110
@@ -152,10 +170,12 @@ static const int16_t STARTER_DEX[3] = { 1, 4, 7 };
 #define FAR_BTN_H 58
 #define FAR_BTN_X (CX - FAR_BTN_W / 2)
 #define FAR_BTN_Y 176
-// el CST9217 avisa por el pin INT cuando hay datos tactiles; lo usamos para no
+// el CST9220 avisa por el pin INT cuando hay datos tactiles; lo usamos para no
 // leer el bus I2C mientras el chip esta dormido (esa lectura se colgaba ~1s)
 volatile bool gTouchIrq = false;
-void IRAM_ATTR touchIsr() { gTouchIrq = true; }
+// static: asi el conversor .ino de PlatformIO no le genera un prototipo (que
+// llevaria IRAM_ATTR con otra seccion y el compilador avisaria del conflicto)
+static void IRAM_ATTR touchIsr() { gTouchIrq = true; }
 uint32_t lastRender = 0;
 uint32_t sdEpoch = 0;  // +1 cada vez que se recarga la SD (las miniaturas cambian)
 // proteccion del AMOLED: atenuado por inactividad
@@ -179,39 +199,44 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   Serial.printf("TamaPoke fw v%s\n", FW_VERSION);
   loadLang();  // idioma guardado (ES por defecto)
-  Wire.begin(IIC_SDA, IIC_SCL);
-  // CST9217 (tactil), AXP2101 (PMU) y PCF85063 (RTC) comparten este bus I2C.
+  Wire.begin(BOARD_I2C_SDA, BOARD_I2C_SCL);
+  // CST9220 (tactil), AXP2101 (PMU), PCF85063 (RTC) y ES8311 comparten este bus I2C.
   // Red de seguridad para PMU/RTC (SensorLib NO respeta este timeout en el
   // tactil; el cuelgue del tactil dormido se resuelve gateando por INT, ver
   // handleTouch).
   Wire.setTimeOut(50);
 
-  // CRITICO: encender la alimentacion del panel (BLDO1=OLED VDD 3.3V) ANTES de
-  // inicializar el display. Si el PMU se reseteo (drenaje total), este rail
-  // queda OFF y la pantalla se ve negra aunque el resto de la placa funcione.
-  pmuEnablePanel();
+  // En la AMOLED-2.16 no se toca ningun rail del AXP2101: la demo de Waveshare
+  // deja todos en su valor de arranque y el panel funciona asi. (En la 1.75 el
+  // panel colgaba de BLDO1 y habia que encenderlo aqui.)
 
-  // QSPI a 80MHz (por defecto 40): el flush del framebuffer es el cuello de
-  // botella del fps (~56ms a 40MHz). Si el panel mostrara basura, bajar a 40M.
-  if (!gfx->begin(80000000)) Serial.println("gfx->begin() fallo");
+  // QSPI a BOARD_LCD_QSPI_HZ (40MHz, como la demo de Waveshare de la 2.16). En
+  // la 1.75 iba a 80MHz: el flush del framebuffer es el cuello de botella del
+  // fps (~56ms a 40MHz, ~46ms a 80MHz). Subirlo a 80M en board_amoled_216.h
+  // cuando se compruebe en la placa que el panel no muestra basura.
+  if (!gfx->begin(BOARD_LCD_QSPI_HZ)) Serial.println("gfx->begin() fallo");
+  roundDisplayBegin(bus, panel, roundCanvas);  // orientacion, borde negro y marco redondo
   panel->setBrightness(180);
   applyLangFont();  // fuente del idioma guardado (clasica salvo CJK)
 
-  touch.setPins(TP_RESET, TP_INT);
+  touch.setPins(BOARD_TP_RST, BOARD_TP_INT);
   bool touchOk = false;
   for (int i = 0; i < 3 && !touchOk; i++) {  // a veces falla al primer intento
-    touchOk = touch.begin(Wire, 0x5A, IIC_SDA, IIC_SCL);
+    touchOk = touch.begin(Wire, BOARD_I2C_ADDR_TOUCH, BOARD_I2C_SDA, BOARD_I2C_SCL);
     if (!touchOk) delay(150);
   }
-  if (!touchOk) Serial.println("CST9217 no detectado");
+  if (!touchOk) Serial.println("CST9220 no detectado");
   // begin() deja el chip en modo comando (lee la identidad y no sale);
   // hace falta un reset por hardware para que vuelva a reportar toques
   touch.reset();
-  touch.setMaxCoordinates(LCD_WIDTH, LCD_HEIGHT);
-  touch.setMirrorXY(true, true);  // el panel esta montado girado 180 grados
+  // coordenadas del panel (480x480) en la orientacion de MADCTL 0xA0, como en
+  // la demo de Waveshare; handleTouch() las pasa al espacio del juego
+  touch.setMaxCoordinates(BOARD_LCD_WIDTH, BOARD_LCD_HEIGHT);
+  touch.setSwapXY(BOARD_TP_SWAP_XY);
+  touch.setMirrorXY(BOARD_TP_MIRROR_X, BOARD_TP_MIRROR_Y);
   // INT activo-bajo: salta cuando hay datos. Gatea las lecturas I2C (ver loop)
-  pinMode(TP_INT, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(TP_INT), touchIsr, FALLING);
+  pinMode(BOARD_TP_INT, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(BOARD_TP_INT), touchIsr, FALLING);
 
   pet.begin();
   sdBegin();
@@ -409,7 +434,7 @@ void idleWait(PowerCtx c) {
   if (lightSleepAllowed(c) && millis() - lastRender >= 100 && !audioBusy()) {
     c.usb = usbPresentNow();
     if (!lightSleepAllowed(c)) { delay(idleDelayMs(c)); return; }
-    if (digitalRead(TP_INT) == LOW) { gTouchIrq = true; delay(1); return; }  // toque pendiente: no se duerme
+    if (digitalRead(BOARD_TP_INT) == LOW) { gTouchIrq = true; delay(1); return; }  // toque pendiente: no se duerme
     uint32_t ms = POWER_SLEEP_MS;
     uint32_t iv = frameIntervalMs(c);
     if (iv) {  // pantalla encendida: hasta el proximo frame
@@ -417,14 +442,14 @@ void idleWait(PowerCtx c) {
       if ((int32_t)due < (int32_t)ms) ms = (int32_t)due > 1 ? due : 1;
     }
     esp_sleep_enable_timer_wakeup((uint64_t)ms * 1000);
-    gpio_wakeup_enable((gpio_num_t)TP_INT, GPIO_INTR_LOW_LEVEL);
+    gpio_wakeup_enable((gpio_num_t)BOARD_TP_INT, GPIO_INTR_LOW_LEVEL);
     esp_sleep_enable_gpio_wakeup();
     esp_light_sleep_start();
     // la interrupcion del tactil vuelve a ser por flanco (como la dejo attachInterrupt); un toque
     // que ya haya bajado la linea se registra a mano
-    gpio_wakeup_disable((gpio_num_t)TP_INT);
-    gpio_set_intr_type((gpio_num_t)TP_INT, GPIO_INTR_NEGEDGE);
-    if (digitalRead(TP_INT) == LOW) gTouchIrq = true;
+    gpio_wakeup_disable((gpio_num_t)BOARD_TP_INT);
+    gpio_set_intr_type((gpio_num_t)BOARD_TP_INT, GPIO_INTR_NEGEDGE);
+    if (digitalRead(BOARD_TP_INT) == LOW) gTouchIrq = true;
     return;
   }
   delay(idleDelayMs(c));
@@ -551,6 +576,8 @@ void handleTouch() {
   // solo tocamos el bus si el chip aviso por INT o si el dedo sigue abajo (hay
   // que detectar el levantamiento). Leer el CST9217 dormido se colgaba ~1s y
   // congelaba el loop entero; SensorLib no respeta el timeout de Wire.
+  // (Medido en la 1.75 con el CST9217; el CST9220 de la 2.16 es de la misma
+  // familia y usa el mismo driver.)
   if (!gTouchIrq && !wasPressed) return;
   gTouchIrq = false;
   // Un ciclo de solo direccion antes de leer. Sin esto, getPoint() se colgaba
@@ -565,10 +592,14 @@ void handleTouch() {
   // El contador de rechazos salio 0 en ambos casos, asi que NO funciona
   // saltandose lecturas cuando el chip no contesta: lo que hace es despertarlo,
   // para que la lectura siguiente no se encuentre el CST9217 dormido.
-  Wire.beginTransmission(TOUCH_ADDR);
+  Wire.beginTransmission(BOARD_I2C_ADDR_TOUCH);
   if (Wire.endTransmission() != 0) return;  // no responde: se reintenta en 20 ms
-  int16_t x, y;
-  bool pressed = touch.getPoint(&x, &y, 1) > 0;
+  // getPoint() copia TODOS los dedos que reporta el chip (hasta 2), pida los que
+  // pida: con un int16_t suelto, dos dedos escribian fuera de la variable
+  int16_t xs[TOUCH_MAX_POINTS] = { 0 }, ys[TOUCH_MAX_POINTS] = { 0 };
+  bool pressed = touch.getPoint(xs, ys, 1) > 0;
+  // del panel de 480x480 al lienzo de 466x466 donde vive la UI (round_display.h)
+  int16_t x = panelToUi(xs[0]), y = panelToUi(ys[0]);
 
   // saco de entrenamiento: cada toque cuenta al instante (aporrear rapido)
   if (sackOpen) {
@@ -1160,8 +1191,7 @@ bool render() {
     char name[28];
     const char *base = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
     snprintf(name, sizeof(name), T(S_NAME_FMT), pet.shiny ? "*" : "", base, pet.level());
-    drawHeader(name, gNight ? UI_INK_NIGHT : d.accent, statusMsg());
-    drawStreakBadge();
+    drawHeader(name, gNight ? UI_INK_NIGHT : d.accent, statusMsg());  // con la racha
     drawPet();
     drawBath();
     drawPoops();
@@ -1700,9 +1730,16 @@ void clockTap(int16_t x, int16_t y) {
 }
 
 // llama + numero de racha arriba a la izquierda
-void drawStreakBadge() {
-  if (pet.streak < 1) return;
-  int x = 26, y = 16;
+// insignia de racha (llama + dias). Ancho en px, 0 si no hay racha.
+int streakBadgeW() {
+  if (pet.streak < 1) return 0;
+  char s[6];
+  snprintf(s, sizeof(s), "%u", pet.streak);
+  setSize(2);
+  return 22 + textW(s, 2);
+}
+
+void drawStreakBadge(int x, int y) {
   gfx->fillTriangle(x + 8, y, x + 1, y + 17, x + 15, y + 17, UI_BAR_BAD);
   gfx->fillTriangle(x + 8, y + 7, x + 4, y + 17, x + 12, y + 17, UI_BAR_WARN);
   char s[6];
@@ -2132,10 +2169,12 @@ void galleryTap(int16_t x, int16_t y) {
   galleryPmd.load(dex, pet.isShinyRegistered(dex));
 }
 
-void drawBattery() {
+#define BAT_ICON_W 27  // 24 de cuerpo + 3 de borne
+
+void drawBattery(int x) {
   int pc = batPercent();
   if (pc < 0) return;  // sin bateria conectada
-  int x = CX - 14, y = 12, w = 24, h = 11;
+  int y = 12, w = 24, h = 11;
   bool charging = batCharging();
   uint16_t col = charging ? UI_BAR_OK
                  : (pc >= 40) ? inkColor()
@@ -2156,7 +2195,17 @@ void drawBattery() {
 }
 
 void drawHeader(const char *name, uint16_t nameColor, const char *msg) {
-  drawBattery();
+  // Fila de estado: la bateria y, con el bicho en pantalla, la racha a su lado,
+  // centradas como grupo. Arriba del todo el circulo solo deja ~140 px; la
+  // insignia de racha estaba en la esquina (26, 16) del lienzo, fuera del
+  // circulo, y no se veia ni en la pantalla redonda original.
+  int sw = (!pet.isEgg() && !pet.ceremony) ? streakBadgeW() : 0;
+  bool bat = batPercent() >= 0;
+  int gap = (sw && bat) ? 10 : 0;
+  int groupW = (bat ? BAT_ICON_W : 0) + gap + sw;
+  int x0 = sw ? CX - groupW / 2 : CX - 14;  // sin racha, la bateria donde siempre
+  drawBattery(x0);
+  if (sw) drawStreakBadge(x0 + (bat ? BAT_ICON_W + gap : 0), 9);
   gfx->setTextColor(nameColor);
   setSize(3);
   setCur(centerX(name, 3), 52);

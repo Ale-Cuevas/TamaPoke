@@ -1,5 +1,5 @@
 #include "sdmon.h"
-#include "pin_config.h"
+#include "board_amoled_216.h"
 #include <FS.h>
 #include <SD_MMC.h>
 
@@ -141,7 +141,7 @@ const uint8_t *SdThumbs::get(int16_t dex) const {
 }
 
 bool sdBegin() {
-  SD_MMC.setPins(SDMMC_CLK, SDMMC_CMD, SDMMC_DATA);
+  SD_MMC.setPins(BOARD_SD_CLK, BOARD_SD_CMD, BOARD_SD_D0);  // 1-bit, como el BSP de Waveshare
   sdReady = SD_MMC.begin("/sdcard", true /* modo 1-bit */, true /* formatea si no monta */);
   if (sdReady) {
     Serial.printf("SD montada: %llu MB\n", SD_MMC.cardSize() / (1024ULL * 1024ULL));

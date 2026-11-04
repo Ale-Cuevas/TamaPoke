@@ -1,7 +1,8 @@
 # TamaPoke web installer
 
-A one-click page that flashes the firmware and loads the sprites from the browser
-(Chrome/Edge), with no Arduino or drivers. It uses
+A one-click page that flashes the firmware onto a **Waveshare
+ESP32-S3-Touch-AMOLED-2.16** and loads the sprites from the browser (Chrome/Edge),
+with no Arduino or drivers. It uses
 [ESP Web Tools](https://esphome.github.io/esp-web-tools/) to flash and **Web
 Serial** to push the sprites to the SD with the firmware's `PUT` protocol (the
 same one as `tools/send_sd.py`).
@@ -10,7 +11,8 @@ same one as `tools/send_sd.py`).
 
 - `index.html` — the page (flashing + sprite loader).
 - `manifest.json` — ESP Web Tools config (points at the firmware).
-- `firmware/tamapoke.bin` — combined firmware, flashable at `0x0`.
+- `firmware/tamapoke.bin` — combined firmware for the AMOLED-2.16, flashable at
+  `0x0` (bootloader, partition table, boot_app0 and app in one image).
 - `sprites.pak` — all the sprites in one bundle (TPAK), so the page sends them in
   one click. **Generated** by `tools/pack_bundle.py` (gitignored by default — see
   *Hosting the sprites* below).
@@ -22,6 +24,10 @@ After changing the firmware or the sprites:
 ```bash
 bash tools/build_web.sh        # recompiles -> firmware/tamapoke.bin AND rebuilds sprites.pak
 ```
+
+It builds with PlatformIO (`pio run -e tamapoke`, versions pinned in
+`platformio.ini`) and copies the merged `firmware.factory.bin` the platform
+produces.
 
 ## Test locally
 

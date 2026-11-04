@@ -7,7 +7,7 @@ on:
 
 jobs:
   firmware:
-    name: Compile firmware
+    name: Compile firmware (arduino-cli)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,23 +15,65 @@ jobs:
       - name: Install arduino-cli
         uses: arduino/setup-arduino-cli@v2
 
-      # Fijado a la version del core verificada para compilar este sketch. Subirla
-      # a mano y a proposito: alguna version nueva del core ha roto librerias de
-      # terceros antes.
+      # Core y librerias fijados a las mismas versiones que platformio.ini: las
+      # de la demo de Waveshare para la AMOLED-2.16 (SensorLib, XPowersLib) y
+      # las verificadas al portar. Subirlas a mano y a proposito: alguna version
+      # nueva del core ha roto librerias de terceros antes.
       - name: Install ESP32 core
         run: |
           arduino-cli config init --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
           arduino-cli core update-index
-          arduino-cli core install esp32:esp32@3.3.10
+          arduino-cli core install esp32:esp32@3.3.11
 
       - name: Install libraries
-        run: arduino-cli lib install "GFX Library for Arduino" SensorLib XPowersLib U8g2
+        run: >
+          arduino-cli lib install
+          "GFX Library for Arduino@1.6.9" "SensorLib@0.3.3" "XPowersLib@0.2.6" "U8g2@2.36.18"
 
       - name: Compile
         run: >
           arduino-cli compile --warnings=all
           --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB"
           .
+
+  platformio:
+    name: Compile firmware + bring-up (PlatformIO)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # la plataforma pioarduino 55.03.311 solo acepta Python 3.10-3.14
+          python-version: "3.13"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+      - run: pip install platformio
+      - name: Build both envs (tamapoke, bringup)
+        run: pio run
+
+  render:
+    name: Render the screens (host)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"  # ver el job platformio
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+      - run: pip install platformio && sudo apt-get install -y zlib1g-dev
+      # La herramienta usa el Python de PlatformIO para su conversor .ino; con
+      # pip, ese es el Python del sistema.
+      - name: Render every scene to PNG
+        run: PIO_PYTHON=python tools/render/render.sh render-out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screens
+          path: render-out/*.png
 
   generated:
     name: Generated headers up to date
@@ -76,7 +118,8 @@ jobs:
       # pet.cpp / i18n.cpp / dex.h compilan y corren en el PC contra unos shims
       # de Arduino, con millis() y random() falsos y una NVS en memoria. Aqui es
       # donde se han roto las cosas: los tres bugs de la v1.3, v1.4 y v1.8 eran
-      # logica pura y estos tests los pillan sin tocar la placa.
+      # logica pura y estos tests los pillan sin tocar la placa. Tambien el
+      # marco redondo de la AMOLED-2.16 (test_roundmask.cpp).
       - name: Run the suite (plus AddressSanitizer + UBSan)
         run: ./test/run_tests.sh --asan
 
