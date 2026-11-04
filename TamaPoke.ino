@@ -1190,8 +1190,7 @@ bool render() {
     char name[28];
     const char *base = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
     snprintf(name, sizeof(name), T(S_NAME_FMT), pet.shiny ? "*" : "", base, pet.level());
-    drawHeader(name, gNight ? UI_INK_NIGHT : d.accent, statusMsg());
-    drawStreakBadge();
+    drawHeader(name, gNight ? UI_INK_NIGHT : d.accent, statusMsg());  // con la racha
     drawPet();
     drawBath();
     drawPoops();
@@ -1730,9 +1729,16 @@ void clockTap(int16_t x, int16_t y) {
 }
 
 // llama + numero de racha arriba a la izquierda
-void drawStreakBadge() {
-  if (pet.streak < 1) return;
-  int x = 26, y = 16;
+// insignia de racha (llama + dias). Ancho en px, 0 si no hay racha.
+int streakBadgeW() {
+  if (pet.streak < 1) return 0;
+  char s[6];
+  snprintf(s, sizeof(s), "%u", pet.streak);
+  setSize(2);
+  return 22 + textW(s, 2);
+}
+
+void drawStreakBadge(int x, int y) {
   gfx->fillTriangle(x + 8, y, x + 1, y + 17, x + 15, y + 17, UI_BAR_BAD);
   gfx->fillTriangle(x + 8, y + 7, x + 4, y + 17, x + 12, y + 17, UI_BAR_WARN);
   char s[6];
@@ -2162,10 +2168,12 @@ void galleryTap(int16_t x, int16_t y) {
   galleryPmd.load(dex, pet.isShinyRegistered(dex));
 }
 
-void drawBattery() {
+#define BAT_ICON_W 27  // 24 de cuerpo + 3 de borne
+
+void drawBattery(int x) {
   int pc = batPercent();
   if (pc < 0) return;  // sin bateria conectada
-  int x = CX - 14, y = 12, w = 24, h = 11;
+  int y = 12, w = 24, h = 11;
   bool charging = batCharging();
   uint16_t col = charging ? UI_BAR_OK
                  : (pc >= 40) ? inkColor()
@@ -2186,7 +2194,17 @@ void drawBattery() {
 }
 
 void drawHeader(const char *name, uint16_t nameColor, const char *msg) {
-  drawBattery();
+  // Fila de estado: la bateria y, con el bicho en pantalla, la racha a su lado,
+  // centradas como grupo. Arriba del todo el circulo solo deja ~140 px; la
+  // insignia de racha estaba en la esquina (26, 16) del lienzo, fuera del
+  // circulo, y no se veia ni en la pantalla redonda original.
+  int sw = (!pet.isEgg() && !pet.ceremony) ? streakBadgeW() : 0;
+  bool bat = batPercent() >= 0;
+  int gap = (sw && bat) ? 10 : 0;
+  int groupW = (bat ? BAT_ICON_W : 0) + gap + sw;
+  int x0 = sw ? CX - groupW / 2 : CX - 14;  // sin racha, la bateria donde siempre
+  drawBattery(x0);
+  if (sw) drawStreakBadge(x0 + (bat ? BAT_ICON_W + gap : 0), 9);
   gfx->setTextColor(nameColor);
   setSize(3);
   setCur(centerX(name, 3), 52);
