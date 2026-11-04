@@ -3,8 +3,43 @@
 All notable changes to the firmware. Versions match the number shown at the
 bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 
-Updating from the [web installer](https://socquique.github.io/TamaPoke/web/)
-**without** ticking "Erase device" keeps your Pokémon.
+Updating from the web installer (`web/`) **without** ticking "Erase device"
+keeps your Pokémon.
+
+## [1.19] - 2026-11-04
+
+The port to the **Waveshare ESP32-S3-Touch-AMOLED-2.16** (square 480x480
+AMOLED). This version targets the 2.16" board only; v1.18 and earlier are for
+the round 1.75". Details and sources: [docs/AMOLED-2.16.md](docs/AMOLED-2.16.md).
+
+### Changed
+
+- **Round screen on a square panel.** The game still draws its 466x466 round
+  UI; the display layer places it on the 480x480 panel and frames it with an
+  anti-aliased round mask, so it looks like the original with black around it
+  (black AMOLED pixels are off). `-D TP_ROUND_FRAME=0` shows the square canvas.
+- Board support for the 2.16": `board_amoled_216.h` replaces `pin_config.h`;
+  panel offsets 0/0 and MADCTL 0xA0; CST9220 touch with its own axis mapping,
+  converted to the game's coordinates; no PMU rail is touched (the 1.75" needed
+  BLDO1 for the panel); 4.2 V charge target as in Waveshare's demo.
+- Built with PlatformIO (`platformio.ini`), with the platform, core and every
+  library pinned. arduino-cli still builds it, with the same versions in CI.
+
+### Added
+
+- `bringup/`: a hardware test firmware for a new board (panel, touch, PMU,
+  IMU, RTC, buttons, microSD), flashed with `pio run -e bringup -t upload`.
+- `tools/render/`: renders every screen on the PC as the PNG the panel would
+  show, from the real drawing code.
+- `test/test_roundmask.cpp`: the round frame's geometry and edge.
+- [docs/DEVICE_TESTS.md](docs/DEVICE_TESTS.md): what to check on the board.
+
+### Fixed
+
+- The daily streak badge was drawn in a corner outside the round screen and
+  never showed. It now sits next to the battery icon.
+- A two-finger touch could write past the touch coordinates: SensorLib returns
+  every finger the chip reports, not just the one asked for.
 
 ## [1.18] - 2026-10-27
 

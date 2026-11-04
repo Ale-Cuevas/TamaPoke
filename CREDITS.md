@@ -32,10 +32,12 @@ Huge thanks to that whole community for an enormous amount of work.
 | Component | Author / source |
 |---|---|
 | GFX Library for Arduino | [moononournation](https://github.com/moononournation/Arduino_GFX) |
-| SensorLib (CST9217 touch, PCF85063 RTC) | [Lewis He / lewisxhe](https://github.com/lewisxhe/SensorLib) |
+| SensorLib (CST9220 touch, PCF85063 RTC) | [Lewis He / lewisxhe](https://github.com/lewisxhe/SensorLib) |
 | XPowersLib (AXP2101 PMU) | [Lewis He / lewisxhe](https://github.com/lewisxhe/XPowersLib) |
 | U8g2 (CJK font data only) | [olikraus](https://github.com/olikraus/u8g2) |
-| Board and pinout | [Waveshare ESP32-S3-Touch-AMOLED-1.75](https://www.waveshare.com/wiki/ESP32-S3-Touch-AMOLED-1.75) |
+| Board and pinout | [Waveshare ESP32-S3-Touch-AMOLED-2.16](https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.16): demo code and schematic ([waveshareteam/ESP32-S3-Touch-AMOLED-2.16](https://github.com/waveshareteam/ESP32-S3-Touch-AMOLED-2.16)) and ESP-IDF board package ([Waveshare-ESP32-components](https://github.com/waveshareteam/Waveshare-ESP32-components)) |
+| Original board | [Waveshare ESP32-S3-Touch-AMOLED-1.75](https://www.waveshare.com/wiki/ESP32-S3-Touch-AMOLED-1.75), the round screen TamaPoke was designed for ([socquique/TamaPoke](https://github.com/socquique/TamaPoke)) |
+| Bring-up firmware (`bringup/`) | adapted from the AMOLED-2.16 port of [Digipet](https://github.com/Ale-Cuevas/Digipet-fork) (MIT) |
 | Web installer | [ESP Web Tools](https://esphome.github.io/esp-web-tools/) (Nabu Casa) |
 
 TamaPoke's own code (firmware and tools) is original work.
