@@ -1,6 +1,6 @@
 #include "batcurve.h"
 #include "rtcbat.h"
-#include "pin_config.h"  // define XPOWERS_CHIP_AXP2101
+#include "board_amoled_216.h"  // define XPOWERS_CHIP_AXP2101: antes de XPowersLib.h
 #include <Wire.h>
 #include <time.h>
 #include <SensorPCF85063.hpp>
@@ -12,7 +12,7 @@ static bool rtcOk = false;
 static bool pmuOk = false;
 
 bool rtcBegin() {
-  rtcOk = rtc.begin(Wire, IIC_SDA, IIC_SCL);
+  rtcOk = rtc.begin(Wire, BOARD_I2C_SDA, BOARD_I2C_SCL);
   if (!rtcOk) Serial.println("PCF85063 no detectado");
   return rtcOk;
 }
@@ -42,24 +42,15 @@ void rtcSetEpoch(uint32_t e) {
 }
 
 bool batBegin() {
-  pmuOk = pmu.begin(Wire, AXP2101_SLAVE_ADDRESS, IIC_SDA, IIC_SCL);
+  pmuOk = pmu.begin(Wire, BOARD_I2C_ADDR_PMIC, BOARD_I2C_SDA, BOARD_I2C_SCL);
   if (!pmuOk) { Serial.println("AXP2101 no detectado"); return false; }
+  // Lo unico que la demo de Waveshare de la 2.16 cambia en el PMU: carga hasta
+  // 4.2 V. Los rails se quedan como arrancan (de ellos cuelga el panel).
+  pmu.setChargeTargetVoltage(XPOWERS_AXP2101_CHG_VOL_4V2);
+  pmu.enableBattDetection();
   pmu.enableBattVoltageMeasure();
   pmu.setSysPowerDownVoltage(BAT_HW_CUTOFF_MV);  // respaldo: el PMU corta solo si el firmware no llega a tiempo
   return true;
-}
-
-// Enciende la alimentacion de la AMOLED. En la Waveshare 1.75 el panel (OLED VDD)
-// cuelga del rail BLDO1 a 3.3V del AXP2101. El firmware daba por hecho que estaba
-// encendido; si el PMU se resetea (drenaje total), BLDO1 queda OFF y la pantalla
-// se ve negra aunque el resto funcione. Hay que llamarla ANTES de gfx->begin().
-void pmuEnablePanel() {
-  if (!pmu.begin(Wire, AXP2101_SLAVE_ADDRESS, IIC_SDA, IIC_SCL)) {
-    Serial.println("AXP2101 no detectado (pmuEnablePanel)");
-    return;
-  }
-  pmu.setBLDO1Voltage(3300);   // OLED VDD
-  pmu.enableBLDO1();
 }
 
 // el estado de energia (I2C) se cachea ~2 s: leerlo en cada frame del loop
