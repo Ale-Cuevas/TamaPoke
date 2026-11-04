@@ -31,8 +31,9 @@ these are the pixels the panel receives.</sub>
 
 **AMOLED-2.16 port (v1.19):** builds (PlatformIO and arduino-cli, pinned
 versions), passes the host test suite, and every screen has been rendered and
-checked on the PC. It has **not run on a 2.16" board yet**: the checklist for
-the first flash is in [docs/DEVICE_TESTS.md](docs/DEVICE_TESTS.md) (summary in
+checked on the PC. **Tested on a real 2.16" board on 2026-11-04**: bring-up and
+game work; the results and the few checks still open are in
+[docs/DEVICE_TESTS.md](docs/DEVICE_TESTS.md) (summary in
 [docs/PENDING_TESTS.md](docs/PENDING_TESTS.md)).
 
 The game itself runs on the 1.75" hardware upstream. Implemented: the 151 +
@@ -200,8 +201,8 @@ The `bringup` env (`bringup/main.cpp`) tests each chip on its own: panel colours
 and corners, touch dots, PMU, IMU, RTC, buttons and microSD, with a log over
 USB. What to look for: [docs/DEVICE_TESTS.md](docs/DEVICE_TESTS.md).
 
-If the upload can't find the board: hold **BOOT**, tap **RESET**, release BOOT,
-upload again.
+If the upload can't find the board: unplug the battery, hold **BOOT** while
+plugging USB in, release BOOT, upload again. (The board has no RESET button.)
 
 ### Arduino IDE / arduino-cli
 

@@ -95,7 +95,8 @@ Sources:
 Note on the microSD: the schematic labels its lines for SPI (MOSI 1, SCK 2,
 MISO 3, CS 41), but Waveshare's own BSP mounts the card over SDMMC in 1-bit
 mode on the same wires, which is what TamaPoke already did on the 1.75". The
-bring-up firmware tries SDMMC first and then SPI, so the first flash settles it.
+bring-up firmware tries SDMMC first and then SPI: on the first board
+(2026-11-04) SDMMC 1-bit mounted, so the game keeps it.
 
 ### Fixed along the way
 
@@ -126,6 +127,14 @@ Without the board:
   PC and saves every screen as the 480x480 PNG the panel would show (the image
   at the top). See [`tools/render/README.md`](../tools/render/README.md).
 
-On the board: nothing yet. The checks to run, in order, are in
+On the board (2026-11-04): the bring-up firmware found every chip, the colours,
+orientation, edges and touch mapping are right, and the microSD mounts over
+SDMMC 1-bit. The game runs at 40 MHz QSPI: round frame, touch, save, clock,
+sound and sprites all work. Results and the checks still open are in
 [DEVICE_TESTS.md](DEVICE_TESTS.md), with a one-line list in
 [PENDING_TESTS.md](PENDING_TESTS.md).
+
+One thing the board taught: the CO5300 drops drawing windows that don't start
+on an even pixel and span an even count. A 1 px `drawRect()` never shows. The
+game only sends aligned windows (the full-screen clear and the 466x466 frame
+at (6, 6)); the bring-up's frame and touch dots are now 2 px aligned too.
