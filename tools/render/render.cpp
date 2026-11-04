@@ -116,7 +116,13 @@ static void pasteOnGlass(std::vector<uint8_t> &img, int iw, int x, int y, const 
 // 2026-06-15 at the given hour (UTC, as the firmware treats the RTC)
 static uint32_t epochAt(int hour) { return 1781481600UL + (uint32_t)hour * 3600; }
 
+// Every scene starts from the same clock, random sequence and pet behaviour, so
+// it renders the same whether it runs alone or after the others.
 static void resetUi() {
+  gHostMillis = 107915;  // the first frame then lands with the clouds clear of the title
+  gHostRandom = 12345;
+  beh = decltype(beh){};
+  walkLast = 0;
   galleryOpen = cardOpen = kbOpen = clockOpen = gameOpen = sackOpen = false;
   galleryDetail = 0;
   galleryPage = 0;
@@ -175,7 +181,7 @@ static const std::vector<Scene> &scenes() {
      } },
     { "home", [] { pokemon(25, 13); } },
     { "home-dusk", [] { pokemon(7, 19); } },
-    { "home-night", [] { pokemon(4, 23); pet.sleeping = true; } },
+    { "home-night", [] { pokemon(133, 23); pet.sleeping = true; } },
     { "home-forest", [] { pokemon(1, 9); pet.poops = 2; pet.fullness = 20; } },
     { "feed", [] { pokemon(133, 12); feedMenuUntil = millis() + 6000; } },
     { "release", [] { pokemon(54, 15); confirmUntil = millis() + 10000; } },

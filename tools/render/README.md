@@ -7,6 +7,7 @@ saves them as 480x480 PNGs. No board, no flashing.
 tools/render/render.sh                          # every scene -> .pio/render/screens/
 tools/render/render.sh /tmp/shots home gallery  # some scenes
 RENDER_FLAGS=-DTP_ROUND_FRAME=0 tools/render/render.sh /tmp/square   # without the round frame
+RENDER_FLAGS="-fsanitize=address,undefined" tools/render/render.sh /tmp/asan  # drawing code under sanitizers
 ```
 
 It also writes `screens.png`, the contact sheet used in the README.
