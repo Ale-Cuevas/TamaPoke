@@ -20,9 +20,9 @@ Write the result on each line: a tick, or what you saw.
 | 11 | Save, RTC aging, sound, sprites from the card | [Save, time, sound, SD](DEVICE_TESTS.md#save-time-sound-sd) | ✓ save, clock across restart, sound, sprites; power-off aging, USB upload: pending |
 | 12 | USER key = back on every screen; volume at -10 dB | [Power, sleep, buttons](DEVICE_TESTS.md#power-sleep-buttons), [Save, time, sound, SD](DEVICE_TESTS.md#save-time-sound-sd) | ✓ back; waking from dim and from light sleep, volume: pending |
 | 13 | IMU probe: chip, axes, filter, FIFO, hardware pedometer (bring-up) | [IMU](DEVICE_TESTS.md#imu-qmi8658-as-the-game-uses-it-from-v120) | QMI8658A, axes and FIFO ✓; hardware pedometer counts 0 (steps go to software); walks with steps counted by hand: pending |
-| 14 | v1.20 steps: FIFO rate, 400 kHz I2C (touch, sound), ±10 % over 100 steps (pocket, hand), shaking adds none, PWR-off walk, restart, midnight | [Steps](DEVICE_TESTS.md#steps) | ✓ FIFO 60/s, touch at 400 kHz, restart, shaking, a ~20-step walk counted; ±10 % over 100, PWR-off walk, midnight, sound at 400 kHz: pending |
+| 14 | v1.20 steps: FIFO rate, 400 kHz I2C (touch, sound), ±10 % over 100 steps (pocket, hand), shaking adds none, PWR-off walk, restart, midnight | [Steps](DEVICE_TESTS.md#steps) | ✓ FIFO 60/s, touch and sound at 400 kHz, restart, shaking, PWR-off walk. **Pocket: 114 for 100 (+14 %), outside ±10 %**, being tuned; hand, bag, midnight: pending |
 | 15 | v1.20 WALK page, goal banner, find popup, using items | [Steps](DEVICE_TESTS.md#steps) | ✓ page, banner, popups, a Golden Berry used; a vitamin and the awake goal bonus: pending |
-| 16 | v1.20 motion: shake to wake (and not in a pocket), grumpy / dizzy, face-down, tilt both ways | [Motion](DEVICE_TESTS.md#motion) | ✓ tilt, face-down by day, grumpy and dizzy (serial); shake to wake on battery, not in a pocket, face-down at night: pending |
+| 16 | v1.20 motion: shake to wake (and not in a pocket), grumpy / dizzy, face-down, tilt both ways | [Motion](DEVICE_TESTS.md#motion) | ✓ tilt, face-down by day and at night, shake to wake on battery, a pocket walk never wakes the screen, grumpy and dizzy (serial); shake with the screen off (PWR), the egg: pending |
 | 17 | v1.20 8 h battery drain, screen off, against v1.19 | [Steps](DEVICE_TESTS.md#steps) | pending |
 
 Questions only the board can answer:
