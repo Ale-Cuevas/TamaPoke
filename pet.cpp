@@ -21,10 +21,11 @@ void Pet::newEgg() {
   prevSpeciesId = -1;
   eggTarget = pickEggSpecies();  // especie oculta segun rareza y pokedex
   starterPick = (registeredCount() == 0);  // primera partida: el jugador elige inicial
-  // sorteo shiny: 1/48 base, mejor con despedida y con racha/vinculo altos
-  int shinyBase = (lastEnd == CER_FAREWELL ? 24 : 48) - careBonus();
-  if (shinyBase < 8) shinyBase = 8;
-  eggShiny = (random(shinyBase) == 0);
+  // amuleto shiny de la mochila: lo gasta este huevo. No el inicial, ni
+  // pickEggSpecies(), que tambien usa la simulacion de tiradas (comando EGGS).
+  bool charm = items[IT_CHARM] && !starterPick;
+  if (charm) items[IT_CHARM] = 0;
+  eggShiny = (random(shinyOdds(charm)) == 0);
   eggTaps = 0;
   fullness = 80;
   joy = 80;
@@ -36,6 +37,18 @@ void Pet::newEgg() {
   mistakeCooldown = 0;
   sleeping = false;
   save();
+}
+
+// sorteo shiny del huevo, 1 entre N: 1/48 base, mejor con despedida y con
+// racha/vinculo altos, y x3 con el amuleto; nunca mejor que 1/8
+int Pet::shinyOdds(bool charm) const {
+  int n = (lastEnd == CER_FAREWELL ? 24 : 48) - careBonus();
+  if (n < 8) n = 8;
+  if (charm) {
+    n /= CHARM_SHINY_MULT;
+    if (n < 8) n = 8;
+  }
+  return n;
 }
 
 // progresion offline: el tiempo paso aunque estuviera apagado, pero con
@@ -263,8 +276,9 @@ int Pet::careBonus() const {
   return s / 3 + bond / 25;
 }
 
-// primer cuidado del dia: avanza la racha y afianza el vinculo
-void Pet::registerCare() {
+// primer cuidado del dia: avanza la racha y afianza el vinculo. saveNow=false
+// para los eventos del IMU (la meta de pasos): marca el guardado y no escribe.
+void Pet::registerCare(bool saveNow) {
   if (isEgg() || ceremony != CER_NONE) return;
   uint32_t d = today();
   if (d == 0 || d == lastCareDay) return;  // sin reloj, o ya conto hoy
@@ -275,7 +289,10 @@ void Pet::registerCare() {
     lastMilestone = 0;
   }
   lastCareDay = d;
-  bondToday = 0;
+  if (bondDay != d) {  // el tope diario de vinculo es por dia (ver addBond)
+    bondDay = d;
+    bondToday = 0;
+  }
   if (streak > bestStreak) bestStreak = streak;
   bond = clamp100(bond + 4);
   uint16_t ms = (streak >= 100) ? 100 : (streak >= 30) ? 30
@@ -284,17 +301,24 @@ void Pet::registerCare() {
     lastMilestone = ms;
     milestoneUntil = millis() + 4500;
   }
-  checkMedals();
-  save();
+  checkMedals(saveNow);
+  persist(saveNow);
 }
 
 void Pet::addBond(uint8_t amt) {
+  // el tope diario vuelve a 0 a medianoche: antes solo lo reiniciaban
+  // registerCare() y hatch(), y el de ayer seguia valiendo hasta el primer cuidado
+  uint32_t d = today();
+  if (d && d != bondDay) {
+    bondDay = d;
+    bondToday = 0;
+  }
   if (bondToday >= 20) return;  // tope diario: el vinculo no se farmea
   bond = clamp100(bond + amt);
   bondToday += amt;
 }
 
-void Pet::checkMedals() {
+void Pet::checkMedals(bool saveNow) {
   if (isEgg()) return;
   uint16_t before = medals;
   if (level() >= 10) medals |= MED_LV10;
@@ -311,7 +335,7 @@ void Pet::checkMedals() {
     newMedal = gained;
     medalUntil = millis() + 4000;
     if (!sleeping) sfxPlay(SFX_MEDAL);
-    save();
+    persist(saveNow);
   }
 }
 
@@ -395,6 +419,7 @@ void Pet::hatch() {
   berryKnown = false;
   bond = 0;          // vinculo, medallas y nombre son del individuo
   bondToday = 0;
+  bondDay = today();
   medals = 0;
   newMedal = 0;
   nick[0] = 0;
@@ -549,6 +574,184 @@ void Pet::eggTap() {
   else save();
 }
 
+// ---------- pasos, hallazgos y mochila (docs/FEATURES.md, Tarea 1) ----------
+
+// dia nuevo: los contadores de hoy vuelven a 0 (el total no)
+void Pet::rollStepDay(uint32_t day) {
+  if (!day || day == stepDay) return;
+  stepDay = day;
+  stepsToday = 0;
+  findsToday = 0;
+  stepJoyToday = 0;
+  pendingSave = true;
+}
+
+static uint16_t nextFindAt() { return FIND_MIN_STEPS + random(FIND_MAX_STEPS - FIND_MIN_STEPS + 1); }
+
+// Pasos contados por el IMU (o el comando STEPS). Se suman siempre a hoy y al
+// total; los premios (FR-1.3) y los hallazgos solo con el bicho nacido y
+// despierto. Caminar no gasta energia: una bajada a 10 contaria como descuido.
+// Los restos se guardan, asi que da igual en cuantos trozos lleguen los pasos.
+void Pet::addSteps(uint32_t n, uint32_t day) {
+  rollStepDay(day);
+  if (!n) return;
+  stepsToday += n;
+  stepsTotal += n;
+  pendingSave = true;  // nunca save(): la escritura a flash congela ~1 s
+
+  bool rewarded = !isEgg() && !sleeping && ceremony == CER_NONE && !starterPick;
+  if (rewarded) {
+    uint32_t j = joyRem + n;
+    joyRem = j % STEPS_PER_JOY;
+    uint32_t gain = j / STEPS_PER_JOY;
+    uint32_t room = stepJoyToday < STEP_JOY_DAY_CAP ? STEP_JOY_DAY_CAP - stepJoyToday : 0;
+    if (gain > room) gain = room;
+    joy = clamp100(joy + (int)gain);
+    stepJoyToday += gain;
+
+    uint32_t w = weightRem + n;
+    weightRem = w % STEPS_PER_WEIGHT;
+    uint32_t burn = w / STEPS_PER_WEIGHT;
+    weight = burn >= weight ? 0 : weight - burn;
+
+    uint32_t b = bondRem + n;
+    bondRem = b % STEPS_PER_BOND;
+    for (uint32_t i = b / STEPS_PER_BOND; i > 0; i--) addBond(1);  // el tope diario lo pone addBond
+
+    if (!findAt) findAt = nextFindAt();
+    uint32_t f = (uint32_t)findRem + n;
+    while (f >= findAt && findsToday < FINDS_PER_DAY) {
+      f -= findAt;
+      findItem();
+      findAt = nextFindAt();
+    }
+    if (findsToday >= FINDS_PER_DAY) f = 0;  // tope del dia: lo que se ande despues no cuenta para el dia siguiente
+    findRem = (uint16_t)f;
+  }
+
+  // meta diaria (FR-1.4): una vez al dia; cuenta como dia de cuidado para la racha
+  if (day && stepsToday >= STEP_GOAL && goalDay != day) {
+    goalDay = day;
+    goalBanner = true;
+    if (rewarded) {
+      joy = clamp100(joy + GOAL_JOY);
+      if (findsToday < FINDS_PER_DAY) findItem();  // hallazgo de regalo
+    }
+    registerCare(false);
+  }
+}
+
+// el bicho encuentra algo por el camino (FR-1.5 / FR-1.6)
+void Pet::findItem() {
+  findsToday++;
+  long r = random(100);
+  uint8_t it;
+  if (r < ODDS_BERRY) it = IT_GOLDEN;
+  else if (r < ODDS_BERRY + ODDS_VITAMIN) it = IT_PROTEIN + random(3);
+  else it = IT_CHARM;
+  if (it == IT_CHARM && items[IT_CHARM]) it = IT_GOLDEN;  // solo se lleva un amuleto
+  uint8_t cap = (it == IT_CHARM) ? 1 : ITEM_MAX;
+  bool full = items[it] >= cap;
+  if (!full) items[it]++;
+  if (foundN < FOUND_QUEUE) {
+    foundQ[foundN] = it;
+    foundFull[foundN] = full;
+    foundN++;
+  }
+}
+
+void Pet::popFound() {
+  if (!foundN) return;
+  for (uint8_t i = 1; i < foundN; i++) {
+    foundQ[i - 1] = foundQ[i];
+    foundFull[i - 1] = foundFull[i];
+  }
+  foundN--;
+}
+
+uint8_t Pet::itemCount() const {
+  uint8_t n = 0;
+  for (uint8_t i = 0; i < IT_COUNT; i++) n += items[i];
+  return n;
+}
+
+bool Pet::canUseItem(uint8_t it) const {
+  if (it >= IT_CHARM || !items[it]) return false;  // el amuleto no se usa a mano
+  if (isEgg() || sleeping || ceremony != CER_NONE) return false;
+  if (it == IT_PROTEIN) return trAtk < 100;
+  if (it == IT_IRON) return trDef < 100;
+  if (it == IT_CARBOS) return trSpe < 100;
+  return true;
+}
+
+bool Pet::useItem(uint8_t it) {
+  if (!canUseItem(it)) return false;
+  items[it]--;
+  if (it == IT_GOLDEN) {
+    fullness = clamp100(fullness + GOLDEN_FOOD);
+    joy = clamp100(joy + GOLDEN_JOY);
+    eatUntil = millis() + EAT_ANIM_MS;
+    heartUntil = millis() + HEART_MS;
+  } else {
+    uint8_t &tr = (it == IT_PROTEIN) ? trAtk : (it == IT_IRON) ? trDef : trSpe;
+    tr = clamp100(tr + VITAMIN_TRAIN);
+  }
+  registerCare();
+  save();  // un toque en la pantalla, no un evento del IMU: se guarda ya
+  return true;
+}
+
+// ---------- trucos del IMU (docs/FEATURES.md, Tarea 2) ----------
+
+// agitarlo dormido con la pantalla encendida: se despierta de mal humor. Sin
+// credito de cuidado; un segundo despertar en menos de 60 s no resta mas.
+void Pet::wakeGrumpy() {
+  if (isEgg() || !sleeping || ceremony != CER_NONE) return;
+  sleeping = false;
+  uint32_t now = millis();
+  if (!grumpied || now - lastGrumpy >= GRUMPY_COOLDOWN_MS) {
+    joy = clamp100(joy - GRUMPY_JOY);
+    grumpied = true;
+    lastGrumpy = now;
+  }
+  startEmote(EMOTE_ANGRY);
+  sfxPlay(SFX_DENY);
+  pendingSave = true;
+}
+
+// agitarlo despierto: se marea. 3 sacudidas en 2 min restan felicidad, como
+// mucho una vez cada 10 min. El huevo solo se tambalea.
+void Pet::shaken() {
+  if (ceremony != CER_NONE) return;
+  if (isEgg()) {
+    startEmote(EMOTE_WOBBLE);
+    return;
+  }
+  if (sleeping) return;  // dormido es wakeGrumpy()
+  startEmote(EMOTE_DIZZY);
+  uint32_t now = millis();
+  if (shakeN == DIZZY_SHAKES) {
+    for (uint8_t i = 1; i < DIZZY_SHAKES; i++) shakeAt[i - 1] = shakeAt[i];
+    shakeN--;
+  }
+  shakeAt[shakeN++] = now;
+  if (shakeN == DIZZY_SHAKES && now - shakeAt[0] <= DIZZY_WINDOW_MS &&
+      (!dizzyPenalized || now - lastDizzyPenalty >= DIZZY_COOLDOWN_MS)) {
+    joy = clamp100(joy - DIZZY_JOY);
+    dizzyPenalized = true;
+    lastDizzyPenalty = now;
+    shakeN = 0;
+    pendingSave = true;
+  }
+}
+
+// boca abajo de noche: a dormir, como el boton de luz pero sin escribir ya en flash
+void Pet::sleepDeferred() {
+  if (ceremony != CER_NONE || isEgg() || sleeping) return;
+  sleeping = true;
+  pendingSave = true;
+}
+
 PetMood Pet::mood() const {
   if (sleeping) return MOOD_SLEEPING;
   if (eating()) return MOOD_EATING;
@@ -595,6 +798,21 @@ void Pet::save() {
   prefs.putUShort("ghi", gameHi);
   prefs.putUShort("shi", strHi);
   prefs.putString("nick", nick);
+  // pasos y mochila (v1.20)
+  prefs.putUInt("stpT", stepsToday);
+  prefs.putUInt("stpA", stepsTotal);
+  prefs.putUInt("stpD", stepDay);
+  prefs.putUChar("fndT", findsToday);
+  prefs.putUChar("sjoy", stepJoyToday);
+  prefs.putUInt("goalD", goalDay);
+  prefs.putUShort("jRem", joyRem);
+  prefs.putUShort("wRem", weightRem);
+  prefs.putUShort("bRem", bondRem);
+  prefs.putUShort("fRem", findRem);
+  prefs.putUShort("fAt", findAt);
+  prefs.putBytes("bpack", items, sizeof(items));
+  prefs.putUInt("bondD", bondDay);
+  prefs.putUChar("bondT", bondToday);
 }
 
 void Pet::load() {
@@ -647,6 +865,28 @@ void Pet::load() {
   gameHi = prefs.getUShort("ghi", 0);
   strHi = prefs.getUShort("shi", 0);
   prefs.getString("nick", nick, sizeof(nick));
+  // pasos y mochila (v1.20): un guardado anterior no trae las claves y quedan a 0
+  stepsToday = prefs.getUInt("stpT", 0);
+  stepsTotal = prefs.getUInt("stpA", 0);
+  stepDay = prefs.getUInt("stpD", 0);
+  findsToday = prefs.getUChar("fndT", 0);
+  stepJoyToday = prefs.getUChar("sjoy", 0);
+  goalDay = prefs.getUInt("goalD", 0);
+  joyRem = prefs.getUShort("jRem", 0) % STEPS_PER_JOY;
+  weightRem = prefs.getUShort("wRem", 0) % STEPS_PER_WEIGHT;
+  bondRem = prefs.getUShort("bRem", 0) % STEPS_PER_BOND;
+  findAt = prefs.getUShort("fAt", 0);
+  if (findAt && (findAt < FIND_MIN_STEPS || findAt > FIND_MAX_STEPS)) findAt = 0;
+  findRem = prefs.getUShort("fRem", 0);
+  if (findAt && findRem >= findAt) findRem = findAt - 1;
+  memset(items, 0, sizeof(items));
+  prefs.getBytes("bpack", items, sizeof(items));
+  for (uint8_t i = 0; i < IT_COUNT; i++) {
+    uint8_t cap = (i == IT_CHARM) ? 1 : ITEM_MAX;
+    if (items[i] > cap) items[i] = cap;
+  }
+  bondDay = prefs.getUInt("bondD", 0);
+  bondToday = prefs.getUChar("bondT", 0);
   // siembra: la mascota actual cuenta como criada (guardados antiguos)
   if (speciesId >= 1) registerSpecies(speciesId);
 }

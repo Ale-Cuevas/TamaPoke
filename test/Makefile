@@ -4,18 +4,23 @@
 CXX      ?= g++
 CXXFLAGS ?= -std=c++17 -O1 -g -Wall -Wextra -Wno-unused-parameter \
             -fno-omit-frame-pointer
+# las capturas del acelerometro (test_steps.cpp / test_motion.cpp), con ruta
+# absoluta para que el binario las encuentre se lance desde donde se lance
+CXXFLAGS += -DTEST_IMU_DIR='"$(CURDIR)/data/imu"'
 LDFLAGS  ?=
 SRC_DIR  := ..
 BUILD    := build
 BIN      := $(BUILD)/tamapoke_tests
 
 SOURCES := main.cpp shim/shim.cpp test_pet.cpp test_dex.cpp test_i18n.cpp test_blit.cpp test_batcurve.cpp test_power.cpp test_roundmask.cpp test_button.cpp \
+           test_steps.cpp test_motion.cpp \
            $(SRC_DIR)/pet.cpp $(SRC_DIR)/i18n.cpp
 
 .PHONY: all run clean asan
 all: run
 
-$(BIN): $(SOURCES) framework.h shim/Arduino.h shim/Preferences.h ../roundmask.h ../ui_frame.h ../board_amoled_216.h ../button.h
+$(BIN): $(SOURCES) framework.h shim/Arduino.h shim/Preferences.h ../roundmask.h ../ui_frame.h ../board_amoled_216.h ../button.h \
+        ../steps.h ../motion.h imu_data.h
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) -I shim -o $@ $(SOURCES) $(LDFLAGS)
 
