@@ -44,10 +44,11 @@ class TestDexData(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from dex_data import DEX, TYPE_ACCENTS, CLASSIC, RARE, LEGENDARY, SLUGS
+        from dex_data import DEX, TYPE_ACCENTS, TYPE_ORDER, TYPE2, CLASSIC, RARE, LEGENDARY, SLUGS
         from dex_stats import BASE_STATS
         from dex_names import LOCAL_NAMES
         cls.DEX, cls.ACCENTS, cls.CLASSIC = DEX, TYPE_ACCENTS, CLASSIC
+        cls.ORDER, cls.TYPE2 = TYPE_ORDER, TYPE2
         cls.RARE, cls.LEGENDARY, cls.SLUGS = RARE, LEGENDARY, SLUGS
         cls.STATS, cls.NAMES = BASE_STATS, LOCAL_NAMES
         cls.byNum = {row[0]: row for row in DEX}
@@ -92,6 +93,37 @@ class TestDexData(unittest.TestCase):
     def test_todos_los_tipos_tienen_color(self):
         for num, slug, display, tipo, *_ in self.DEX:
             self.assertIn(tipo, self.ACCENTS, f'{display}: tipo "{tipo}" sin color')
+
+    def test_los_15_tipos_de_gen_1_tienen_orden_y_color(self):
+        # el orden es el de la tabla de eficacias de battle.h: 15 tipos, sin repetir
+        self.assertEqual(len(self.ORDER), 15)
+        self.assertEqual(len(set(self.ORDER)), 15)
+        self.assertEqual(set(self.ORDER), set(self.ACCENTS), 'cada tipo con su color y su sitio en la tabla')
+
+    def test_los_segundos_tipos_son_validos(self):
+        for num, t2 in self.TYPE2.items():
+            self.assertIn(num, self.byNum, f'segundo tipo para una especie inexistente: {num}')
+            self.assertIn(t2, self.ORDER, f'{self.byNum[num][2]}: tipo "{t2}" desconocido')
+            self.assertNotEqual(t2, self.byNum[num][3], f'{self.byNum[num][2]}: el mismo tipo dos veces')
+        # muestras de gen 1
+        self.assertEqual(self.TYPE2[6], 'volador')    # Charizard
+        self.assertEqual(self.TYPE2[94], 'veneno')    # Gengar
+        self.assertEqual(self.TYPE2[130], 'volador')  # Gyarados
+        self.assertNotIn(25, self.TYPE2)              # Pikachu: electrico puro
+        self.assertNotIn('volador', [row[3] for row in self.DEX], 'ningun gen 1 es volador puro')
+
+    def test_la_forma_base_de_cada_linea(self):
+        from gen_dex import line_bases
+        base = line_bases()
+        evolucionadas = {row[4] for row in self.DEX if row[4]} | {135, 136}
+        for num in self.byNum:
+            b = base[num]
+            self.assertNotIn(b, evolucionadas, f'{self.byNum[num][2]}: su base {b} es una evolucion')
+            self.assertEqual(base[b], b)
+        self.assertEqual(base[6], 4)      # Charizard -> Charmander
+        self.assertEqual(base[135], 133)  # Jolteon -> Eevee, aunque Eevee apunte a Vaporeon
+        self.assertEqual(base[136], 133)
+        self.assertEqual(base[150], 150)
 
     def test_los_colores_son_hex_de_6_digitos(self):
         for tipo, col in self.ACCENTS.items():

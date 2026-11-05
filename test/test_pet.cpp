@@ -1375,3 +1375,50 @@ TEST(imu, nada_de_esto_en_una_ceremonia) {
   CHECK_EQ(p.emote(), (uint8_t)EMOTE_NONE);
   CHECK_EQ(p.joy, (uint8_t)50);
 }
+
+// ---------------------------------------------------------------- combate de practica (Tarea 3a)
+TEST(battle, solo_combate_nacido_y_despierto) {
+  mockNvsReset();
+  Pet egg;
+  egg.begin();
+  CHECK(!egg.canBattle());  // huevo (y eligiendo inicial)
+  egg.chooseStarter(4);
+  CHECK(!egg.canBattle());
+  Pet p;
+  makePet(p, 4);
+  CHECK(p.canBattle());
+  p.toggleLight();
+  CHECK(!p.canBattle());
+  p.toggleLight();
+  p.release();
+  CHECK(!p.canBattle());
+}
+
+TEST(battle, la_practica_da_felicidad_una_vez_por_hora) {
+  Pet p;
+  makePet(p, 25);
+  setStats(p, 80, 50, 80, 100);
+  CHECK(p.practiceRewardReady());
+  CHECK_EQ(p.practiceDone(), (uint8_t)PRACTICE_JOY);
+  CHECK_EQ(p.joy, (uint8_t)(50 + PRACTICE_JOY));
+  CHECK(!p.practiceRewardReady());
+  mockAdvanceMillis(PRACTICE_EVERY_MS - 1000);
+  CHECK_EQ(p.practiceDone(), (uint8_t)0);  // otra dentro de la hora: sin premio
+  CHECK_EQ(p.joy, (uint8_t)(50 + PRACTICE_JOY));
+  mockAdvanceMillis(1000);
+  CHECK_EQ(p.practiceDone(), (uint8_t)PRACTICE_JOY);
+  CHECK_EQ(p.joy, (uint8_t)(50 + 2 * PRACTICE_JOY));
+  p.joy = 99;
+  mockAdvanceMillis(PRACTICE_EVERY_MS);
+  CHECK_EQ(p.practiceDone(), (uint8_t)1);  // tope de 100: dice lo que de verdad dio
+  CHECK_EQ(p.joy, (uint8_t)100);
+}
+
+TEST(battle, la_practica_no_toca_energia_ni_comida) {
+  Pet p;
+  makePet(p, 25);
+  setStats(p, 60, 50, 40, 100);
+  p.practiceDone();
+  CHECK_EQ(p.fullness, (uint8_t)60);
+  CHECK_EQ(p.energy, (uint8_t)40);
+}

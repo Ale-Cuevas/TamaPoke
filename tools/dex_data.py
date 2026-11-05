@@ -6,7 +6,8 @@ Cada entrada: (num, slug, nombre_pantalla, tipo, evoluciona_a, nivel)
 - nombre_pantalla: mayusculas sin acentos. La fuente GFX si tiene glifos
   acentuados (CP437), pero NO las mayusculas acentuadas salvo la E, y los
   nombres se pintan en mayusculas, asi que aqui van sin tilde
-- tipo: clave de TYPE_ACCENTS (color del nombre en la UI)
+- tipo: clave de TYPE_ACCENTS (color del nombre en la UI); es el tipo
+  principal de gen 1, y TYPE2 lleva el segundo de los que tienen dos
 - evoluciona_a: numero de dex (0 = forma final); niveles gen 1 reales,
   piedras ~30 y por intercambio ~40 convertidos a nivel. Eevee (133) se
   ramifica en el codigo del juego (134/135/136 al azar).
@@ -27,7 +28,13 @@ TYPE_ACCENTS = {
     'roca':      '#93803d',
     'fantasma':  '#6a5a9e',
     'dragon':    '#5a52c4',
+    'volador':   '#7a8fd0',  # solo como segundo tipo (TYPE2): ningun gen 1 es volador puro
 }
+
+# orden de los 15 tipos de gen 1 en el firmware (enum TY_* de dex.h y la tabla
+# de eficacias de battle.h, que va en este mismo orden)
+TYPE_ORDER = ['normal', 'fuego', 'agua', 'electrico', 'planta', 'hielo', 'lucha', 'veneno',
+              'tierra', 'volador', 'psiquico', 'bicho', 'roca', 'fantasma', 'dragon']
 
 # num, slug, display, tipo, evolucionaA, nivel
 DEX = [
@@ -183,6 +190,41 @@ DEX = [
     (150, 'mewtwo', 'MEWTWO', 'psiquico', 0, 0),
     (151, 'mew', 'MEW', 'psiquico', 0, 0),
 ]
+
+# segundo tipo de gen 1 (el primero es el de DEX); el resto tiene uno solo
+TYPE2 = {
+    1: 'veneno', 2: 'veneno', 3: 'veneno',              # Bulbasaur
+    6: 'volador',                                       # Charizard
+    12: 'volador',                                      # Butterfree
+    13: 'veneno', 14: 'veneno', 15: 'veneno',           # Weedle
+    16: 'volador', 17: 'volador', 18: 'volador',        # Pidgey
+    21: 'volador', 22: 'volador',                       # Spearow
+    31: 'tierra', 34: 'tierra',                         # Nidoqueen, Nidoking
+    41: 'volador', 42: 'volador',                       # Zubat
+    43: 'veneno', 44: 'veneno', 45: 'veneno',           # Oddish
+    46: 'planta', 47: 'planta',                         # Paras
+    48: 'veneno', 49: 'veneno',                         # Venonat
+    62: 'lucha',                                        # Poliwrath
+    69: 'veneno', 70: 'veneno', 71: 'veneno',           # Bellsprout
+    72: 'veneno', 73: 'veneno',                         # Tentacool
+    74: 'tierra', 75: 'tierra', 76: 'tierra',           # Geodude
+    79: 'psiquico', 80: 'psiquico',                     # Slowpoke
+    83: 'volador', 84: 'volador', 85: 'volador',        # Farfetch'd, Doduo
+    87: 'hielo', 91: 'hielo',                           # Dewgong, Cloyster
+    92: 'veneno', 93: 'veneno', 94: 'veneno',           # Gastly
+    95: 'tierra',                                       # Onix
+    102: 'psiquico', 103: 'psiquico',                   # Exeggcute
+    111: 'roca', 112: 'roca',                           # Rhyhorn
+    121: 'psiquico',                                    # Starmie
+    123: 'volador',                                     # Scyther
+    124: 'psiquico',                                    # Jynx
+    130: 'volador',                                     # Gyarados
+    131: 'hielo',                                       # Lapras
+    138: 'agua', 139: 'agua', 140: 'agua', 141: 'agua',  # Omanyte, Kabuto
+    142: 'volador',                                     # Aerodactyl
+    144: 'volador', 145: 'volador', 146: 'volador',     # las aves legendarias
+    149: 'volador',                                     # Dragonite
+}
 
 # el primer huevo de la partida siempre es un inicial clasico
 CLASSIC = [1, 4, 7, 25, 133]

@@ -745,6 +745,22 @@ void Pet::shaken() {
   }
 }
 
+// ---------- combate de practica (docs/FEATURES.md, Tarea 3a) ----------
+
+bool Pet::practiceRewardReady() const {
+  return !practiceRewarded || millis() - lastPracticeReward >= PRACTICE_EVERY_MS;
+}
+
+uint8_t Pet::practiceDone() {
+  if (isEgg() || ceremony != CER_NONE || !practiceRewardReady()) return 0;
+  practiceRewarded = true;
+  lastPracticeReward = millis();
+  uint8_t before = joy;
+  joy = clamp100(joy + PRACTICE_JOY);
+  save();  // fin de una pantalla de juego, como el minijuego: se guarda ya
+  return joy - before;
+}
+
 // boca abajo de noche: a dormir, como el boton de luz pero sin escribir ya en flash
 void Pet::sleepDeferred() {
   if (ceremony != CER_NONE || isEgg() || sleeping) return;

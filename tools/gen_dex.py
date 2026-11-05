@@ -7,7 +7,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from dex_data import DEX, TYPE_ACCENTS, CLASSIC, RARE, LEGENDARY
+from dex_data import DEX, TYPE_ACCENTS, TYPE_ORDER, TYPE2, CLASSIC, RARE, LEGENDARY
 from dex_stats import BASE_STATS
 from dex_names import LOCAL_NAMES
 
@@ -23,11 +23,26 @@ TYPE_BIOME = {
     'agua': 1, 'planta': 2, 'bicho': 2, 'fuego': 3,
     'roca': 4, 'tierra': 4, 'dragon': 1, 'hielo': 5,  # los dragones gen1 (Dratini) viven en el agua
     'normal': 0, 'electrico': 0, 'lucha': 0, 'veneno': 0,
-    'psiquico': 0, 'fantasma': 0,
+    'psiquico': 0, 'fantasma': 0, 'volador': 0,
 }
 
 # excepciones por dex# (el tipo no basta): fosiles marinos roca/agua -> playa
 BIOME_OVERRIDE = {138: 1, 139: 1, 140: 1, 141: 1}  # Omanyte, Omastar, Kabuto, Kabutops
+
+
+def line_bases():
+    """Primera forma de la linea evolutiva de cada especie. Jolteon y Flareon no
+    tienen predecesor en la tabla (Eevee solo apunta a Vaporeon; el juego elige
+    la rama al evolucionar), asi que se enlazan a mano, como hace pet.cpp."""
+    prev = {evo: num for num, _s, _d, _t, evo, _l in DEX if evo}
+    prev[135] = prev[136] = 133
+    base = {}
+    for num, *_ in DEX:
+        cur = num
+        while cur in prev:
+            cur = prev[cur]
+        base[num] = cur
+    return base
 
 
 def main():
@@ -36,6 +51,11 @@ def main():
     out.append("// GENERADO por tools/gen_dex.py desde tools/dex_data.py - no editar\n\n")
     out.append("#define DEX_COUNT 151\n")
     out.append("#define DEX_EEVEE 133  // rama al azar: 134/135/136\n\n")
+    out.append("// los 15 tipos de gen 1, en el orden de la tabla de eficacias de battle.h\n")
+    out.append("enum : uint8_t {\n")
+    for i, t in enumerate(TYPE_ORDER):
+        out.append(f"  TY_{t.upper()}{' = 0' if i == 0 else ''},\n")
+    out.append("  TY_COUNT,\n  TY_NONE = 0xFF\n};\n\n")
     out.append(
         "// rareza: 0 = solo por evolucion, 1 = comun, 2 = raro, 3 = legendario\n"
         "enum : uint8_t { R_EVO = 0, R_COMUN, R_RARO, R_LEGENDARIO };\n\n"
@@ -47,13 +67,16 @@ def main():
         "  uint16_t accent;      // color RGB565 del tipo para la UI\n"
         "  uint8_t bHp, bAtk, bDef, bSpe;  // base stats reales de gen 1\n"
         "  uint8_t biome;        // 0 pradera 1 playa 2 bosque 3 volcan 4 montana 5 nieve\n"
+        "  uint8_t type1, type2; // TY_*; type2 = TY_NONE si solo tiene uno (combate)\n"
+        "  uint8_t base;         // primera forma de su linea evolutiva\n"
         "};\n\n")
     # formas base = las que no son evolucion de nadie (las ramas de Eevee si lo son)
     evolved = {evo for *_, evo, _lvl in [(d[4], d[5]) for d in DEX] for evo in [_[0] for _ in [(d[4],) for d in DEX]]}
     evolved = {d[4] for d in DEX if d[4]} | {135, 136}
     rarities = []
     out.append("static const DexEntry DEX_TBL[DEX_COUNT + 1] = {\n")
-    out.append('  { "?", 0, 0, 0, 0x2946, 50, 50, 50, 50, 0 },  // 0: sin usar\n')
+    out.append('  { "?", 0, 0, 0, 0x2946, 50, 50, 50, 50, 0, TY_NORMAL, TY_NONE, 0 },  // 0: sin usar\n')
+    bases = line_bases()
     for num, slug, display, typ, evo, lvl in DEX:
         acc = rgb565(TYPE_ACCENTS[typ])
         if num in evolved:
@@ -67,7 +90,11 @@ def main():
         rarities.append(rar)
         hp, atk, df, spe = BASE_STATS[num]
         bio = BIOME_OVERRIDE.get(num, TYPE_BIOME[typ])
-        out.append(f'  {{ "{display}", {evo}, {lvl}, {rar}, 0x{acc:04X}, {hp}, {atk}, {df}, {spe}, {bio} }},  // {num} {typ}\n')
+        t1 = f'TY_{typ.upper()}'
+        t2 = f'TY_{TYPE2[num].upper()}' if num in TYPE2 else 'TY_NONE'
+        tipos = typ + ('/' + TYPE2[num] if num in TYPE2 else '')
+        out.append(f'  {{ "{display}", {evo}, {lvl}, {rar}, 0x{acc:04X}, {hp}, {atk}, {df}, {spe}, {bio}, '
+                   f'{t1}, {t2}, {bases[num]} }},  // {num} {tipos}\n')
     out.append("};\n\n")
 
     # Solo FR y DE tienen nombre propio en gen 1; ES/IT/PT usan el ingles.

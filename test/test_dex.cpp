@@ -151,6 +151,41 @@ TEST(dex, las_stats_base_son_plausibles) {
   }
 }
 
+// tipos y forma base (combate, v1.22): los genera tools/gen_dex.py
+TEST(dex, cada_especie_tiene_uno_o_dos_tipos_validos) {
+  int duales = 0;
+  for (int d = 1; d <= N; d++) {
+    const DexEntry &e = DEX_TBL[d];
+    CHECK_MSG(e.type1 < TY_COUNT, std::string("tipo principal desconocido en ") + e.name);
+    CHECK_MSG(e.type2 == TY_NONE || e.type2 < TY_COUNT, std::string("segundo tipo desconocido en ") + e.name);
+    CHECK_MSG(e.type2 != e.type1, std::string("el mismo tipo dos veces en ") + e.name);
+    CHECK_MSG(e.type1 != TY_VOLADOR, std::string("volador como tipo principal en ") + e.name);
+    if (e.type2 != TY_NONE) duales++;
+  }
+  CHECK_RANGE(duales, 55, 75);
+  CHECK_EQ((int)DEX_TBL[6].type2, (int)TY_VOLADOR);    // Charizard
+  CHECK_EQ((int)DEX_TBL[94].type1, (int)TY_FANTASMA);  // Gengar
+  CHECK_EQ((int)DEX_TBL[94].type2, (int)TY_VENENO);
+  CHECK_EQ((int)DEX_TBL[25].type2, (int)TY_NONE);      // Pikachu
+}
+
+TEST(dex, la_forma_base_es_la_primera_de_la_linea) {
+  for (int d = 1; d <= N; d++) {
+    int b = DEX_TBL[d].base;
+    CHECK_RANGE(b, 1, N);
+    CHECK_MSG(DEX_TBL[b].rarity != R_EVO, std::string("la base de ") + DEX_TBL[d].name + " no sale de huevo");
+    CHECK_EQ((int)DEX_TBL[b].base, b);
+    // seguir las evoluciones desde la base llega a la especie (Eevee: cualquier rama)
+    bool llega = false;
+    for (int cur = b, guard = 0; cur && guard < 4; guard++) {
+      if (cur == d || (cur == DEX_EEVEE && d >= 134 && d <= 136)) { llega = true; break; }
+      cur = DEX_TBL[cur].evolvesTo;
+    }
+    CHECK_MSG(llega, std::string(DEX_TBL[d].name) + " no esta en la linea de su base");
+  }
+  CHECK_EQ((int)DEX_TBL[136].base, DEX_EEVEE);  // Flareon, sin predecesor en la tabla
+}
+
 TEST(dex, la_rama_de_eevee_cuadra_con_el_codigo) {
   CHECK_EQ((int)DEX_TBL[DEX_EEVEE].rarity, (int)R_COMUN);
   CHECK_RANGE((int)DEX_TBL[DEX_EEVEE].evolvesTo, 134, 136);

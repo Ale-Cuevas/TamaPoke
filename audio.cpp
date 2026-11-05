@@ -114,12 +114,32 @@ static const Note N_MEDAL[]  = {{784, 70}, {0, 25}, {784, 70}, {0, 25}, {1047, 2
 static const Note N_DENY[]   = {{300, 110}, {200, 170}};
 static const Note N_BYE[]    = {{784, 150}, {659, 150}, {523, 280}};
 static const Note N_LEVEL[]  = {{784, 70}, {1047, 130}};
+// combate (v1.22). La tarea de audio no puede parar ni repetir un sonido, asi
+// que no hay musica de fondo: un jingle de entrada y efectos cortos.
+static const Note N_BATTLE[] = {
+  {392, 90}, {0, 30}, {392, 90}, {0, 30}, {466, 90}, {0, 30}, {523, 180},
+  {392, 90}, {0, 30}, {392, 90}, {0, 30}, {698, 90}, {0, 30}, {659, 180},
+  {587, 120}, {523, 120}, {466, 120}, {523, 240},
+  {784, 150}, {0, 50}, {784, 150}, {0, 50}, {1047, 420},
+};
+static const Note N_HIT[]     = {{220, 40}, {150, 70}};
+static const Note N_CRIT[]    = {{1245, 30}, {311, 40}, {165, 90}};
+static const Note N_SPECIAL[] = {{523, 40}, {784, 40}, {1047, 40}, {1568, 90}, {392, 50}, {196, 90}};
+static const Note N_WIN[]     = {{523, 100}, {659, 100}, {784, 100}, {1047, 240}, {0, 60}, {988, 120}, {1047, 360}};
+static const Note N_LOSE[]    = {{392, 200}, {370, 200}, {349, 200}, {330, 450}};
 
 struct SfxDef { const Note *n; uint8_t len; };
-static const SfxDef SFX[SFX_COUNT] = {
-  {N_TAP, 1}, {N_EAT, 3}, {N_PLAY, 2}, {N_HEART, 2}, {N_HATCH, 4},
-  {N_EVOLVE, 5}, {N_MEDAL, 5}, {N_DENY, 2}, {N_BYE, 3}, {N_LEVEL, 2},
+#define SFX_ENTRY(n) { n, (uint8_t)(sizeof(n) / sizeof(n[0])) }
+// en el orden del enum Sfx (audio.h). Sin tamano fijo a proposito: con
+// SFX[SFX_COUNT], un efecto anadido al enum y olvidado aqui compilaba y sonaba
+// a silencio; asi lo para el static_assert.
+static const SfxDef SFX[] = {
+  SFX_ENTRY(N_TAP), SFX_ENTRY(N_EAT), SFX_ENTRY(N_PLAY), SFX_ENTRY(N_HEART), SFX_ENTRY(N_HATCH),
+  SFX_ENTRY(N_EVOLVE), SFX_ENTRY(N_MEDAL), SFX_ENTRY(N_DENY), SFX_ENTRY(N_BYE), SFX_ENTRY(N_LEVEL),
+  SFX_ENTRY(N_BATTLE), SFX_ENTRY(N_HIT), SFX_ENTRY(N_CRIT), SFX_ENTRY(N_SPECIAL), SFX_ENTRY(N_WIN),
+  SFX_ENTRY(N_LOSE),
 };
+static_assert(sizeof(SFX) / sizeof(SFX[0]) == SFX_COUNT, "SFX[] tiene que tener un efecto por cada Sfx");
 
 static int16_t buf[256 * 2];  // estéreo intercalado (L=R)
 
