@@ -22,8 +22,9 @@ keeps your Pokémon.
 
 - `tools/imu_capture.py` records a walk from the running game over USB
   (`IMULOG`, without restarting the board) into `test/data/imu/`, with the
-  game's own count. Three new captures there: a 100-step pocket walk, a hand
-  walk and taking the board out of a pocket to look at it.
+  game's own count. Four new captures there: 100-step walks in a pocket and
+  in the hand, another hand walk, and taking the board out of a pocket to look
+  at it. On the board, v1.21 counts the 100 steps in the hand as 105.
 
 ### Fixed
 

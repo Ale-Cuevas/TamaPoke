@@ -142,7 +142,7 @@ and the steps not yet handed to the pet; `STATS` shows steps today/total and the
   The first boot after flashing logged `i2cWrite(): ... ESP_ERR_INVALID_STATE` and `TouchDrvCST92xx
   getAttribute(): Firmware info read error`; touch still started (the 3-try loop) and the next boot was clean)
 - [ ] 100 real steps, counted by hand, board in a trouser pocket: the WALK page (stat card, 5th page) counts
-  them within ±10 %: **114 for 100 (+14 %), fails** . Same in hand: ____ . Same in a bag: ____
+  them within ±10 %: **114 for 100 (+14 %), fails** . Same in hand: **105 for 100 (+5 %, v1.21)** . Same in a bag: ____
   (2026-11-04, v1.20. The extra steps were bursts from taking the board out of the pocket; v1.21 needs 8 steps
   in a row instead of 4. v1.21, 100 steps in a pocket: ____)
 - [x] 10 s of hard shaking: at most a few steps and no find. (few steps ✓; "no find" not really tested: the

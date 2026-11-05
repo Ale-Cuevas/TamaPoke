@@ -38,7 +38,7 @@ static inline std::vector<ImuSample> loadCapture(const char *name) {
 
 static const char *const CAPTURES_STILL[] = { "flat-up-1", "face-down-1", "upright-1", "tilt-right-left" };
 static const char *const CAPTURES_WALK[] = { "walk-pocket-1", "walk-pocket-2", "walk-hand-1", "run-1",
-                                              "walk-pocket-100-1", "walk-hand-2" };
+                                              "walk-pocket-100-1", "walk-hand-2", "walk-hand-100-1" };
 
 // senal sintetica a 62.5 Hz durante `ms`, desde t0: f(t_s) -> (x, y, z) en g
 static inline std::vector<ImuSample> synth(uint32_t ms, std::function<void(float, float &, float &, float &)> f,

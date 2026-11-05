@@ -38,11 +38,12 @@ TEST(steps, las_capturas_se_cargan) {
 // real de pasos apuntado. walk-pocket-100-1 son 100 pasos contados a mano (unos
 // 3 antes de empezar a grabar) y 4 movimientos ya parada que con la entrada de 4
 // contaban: 103, con la de 8 los 99 del paseo. walk-hand-2 es un paseo en la
-// mano de 73 s a 0,63 s el paso, unos 115 pasos.
+// mano de 73 s a 0,63 s el paso, unos 115 pasos. walk-hand-100-1 son 100 pasos
+// contados a mano con la placa en la mano, ya con la entrada de 8: 105 en la placa.
 TEST(steps, cuenta_lo_mismo_que_el_prototipo_en_las_capturas) {
   struct { const char *name; uint32_t proto; } cases[] = {
     { "walk-pocket-1", 22 }, { "walk-pocket-2", 20 }, { "walk-hand-1", 17 }, { "run-1", 31 },
-    { "walk-pocket-100-1", 99 }, { "walk-hand-2", 112 },
+    { "walk-pocket-100-1", 99 }, { "walk-hand-2", 112 }, { "walk-hand-100-1", 104 },
   };
   for (auto &c : cases) {
     uint32_t n = pipelineSteps(loadCapture(c.name));
