@@ -120,6 +120,12 @@ yellow label to `/imu/` on the SD card, USER picks the label, a 1 s USER hold sw
 - [ ] On battery with the screen off, it still wakes on a touch (light sleep).
 - [x] USER = back. A press (or `BACK` over serial) closes: gallery detail → grid → home; the stat card from any page; the rename keyboard (the name is not saved, back on the card); the clock screen (time not applied); the minigame and the bag (no reward); the feed menu and the release, evolve and farewell dialogs (the evolve/farewell button stays). On the home screen and during the starter choice or a farewell it does nothing.
 - [ ] USER on a dim screen (90 s) only wakes it. On battery with the screen off (PWR), a short USER press wakes it too (light sleep).
+- [ ] v1.23 BOOT = brightness: each press steps 4 levels (the toast shows sun + dots for 1.5 s), the 4th press goes
+  back to the dimmest; the screen gets visibly brighter / dimmer at each. `BRIGHT` over serial prints the level.
+- [ ] v1.23 BOOT on a dim screen (90 s) only wakes it (no level change); on battery with the screen off (PWR) it
+  wakes it too (light sleep).
+- [ ] v1.23 the sun pill on the clock screen (swipe down) cycles the same level; after a restart (re-upload) the
+  level is kept. At level 0 (dimmest) the 90 s dim doesn't get brighter.
 - [ ] Battery percentage close to the bring-up `[pmu]` reading; the charging bolt shows within a few seconds of plugging USB in.
 
 ### Save, time, sound, SD

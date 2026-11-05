@@ -39,7 +39,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.22"
+#define FW_VERSION "1.23"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -190,6 +190,14 @@ uint32_t sdEpoch = 0;  // +1 cada vez que se recarga la SD (las miniaturas cambi
 // proteccion del AMOLED: atenuado por inactividad
 uint32_t lastInteract = 0;
 uint8_t dimStage = 0;        // 0 despierto, 1 atenuado (90s), 2 casi apagado (5min)
+// nivel de brillo del jugador (power.h, v1.23): tecla BOOT o la pildora del reloj.
+// Se guarda en "bri" unos segundos despues del ultimo cambio (varias pulsaciones seguidas
+// = una sola escritura en la NVS)
+uint8_t gBright = BRIGHT_DEFAULT;
+uint32_t briSaveAt = 0;      // millis en que se guarda el nivel (0 = nada pendiente)
+uint32_t briToastUntil = 0;  // aviso del nivel en pantalla
+#define BRI_SAVE_DELAY_MS 3000
+#define BRI_TOAST_MS 1500
 bool swallowGesture = false; // el toque que despierta no acciona nada
 uint32_t holdStart = 0;     // pulsacion larga sobre el bicho
 uint32_t confirmUntil = 0;  // dialogo "soltar?" activo hasta este millis
@@ -228,7 +236,15 @@ void setup() {
   // cuando se compruebe en la placa que el panel no muestra basura.
   if (!gfx->begin(BOARD_LCD_QSPI_HZ)) Serial.println("gfx->begin() fallo");
   roundDisplayBegin(bus, panel, roundCanvas);  // orientacion, borde negro y marco redondo
-  panel->setBrightness(180);
+  {
+    Preferences p;
+    p.begin("tamapoke", true);
+    gBright = p.getUChar("bri", BRIGHT_DEFAULT);
+    p.end();
+    if (gBright >= BRIGHT_LEVELS) gBright = BRIGHT_DEFAULT;
+  }
+  panel->setBrightness(brightLevelValue(gBright));
+  roundCanvas->overlay = drawBrightToast;
   applyLangFont();  // fuente del idioma guardado (clasica salvo CJK)
 
   touch.setPins(BOARD_TP_RST, BOARD_TP_INT);
@@ -251,6 +267,9 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(BOARD_TP_INT), touchIsr, FALLING);
   // tecla USER = atras (ver onBack). Pull-up externo de 10K: baja al pulsar
   pinMode(BOARD_BTN_USER, INPUT);
+  // tecla BOOT = brillo (ver onBootKey). Igual: pull-up externo, baja al pulsar. Es un pin
+  // de arranque, pero solo cuenta al encender: despues es una entrada normal
+  pinMode(BOARD_BTN_BOOT, INPUT);
 
   pet.begin();
   sdBegin();
@@ -328,6 +347,9 @@ void loop() {
   handleTouch();
   static KeyDebounce backKey;  // tecla USER = atras
   if (backKey.update(digitalRead(BOARD_BTN_USER) == BOARD_BTN_PRESSED_LEVEL, millis())) onBack();
+  static KeyDebounce bootKey;  // tecla BOOT = brillo
+  if (bootKey.update(digitalRead(BOARD_BTN_BOOT) == BOARD_BTN_PRESSED_LEVEL, millis())) onBootKey();
+  if (briSaveAt && !timeLeft(briSaveAt)) saveBright();
   handleSerial();
   ensureMon();
   imuTick(now);  // pasos, sacudidas, boca abajo
@@ -373,10 +395,10 @@ void loop() {
   static uint32_t lastHealth = 0;
   if (now - lastHealth > 300000) {
     lastHealth = now;
-    Serial.printf("HEALTH up=%lus heap=%u min=%u bat=%d%% mv=%d chg=%d usb=%d dim=%u off=%d\n",
+    Serial.printf("HEALTH up=%lus heap=%u min=%u bat=%d%% mv=%d chg=%d usb=%d dim=%u off=%d bri=%u\n",
                   (unsigned long)(now / 1000), ESP.getFreeHeap(), ESP.getMinFreeHeap(),
                   batPercent(), batMillivolts(), batCharging() ? 1 : 0,
-                  usbPresent() ? 1 : 0, dimStage, screenOff ? 1 : 0);
+                  usbPresent() ? 1 : 0, dimStage, screenOff ? 1 : 0, gBright);
   }
 
   // Ritmo de dibujo (power.h): 10 fps con el bicho en uso, menos cuanto mas rato sin tocar,
@@ -455,6 +477,7 @@ PowerCtx powerCtx(uint32_t now) {
   c.usb = usbPresent();
   c.charging = batCharging();
   c.batPct = batPercent();
+  c.brightLevel = gBright;
   return c;
 }
 
@@ -498,6 +521,7 @@ void idleWait(PowerCtx c) {
     if (!lightSleepAllowed(c)) { delay(idleDelayMs(c)); return; }
     if (digitalRead(BOARD_TP_INT) == LOW) { gTouchIrq = true; delay(1); return; }  // toque pendiente: no se duerme
     if (digitalRead(BOARD_BTN_USER) == BOARD_BTN_PRESSED_LEVEL) { delay(1); return; }  // tecla USER pulsada
+    if (digitalRead(BOARD_BTN_BOOT) == BOARD_BTN_PRESSED_LEVEL) { delay(1); return; }  // tecla BOOT pulsada
     uint32_t ms = POWER_SLEEP_MS;
     uint32_t iv = frameIntervalMs(c);
     if (iv) {  // pantalla encendida: hasta el proximo frame
@@ -508,10 +532,13 @@ void idleWait(PowerCtx c) {
     gpio_wakeup_enable((gpio_num_t)BOARD_TP_INT, GPIO_INTR_LOW_LEVEL);
     // la tecla USER tambien despierta: una pulsacion corta cabe entera en un sueno de 200 ms
     gpio_wakeup_enable((gpio_num_t)BOARD_BTN_USER, GPIO_INTR_LOW_LEVEL);
+    gpio_wakeup_enable((gpio_num_t)BOARD_BTN_BOOT, GPIO_INTR_LOW_LEVEL);  // y BOOT
     esp_sleep_enable_gpio_wakeup();
     esp_light_sleep_start();
     gpio_wakeup_disable((gpio_num_t)BOARD_BTN_USER);
     gpio_set_intr_type((gpio_num_t)BOARD_BTN_USER, GPIO_INTR_DISABLE);  // sin interrupcion: se lee en el loop
+    gpio_wakeup_disable((gpio_num_t)BOARD_BTN_BOOT);
+    gpio_set_intr_type((gpio_num_t)BOARD_BTN_BOOT, GPIO_INTR_DISABLE);
     // la interrupcion del tactil vuelve a ser por flanco (como la dejo attachInterrupt); un toque
     // que ya haya bajado la linea se registra a mano
     gpio_wakeup_disable((gpio_num_t)BOARD_TP_INT);
@@ -616,6 +643,19 @@ void handleSerial() {
     for (int i = 1; i <= 151; i++)
       if (pet.isRegistered(i)) Serial.printf(" %d", i);
     Serial.println();
+    Serial.println("DONE");
+  } else if (line.startsWith("BRIGHT")) {  // BRIGHT: nivel y brillo; BRIGHT <n>: lo fija (como BOOT)
+    if (line.length() > 7) {
+      int lv = line.substring(7).toInt();
+      if (lv >= 0 && lv < BRIGHT_LEVELS) {
+        gBright = (uint8_t)lv;
+        briSaveAt = millis() + BRI_SAVE_DELAY_MS;
+        briToastUntil = millis() + BRI_TOAST_MS;
+        wakeUI();
+      }
+    }
+    Serial.printf("bri=%u/%u value=%u now=%u\n", gBright, BRIGHT_LEVELS - 1, brightLevelValue(gBright),
+                  brightnessFor(powerCtx(millis())));
     Serial.println("DONE");
   } else if (line == "HEALTH") {
     Serial.printf("up=%lus heap=%u min=%u sd=%d mon=%d\n",
@@ -800,6 +840,34 @@ void onSwipe(int dir) {
 // tecla USER = atras: cierra la capa de arriba (en el mismo orden que onTap y render),
 // con el mismo codigo con que se cierra cada pantalla al tocar o deslizar. Sin sonido,
 // como al cerrar con el dedo.
+// cambia el nivel de brillo (tecla BOOT o la pildora del reloj): aviso en pantalla y
+// guardado diferido
+void cycleBright() {
+  gBright = nextBrightLevel(gBright);
+  briSaveAt = millis() + BRI_SAVE_DELAY_MS;
+  briToastUntil = millis() + BRI_TOAST_MS;
+  sfxPlay(SFX_TAP);
+}
+
+void saveBright() {
+  briSaveAt = 0;
+  Preferences p;
+  p.begin("tamapoke", false);
+  p.putUChar("bri", gBright);
+  p.end();
+}
+
+// tecla BOOT = brillo. A oscuras solo despierta, como USER y el primer toque
+void onBootKey() {
+  if (screenOff || dimStage > 0) {
+    screenOff = false;
+    wakeUI();
+    return;
+  }
+  wakeUI();
+  cycleBright();
+}
+
 void onBack() {
   if (screenOff || dimStage > 0) {  // a oscuras solo despierta (como el primer toque)
     screenOff = false;
@@ -1230,6 +1298,8 @@ static uint32_t screenKey() {
   uint32_t h = 2166136261u;
   h = mixKey(h, pet.awaitingStarter() ? 1 : kbOpen ? 2 : clockOpen ? 3 : 4 + cardPage);
   h = mixKey(h, sdEpoch);
+  h = mixKey(h, gBright);                      // el aviso de brillo va encima de todo
+  h = mixKey(h, timeLeft(briToastUntil) > 0);  // y al irse tiene que repintarse
   if (kbOpen) {
     h = mixKey(h, nameLen);
     for (int i = 0; i < nameLen; i++) h = mixKey(h, (uint8_t)nameBuf[i]);
@@ -1797,6 +1867,40 @@ void drawClockBtn(int x, int y, const char *l) {
 #define LANG_PILL_W 96
 static const char *const LANG_CODES[LANG_COUNT] = { "ES", "EN", "FR", "DE", "IT", "PT", "JA", "KO" };
 
+// pildora de brillo, en el hueco entre la de sonido y la de idioma (v1.23)
+#define BRI_PILL_X 146
+#define BRI_PILL_W 174
+
+// sol: disco y 8 rayos cortos (sin texto: igual en todos los idiomas)
+void drawSunIcon(int x, int y, int r, uint16_t col) {
+  gfx->fillCircle(x, y, r, col);
+  int d = r + 4, e = d * 7 / 10;
+  const int8_t dir[8][2] = { { 1, 0 }, { 1, 1 }, { 0, 1 }, { -1, 1 }, { -1, 0 }, { -1, -1 }, { 0, -1 }, { 1, -1 } };
+  for (auto &v : dir) {
+    int k = (v[0] && v[1]) ? e : d;
+    gfx->fillCircle(x + v[0] * k, y + v[1] * k, r > 6 ? 2 : 1, col);
+  }
+}
+
+// nivel de brillo como BRIGHT_LEVELS puntos: rellenos hasta el nivel actual
+void drawBrightDots(int x, int y, int r, int gap, uint16_t on, uint16_t off) {
+  for (int i = 0; i < BRIGHT_LEVELS; i++) {
+    int cx = x + i * gap;
+    if (i <= gBright) gfx->fillCircle(cx, y, r, on);
+    else gfx->drawCircle(cx, y, r, off);
+  }
+}
+
+// aviso del nivel de brillo, encima de cualquier pantalla (RoundCanvas::overlay)
+void drawBrightToast() {
+  if (!timeLeft(briToastUntil)) return;
+  const int w = 200, h = 56, x = CX - w / 2, y = 142;
+  gfx->fillRoundRect(x, y, w, h, 16, UI_INK);
+  gfx->drawRoundRect(x, y, w, h, 16, UI_WHITE);
+  drawSunIcon(x + 34, y + h / 2, 9, UI_BAR_WARN);
+  drawBrightDots(x + 78, y + h / 2, 8, 32, UI_BAR_WARN, 0x8410);
+}
+
 void renderClock() {
   gfx->fillScreen(RGB565_BLACK);
   gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
@@ -1831,6 +1935,12 @@ void renderClock() {
   setSize(2);
   setCur(34 + (96 - textW(sl, 2)) / 2, LANG_PILL_Y + 8);
   printT(sl);
+
+  // brillo: sol y un punto por nivel; cicla al tocar, como la tecla BOOT
+  gfx->fillRoundRect(BRI_PILL_X, LANG_PILL_Y, BRI_PILL_W, LANG_PILL_H, 8, UI_WHITE);
+  gfx->drawRoundRect(BRI_PILL_X, LANG_PILL_Y, BRI_PILL_W, LANG_PILL_H, 8, UI_INK);
+  drawSunIcon(BRI_PILL_X + 22, LANG_PILL_Y + LANG_PILL_H / 2, 5, UI_BAR_WARN);
+  drawBrightDots(BRI_PILL_X + 56, LANG_PILL_Y + LANG_PILL_H / 2, 6, 32, UI_BAR_WARN, 0x9492);
 
   // selector de idioma: una pildora que cicla los 6 idiomas al tocar
   gfx->fillRoundRect(LANG_PILL_X, LANG_PILL_Y, LANG_PILL_W, LANG_PILL_H, 8, UI_WHITE);
@@ -1874,6 +1984,11 @@ void clockTap(int16_t x, int16_t y) {
     if (x >= 34 && x < 130) {                  // interruptor de sonido
       audioSetEnabled(!audioEnabled());
       if (audioEnabled()) sfxPlay(SFX_TAP);    // confirma al encender
+      return;
+    }
+    if (x >= BRI_PILL_X && x < BRI_PILL_X + BRI_PILL_W) {  // cicla el brillo
+      cycleBright();
+      briToastUntil = 0;  // aqui la pildora ya lo muestra
       return;
     }
     if (x >= LANG_PILL_X && x < LANG_PILL_X + LANG_PILL_W) {  // cicla idioma

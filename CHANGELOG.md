@@ -8,6 +8,25 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.23] - 2026-11-05
+
+### Added
+
+- **Brightness levels.** The BOOT key, unused by the game until now, steps
+  through 4 levels (50 / 100 / 150 / 220): a sun and 4 dots show the level for
+  a moment, and the 4th press goes back to the dimmest. The clock screen
+  (swipe down) has the same control as a sun pill between sound and language.
+  The level is saved (`bri`, written 3 s after the last change) and kept across
+  restarts; BOOT also wakes the board from light sleep, and on a dim or dark
+  screen the first press only wakes it. `BRIGHT [n]` over serial reads or sets
+  it; the `HEALTH` log prints it.
+
+### Changed
+
+- The idle dimming (60, then 8) and the sleeping pet's 25 never go above the
+  chosen level. The fixed 145 on battery / 180 on USB is gone: the default level
+  is 150 either way.
+
 ## [1.22] - 2026-11-05
 
 After a day on the board, weight never left 0 and bond filled far too fast.

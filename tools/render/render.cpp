@@ -148,6 +148,8 @@ static void resetUi() {
   gStubImuPresent = true;
   gStubTiltSide = 0;
   gStubTiltSlide = false;
+  gBright = BRIGHT_DEFAULT;
+  briToastUntil = briSaveAt = 0;
   screenKeyValid = false;
   if (gLang != LANG_EN) { setLang(LANG_EN); applyLangFont(); }
 }
@@ -219,6 +221,9 @@ static const std::vector<Scene> &scenes() {
     { "card-medals", [] { pokemon(25, 13); cardOpen = true; cardPage = 2; } },
     { "card-progress", [] { pokemon(25, 13); cardOpen = true; cardPage = 3; } },
     { "settings", [] { pokemon(25, 13); openClock(); } },
+    { "settings-bright-max", [] { pokemon(25, 13); openClock(); gBright = BRIGHT_LEVELS - 1; } },
+    // brightness toast after a BOOT press (v1.23)
+    { "bright-toast", [] { pokemon(25, 13); gBright = 0; cycleBright(); } },
     { "keyboard", [] { pokemon(25, 13); openKeyboard(); } },
     { "gallery", [] { pokemon(25, 13); galleryOpen = true; galleryDirty = true; } },
     { "gallery-detail", [] {
@@ -289,6 +294,7 @@ int main(int argc, char **argv) {
   // the same display bring-up as setup(): panel, canvas, black border, frame
   if (!gfx->begin(BOARD_LCD_QSPI_HZ) || !panel->begin()) return 1;
   roundDisplayBegin(bus, panel, roundCanvas);
+  roundCanvas->overlay = drawBrightToast;  // as setup() does
   applyLangFont();
   pet.begin();
   sdBegin();

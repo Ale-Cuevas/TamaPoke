@@ -25,6 +25,7 @@ Write the result on each line: a tick, or what you saw.
 | 16 | v1.20 motion: shake to wake (and not in a pocket), grumpy / dizzy, face-down, tilt both ways | [Motion](DEVICE_TESTS.md#motion) | ✓ tilt, face-down by day and at night, shake to wake on battery, a pocket walk never wakes the screen, grumpy and dizzy (serial); shake with the screen off (PWR), the egg: pending |
 | 17 | v1.20 8 h battery drain, screen off, against v1.19 | [Steps](DEVICE_TESTS.md#steps) | screen-off drain: pending; a real day on v1.21, light use, lasted ~20 h on battery (23:00 → 19:00, 2026-11-05) |
 | 18 | v1.22 pacing: candy weight lasts, 1000 steps = −1 weight, petting bond once per 15 min, bond ≤ 14 a day | [Pacing](DEVICE_TESTS.md#pacing-v122) | pending |
+| 19 | v1.23 BOOT and the clock pill cycle 4 brightness levels; wake-only on a dim screen; kept after a restart | [Power, sleep, buttons](DEVICE_TESTS.md#power-sleep-buttons) | pending |
 
 Questions only the board can answer:
 - Where is the USB-C port relative to the screen's top? Bottom edge (buttons on top).

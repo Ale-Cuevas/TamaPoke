@@ -1,7 +1,7 @@
 # TamaPoke
 
 ![Board](https://img.shields.io/badge/board-ESP32--S3%20AMOLED%202.16-E7352C?logo=espressif&logoColor=white)
-![Firmware](https://img.shields.io/badge/firmware-v1.22-8A2BE2)
+![Firmware](https://img.shields.io/badge/firmware-v1.23-8A2BE2)
 [![CI](https://github.com/Ale-Cuevas/TamaPoke/actions/workflows/ci.yml/badge.svg)](https://github.com/Ale-Cuevas/TamaPoke/actions/workflows/ci.yml)
 ![Code](https://img.shields.io/badge/code-MIT-blue)
 ![Languages](https://img.shields.io/badge/languages-8-FFCB05)
@@ -345,7 +345,8 @@ If one bottoms out it counts as a *slip-up*.
 - Vertical swipe up = open the **stat card** (5 pages: Profile / Battle / Medals /
   Progress / Walk; swipe between them; tap the name on Profile to rename; on Battle the
   "Train strength" button opens the bag; on Walk, tap a Backpack item to use it).
-- Swipe down = **set the clock** and pick the **language** + sound on/off.
+- Swipe down = **set the clock** and pick the **language**, sound on/off and
+  **brightness** (the sun pill: 4 levels, tap to cycle).
 - Long press (3 s) on the creature = **release** dialog.
 
 **Physical PWR button:** short = screen on/off · long (4 s) = full power-off
@@ -356,6 +357,12 @@ detail → grid → home, stat card, rename keyboard (without saving the name),
 clock screen (without applying the time), the minigame or the bag (quit, no
 reward), and the feed / release / evolve / farewell dialogs. On a dim or dark
 screen the first press only wakes it.
+
+**Physical BOOT button:** brightness. Each press steps through 4 levels (the
+last goes back to the dimmest) and shows them for a moment; the level is kept
+across restarts. The idle dimming never goes above it. On a dim or dark screen
+the first press only wakes it. (Holding BOOT while plugging USB in is still how
+you force upload mode.)
 
 ## Decisions: you choose, and you watch
 

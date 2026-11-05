@@ -7,6 +7,7 @@ static PowerCtx ctx(uint32_t idle) {
   c.idleMs = idle;
   c.usb = false;
   c.batPct = 80;
+  c.brightLevel = BRIGHT_DEFAULT;
   return c;
 }
 
@@ -29,9 +30,9 @@ TEST(power, los_escalones_de_atenuacion_son_los_de_siempre) {
 
 TEST(power, el_brillo_no_cambia_con_bateria_normal) {
   PowerCtx c = ctx(0);
-  CHECK_EQ((int)brightnessFor(c), 145);       // bateria
+  CHECK_EQ((int)brightnessFor(c), 150);       // nivel por defecto
   c.usb = true;
-  CHECK_EQ((int)brightnessFor(c), 180);       // USB
+  CHECK_EQ((int)brightnessFor(c), 150);       // con USB igual: manda el nivel (v1.23)
   c = ctx(100000);
   CHECK_EQ((int)brightnessFor(c), 60);        // atenuada
   c.sleeping = true;
@@ -50,7 +51,7 @@ TEST(power, con_poca_bateria_el_brillo_tiene_tope_y_no_sube_nunca) {
   c.batPct = 5;
   CHECK_EQ((int)brightnessFor(c), 60);
   c.charging = true;                           // cargando: sin restricciones
-  CHECK_EQ((int)brightnessFor(c), 145);
+  CHECK_EQ((int)brightnessFor(c), 150);
   c = ctx(100000);
   c.batPct = 5;
   CHECK_EQ((int)brightnessFor(c), 60);         // el tope no sube un brillo ya menor
@@ -158,4 +159,46 @@ TEST(power, con_la_pantalla_apagada_y_sin_usb_el_bucle_despierta_cinco_veces_por
   c.screenOff = true;
   CHECK(lightSleepAllowed(c));
   CHECK_EQ(1000 / POWER_SLEEP_MS, 5);                  // antes: 1000 despertares por segundo
+}
+
+// v1.23: el nivel elegido manda en el brillo despierto; atenuada o dormido nunca lo pasa
+TEST(power, el_nivel_de_brillo_fija_el_brillo_despierto) {
+  for (uint8_t lv = 0; lv < BRIGHT_LEVELS; lv++) {
+    PowerCtx c = ctx(0);
+    c.brightLevel = lv;
+    CHECK_EQ((int)brightnessFor(c), (int)BRIGHT_VALUE[lv]);
+  }
+  PowerCtx c = ctx(0);
+  c.brightLevel = 3;
+  CHECK_EQ((int)brightnessFor(c), 220);
+  c.batPct = 15;
+  CHECK_EQ((int)brightnessFor(c), 100);  // bateria baja: el tope sigue mandando
+  c.batPct = 5;
+  CHECK_EQ((int)brightnessFor(c), 60);
+  c = ctx(0);
+  c.brightLevel = 0;  // el minimo (50)
+  CHECK_EQ((int)brightnessFor(c), 50);
+  c.sleeping = true;
+  CHECK_EQ((int)brightnessFor(c), 25);
+  c = ctx(100000);    // atenuada: 60, pero nunca mas que el nivel
+  c.brightLevel = 0;
+  CHECK_EQ((int)brightnessFor(c), 50);
+  c.brightLevel = 1;
+  CHECK_EQ((int)brightnessFor(c), 60);
+  c = ctx(400000);
+  c.brightLevel = 0;
+  CHECK_EQ((int)brightnessFor(c), 8);
+  c = ctx(0);
+  c.brightLevel = 0;
+  c.screenOff = true;
+  CHECK_EQ((int)brightnessFor(c), 0);
+}
+
+TEST(power, el_nivel_de_brillo_cicla_y_un_valor_raro_cae_al_de_por_defecto) {
+  CHECK_EQ((int)nextBrightLevel(0), 1);
+  CHECK_EQ((int)nextBrightLevel(2), 3);
+  CHECK_EQ((int)nextBrightLevel(BRIGHT_LEVELS - 1), 0);
+  CHECK_EQ((int)nextBrightLevel(200), 0);  // un guardado corrupto vuelve al principio
+  CHECK_EQ((int)brightLevelValue(200), (int)BRIGHT_VALUE[BRIGHT_DEFAULT]);
+  for (uint8_t lv = 1; lv < BRIGHT_LEVELS; lv++) CHECK(BRIGHT_VALUE[lv] > BRIGHT_VALUE[lv - 1]);
 }

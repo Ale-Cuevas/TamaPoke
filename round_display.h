@@ -24,7 +24,13 @@ class RoundCanvas : public Arduino_Canvas {
 #endif
   }
 
+  // Drawn on top of every frame right before it goes out (the brightness
+  // toast): every screen ends in its own flush(), so this is the one place
+  // they all pass through.
+  void (*overlay)() = nullptr;
+
   void flush(bool force_flush = false) override {
+    if (overlay) overlay();
 #if TP_ROUND_FRAME
     mask_.apply(getFramebuffer());  // about 93 KB of corners zeroed + 1.4 K edge pixels
 #endif
