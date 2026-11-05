@@ -15,6 +15,19 @@
 
 enum DimStage : uint8_t { DIM_AWAKE = 0, DIM_LOW = 1, DIM_OFF = 2 };
 
+// Niveles de brillo que elige el jugador (tecla BOOT o la pildora del reloj), v1.23.
+// El nivel fija el brillo despierto; los escalones de atenuacion nunca lo superan.
+// Hasta la v1.22 era fijo: 145 con bateria y 180 con USB.
+#define BRIGHT_LEVELS 4
+#define BRIGHT_DEFAULT 2
+static const uint8_t BRIGHT_VALUE[BRIGHT_LEVELS] = { 50, 100, 150, 220 };
+inline uint8_t brightLevelValue(uint8_t level) {
+  return BRIGHT_VALUE[level < BRIGHT_LEVELS ? level : BRIGHT_DEFAULT];
+}
+inline uint8_t nextBrightLevel(uint8_t level) {
+  return level + 1 < BRIGHT_LEVELS ? level + 1 : 0;  // cicla: el maximo vuelve al minimo
+}
+
 struct PowerCtx {
   uint32_t idleMs;    // ms sin interaccion
   bool screenOff;     // apagada con el boton PWR
@@ -23,6 +36,7 @@ struct PowerCtx {
   bool usb;           // alimentacion externa
   bool charging;
   int batPct;         // 0-100, -1 si no hay bateria
+  uint8_t brightLevel;  // nivel elegido, 0..BRIGHT_LEVELS-1
 };
 
 // ms desde `last`, sin desbordar si `last` es posterior a `now` (un toque atendido despues de
@@ -41,13 +55,16 @@ inline uint8_t dimStageFor(uint32_t idleMs) {
 inline bool batteryLow(const PowerCtx &c) { return c.batPct >= 0 && c.batPct < 20 && !c.charging && !c.usb; }
 inline bool batteryCritical(const PowerCtx &c) { return c.batPct >= 0 && c.batPct < 10 && !c.charging && !c.usb; }
 
-// brillo del panel (0-255): el de siempre, con un tope cuando queda poca bateria
+// brillo del panel (0-255): el del nivel elegido, menos al atenuarse o con el bicho
+// dormido (sin pasar nunca del nivel), y con un tope cuando queda poca bateria
 inline uint8_t brightnessFor(const PowerCtx &c) {
   if (c.screenOff) return 0;
   uint8_t stage = dimStageFor(c.idleMs);
-  uint8_t t = c.sleeping ? 25 : (c.usb ? 180 : 145);
+  uint8_t lv = brightLevelValue(c.brightLevel);
+  uint8_t t = c.sleeping ? 25 : lv;
   if (stage == DIM_LOW) t = c.sleeping ? 10 : 60;
   else if (stage == DIM_OFF) t = 8;
+  if (t > lv) t = lv;
   if (batteryCritical(c) && t > 60) t = 60;
   else if (batteryLow(c) && t > 100) t = 100;
   return t;
