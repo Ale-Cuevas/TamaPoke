@@ -24,6 +24,8 @@ Write the result on each line: a tick, or what you saw.
 | 15 | v1.20 WALK page, goal banner, find popup, using items | [Steps](DEVICE_TESTS.md#steps) | ✓ page, banner, popups, a Golden Berry used; a vitamin and the awake goal bonus: pending |
 | 16 | v1.20 motion: shake to wake (and not in a pocket), grumpy / dizzy, face-down, tilt both ways | [Motion](DEVICE_TESTS.md#motion) | ✓ tilt, face-down by day and at night, shake to wake on battery, a pocket walk never wakes the screen, grumpy and dizzy (serial); shake with the screen off (PWR), the egg: pending |
 | 17 | v1.20 8 h battery drain, screen off, against v1.19 | [Steps](DEVICE_TESTS.md#steps) | pending |
+| 18 | v1.22 practice battle: PLAY menu, VS card and jingle, attacks and captions, special (taps, flash, cooldown), result and reward | [Battle](DEVICE_TESTS.md#battle) | pending |
+| 19 | v1.22 battle lengths 10–20 s; big Attack sprites without stutter; heap flat over 20 battles | [Battle](DEVICE_TESTS.md#battle) | pending |
 
 Questions only the board can answer:
 - Where is the USB-C port relative to the screen's top? Bottom edge (buttons on top).

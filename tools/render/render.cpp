@@ -130,7 +130,10 @@ static void resetUi() {
   galleryDetail = 0;
   galleryPage = 0;
   cardPage = 0;
-  feedMenuUntil = confirmUntil = choiceUntil = bathUntil = 0;
+  menuUntil = confirmUntil = choiceUntil = bathUntil = 0;
+  menuKind = MENU_NONE;
+  closeBattle();
+  bt = decltype(bt){};
   choiceKind = 0;
   pet.sleeping = false;
   pet.ceremony = CER_NONE;
@@ -191,6 +194,14 @@ static void pokemon(int16_t dex, int hour, bool shiny = false) {
   ensureMon();
 }
 
+// steps the clock 85 ms at a time through the battle logic until `done` (or 60 s)
+static void battleUntil(bool (*done)()) {
+  for (int i = 0; i < 700 && !done(); i++) {
+    gHostMillis += 85;
+    battleStep(millis());
+  }
+}
+
 struct Scene {
   const char *name;
   std::function<void()> setup;
@@ -211,7 +222,8 @@ static const std::vector<Scene> &scenes() {
     { "home-dusk", [] { pokemon(7, 19); } },
     { "home-night", [] { pokemon(133, 23); pet.sleeping = true; } },
     { "home-forest", [] { pokemon(1, 9); pet.poops = 2; pet.fullness = 20; } },
-    { "feed", [] { pokemon(133, 12); feedMenuUntil = millis() + 6000; } },
+    { "feed", [] { pokemon(133, 12); menuKind = MENU_FEED; menuUntil = millis() + 6000; } },
+    { "play-menu", [] { pokemon(133, 12); menuKind = MENU_PLAY; menuUntil = millis() + 6000; } },
     { "release", [] { pokemon(54, 15); confirmUntil = millis() + 10000; } },
     { "evolve", [] { pokemon(4, 11); pet.ageMinutes = 17 * MINUTES_PER_LEVEL; choiceKind = 1; choiceUntil = millis() + 12000; } },
     { "card-profile", [] { pokemon(25, 13); cardOpen = true; cardPage = 0; } },
@@ -271,6 +283,38 @@ static const std::vector<Scene> &scenes() {
      }, 3 },
     { "tilt-walk", [] { pokemon(25, 13); gStubTiltSide = 1; }, 8 },
     { "tilt-slide", [] { pokemon(25, 13); gStubTiltSide = -1; gStubTiltSlide = true; }, 8 },
+    // practice battle (Task 3a): driven to a given moment with the sketch's own battleStep()
+    { "battle-vs", [] { pokemon(25, 13); startPractice(79); }, 2 },
+    { "battle-walkin", [] { pokemon(25, 13); startPractice(79); }, 30 },
+    { "battle-special", [] {
+       pokemon(25, 13);
+       startPractice(79);
+       bt.meter.pips = SPECIAL_TAPS;  // charged before the first attack
+       battleUntil([] { return bt.haveEv && bt.ev.special && millis() - bt.evAt >= BT_HIT_MS + 100; });
+     }, 1 },
+    { "battle-mid", [] {
+       pokemon(25, 13);
+       startPractice(79);
+       battleUntil([] { return bt.eng.attacks >= 4 && millis() - bt.evAt >= BT_HIT_MS + 150; });
+       bt.meter.pips = 3;
+     }, 1 },
+    { "battle-result", [] {
+       pokemon(25, 13);
+       startPractice(129);  // Magikarp: a win
+       battleUntil([] { return bt.phase == BT_END; });
+     }, 4 },
+    { "battle-draw", [] {
+       pokemon(19, 20);
+       startPractice(92);  // Rattata vs Gastly: neither can touch the other
+       battleUntil([] { return bt.phase == BT_END; });
+     }, 4 },
+    { "battle-ja", [] {
+       pokemon(4, 19);
+       setLang(LANG_JA);
+       applyLangFont();
+       startPractice(7);
+       battleUntil([] { return bt.eng.attacks >= 3 && millis() - bt.evAt >= BT_HIT_MS + 150; });
+     }, 1 },
   };
   return s;
 }

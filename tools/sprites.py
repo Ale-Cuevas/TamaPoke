@@ -574,6 +574,29 @@ def icon_flag():
     return g.rows()
 
 
+def icon_battle():
+    # dos espadas cruzadas (menu de JUGAR: combate). Las hojas son finas, asi que
+    # el contorno crece por fuera en vez de comerse la figura como outline()
+    g = G(16)
+    for i in range(1, 10):
+        g.px(i, i, 'w'); g.px(i + 1, i, 's')            # hoja \
+        g.px(15 - i, i, 'w'); g.px(14 - i, i, 's')      # hoja /
+    for x, y in ((12, 9), (11, 10), (10, 11), (9, 12)):  # guardas doradas
+        g.px(x, y, 'f'); g.px(15 - x, y, 'f')
+    for x, y, c in ((11, 11, 'c'), (12, 12, 'c'), (13, 13, 'C')):  # empunaduras
+        g.px(x, y, c); g.px(15 - x, y, c)
+    grown = [row[:] for row in g.g]
+    for y in range(16):
+        for x in range(16):
+            if g.g[y][x] != '.':
+                continue
+            if any(0 <= x + dx < 16 and 0 <= y + dy < 16 and g.g[y + dy][x + dx] != '.'
+                   for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                grown[y][x] = 'k'
+    g.g = grown
+    return g.rows()
+
+
 SPRITES = {
     "CHARMANDER": charmander(),
     "CHARMELEON": charmeleon(),
@@ -597,6 +620,7 @@ SPRITES = {
     "ICON_CARBOS": icon_carbos(),
     "ICON_CHARM": icon_charm(),
     "ICON_FLAG": icon_flag(),
+    "ICON_BATTLE": icon_battle(),
     "EGG": egg(),
     "POOP": poop(),
     "HEART": heart(),

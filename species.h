@@ -640,6 +640,25 @@ static const char* const SPR_ICON_FLAG[16] = {  // 16x16
   "................",
 };
 
+static const char* const SPR_ICON_BATTLE[16] = {  // 16x16
+  ".kk..........kk.",
+  "kwsk........kswk",
+  ".kwsk......kswk.",
+  "..kwsk....kswk..",
+  "...kwsk..kswk...",
+  "....kwskkswk....",
+  ".....kwsswk.....",
+  "......kswk......",
+  "...k.kswwsk.k...",
+  "..kfkswkkwskfk..",
+  "...kfkk..kkfk...",
+  "...kcfk..kfck...",
+  "..kckkfkkfkkck..",
+  ".kCk..k..k..kCk.",
+  "..k..........k..",
+  "................",
+};
+
 static const char* const SPR_EGG[32] = {  // 32x32
   "................................",
   "................................",

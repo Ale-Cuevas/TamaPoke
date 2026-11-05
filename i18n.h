@@ -66,6 +66,9 @@ enum StrId : uint8_t {
   S_GRUMPY, S_DIZZY,
   // nombres de los objetos, en el orden de IT_* (pet.h)
   S_IT_GOLDEN, S_IT_PROTEIN, S_IT_IRON, S_IT_CARBOS, S_IT_CHARM,
+  // combate de practica (v1.22): tarjeta VS, rotulos de cada golpe, resultado
+  S_PRACTICE, S_SUPER_EFF, S_NOT_EFF, S_NO_EFFECT, S_CRITICAL, S_SPECIAL, S_TAP_CHARGE,
+  S_WIN, S_LOSE, S_DRAW, S_PRACTICE_JOY_FMT, S_PRACTICE_NONE,
   STR_COUNT
 };
 
