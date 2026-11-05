@@ -125,6 +125,7 @@ through the prototype detectors.
 | Can the FIFO deliver every sample? | Software steps and shakes while the board sleeps | **Yes, with our own reader.** SensorLib's `readFromFifo()` fails (`ESP_ERR_INVALID_ARG`: one 768-byte I2C read against Wire's 128-byte buffer) and stalls about 1 s per call. A chunked read got 357 samples in 6 s (**59.5 Hz** real rate), little-endian, flat Z +1.01 g; 36 ms per second of data at 100 kHz I2C. The first sample after a FIFO reset read -4/-4/+4 g (junk). |
 | Walking, running and shaking, LPF off (`test/data/imu/`) | Thresholds for FR-1.1 and FR-2.1 | Walk in hand: 1.6 Hz, peaks 1.5 g. Walk in a pocket: 1.7 Hz, peaks 2.9-3.4 g. Run: 2.7 Hz, 4.3 g (clipped at ±4 g). Soft shake: 3.9-4.3 Hz, 4.0 g. Hard shake: 6.1 Hz, 6.9 g (clipped on every axis). Shake events (5 reversals beyond 1 g on one axis, each under 170 ms apart): run 0, soft shake 6, hard shake 7. |
 | Software prototype on the captures (`tools/imu_replay.py`) | Feasibility of FR-1.1 / FR-2.1 | Steps: pocket walks 22 and 20, hand walk 17, run 31; still, face-down, upright and tilting 0; hard shake 0; soft shake 4. Shakes detected: hard 7, soft 6; walks, run, tilts 0. The true step counts of these walks weren't recorded, so accuracy is still open: the next capture round should count steps. |
+| 100 steps counted by hand (v1.20 on the board; `tools/imu_capture.py` for the captures) | FR-1.1 accuracy | Pocket: the WALK page showed **114 for 100**. Its capture (`walk-pocket-100-1`): 102 during the walk (3 of them before the recording started), then **4 more from moving the board after stopping**. Taking it out of the pocket and looking at it, no walking (`handling-1`): **4 steps**, one burst of 4 weak, uneven peaks. Both bursts just passed the entry of 4. With an entry of 8 (v1.21) both count 0 and every walk and the run count the same. A hand walk (`walk-hand-2`, 73 s at 0.63 s a step, about 115 steps; the hand count wasn't given) counted 112: in the hand peaks are weaker (0.12-0.45 g against 0.2-1.0 g in a pocket) and about 7 steps were missed, so `STEP_PEAK_G` stays where it is. |
 | Does the STATUS1 any-motion bit latch? | Was a cheap light-sleep motion check | No longer needed: the FIFO carries every sample. One 1 Hz poll did catch an any-motion event after a brief movement. |
 | INT1 (GPIO17) / INT2 (GPIO21) | Recorded for later; v1 does not use them | INT1 rests low and pulses on activity events (pedometer, motion). INT2 is not enabled; once it read about 36,000 edges a second with the pin low, once none: it floats (no pull). Don't use it without enabling it. |
 | Free and minimum internal heap with the game running (`HEALTH`) | Budget for the WiFi/ESP-NOW stack | **290,900 B free, 285,848 B minimum** (`MALLOC_CAP_INTERNAL`, v1.19, a sprite loaded). |
@@ -202,8 +203,10 @@ the hardware engine again if the cause is found.
 - A step is a local peak above `STEP_PEAK_G` at least `STEP_MIN_GAP_MS`
   after the previous one (about 3.5 steps/s at most).
 - Counting starts after `STEP_ENTRY` steps in a row, each within
-  `STEP_MAX_GAP_MS` of the last; then every step counts. Shorter bursts are
-  dropped, like the chip's own entry count.
+  `STEP_MAX_GAP_MS` of the last; then every step counts, the entry's too.
+  Shorter bursts are dropped. v1.20 used 4, like the chip's own entry count;
+  taking the board out of a pocket to look at it made bursts of 4 that counted,
+  so v1.21 uses 8 (walks shorter than 8 steps don't count).
 - A shake (Task 2's `ShakeDetector`, which Task 1 ships first) pauses
   counting for a second and breaks the streak, so shaking doesn't farm steps
   (FR-1.8).
@@ -256,7 +259,7 @@ already does. The extra current must be measured; the device test compares an
 |---|---|---|
 | `STEP_PEAK_G` | 0.12 | Smoothed dynamic \|a\| a step must exceed |
 | `STEP_MIN_GAP_MS` / `STEP_MAX_GAP_MS` | 280 / 2000 | Fastest step, longest pause inside a streak |
-| `STEP_ENTRY` | 4 | Steps in a row before counting starts |
+| `STEP_ENTRY` | 8 | Steps in a row before counting starts (4 in v1.20) |
 | `STEP_FLUSH_MS` | 30000 | How often counted steps go to `Pet::addSteps()` |
 | `STEP_GOAL` | 3000 | Daily goal |
 | `STEPS_PER_JOY` / `STEP_JOY_DAY_CAP` | 100 / 30 | Joy from walking |
@@ -277,7 +280,8 @@ Host (`test/test_steps.cpp`, `test/test_pet.cpp`):
 - `StepCounter` on the recorded captures in `test/data/imu/`: walks and the
   run count steps (within ±10 % of the true count, once captures with counted
   steps exist); still, face-down, upright and tilt captures count 0; a hard
-  shake counts 0 and a soft one at most 5. Plus synthetic signals: a clean
+  shake counts 0 and a soft one at most 5 (0 since v1.21); taking the board
+  out of a pocket to look at it counts 0 (v1.21). Plus synthetic signals: a clean
   1.7 Hz walk, a burst shorter than `STEP_ENTRY`, a pause longer than
   `STEP_MAX_GAP_MS`.
 - Joy, weight and bond per step, with remainders; joy cap; rewards skipped

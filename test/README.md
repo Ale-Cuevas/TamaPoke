@@ -24,7 +24,7 @@ python3 test/test_tools.py    # solo las herramientas de tools/
 | Fichero | Que comprueba |
 |---|---|
 | `test_pet.cpp` | huevo y eleccion de inicial, comida, tick de estadisticas, sueno, descuidos, niveles, evolucion (incluida la rama de Eevee), stats de combate, entrenamiento y minijuego, racha y vinculo, medallas, ceremonias, progresion offline y guardado en NVS; pasos (premios con sus restos y topes, la meta, el cambio de dia), hallazgos, mochila, amuleto shiny y las reacciones al IMU (enfado, mareo, boca abajo), sin escrituras a flash inmediatas |
-| `test_steps.cpp` | el contador de pasos (`steps.h`) sobre las capturas reales de `data/imu/` (los mismos conteos que el prototipo `tools/imu_replay.py`; quieta o agitada no cuenta) y senales sinteticas: paseo limpio, rafaga corta, pausas, la vuelta de `millis()` |
+| `test_steps.cpp` | el contador de pasos (`steps.h`) sobre las capturas reales de `data/imu/` (los mismos conteos que el prototipo `tools/imu_replay.py`; quieta, agitada o sacada del bolsillo para mirarla no cuenta) y senales sinteticas: paseo limpio, rafaga corta, pausas, la vuelta de `millis()` |
 | `test_motion.cpp` | sacudida, boca abajo e inclinacion (`motion.h`) sobre las capturas y senales sinteticas: las dos sacudidas grabadas se ven y ningun paseo ni carrera lo es; boca abajo a los 3 s y no antes; el lado de la inclinacion con los dos signos de eje |
 | `test_dex.cpp` | integridad de la Pokedex: nombres ASCII, cadenas evolutivas sin bucles, toda especie alcanzable, ninguna linea imposible de completar, limites de los buffers de la UI |
 | `test_i18n.cpp` | los 6 idiomas completos, sin acentos (la fuente GFX es ASCII), y con los mismos `%u`/`%s` que le pasa el sketch en cada llamada |

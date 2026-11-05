@@ -34,11 +34,15 @@ TEST(steps, las_capturas_se_cargan) {
 }
 
 // Los conteos del prototipo (tools/imu_replay.py) sobre las mismas capturas: el
-// port en C++ tiene que dar lo mismo. El numero real de pasos de estas capturas
-// no se apunto; la precision (+-10 %) queda para la prueba en placa.
+// port en C++ tiene que dar lo mismo. Las cuatro primeras no tienen el numero
+// real de pasos apuntado. walk-pocket-100-1 son 100 pasos contados a mano (unos
+// 3 antes de empezar a grabar) y 4 movimientos ya parada que con la entrada de 4
+// contaban: 103, con la de 8 los 99 del paseo. walk-hand-2 es un paseo en la
+// mano de 73 s a 0,63 s el paso, unos 115 pasos.
 TEST(steps, cuenta_lo_mismo_que_el_prototipo_en_las_capturas) {
   struct { const char *name; uint32_t proto; } cases[] = {
     { "walk-pocket-1", 22 }, { "walk-pocket-2", 20 }, { "walk-hand-1", 17 }, { "run-1", 31 },
+    { "walk-pocket-100-1", 99 }, { "walk-hand-2", 112 },
   };
   for (auto &c : cases) {
     uint32_t n = pipelineSteps(loadCapture(c.name));
@@ -54,7 +58,13 @@ TEST(steps, quieta_boca_abajo_de_pie_o_inclinandola_no_cuenta) {
 
 TEST(steps, agitar_no_suma_pasos) {
   CHECK_EQ(pipelineSteps(loadCapture("shake-hard-1")), (uint32_t)0);
-  CHECK(pipelineSteps(loadCapture("shake-soft-1")) <= 5);
+  CHECK_EQ(pipelineSteps(loadCapture("shake-soft-1")), (uint32_t)0);  // 4 con la entrada de 4
+}
+
+// de pie sin andar, sacarla del bolsillo, mirarla y guardarla 4-5 veces: con la
+// entrada de 4 una de esas rafagas sumaba 4 pasos
+TEST(steps, sacarla_del_bolsillo_para_mirarla_no_cuenta) {
+  CHECK_EQ(pipelineSteps(loadCapture("handling-1")), (uint32_t)0);
 }
 
 TEST(steps, caminar_limpio_a_1_7_hz_cuenta_cada_paso) {
@@ -63,10 +73,14 @@ TEST(steps, caminar_limpio_a_1_7_hz_cuenta_cada_paso) {
   CHECK_RANGE(n, (uint32_t)31, (uint32_t)35);
 }
 
+// pasos sinteticos a 1,7 Hz: duracion de `n` pasos
+static uint32_t stepsMs(int n) { return (uint32_t)(n * 1000 / 1.7f); }
+
 TEST(steps, una_rafaga_mas_corta_que_la_entrada_no_cuenta) {
-  // ~3 pasos (menos que STEP_ENTRY) y quieta
-  auto s = concat(synthStill(3000), synthWalk(1700, 1.7f, 0.4f, 3016));
-  s = concat(s, synthStill(5000, 4800));
+  // STEP_ENTRY - 2 pasos y quieta
+  uint32_t w = stepsMs(STEP_ENTRY - 2);
+  auto s = concat(synthStill(3000), synthWalk(w, 1.7f, 0.4f, 3016));
+  s = concat(s, synthStill(5000, 3032 + w));
   CHECK_EQ(countSteps(s), (uint32_t)0);
 }
 
@@ -86,11 +100,13 @@ TEST(steps, al_llegar_a_la_entrada_cuenta_los_pasos_de_la_entrada) {
 }
 
 TEST(steps, una_pausa_larga_rompe_la_racha) {
-  // 3 pasos, 3 s parada (> STEP_MAX_GAP_MS), otros 3: nunca 4 seguidos
-  auto s = concat(synthStill(2000), synthWalk(1700, 1.7f, 0.4f, 2016));
-  s = concat(s, synthStill(3000, 3732));
-  s = concat(s, synthWalk(1700, 1.7f, 0.4f, 6748));
-  s = concat(s, synthStill(3000, 8464));
+  // STEP_ENTRY - 2 pasos, 3 s parada (> STEP_MAX_GAP_MS), otros tantos: juntos
+  // pasan de la entrada, pero nunca llegan a ella seguidos
+  uint32_t w = stepsMs(STEP_ENTRY - 2);
+  auto s = concat(synthStill(2000), synthWalk(w, 1.7f, 0.4f, 2016));
+  s = concat(s, synthStill(3000, 2032 + w));
+  s = concat(s, synthWalk(w, 1.7f, 0.4f, 5048 + w));
+  s = concat(s, synthStill(3000, 5064 + 2 * w));
   CHECK_EQ(countSteps(s), (uint32_t)0);
 }
 
@@ -108,7 +124,7 @@ TEST(steps, una_pausa_corta_no_rompe_la_racha) {
 
 TEST(steps, la_pausa_por_sacudida_no_cuenta_y_rompe_la_racha) {
   StepCounter c;
-  auto s = synthWalk(10000, 1.7f, 0.4f);
+  auto s = synthWalk(14000, 1.7f, 0.4f);  // tras la pausa quedan ~13 pasos, mas que la entrada
   uint32_t mid = 0;
   for (const ImuSample &m : s) {
     if (m.t == 5008) { mid = c.total; c.pause(m.t + SHAKE_HOLD_MS); }

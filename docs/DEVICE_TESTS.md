@@ -143,8 +143,8 @@ and the steps not yet handed to the pet; `STATS` shows steps today/total and the
   getAttribute(): Firmware info read error`; touch still started (the 3-try loop) and the next boot was clean)
 - [ ] 100 real steps, counted by hand, board in a trouser pocket: the WALK page (stat card, 5th page) counts
   them within ±10 %: **114 for 100 (+14 %), fails** . Same in hand: ____ . Same in a bag: ____
-  (2026-11-04. The thresholds were never tuned against counted steps: being tuned on hand-counted captures,
-  `tools/imu_capture.py`)
+  (2026-11-04, v1.20. The extra steps were bursts from taking the board out of the pocket; v1.21 needs 8 steps
+  in a row instead of 4. v1.21, 100 steps in a pocket: ____)
 - [x] 10 s of hard shaking: at most a few steps and no find. (few steps ✓; "no find" not really tested: the
   `STEPS` tests had used up the day's 5 finds)
 - [x] Screen off with PWR, on battery, a 200-step walk: the steps are there when the screen comes back.
