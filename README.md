@@ -1,7 +1,7 @@
 # TamaPoke
 
 ![Board](https://img.shields.io/badge/board-ESP32--S3%20AMOLED%202.16-E7352C?logo=espressif&logoColor=white)
-![Firmware](https://img.shields.io/badge/firmware-v1.20-8A2BE2)
+![Firmware](https://img.shields.io/badge/firmware-v1.22-8A2BE2)
 [![CI](https://github.com/Ale-Cuevas/TamaPoke/actions/workflows/ci.yml/badge.svg)](https://github.com/Ale-Cuevas/TamaPoke/actions/workflows/ci.yml)
 ![Code](https://img.shields.io/badge/code-MIT-blue)
 ![Languages](https://img.shields.io/badge/languages-8-FFCB05)
@@ -133,8 +133,9 @@ After any ending, a **new egg** appears.
 ### Bonds, streaks, medals, Pokédex
 - **Streak** (player-wide, survives across pets): first care each real day; milestones
   at **3 / 7 / 30 / 100** days; skipping a day breaks it.
-- **Bond** (per pet, resets on hatch): grows with affection (**cap +8/day**), cools on
-  neglect. Both streak & bond improve egg/shiny odds.
+- **Bond** (per pet, resets on hatch): grows with affection (**cap +10/day**, plus +4 for
+  the first care of the day; petting counts once per 15 min), so max bond takes about
+  8 days of full care. Cools on neglect. Both streak & bond improve egg/shiny odds.
 - **8 medals** (Lv10/25/50, favorite berry found, 7-day streak, max bond, final form,
   "fit" = weight 0 & no slip-ups), per-pet + a global counter.
 - **Pokédex:** raising a species registers it; **151 + shinies** to complete.
@@ -155,7 +156,7 @@ waving it around doesn't farm anything.
 - **Steps today** (reset at local midnight) and a **lifetime total** belong to
   you, not to the pet: they survive a new egg and a restart.
 - While the pet is **hatched and awake**, walking is care: **+1 JOY per 100
-  steps** (at most +30 a day), **−1 weight per 250**, **+1 bond per 1000** (the
+  steps** (at most +30 a day), **−1 weight per 1000**, **+1 bond per 1000** (the
   daily bond cap still applies). Walking costs no energy.
 - **Daily goal: 3000 steps.** The first time each day: +10 JOY, a bonus find,
   and the day counts toward your **streak** (a banner and a jingle when you next
@@ -409,8 +410,9 @@ hatch) + level + **training**:
 - DEFENSE ← sustained good care (12 h with no slip-ups)
 - STRENGTH ← the training bag (whacking)
 
-Shown on the Battle page of the stat card. The (hidden) weight goes up with candy
-and burns off with training.
+Shown on the Battle page of the stat card. Weight is extra fat (0 = fit): it goes
+up +12 per candy and burns off slowly, −1 every 15 min awake (30 asleep), a little
+with training and the minigame, and −1 per 1000 steps. A candy lasts about 3 h.
 
 ## Retention: streak, bond, medals, name
 

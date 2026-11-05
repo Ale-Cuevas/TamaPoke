@@ -223,7 +223,7 @@ TEST(tick, sobrepeso_se_quema_solo) {
   makePet(p, 4);
   p.weight = 30;
   advance(p, 30);
-  CHECK_EQ(p.weight, (uint8_t)20);  // -1 cada 3 minutos
+  CHECK_EQ(p.weight, (uint8_t)28);  // -1 cada WEIGHT_BURN_AWAKE_MIN (15) minutos
 }
 
 TEST(tick, descuido_cuenta_una_vez_por_hora) {
@@ -447,7 +447,7 @@ TEST(train, el_saco_cansa_y_quema_peso) {
   p.trainStrength(30);
   CHECK_EQ(p.energy, (uint8_t)68);
   CHECK_EQ(p.fullness, (uint8_t)75);
-  CHECK_EQ(p.weight, (uint8_t)30);
+  CHECK_EQ(p.weight, (uint8_t)37);  // 30 golpes / TRAIN_WEIGHT_DIV
   p.energy = 3;  // el suelo protege de dejarlo a cero
   p.trainStrength(30);
   CHECK_EQ(p.energy, (uint8_t)3);
@@ -461,7 +461,7 @@ TEST(play, minijuego_entrena_velocidad_y_guarda_record) {
   p.playResult(20);
   CHECK_EQ(p.trSpe, (uint8_t)4);
   CHECK_EQ(p.joy, (uint8_t)45);   // +5 +30 por marcar mas de 15
-  CHECK_EQ(p.weight, (uint8_t)10);  // 50 - 20*2
+  CHECK_EQ(p.weight, (uint8_t)40);  // 50 - 20/GAME_WEIGHT_DIV
   CHECK_EQ(p.gameHi, (uint16_t)20);
   p.playResult(5);
   CHECK_MSG(p.gameHi == 20, "un resultado peor no baja el record");
@@ -502,8 +502,7 @@ TEST(care, el_vinculo_tiene_tope_diario) {
   Pet p;
   makePet(p, 4);
   for (int i = 0; i < 50; i++) p.play();  // +2 de vinculo cada vez
-  CHECK_MSG(p.bond <= 20, "tope de 20 puntos de vinculo al dia");
-  CHECK_EQ(p.bond, (uint8_t)20);
+  CHECK_EQ(p.bond, (uint8_t)BOND_DAY_CAP);  // tope diario (sin reloj no hay +4 del dia)
 }
 
 TEST(mood, refleja_el_estado) {
@@ -966,11 +965,11 @@ TEST(steps, felicidad_peso_y_vinculo_por_pasos_con_restos) {
   CHECK_EQ(p.joy, (uint8_t)51);  // el resto no se pierde entre lecturas
   p.addSteps(150, DIA);          // 250 en total
   CHECK_EQ(p.joy, (uint8_t)52);
-  CHECK_EQ(p.weight, (uint8_t)19);
+  CHECK_EQ(p.weight, (uint8_t)20);  // 250 pasos ya no queman: hacen falta 1000
   CHECK_EQ(p.bond, (uint8_t)0);
   p.addSteps(750, DIA);          // 1000 en total
   CHECK_EQ(p.bond, (uint8_t)1);
-  CHECK_EQ(p.weight, (uint8_t)16);
+  CHECK_EQ(p.weight, (uint8_t)19);
   CHECK_EQ(p.joy, (uint8_t)60);
   CHECK_EQ(p.stepsToday, (uint32_t)1000);
   CHECK_EQ(p.stepsTotal, (uint32_t)1000);
@@ -1279,10 +1278,54 @@ TEST(care, el_tope_diario_de_vinculo_vuelve_a_cero_a_medianoche) {
   Pet p;
   makeWalker(p);
   for (int i = 0; i < 20; i++) p.play();
-  CHECK_EQ(p.bond, (uint8_t)24);  // 20 del tope + 4 del primer cuidado del dia
+  CHECK_EQ(p.bond, (uint8_t)(BOND_DAY_CAP + BOND_CARE_DAY));  // tope + primer cuidado del dia
   p.setClock((DIA + 1) * 86400 + 3600);
   p.addSteps(1000, DIA + 1);  // +1 de vinculo caminando, sin cuidado previo hoy
-  CHECK_EQ(p.bond, (uint8_t)25);
+  CHECK_EQ(p.bond, (uint8_t)(BOND_DAY_CAP + BOND_CARE_DAY + 1));
+}
+
+// v1.22: mimar no llena el tope del dia a toques; da vinculo cada PET_BOND_COOLDOWN_MS
+TEST(care, mimar_da_vinculo_con_enfriamiento) {
+  Pet p;
+  makePet(p, 4);
+  p.joy = 20;
+  mockAdvanceMillis(1000);
+  for (int i = 0; i < 10; i++) p.caress();
+  CHECK_EQ(p.bond, (uint8_t)1);  // diez toques seguidos: uno solo cuenta
+  CHECK_EQ(p.joy, (uint8_t)70);  // la felicidad si sube con cada toque
+  mockAdvanceMillis(PET_BOND_COOLDOWN_MS - 1);
+  p.caress();
+  CHECK_EQ(p.bond, (uint8_t)1);
+  mockAdvanceMillis(1);
+  p.caress();
+  CHECK_EQ(p.bond, (uint8_t)2);
+}
+
+// v1.22: un +2 a un punto del tope no lo pasa (antes 19 + 2 = 21)
+TEST(care, el_tope_de_vinculo_no_se_pasa) {
+  Pet p;
+  makePet(p, 4);
+  p.clean();
+  for (int i = 1; i < BOND_DAY_CAP - 1; i++) p.clean();  // +1 cada bano: tope - 1
+  CHECK_EQ(p.bond, (uint8_t)(BOND_DAY_CAP - 1));
+  p.play();  // +2
+  CHECK_EQ(p.bond, (uint8_t)BOND_DAY_CAP);
+}
+
+// v1.22: el vinculo maximo cuesta 5-8 dias aun cuidandolo al maximo cada dia
+TEST(care, el_vinculo_maximo_cuesta_mas_de_cinco_dias) {
+  Pet p;
+  makeWalker(p);
+  int dayFull = 0;
+  for (int d = 0; d < 12 && !dayFull; d++) {
+    p.setClock((DIA + d) * 86400 + 10 * 3600);
+    for (int i = 0; i < 30; i++) p.play();  // muchisimo cuidado
+    mockAdvanceMillis(PET_BOND_COOLDOWN_MS);
+    p.caress();
+    if (p.bond >= 100) dayFull = d + 1;
+  }
+  CHECK_MSG(dayFull >= 5 && dayFull <= 8, "vinculo 100 entre el dia 5 y el 8");
+  CHECK_EQ(dayFull, 8);
 }
 
 // ---------------------------------------------------------------- trucos del IMU (Tarea 2)

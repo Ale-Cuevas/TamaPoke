@@ -138,7 +138,7 @@ void Pet::tick() {
   // El peso aun se quema; la racha de buen cuidado (goodTicks) queda en pausa.
   if (sleeping) {
     energy = clamp100(energy + 6);
-    if (weight > 0 && ageMinutes % 3 == 0) weight--;
+    if (weight > 0 && ageMinutes % WEIGHT_BURN_SLEEP_MIN == 0) weight--;
     if (ageMinutes % 2 == 0) {                 // ~4x mas lento que despierto
       fullness = dropTo(fullness, 1, 30);
       joy = dropTo(joy, 1, 35);
@@ -158,7 +158,7 @@ void Pet::tick() {
   hygiene = clamp100(hygiene - 1 - 4 * poops);
   // el sobrepeso da pereza: la energia cae el doble
   if (weight > 50) energy = clamp100(energy - 1);
-  if (weight > 0 && ageMinutes % 3 == 0) weight--;
+  if (weight > 0 && ageMinutes % WEIGHT_BURN_AWAKE_MIN == 0) weight--;
 
   // la disciplina forja la defensa: 12 h seguidas bien cuidado = +1 DEF
   if (lowestStat() >= 40) {
@@ -294,7 +294,7 @@ void Pet::registerCare(bool saveNow) {
     bondToday = 0;
   }
   if (streak > bestStreak) bestStreak = streak;
-  bond = clamp100(bond + 4);
+  bond = clamp100(bond + BOND_CARE_DAY);  // fuera del tope diario de addBond
   uint16_t ms = (streak >= 100) ? 100 : (streak >= 30) ? 30
               : (streak >= 7)   ? 7   : (streak >= 3)  ? 3 : 0;
   if (ms > lastMilestone) {
@@ -313,7 +313,8 @@ void Pet::addBond(uint8_t amt) {
     bondDay = d;
     bondToday = 0;
   }
-  if (bondToday >= 20) return;  // tope diario: el vinculo no se farmea
+  if (bondToday >= BOND_DAY_CAP) return;  // tope diario: el vinculo no se farmea
+  if (amt > BOND_DAY_CAP - bondToday) amt = BOND_DAY_CAP - bondToday;  // sin pasarse del tope
   bond = clamp100(bond + amt);
   bondToday += amt;
 }
@@ -499,7 +500,7 @@ void Pet::playResult(uint8_t score) {
   joy = clamp100(joy + 5 + (score > 15 ? 30 : score * 2));
   energy = dropTo(energy, 10 + score / 2, 5);
   fullness = dropTo(fullness, 5, 5);
-  int burn = (int)weight - score * 2;  // el ejercicio quema peso
+  int burn = (int)weight - score / GAME_WEIGHT_DIV;  // el ejercicio quema peso
   weight = burn > 0 ? burn : 0;
   if (score >= 5) heartUntil = millis() + HEART_MS;
   if (score > gameHi) gameHi = score;  // nuevo record
@@ -520,7 +521,7 @@ uint8_t Pet::trainStrength(uint16_t hits) {
                                     // pantalla anunciaba +18 aunque cupieran menos
   energy = dropTo(energy, 12, 5);   // cansa
   fullness = dropTo(fullness, 5, 5);
-  int burn = (int)weight - hits / 3;  // tambien quema peso
+  int burn = (int)weight - hits / TRAIN_WEIGHT_DIV;  // tambien quema peso
   weight = burn > 0 ? burn : 0;
   joy = clamp100(joy + 6);
   if (hits >= 20) heartUntil = millis() + HEART_MS;
@@ -564,7 +565,11 @@ void Pet::caress() {
   if (isEgg() || sleeping) return;
   joy = clamp100(joy + 5);
   heartUntil = millis() + HEART_MS;
-  addBond(1);
+  // un toque en el bicho es gratis: sin enfriamiento, 10 toques llenaban el tope del dia
+  if (!timeLeft(petBondUntil)) {
+    addBond(1);
+    petBondUntil = millis() + PET_BOND_COOLDOWN_MS;
+  }
   registerCare();
 }
 

@@ -154,9 +154,9 @@ User stories:
   day boundary as the streak) and a **lifetime total**. Both belong to the
   player: they survive a new egg and a restart.
 - **FR-1.3** Walk care, applied only while the pet is hatched and awake:
-  joy +1 per 100 steps (at most +30 a day), weight -1 per 250 steps, bond +1
-  per 1000 steps (through `addBond()`, so the existing daily bond cap of 20
-  applies). Walking costs no energy: an energy drop to 10 or below would count
+  joy +1 per 100 steps (at most +30 a day), weight -1 per 1000 steps (250 until
+  v1.22), bond +1 per 1000 steps (through `addBond()`, so the daily bond cap
+  applies: 20 until v1.22, 10 since). Walking costs no energy: an energy drop to 10 or below would count
   as a care mistake.
 - **FR-1.4** Daily goal of 3000 steps. The first time it is reached each day:
   joy +10 (if hatched and awake), one bonus find, and the day counts as a day
@@ -263,7 +263,7 @@ already does. The extra current must be measured; the device test compares an
 | `STEP_FLUSH_MS` | 30000 | How often counted steps go to `Pet::addSteps()` |
 | `STEP_GOAL` | 3000 | Daily goal |
 | `STEPS_PER_JOY` / `STEP_JOY_DAY_CAP` | 100 / 30 | Joy from walking |
-| `STEPS_PER_WEIGHT` | 250 | Weight burned |
+| `STEPS_PER_WEIGHT` | 1000 | Weight burned (250 until v1.22) |
 | `STEPS_PER_BOND` | 1000 | Bond from walking |
 | `GOAL_JOY` | 10 | Goal bonus |
 | `FIND_MIN_STEPS` / `FIND_MAX_STEPS` | 800 / 1200 | Distance between finds |
