@@ -8,6 +8,29 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.22] - 2026-11-05
+
+After a day on the board, weight never left 0 and bond filled far too fast.
+Saves from v1.21 load as they are.
+
+### Changed
+
+- **Weight burns off slowly.** Weight is still extra fat (0 = fit), but the pet
+  burns 1 every 15 minutes awake and every 30 asleep, instead of 1 every 3
+  minutes: a candy (+12) used to vanish in 36 minutes and now lasts about 3
+  hours. Steps burn 1 per 1000 (was 250), the minigame `score / 2` (was
+  `score × 2`) and the training bag `hits / 10` (was `hits / 3`).
+- **Bond takes about 8 days to max.** The daily cap through care is 10 (was
+  20), plus 4 for the first care of the day: at most 14 a day, so 100 on day 8
+  of full care instead of day 5.
+- **Petting gives bond once every 15 minutes.** JOY and the heart still come on
+  every tap; ten taps in a row used to fill half the day's cap.
+
+### Fixed
+
+- A +2 bond one point below the daily cap no longer goes past it.
+- The README's bond cap ("+8/day", from before v1.4) and firmware badge (v1.20).
+
 ## [1.21] - 2026-11-04
 
 ### Changed

@@ -23,7 +23,8 @@ Write the result on each line: a tick, or what you saw.
 | 14 | v1.20 steps: FIFO rate, 400 kHz I2C (touch, sound), ±10 % over 100 steps (pocket, hand), shaking adds none, PWR-off walk, restart, midnight | [Steps](DEVICE_TESTS.md#steps) | ✓ FIFO 60/s, touch and sound at 400 kHz, restart, shaking, PWR-off walk. **Pocket: 114 for 100 (+14 %), outside ±10 %** in v1.20; v1.21 (entry 8): **hand 105 for 100 (+5 %)** ✓; pocket re-walk, bag, midnight: pending |
 | 15 | v1.20 WALK page, goal banner, find popup, using items | [Steps](DEVICE_TESTS.md#steps) | ✓ page, banner, popups, a Golden Berry used; a vitamin and the awake goal bonus: pending |
 | 16 | v1.20 motion: shake to wake (and not in a pocket), grumpy / dizzy, face-down, tilt both ways | [Motion](DEVICE_TESTS.md#motion) | ✓ tilt, face-down by day and at night, shake to wake on battery, a pocket walk never wakes the screen, grumpy and dizzy (serial); shake with the screen off (PWR), the egg: pending |
-| 17 | v1.20 8 h battery drain, screen off, against v1.19 | [Steps](DEVICE_TESTS.md#steps) | pending |
+| 17 | v1.20 8 h battery drain, screen off, against v1.19 | [Steps](DEVICE_TESTS.md#steps) | screen-off drain: pending; a real day on v1.21, light use, lasted ~20 h on battery (23:00 → 19:00, 2026-11-05) |
+| 18 | v1.22 pacing: candy weight lasts, 1000 steps = −1 weight, petting bond once per 15 min, bond ≤ 14 a day | [Pacing](DEVICE_TESTS.md#pacing-v122) | pending |
 
 Questions only the board can answer:
 - Where is the USB-C port relative to the screen's top? Bottom edge (buttons on top).

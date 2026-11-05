@@ -159,11 +159,20 @@ and the steps not yet handed to the pet; `STATS` shows steps today/total and the
   finds and +30 JOY a day ✓. WALK page, banner and find popups look right; a Golden Berry used. The awake goal
   bonus and a vitamin: not tried)
 - [ ] No visible stall while walking with the screen lit (steps are only saved with the screen dimmed).
-- [ ] 8 h battery drain, screen off, against v1.19: ____ % vs ____ %.
+- [ ] 8 h battery drain, screen off, against v1.19: ____ % vs ____ %. (Not measured as specced, but a real
+  day on v1.21 with light use ran on battery from 23:00 to 19:00, about 20 h, 2026-11-05)
 - [ ] `IMULOG 15` streams CSV that `tools/imu_replay.py` reads; any key stops it. Record a few walks with the
   steps counted by hand into `test/data/imu/` for the accuracy test (`python3 tools/imu_capture.py <name>`
   does the recording). (`IMULOG 3`: 180 samples ✓; the script
   choked on the closing `[imulog] end` and now skips any line that isn't a sample. Walks: pending)
+
+### Pacing (v1.22)
+Weight and bond move slower. `STATS` prints them; `STEPS <n>` injects steps.
+- [ ] A candy: the WGT bar (Battle page) goes up 12 and is still above 0 an hour later (−1 every 15 min
+  awake): ____
+- [ ] Awake, `STEPS 1000`: weight −1, bond +1 (not −4 as in v1.21): ____
+- [ ] Tap the pet 10 times in a row: JOY goes up each time, bond only +1. Again 15 min later: +1: ____
+- [ ] A day of normal care: bond grows at most 14 (10 from care + 4 for the first care of the day): ____
 
 ### Motion
 (v1.20, [FEATURES.md Task 2](FEATURES.md#task-2-easter-eggs).) `SHAKE` and `FACEDOWN` / `FACEDOWN 0` inject

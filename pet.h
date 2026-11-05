@@ -15,6 +15,19 @@
 #define FAREWELL_AGE_MIN (3UL * 24 * 60)   // se despide a los 3 dias de juego (en forma final)
 #define RUNAWAY_TICKS 60                   // se escapa tras 1 h con TODO a cero
 
+// --- ritmo del peso y del vinculo (v1.22). El peso es grasa de mas: 0 = en forma.
+// Antes se quemaba -1 cada 3 min (20 a la hora): una chuche (+12) desaparecia en
+// 36 min y el peso se quedaba en 0 todo el dia. Ahora una chuche dura ~3 h despierto.
+#define WEIGHT_BURN_AWAKE_MIN 15           // -1 de peso cada 15 min despierto
+#define WEIGHT_BURN_SLEEP_MIN 30           // -1 cada 30 min durmiendo
+#define GAME_WEIGHT_DIV 2                  // minijuego: -puntos/2 de peso
+#define TRAIN_WEIGHT_DIV 10                // saco: -golpes/10 de peso
+// El vinculo maximo (100) debe costar 5-8 dias: 10 al dia por cuidados (tope de
+// addBond) + 4 del primer cuidado del dia = 14, el dia 8 cuidandolo al maximo.
+#define BOND_DAY_CAP 10                    // tope diario de addBond (era 20)
+#define BOND_CARE_DAY 4                    // primer cuidado del dia, fuera del tope
+#define PET_BOND_COOLDOWN_MS (15UL * 60 * 1000)  // mimar da vinculo como mucho cada 15 min
+
 // milisegundos que faltan hasta `deadline` (0 si ya paso, o si deadline==0:
 // "temporizador inactivo"). Todos los temporizadores del juego (dialogos,
 // animaciones) se guardan como un instante absoluto "deadline = millis() +
@@ -38,7 +51,7 @@ enum PetMood : uint8_t { MOOD_HAPPY, MOOD_SAD, MOOD_EATING, MOOD_SLEEPING };
 #define STEP_GOAL 3000            // meta diaria
 #define STEPS_PER_JOY 100         // +1 felicidad cada 100 pasos...
 #define STEP_JOY_DAY_CAP 30       // ...como mucho +30 al dia
-#define STEPS_PER_WEIGHT 250      // -1 de peso cada 250 pasos
+#define STEPS_PER_WEIGHT 1000     // -1 de peso cada 1000 pasos (v1.22: eran 250, 3000 pasos quemaban una chuche)
 #define STEPS_PER_BOND 1000       // +1 de vinculo cada 1000 (con el tope diario de addBond)
 #define GOAL_JOY 10               // premio de la meta
 #define FIND_MIN_STEPS 800        // pasos premiados entre dos hallazgos (al azar entre MIN y MAX)
@@ -201,6 +214,7 @@ public:
   // racha / vinculo / medallas / nombre
   void rename(const char *name);
   bool hasMedal(uint16_t m) const { return medals & m; }
+  uint8_t bondGainedToday() const { return bondToday; }  // diagnostico (STATS)
   bool showMedal() const { return timeLeft(medalUntil) > 0; }
   bool showMilestone() const { return timeLeft(milestoneUntil) > 0; }
   int careBonus() const;  // mejora del huevo por racha + vinculo
@@ -248,6 +262,7 @@ private:
   uint32_t lastTick = 0;
   uint32_t eatUntil = 0;
   uint32_t heartUntil = 0;
+  uint32_t petBondUntil = 0;   // enfriamiento del vinculo por mimos (solo RAM)
   uint32_t evolveUntil = 0;
   int16_t eggTarget = 1;       // dex oculto que saldra del huevo
   bool eggShiny = false;       // sorpresa sorteada al crear el huevo
