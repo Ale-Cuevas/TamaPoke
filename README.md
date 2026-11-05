@@ -150,7 +150,7 @@ SPEED ← minigame, DEFENSE ← 12 h of unbroken good care; vitamins from walks 
 
 Carry the board in a pocket, a bag or your hand: the IMU counts steps whenever
 the board is on, screen lit, dimmed, off (PWR) or asleep. Steps only start
-counting after **4 in a row**, and shaking the board pauses the counter, so
+counting after **8 in a row**, and shaking the board pauses the counter, so
 waving it around doesn't farm anything.
 - **Steps today** (reset at local midnight) and a **lifetime total** belong to
   you, not to the pet: they survive a new egg and a restart.

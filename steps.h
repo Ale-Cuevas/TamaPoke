@@ -14,15 +14,18 @@
 // Por muestra: |a|, menos una media lenta (la gravedad, 1 s), suavizado con una
 // media rapida (60 ms). Un paso es un maximo local por encima de STEP_PEAK_G,
 // al menos STEP_MIN_GAP_MS despues del anterior. Se empieza a contar tras
-// STEP_ENTRY pasos seguidos, cada uno a menos de STEP_MAX_GAP_MS del anterior
-// (como la "entrada" del podometro del chip): las rafagas cortas se descartan.
+// STEP_ENTRY pasos seguidos, cada uno a menos de STEP_MAX_GAP_MS del anterior,
+// y entonces cuentan todos: las rafagas cortas se descartan. Con 4 (la
+// "entrada" del podometro del chip) sacar la placa del bolsillo para mirarla
+// sumaba 4 pasos falsos cada vez (100 pasos contados a mano dieron 114); con 8
+// esas rafagas no cuentan y los paseos grabados dan lo mismo (v1.21).
 // Una sacudida (motion.h) pausa el contador y rompe la racha, para que agitar
 // la placa no sume pasos.
 
 #define STEP_PEAK_G 0.12f       // |a| dinamica suavizada que tiene que superar un paso
 #define STEP_MIN_GAP_MS 280     // paso mas rapido (~3,5 pasos/s)
 #define STEP_MAX_GAP_MS 2000    // pausa mas larga dentro de una racha
-#define STEP_ENTRY 4            // pasos seguidos antes de empezar a contar
+#define STEP_ENTRY 8            // pasos seguidos antes de empezar a contar
 #define STEP_SLOW_TAU_MS 1000.0f  // media lenta: la gravedad en |a|
 #define STEP_FAST_TAU_MS 60.0f    // suavizado de la senal de paso
 #define STEP_FLUSH_MS 30000UL     // cada cuanto pasan los pasos contados a Pet::addSteps()

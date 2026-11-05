@@ -12,7 +12,8 @@ checks the port gives the same counts on these captures.
 
 Step counter: |a|, minus a slow moving average (gravity), smoothed; a step is
 a peak above PEAK_G at least MIN_GAP_S after the previous one, and counting
-starts after ENTRY steps in a row, as the QMI8658's own pedometer does.
+starts after ENTRY steps in a row (the QMI8658's own pedometer uses 4; taking
+the board out of a pocket to look at it made bursts of 4, so 8 since v1.21).
 Shake: on any one axis (gravity removed), SHAKE_REV direction reversals beyond
 SHAKE_G, each within SHAKE_GAP_S of the previous one. A shake pauses the step
 counter for a second.
@@ -23,7 +24,7 @@ import sys
 PEAK_G = 0.12  # smoothed dynamic |a| a step must exceed
 MIN_GAP_S = 0.28  # fastest step, about 3.5 steps/s
 MAX_GAP_S = 2.0  # a slower step breaks the streak
-ENTRY = 4  # steps in a row before they count
+ENTRY = 8  # steps in a row before they count
 SLOW_TAU_S = 1.0  # gravity estimate for |a|
 FAST_TAU_S = 0.06  # smoothing of the step signal
 SHAKE_G = 1.0  # per-axis swing beyond gravity

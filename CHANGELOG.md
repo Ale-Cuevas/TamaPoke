@@ -8,6 +8,29 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.21] - 2026-11-04
+
+### Changed
+
+- **Steps start counting after 8 in a row, not 4.** On the board, 100 steps
+  counted by hand in a pocket came out as 114: taking the board out of the
+  pocket to look at it, or moving it after stopping, made bursts of 4 that
+  passed the old entry. With 8 they count nothing, while every recorded walk
+  and run counts the same. Walks shorter than 8 steps no longer count.
+
+### Added
+
+- `tools/imu_capture.py` records a walk from the running game over USB
+  (`IMULOG`, without restarting the board) into `test/data/imu/`, with the
+  game's own count. Four new captures there: 100-step walks in a pocket and
+  in the hand, another hand walk, and taking the board out of a pocket to look
+  at it. On the board, v1.21 counts the 100 steps in the hand as 105.
+
+### Fixed
+
+- `tools/imu_replay.py` read `IMULOG` output only after deleting its closing
+  `[imulog] end` line by hand; it now skips any line that isn't a sample.
+
 ## [1.20] - 2026-11-04
 
 Steps and the motion tricks, from the board's QMI8658 IMU (Tasks 1 and 2 of
