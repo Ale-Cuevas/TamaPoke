@@ -30,7 +30,7 @@ Write the result on each line: a tick, or what you saw.
 | 21 | v1.24 battle lengths 10–20 s; big Attack sprites without stutter; heap flat over 20 battles | [Battle](DEVICE_TESTS.md#battle) | ✓ battles fine on the board (user, 2026-11-05); 20-battle heap check not run |
 | 22 | v1.25 goals at 3000 / 6000 / 10000: banners, rewards, Rare Candy found and used (+1 level), Marathon medal, WALK ring and flags | [Steps](DEVICE_TESTS.md#steps) | pending |
 | 23 | v1.26 swaying meadow (`BIOME 0`): smooth sway, gust every 12 s, front tufts over the feet, night tint; forest tips sway | [Backgrounds](DEVICE_TESTS.md#backgrounds-v126) | draw time ✓ (16.7 ms vs 14.8 beach); look: pending |
-| 24 | v1.27 new biomes (`BIOME 6/7/8`): power plant, swamp, ruins by day and night; Pikachu, Ekans, Gastly and friends get them | [Backgrounds](DEVICE_TESTS.md#backgrounds-v126) | draw time ✓; swamp ✓ on the board (user, 2026-11-05); power plant, ruins: pending |
+| 24 | v1.27 new biomes (`BIOME 6/7/8`): power plant, swamp, ruins by day and night; Pikachu, Ekans, Gastly and friends get them | [Backgrounds](DEVICE_TESTS.md#backgrounds-v126) | draw time ✓; swamp, power plant and ruins ✓ on the board, by day and at night (user, 2026-11-05) |
 | 25 | v1.28 burn-in: screensaver after 5 min (look, wake paths), orbit every 3 min (no edge garbage, taps land), a battery day | [Power, sleep, buttons](DEVICE_TESTS.md#power-sleep-buttons) | serial ✓ (brightness, wake, face-down, origins); screensaver look and wake ✓, orbit edges clean and taps land while moved ✓ (user, 2026-11-05); v1.29 bigger clock ✓ (user); battery: pending |
 
 Questions only the board can answer:
