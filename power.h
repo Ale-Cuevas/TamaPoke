@@ -62,6 +62,20 @@ inline bool saverActive(const PowerCtx &c) {
   return !c.screenOff && !c.faceDown && dimStageFor(c.idleMs) == DIM_OFF;
 }
 
+// Boton PWR, pulsacion corta (v1.32): recorre tres vistas, juego -> salvapantallas -> apagada
+// -> juego. Hasta la v1.31 solo encendia y apagaba. La vista sale del estado de siempre: apagada
+// con PWR, salvapantallas (el de los 5 min o el puesto con PWR) o el juego (tambien atenuado a
+// los 90 s o boca abajo, que no son el salvapantallas).
+enum PwrView : uint8_t { VIEW_ON = 0, VIEW_SAVER, VIEW_OFF };
+inline PwrView pwrViewOf(const PowerCtx &c) {
+  return c.screenOff ? VIEW_OFF : saverActive(c) ? VIEW_SAVER : VIEW_ON;
+}
+inline PwrView pwrNext(PwrView v) {
+  return v == VIEW_ON ? VIEW_SAVER : v == VIEW_SAVER ? VIEW_OFF : VIEW_ON;
+}
+// inactividad que pone el salvapantallas en el acto (como tras 5 min sin tocar)
+#define POWER_SAVER_IDLE_MS (POWER_DIM2_MS + 1)
+
 inline bool batteryLow(const PowerCtx &c) { return c.batPct >= 0 && c.batPct < 20 && !c.charging && !c.usb; }
 inline bool batteryCritical(const PowerCtx &c) { return c.batPct >= 0 && c.batPct < 10 && !c.charging && !c.usb; }
 

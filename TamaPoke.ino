@@ -43,7 +43,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.31"
+#define FW_VERSION "1.32"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -87,7 +87,10 @@ bool galleryDirty = false;
 int galleryPage = 0;        // 10 paginas de 16
 int16_t galleryDetail = 0;  // dex en vista detalle, 0 = rejilla
 
-bool screenOff = false;       // pulsacion corta del boton PWR
+bool screenOff = false;       // pulsacion corta del boton PWR (la tercera de cada vuelta, v1.32)
+// salvapantallas puesto con PWR (v1.32): comer, el corazon o una evolucion no lo quitan solos,
+// como hacen con la pantalla atenuada; cualquier toque, tecla o sacudida si (wakeUI)
+bool saverPinned = false;
 bool cardOpen = false;        // ficha del bicho (deslizar vertical)
 bool kbOpen = false;          // teclado para renombrar al bicho
 char nameBuf[12] = "";
@@ -388,17 +391,11 @@ void loop() {
   ensureMon();
   imuTick(now);  // pasos, sacudidas, boca abajo
 
-  // pulsacion corta del PWR: pantalla on/off
+  // pulsacion corta del PWR: juego -> salvapantallas -> apagada -> juego (v1.32)
   static uint32_t lastPwr = 0;
   if (now - lastPwr > 250) {
     lastPwr = now;
-    if (pwrShortPressed()) {
-      screenOff = !screenOff;
-      if (!screenOff) wakeUI();
-      // apagada no se dibuja, y el combate solo avanza al dibujar: al volver
-      // soltaria de golpe los ataques atrasados. Apagar la pantalla lo abandona.
-      else if (battleOpen()) closeBattle();
-    }
+    if (pwrShortPressed()) pwrPress();
   }
 
   updateBrightness(now);
@@ -534,15 +531,51 @@ void wakeUI() {
   bool slow = !iv || iv > 100;  // pantalla apagada o ritmo lento: se dibuja ya, sin esperar al frame
   lastInteract = now;
   gFaceDown = false;
+  saverPinned = false;
   // el frame forzado respeta los 85 ms entre redibujados (si no, solapa el DMA del anterior)
   if (slow) lastRender = (now - lastRender >= 85) ? 0 : lastRender - 15;
   audioSetIdle(false);
 }
 
+// Pulsacion corta del PWR (v1.32, power.h): pasa a la siguiente vista y la devuelve.
+//  - salvapantallas: el mismo truco que el comando SAVER (como tras 5 min sin tocar), asi que
+//    su brillo, su ritmo, el light sleep y el amplificador apagado salen solos; y fijado, para
+//    que comer o el corazon no lo quiten al instante (updateBrightness).
+//  - apagada: como siempre.
+//  - el juego: como siempre, como un toque.
+// El combate solo avanza al dibujarse: en el salvapantallas o apagada no se dibuja, y al volver
+// soltaria de golpe los ataques atrasados. Pasar a cualquiera de las dos lo abandona.
+PwrView pwrPress() {
+  uint32_t now = millis();
+  PwrView next = pwrNext(pwrViewOf(powerCtx(now)));
+  if (next == VIEW_ON) {
+    screenOff = false;
+    wakeUI();
+    return next;
+  }
+  if (battleOpen()) closeBattle();
+  if (next == VIEW_SAVER) {
+    lastInteract = now - POWER_SAVER_IDLE_MS;
+    gFaceDown = false;
+    saverPinned = true;
+    // el salvapantallas sale ya, no al siguiente frame de su ritmo lento (1 s); con 85 ms
+    // desde el ultimo volcado como minimo, para no pisar su DMA
+    uint32_t iv = frameIntervalMs(powerCtx(now));
+    uint32_t since = now - lastRender;
+    lastRender = now + (since >= 85 ? 0 : 85 - since) - iv;
+  } else {
+    screenOff = true;
+    saverPinned = false;
+  }
+  return next;
+}
+
+static const char *const PWR_VIEW_NAME[] = { "on", "saver", "off" };
+
 // brillo segun sueno + inactividad (proteccion del AMOLED) y bateria
 void updateBrightness(uint32_t now) {
-  // los eventos visibles despiertan la pantalla solos
-  if (!screenOff && (pet.evolving() || pet.ceremony || pet.eating() || pet.showHeart())) {
+  // los eventos visibles despiertan la pantalla solos (no el salvapantallas puesto con PWR)
+  if (!screenOff && !saverPinned && (pet.evolving() || pet.ceremony || pet.eating() || pet.showHeart())) {
     if (dimStageFor(idleSince(now, lastInteract)) != DIM_AWAKE) wakeUI();
     else lastInteract = now;
   }
@@ -701,6 +734,12 @@ void handleSerial() {
     wakeUI();
     Serial.printf("orbit=%u%s origin=%d,%d\n", gOrbitStep, gOrbitForce >= 0 ? " (forced)" : "",
                   roundCanvas->originX(), roundCanvas->originY());
+    Serial.println("DONE");
+  } else if (line == "PWR") {  // como una pulsacion corta del PWR (v1.32): juego -> salvapantallas -> apagada
+    PwrView v = pwrPress();
+    updateBrightness(millis());
+    Serial.printf("pwr view=%s off=%d saver=%d pinned=%d bri=%u\n", PWR_VIEW_NAME[v], screenOff ? 1 : 0,
+                  saverOn() ? 1 : 0, saverPinned ? 1 : 0, brightnessFor(powerCtx(millis())));
     Serial.println("DONE");
   } else if (line == "SAVER") {  // como tras 5 min sin tocar: salvapantallas
     lastInteract = millis() - POWER_DIM2_MS - 1;

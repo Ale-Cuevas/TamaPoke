@@ -186,8 +186,8 @@ attacking until one faints, in 10–20 s after a 3 s VS card and jingle.
   After a special the meter rests for 2 normal attacks. The opponent charges
   its own.
 - **Reward:** +3 JOY whether you win or lose, at most once an hour. Practice
-  isn't counted in any win/loss record. The USER key, or switching the screen
-  off with PWR, quits with no reward.
+  isn't counted in any win/loss record. The USER key, or PWR (to the screensaver
+  or off), quits with no reward.
 - Battles between two boards over the air are next (see the roadmap).
 
 ### Steps, finds & the Backpack (v1.20)
@@ -404,8 +404,11 @@ If one bottoms out it counts as a *slip-up*.
   **brightness** (the sun pill: 4 levels, tap to cycle).
 - Long press (3 s) on the creature = **release** dialog.
 
-**Physical PWR button:** short = screen on/off · long (4 s) = full power-off
-(the RTC stays alive, so time passes even while it's off).
+**Physical PWR button:** short = the next of three views, game → screensaver → screen off → game (v1.32) ·
+long (4 s) = full power-off (the RTC stays alive, so time passes even while it's off). A screensaver that
+came on by itself after 5 minutes counts as the screensaver, so one press turns the screen off; a dimmed or
+face-down screen counts as the game. A touch, USER, BOOT or a shake still wakes the screensaver, and a touch
+wakes the screen from off. Eating or a heart doesn't wake a screensaver you put on with PWR.
 
 **Physical USER button:** back. It closes whatever is open on top: gallery
 detail → grid → home, stat card, rename keyboard (without saving the name),
@@ -582,7 +585,8 @@ What the firmware does to save power (the policy is in `power.h`, covered by `te
   CO5300 only takes even positions; taps follow the picture). After 5 minutes untouched the screen shows a
   **screensaver** instead of the dimmed scene: black, with the pet and the clock drifting slowly around the
   circle (brightness 40, asleep or awake; most pixels are off). A touch, USER, BOOT or a shake brings
-  back whatever was open; the first touch only wakes. Face-down skips it (nobody is looking). `SAVER` and
+  back whatever was open; the first touch only wakes. A short PWR press shows it at once (v1.32). Face-down
+  skips it (nobody is looking). `SAVER` and
   `ORBIT <n>` over serial show them at once.
 - **Static screens are not redrawn.** Keyboard, clock, card pages 2-4 and the starter choice are painted once
   and again only when something on them changes.
@@ -614,7 +618,8 @@ as CSV, the `test/data/imu/` format; any key stops it) · `SHAKE` /
 (a practice battle, against a random or the given species; the result is logged) ·
 `FX <effect>` (show a feedback effect without touching the save: `levelup`, `levelup6`,
 `medal`, `streak`, `goal`, `goal3`, `stat`, `bond`, `train`, `deny`, `press`, `oops`,
-`hatch`) · `PERF` (scene and effects draw time).
+`hatch`) · `PERF` (scene and effects draw time) · `PWR` (a short PWR press: prints the new view,
+`on` / `saver` / `off`).
 
 To test fast: lower `PET_TICK_MS`, `MINUTES_PER_LEVEL` and `FAREWELL_AGE_MIN` in `pet.h`.
 

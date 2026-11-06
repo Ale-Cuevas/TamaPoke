@@ -228,6 +228,15 @@ A short press moves to the next of three views:
   Also update the DEVICE_TESTS power section.
 - Board check by the user: press three times from the game, then the same with the pet asleep.
 
+### Built in v1.32
+
+As planned: `PwrView`, `pwrViewOf()`, `pwrNext()` and `POWER_SAVER_IDLE_MS` in `power.h`;
+`pwrPress()` and `saverPinned` in the sketch (`wakeUI()` clears the flag, `updateBrightness()`
+skips its automatic wake while it's set). The screensaver draws right away instead of at its
+next 1 s frame, keeping 85 ms after the previous flush. The `PWR` serial command prints
+`pwr view=… off=… saver=… pinned=… bri=…`. Three host tests cover the cycle, the view of each
+screen state, and that the PWR screensaver gets the 5-minute one's power rules.
+
 ---
 
 ## #4 GAMES: all games in the PLAY menu
