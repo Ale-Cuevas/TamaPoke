@@ -31,6 +31,7 @@ Write the result on each line: a tick, or what you saw.
 | 22 | v1.25 goals at 3000 / 6000 / 10000: banners, rewards, Rare Candy found and used (+1 level), Marathon medal, WALK ring and flags | [Steps](DEVICE_TESTS.md#steps) | pending |
 | 23 | v1.26 swaying meadow (`BIOME 0`): smooth sway, gust every 12 s, front tufts over the feet, night tint; forest tips sway | [Backgrounds](DEVICE_TESTS.md#backgrounds-v126) | draw time ✓ (16.7 ms vs 14.8 beach); look: pending |
 | 24 | v1.27 new biomes (`BIOME 6/7/8`): power plant, swamp, ruins by day and night; Pikachu, Ekans, Gastly and friends get them | [Backgrounds](DEVICE_TESTS.md#backgrounds-v126) | draw time ✓; look: pending |
+| 25 | v1.28 burn-in: screensaver after 5 min (look, wake paths), orbit every 3 min (no edge garbage, taps land), a battery day | [Power, sleep, buttons](DEVICE_TESTS.md#power-sleep-buttons) | serial ✓ (brightness, wake, face-down, origins); look, taps, battery: pending |
 
 Questions only the board can answer:
 - Where is the USB-C port relative to the screen's top? Bottom edge (buttons on top).

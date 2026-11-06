@@ -117,6 +117,15 @@ yellow label to `/imu/` on the SD card, USER picks the label, a 1 s USER hold sw
 ### Power, sleep, buttons
 - [x] PWR short press turns the screen off and on; holding it 4 s powers the board off and the RTC keeps the time.
 - [ ] After 90 s untouched the screen dims, after 5 min it is almost off; a touch wakes it (the waking touch does nothing else). (90 s dim and touch wake ✓; 5 min not tried)
+- [ ] v1.28 screensaver: after 5 min untouched (or `SAVER` over serial) the screen goes black with the pet and the
+  clock drifting slowly; the clock reads the right time. A touch (it does nothing else), USER, BOOT and a shake each
+  bring back what was open (home, a card page, the clock screen). Face-down (`FACEDOWN`) gives the old dark screen
+  instead. (Serial on the board 2026-11-05: `SAVER` → brightness 16 with the pet asleep, `BACK` → 25, `FACEDOWN`
+  → 8, lifted → 25 ✓; the look: pending)
+- [ ] v1.28 orbit: `ORBIT 2` then `ORBIT 6` (or wait 3 min each): the picture moves 4 px diagonally, with no stale
+  strip or garbage along the edges and no tearing. Taps still land on the buttons at `ORBIT 6` (picture up-left)
+  and `ORBIT 2` (down-right). `ORBIT` alone goes back to the clock. (Serial: origin 10,10 and 2,2 ✓)
+- [ ] v1.28 a day on battery with the screensaver against the v1.21 day (~20 h, light use): ____
 - [ ] On battery with the screen off, it still wakes on a touch (light sleep).
 - [x] USER = back. A press (or `BACK` over serial) closes: gallery detail → grid → home; the stat card from any page; the rename keyboard (the name is not saved, back on the card); the clock screen (time not applied); the minigame and the bag (no reward); the feed menu and the release, evolve and farewell dialogs (the evolve/farewell button stays). On the home screen and during the starter choice or a farewell it does nothing.
 - [ ] USER on a dim screen (90 s) only wakes it. On battery with the screen off (PWR), a short USER press wakes it too (light sleep).

@@ -38,7 +38,9 @@ TEST(power, el_brillo_no_cambia_con_bateria_normal) {
   c.sleeping = true;
   CHECK_EQ((int)brightnessFor(c), 10);
   c = ctx(400000);
-  CHECK_EQ((int)brightnessFor(c), 8);
+  CHECK_EQ((int)brightnessFor(c), SAVER_BRIGHT);  // salvapantallas (v1.28)
+  c.faceDown = true;
+  CHECK_EQ((int)brightnessFor(c), 8);             // boca abajo: casi apagada, como antes
   c = ctx(0);
   c.screenOff = true;
   CHECK_EQ((int)brightnessFor(c), 0);
@@ -57,7 +59,7 @@ TEST(power, con_poca_bateria_el_brillo_tiene_tope_y_no_sube_nunca) {
   CHECK_EQ((int)brightnessFor(c), 60);         // el tope no sube un brillo ya menor
   c = ctx(400000);
   c.batPct = 5;
-  CHECK_EQ((int)brightnessFor(c), 8);
+  CHECK_EQ((int)brightnessFor(c), SAVER_BRIGHT);  // por debajo del tope de bateria critica
 }
 
 TEST(power, el_periodo_de_frame_crece_con_la_inactividad_y_nunca_es_cero_con_pantalla_encendida) {
@@ -187,7 +189,7 @@ TEST(power, el_nivel_de_brillo_fija_el_brillo_despierto) {
   CHECK_EQ((int)brightnessFor(c), 60);
   c = ctx(400000);
   c.brightLevel = 0;
-  CHECK_EQ((int)brightnessFor(c), 8);
+  CHECK_EQ((int)brightnessFor(c), SAVER_BRIGHT);  // 40 < 50, el nivel minimo
   c = ctx(0);
   c.brightLevel = 0;
   c.screenOff = true;
@@ -201,4 +203,24 @@ TEST(power, el_nivel_de_brillo_cicla_y_un_valor_raro_cae_al_de_por_defecto) {
   CHECK_EQ((int)nextBrightLevel(200), 0);  // un guardado corrupto vuelve al principio
   CHECK_EQ((int)brightLevelValue(200), (int)BRIGHT_VALUE[BRIGHT_DEFAULT]);
   for (uint8_t lv = 1; lv < BRIGHT_LEVELS; lv++) CHECK(BRIGHT_VALUE[lv] > BRIGHT_VALUE[lv - 1]);
+}
+
+// v1.28: a los 5 min sin tocar, el salvapantallas (fondo negro, el bicho y la hora)
+TEST(power, el_salvapantallas_sale_a_los_5_minutos_y_no_boca_abajo_ni_apagada) {
+  PowerCtx c = ctx(300000);
+  CHECK(!saverActive(c));
+  c = ctx(300001);
+  CHECK(saverActive(c));
+  c.sleeping = true;
+  CHECK_EQ((int)brightnessFor(c), SAVER_BRIGHT_SLEEP);
+  c.faceDown = true;
+  CHECK(!saverActive(c));
+  c = ctx(400000);
+  c.screenOff = true;  // apagada con PWR: nada
+  CHECK(!saverActive(c));
+  CHECK_EQ((int)brightnessFor(c), 0);
+  CHECK_EQ((int)frameIntervalMs(c), 0);
+  c = ctx(400000);
+  CHECK_EQ((int)frameIntervalMs(c), 1000);  // un frame por segundo, como antes
+  CHECK(lightSleepAllowed(c));
 }

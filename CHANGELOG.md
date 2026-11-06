@@ -8,6 +8,31 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.28] - 2026-11-05
+
+AMOLED burn-in protection: the background and the UI chrome were static, and the
+only protection was idle dimming.
+
+### Added
+
+- **Pixel orbit.** Every 3 minutes the whole picture moves 4 px to the next of 9
+  positions around its usual place (`burnin.h`), so no fixed edge (header,
+  bars, buttons, horizon) burns into the same pixels. Positions stay even, as
+  the CO5300 needs; the strip the picture uncovers is painted black on the
+  panel, static screens are sent again at the new place, and taps are mapped
+  through the current position.
+- **Screensaver.** After 5 minutes untouched the screen no longer shows the
+  whole scene at brightness 8: it goes black with the pet (its idle or sleep
+  animation) and the clock drifting slowly around the circle, at brightness 40
+  (16 while the pet sleeps, never above your level). A touch, USER, BOOT or a
+  shake brings back what was open, the first touch only waking. Face-down keeps
+  the old dark screen. Frame rate (1 fps) and light sleep are unchanged.
+- `SAVER` and `ORBIT [n]` over serial; `HEALTH` prints the orbit step and
+  whether the screensaver is on. Tests in `test/test_burnin.cpp` (even, in-panel
+  positions, small steps; the screensaver stays inside the circle and moves
+  slowly) and `test_power.cpp`; render scenes for the screensaver and a moved
+  picture.
+
 ## [1.27] - 2026-11-05
 
 ### Added

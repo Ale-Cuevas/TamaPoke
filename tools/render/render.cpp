@@ -155,6 +155,9 @@ static void resetUi() {
   gStubTiltSide = 0;
   gStubTiltSlide = false;
   gBright = BRIGHT_DEFAULT;
+  gFaceDown = false;
+  dimStage = DIM_AWAKE;
+  roundCanvas->setShift(0, 0);
   briToastUntil = briSaveAt = 0;
   screenKeyValid = false;
   if (gLang != LANG_EN) { setLang(LANG_EN); applyLangFont(); }
@@ -234,6 +237,17 @@ static const std::vector<Scene> &scenes() {
     // the swaying tall-grass meadow (v1.26): mid-gust, at dusk
     { "home-gust", [] { pokemon(19, 11); gHostMillis = 114000; } },  // wind.h: the gust is mid-screen at 6 s of 12
     { "home-meadow-dusk", [] { pokemon(19, 19); } },
+    // burn-in (v1.28): the screensaver after 5 min idle, and the picture moved by the orbit
+    { "saver", [] { pokemon(25, 13); dimStage = DIM_OFF; }, 2 },
+    { "saver-egg-night", [] {
+       resetUi();
+       if (pet.awaitingStarter()) pet.chooseStarter(4);
+       pet.speciesId = -1;
+       pet.lastSeenEpoch = epochAt(23) + 17 * 60;
+       gHostMillis = 190000;
+       dimStage = DIM_OFF;
+     }, 2 },
+    { "home-orbit", [] { pokemon(25, 13); OrbitShift o = orbitShift(6); roundCanvas->setShift(o.dx, o.dy); }, 2 },
     // new biomes (v1.27): power plant (electric), swamp (poison), ruins (ghost, psychic)
     { "home-power-night", [] { pokemon(25, 22); }, 3 },
     { "home-swamp", [] { pokemon(23, 11); } },
