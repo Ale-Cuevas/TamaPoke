@@ -37,6 +37,7 @@ struct PowerCtx {
   bool charging;
   int batPct;         // 0-100, -1 si no hay bateria
   uint8_t brightLevel;  // nivel elegido, 0..BRIGHT_LEVELS-1
+  bool faceDown;      // boca abajo: nadie mira, la pantalla casi apagada como antes
 };
 
 // ms desde `last`, sin desbordar si `last` es posterior a `now` (un toque atendido despues de
@@ -52,6 +53,15 @@ inline uint8_t dimStageFor(uint32_t idleMs) {
 }
 
 // bateria baja: se ahorra mas (solo si de verdad depende de la bateria)
+// Salvapantallas (v1.28, burnin.h): a los 5 min sin tocar (DIM_OFF) la pantalla ya no es la
+// escena entera a brillo 8 sino un fondo negro con el bicho y la hora, que se ven mejor algo
+// mas brillantes. Casi todo es negro (pixeles apagados), asi que gasta poco igualmente.
+#define SAVER_BRIGHT 40
+#define SAVER_BRIGHT_SLEEP 16  // con el bicho dormido (de noche, a oscuras), mas tenue
+inline bool saverActive(const PowerCtx &c) {
+  return !c.screenOff && !c.faceDown && dimStageFor(c.idleMs) == DIM_OFF;
+}
+
 inline bool batteryLow(const PowerCtx &c) { return c.batPct >= 0 && c.batPct < 20 && !c.charging && !c.usb; }
 inline bool batteryCritical(const PowerCtx &c) { return c.batPct >= 0 && c.batPct < 10 && !c.charging && !c.usb; }
 
@@ -63,7 +73,7 @@ inline uint8_t brightnessFor(const PowerCtx &c) {
   uint8_t lv = brightLevelValue(c.brightLevel);
   uint8_t t = c.sleeping ? 25 : lv;
   if (stage == DIM_LOW) t = c.sleeping ? 10 : 60;
-  else if (stage == DIM_OFF) t = 8;
+  else if (stage == DIM_OFF) t = saverActive(c) ? (c.sleeping ? SAVER_BRIGHT_SLEEP : SAVER_BRIGHT) : 8;
   if (t > lv) t = lv;
   if (batteryCritical(c) && t > 60) t = 60;
   else if (batteryLow(c) && t > 100) t = 100;

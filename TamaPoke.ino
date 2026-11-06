@@ -38,10 +38,11 @@
 #include "steps.h"  // STEP_FLUSH_MS
 #include "battle.h" // motor del combate de practica (logica pura)
 #include "wind.h"   // viento del paisaje: hierba, flores y copas que se mecen (logica pura)
+#include "burnin.h" // contra el quemado del AMOLED: orbita de la imagen y salvapantallas (logica pura)
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.27"
+#define FW_VERSION "1.28"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -209,6 +210,11 @@ uint32_t briToastUntil = 0;  // aviso del nivel en pantalla
 uint32_t gSceneUs = 0, gSceneMaxUs = 0;
 // BIOME <n> (serie): muestra otro paisaje sin tocar el bicho ni el guardado; -1 = el suyo
 int8_t gBiomeOverride = -1;
+// contra el quemado (burnin.h, v1.28): paso de la orbita en uso (ORBIT <n> lo fija por serie),
+// y si esta boca abajo (entonces no hay salvapantallas: casi apagada, como siempre)
+uint8_t gOrbitStep = 0;
+int8_t gOrbitForce = -1;
+bool gFaceDown = false;
 #define BIOME_COUNT 9  // paisajes (dex.h: biome)
 bool swallowGesture = false; // el toque que despierta no acciona nada
 uint32_t holdStart = 0;     // pulsacion larga sobre el bicho
@@ -410,10 +416,11 @@ void loop() {
   static uint32_t lastHealth = 0;
   if (now - lastHealth > 300000) {
     lastHealth = now;
-    Serial.printf("HEALTH up=%lus heap=%u min=%u bat=%d%% mv=%d chg=%d usb=%d dim=%u off=%d bri=%u\n",
+    Serial.printf("HEALTH up=%lus heap=%u min=%u bat=%d%% mv=%d chg=%d usb=%d dim=%u off=%d bri=%u orbit=%u saver=%d\n",
                   (unsigned long)(now / 1000), ESP.getFreeHeap(), ESP.getMinFreeHeap(),
                   batPercent(), batMillivolts(), batCharging() ? 1 : 0,
-                  usbPresent() ? 1 : 0, dimStage, screenOff ? 1 : 0, gBright);
+                  usbPresent() ? 1 : 0, dimStage, screenOff ? 1 : 0, gBright, gOrbitStep,
+                  saverOn() ? 1 : 0);
   }
 
   // Ritmo de dibujo (power.h): 10 fps con el bicho en uso, menos cuanto mas rato sin tocar,
@@ -425,6 +432,11 @@ void loop() {
   // entera, asi que no queda nada a medias; y al quedarse lastRender congelado, el primer
   // frame tras despertar sale en el acto.
   PowerCtx pc = powerCtx(millis());
+  // orbita contra el quemado: la imagen cambia de sitio cada ORBIT_STEP_MS (en el proximo flush)
+  uint32_t orbit = gOrbitForce >= 0 ? (uint32_t)gOrbitForce : orbitStepAt(now);
+  gOrbitStep = orbit % ORBIT_POSITIONS;
+  OrbitShift osh = orbitShift(gOrbitStep);
+  roundCanvas->setShift(osh.dx, osh.dy);
   audioSetIdle(!amplifierWanted(pc));  // el amplificador consume en reposo
   batSetPollMs(powerCacheMs(pc));
   uint32_t interval = frameIntervalMs(pc);
@@ -480,6 +492,7 @@ void onFaceDown(bool down) {
   int h = sceneHour();
   if ((h >= 20 || h < 6) && !pet.isEgg() && !pet.sleeping) pet.sleepDeferred();
   lastInteract = millis() - POWER_DIM2_MS - 1;  // casi apagada, como tras 5 min sin tocar
+  gFaceDown = true;  // y sin salvapantallas: nadie la mira
 }
 
 // estado de consumo actual (ver power.h)
@@ -493,6 +506,7 @@ PowerCtx powerCtx(uint32_t now) {
   c.charging = batCharging();
   c.batPct = batPercent();
   c.brightLevel = gBright;
+  c.faceDown = gFaceDown;
   return c;
 }
 
@@ -503,6 +517,7 @@ void wakeUI() {
   uint32_t iv = frameIntervalMs(powerCtx(now));
   bool slow = !iv || iv > 100;  // pantalla apagada o ritmo lento: se dibuja ya, sin esperar al frame
   lastInteract = now;
+  gFaceDown = false;
   // el frame forzado respeta los 85 ms entre redibujados (si no, solapa el DMA del anterior)
   if (slow) lastRender = (now - lastRender >= 85) ? 0 : lastRender - 15;
   audioSetIdle(false);
@@ -665,6 +680,16 @@ void handleSerial() {
     wakeUI();
     Serial.printf("biome=%u%s\n", homeBiome(), gBiomeOverride >= 0 ? " (override)" : "");
     Serial.println("DONE");
+  } else if (line.startsWith("ORBIT")) {  // ORBIT <n>: fija la posicion de la orbita; ORBIT: la del reloj
+    gOrbitForce = line.length() > 6 ? (int8_t)(line.substring(6).toInt() % ORBIT_POSITIONS) : -1;
+    wakeUI();
+    Serial.printf("orbit=%u%s origin=%d,%d\n", gOrbitStep, gOrbitForce >= 0 ? " (forced)" : "",
+                  roundCanvas->originX(), roundCanvas->originY());
+    Serial.println("DONE");
+  } else if (line == "SAVER") {  // como tras 5 min sin tocar: salvapantallas
+    lastInteract = millis() - POWER_DIM2_MS - 1;
+    gFaceDown = false;
+    Serial.println("DONE");
   } else if (line == "PERF") {  // cuanto tarda el paisaje (drawScene) en dibujarse, en us
     Serial.printf("scene=%luus max=%luus biome=%u\n", (unsigned long)gSceneUs, (unsigned long)gSceneMaxUs,
                   homeBiome());
@@ -768,8 +793,9 @@ void handleTouch() {
   // pida: con un int16_t suelto, dos dedos escribian fuera de la variable
   int16_t xs[TOUCH_MAX_POINTS] = { 0 }, ys[TOUCH_MAX_POINTS] = { 0 };
   bool pressed = touch.getPoint(xs, ys, 1) > 0;
-  // del panel de 480x480 al lienzo de 466x466 donde vive la UI (round_display.h)
-  int16_t x = panelToUi(xs[0]), y = panelToUi(ys[0]);
+  // del panel de 480x480 al lienzo de 466x466 donde vive la UI (round_display.h), que la
+  // orbita contra el quemado mueve unos pixeles: se resta donde esta ahora, no UI_ORIGIN
+  int16_t x = xs[0] - roundCanvas->originX(), y = ys[0] - roundCanvas->originY();
 
   // saco de entrenamiento: cada toque cuenta al instante (aporrear rapido)
   if (sackOpen) {
@@ -1137,6 +1163,9 @@ uint8_t homeBiome() {
   if (gBiomeOverride >= 0) return (uint8_t)gBiomeOverride;
   return pet.isEgg() ? 0 : DEX_TBL[pet.speciesId].biome;
 }
+
+// salvapantallas (v1.28): a los 5 min sin tocar, salvo boca abajo o apagada con PWR
+bool saverOn() { return !screenOff && !gFaceDown && dimStage == DIM_OFF; }
 
 void perfNote(uint32_t us) {
   gSceneUs = us;
@@ -1653,6 +1682,7 @@ static uint32_t screenKey() {
   h = mixKey(h, sdEpoch);
   h = mixKey(h, gBright);                      // el aviso de brillo va encima de todo
   h = mixKey(h, timeLeft(briToastUntil) > 0);  // y al irse tiene que repintarse
+  h = mixKey(h, gOrbitStep);                   // la orbita la mueve: hay que volver a mandarla
   if (kbOpen) {
     h = mixKey(h, nameLen);
     for (int i = 0; i < nameLen; i++) h = mixKey(h, (uint8_t)nameBuf[i]);
@@ -1685,6 +1715,11 @@ uint32_t lastScreenKey = 0;
 bool render() {
   if (itemConfirm && !timeLeft(itemConfirmUntil)) itemConfirm = 0;  // antes de la clave: asi se repinta
   foundShown = false;  // lo vuelve a poner drawWalkNews() si el hallazgo sigue en pantalla
+  if (saverOn()) {  // 5 min sin tocar: salvapantallas, encima de cualquier pantalla
+    screenKeyValid = false;  // al despertar, la pantalla de debajo se vuelve a pintar entera
+    renderScreensaver();
+    return true;
+  }
   if (staticScreen()) {
     uint32_t k = screenKey();
     if (screenKeyValid && k == lastScreenKey) return false;
@@ -3902,6 +3937,39 @@ void drawFighter(uint8_t side, uint8_t act, int x, int ground, uint32_t t, bool 
   setSize(6);
   setCur(x - 18, ground - 60);
   printT("?");
+}
+
+// Fondo negro con el bicho pequeno y la hora, recorriendo la pantalla despacio (burnin.h):
+// casi todos los pixeles apagados, y nada se queda quieto en el mismo sitio.
+void renderScreensaver() {
+  uint32_t now = millis();
+  gfx->fillScreen(RGB565_BLACK);
+  int x, y;
+  saverPos(now, &x, &y);
+  int ground = y + 26;  // los pies del bicho; la hora, debajo
+  if (pet.awaitingStarter()) {
+    // nada que mostrar aun: solo la hora
+  } else if (pet.isEgg()) {
+    drawMap(SPR_EGG, SPRITE_H, x - 32, ground - 64, 2, false);
+  } else if (pmd.loaded) {
+    uint8_t act = pet.sleeping && pmd.has(PMD_SLEEP) ? PMD_SLEEP : PMD_IDLE;
+    drawPmdAct(act, x, ground, now, true, false, 2);
+  } else if (const uint8_t *th = thumbs.get(pet.speciesId)) {
+    drawThumb(th, x - GAL_CELL / 2, ground - GAL_CELL, 2, false);
+  } else {
+    int fi = flashIdxForDex(pet.speciesId);
+    if (fi >= 0) drawMap(SPECIES[fi].sprite, SPRITE_H, x - 32, ground - 64, 2, false);
+  }
+  uint32_t e = pet.lastSeenEpoch;
+  if (e) {
+    char t[8];
+    snprintf(t, sizeof(t), "%02u:%02u", (unsigned)((e / 3600) % 24), (unsigned)((e / 60) % 60));
+    gfx->setTextColor(pet.sleeping ? 0x4208 : 0x8410);  // gris tenue (mas aun con el bicho dormido)
+    setSize(3);
+    setCur(x - textW(t, 3) / 2, ground + 8);
+    printT(t);
+  }
+  gfx->flush();
 }
 
 // cuadro de vida: nombre, nivel, barra (y numeros en el tuyo)

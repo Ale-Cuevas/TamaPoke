@@ -1,7 +1,7 @@
 # TamaPoke
 
 ![Board](https://img.shields.io/badge/board-ESP32--S3%20AMOLED%202.16-E7352C?logo=espressif&logoColor=white)
-![Firmware](https://img.shields.io/badge/firmware-v1.27-8A2BE2)
+![Firmware](https://img.shields.io/badge/firmware-v1.28-8A2BE2)
 [![CI](https://github.com/Ale-Cuevas/TamaPoke/actions/workflows/ci.yml/badge.svg)](https://github.com/Ale-Cuevas/TamaPoke/actions/workflows/ci.yml)
 ![Code](https://img.shields.io/badge/code-MIT-blue)
 ![Languages](https://img.shields.io/badge/languages-8-FFCB05)
@@ -56,7 +56,7 @@ shinies animated from microSD, full life cycle (egg by rarity → evolution → 
 behind a decision dialog), bred-Pokédex with gallery, battle stats (genes +
 training), retention hooks (streak / bond / medals / name), biome + real-time
 backgrounds, ball minigame, training bag, animated bath, RTC with offline
-progression, battery (AXP2101) and PWR button, anti-burn-in dimming,
+progression, battery (AXP2101) and PWR button, AMOLED burn-in protection (pixel orbit + screensaver),
 **sound (ES8311)**, **8 UI languages (English default)**, **starter choice on
 first run**, and a one-click **web installer**.
 
@@ -565,6 +565,13 @@ What the firmware does to save power (the policy is in `power.h`, covered by `te
   4 fps when the screen dims (90 s); 1 fps when it is almost off (5 min); 2 fps while the pet sleeps and
   nobody touches it. The ball minigame keeps its 85 ms step. Over 10 idle minutes this sends about 68 % fewer
   frames to the panel (each one is a full redraw plus a 434 KB QSPI transfer).
+- **Burn-in protection.** Every 3 minutes the whole picture moves 4 px to the next of 9 positions around
+  its usual place, so the header, bars, buttons and horizon never sit on the same pixels for long (the
+  CO5300 only takes even positions; taps follow the picture). After 5 minutes untouched the screen shows a
+  **screensaver** instead of the dimmed scene: black, with the pet and the clock drifting slowly around the
+  circle (brightness 40, 16 while the pet sleeps; most pixels are off). A touch, USER, BOOT or a shake brings
+  back whatever was open; the first touch only wakes. Face-down skips it (nobody is looking). `SAVER` and
+  `ORBIT <n>` over serial show them at once.
 - **Static screens are not redrawn.** Keyboard, clock, card pages 2-4 and the starter choice are painted once
   and again only when something on them changes.
 - **Light sleep when nobody is looking.** With the screen off, or almost off (5 min), and on battery, the CPU
