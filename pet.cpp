@@ -33,6 +33,7 @@ void Pet::newEgg() {
   hygiene = 100;
   poops = 0;
   ageMinutes = 0;
+  growMin = 0;
   careMistakes = 0;
   mistakeCooldown = 0;
   sleeping = false;
@@ -81,6 +82,7 @@ void Pet::syncClock(uint32_t nowEpoch) {
       if (ageMinutes >= 3) hatch();  // eclosiona en tu ausencia
       continue;
     }
+    growMin++;  // crece igual apagado que en vivo, dormido o despierto
     if (sleeping) {  // descanso: baja lento y con suelo, igual que en vivo
       energy = clamp100(energy + 6);
       if (ageMinutes % 2 == 0) {
@@ -131,6 +133,7 @@ void Pet::tick() {
     if (ageMinutes >= 3) hatch();  // si no lo tocas, eclosiona solo a los 3 min
     return;
   }
+  growMin++;  // el nivel sale de aqui (growth.h), despierto o dormido
 
   // el sueño es descanso: la energia se recupera y las necesidades bajan MUCHO
   // mas lento que despierto y con suelo (amanece pidiendo algo de mimo, no a
@@ -662,8 +665,13 @@ void Pet::addSteps(uint32_t n, uint32_t day) {
 // premio de cada meta. El banner y la racha (la primera) se dan siempre; lo demas, con el
 // bicho nacido y despierto, como el resto de premios de caminar. Los regalos no cuentan
 // para el tope de hallazgos al azar, y el vinculo va fuera del tope diario de addBond.
+// v1.36: cada meta sube niveles (STEP_GOAL_LEVELS: +1, +1, +2), con la barra igual de llena.
 void Pet::goalReward(uint8_t tier, bool rewarded) {
   if (rewarded) {
+    uint16_t before = level();
+    growMin = addLevels(growMin, STEP_GOAL_LEVELS[tier - 1]);
+    uint16_t gained = level() - before;  // menos en el tope (999)
+    goalBannerLv = (uint8_t)(goalBannerLv + gained);
     if (tier == 1) {
       joy = clamp100(joy + GOAL_JOY);
       bonusFindsToday++;
@@ -673,15 +681,12 @@ void Pet::goalReward(uint8_t tier, bool rewarded) {
       bond = clamp100(bond + GOAL2_BOND);
       bonusFindsToday++;
       findItem();
-    } else {
+    } else {  // 10000: +2 niveles (arriba) en vez del Caramelo Raro de la v1.25
       joy = clamp100(joy + GOAL3_JOY);
       bond = clamp100(bond + GOAL3_BOND);
-      bonusFindsToday++;
-      findsToday++;
-      giveFound(IT_RARECANDY);
       pendingMedals |= MED_MARATHON;
-      checkMedals(false);
     }
+    checkMedals(false);  // las de nivel (10, 25, 50) que abran los niveles nuevos, y MARATON
   }
   if (tier == 1) registerCare(false);  // cuenta como dia de cuidado para la racha
 }
@@ -703,7 +708,7 @@ void Pet::giveFound(uint8_t it) {
   bool full = items[it] >= cap;
   if (!full) items[it]++;
   // cola llena (muchos sin ver con la pantalla apagada): se pierde el aviso mas antiguo, no
-  // el nuevo, que puede ser el Caramelo Raro de la meta de 10000. El objeto ya esta en la mochila.
+  // el nuevo, que puede ser el regalo de una meta. El objeto ya esta en la mochila.
   if (foundN == FOUND_QUEUE) popFound();
   foundQ[foundN] = it;
   foundFull[foundN] = full;
@@ -744,9 +749,9 @@ bool Pet::useItem(uint8_t it) {
     eatUntil = millis() + EAT_ANIM_MS;
     heartUntil = millis() + HEART_MS;
   } else if (it == IT_RARECANDY) {
-    // +1 nivel: la edad salta al principio del siguiente (el nivel son las horas de edad),
-    // asi que puede abrir la evolucion y las medallas de nivel
-    ageMinutes = (ageMinutes / MINUTES_PER_LEVEL + RARE_CANDY_LEVELS) * MINUTES_PER_LEVEL;
+    // +1 nivel (v1.35): salta el crecimiento, no la edad, y la barra conserva lo que llevaba.
+    // Puede abrir la evolucion y las medallas de nivel.
+    growMin = addLevels(growMin, RARE_CANDY_LEVELS);
     heartUntil = millis() + HEART_MS;
     checkMedals(false);
   } else {
@@ -853,6 +858,7 @@ void Pet::save() {
   prefs.putBool("stpk", starterPick);
   prefs.putBytes("dexsh", dexShinyReg, sizeof(dexShinyReg));
   prefs.putUInt("age", ageMinutes);
+  prefs.putUInt("grow", growMin);
   prefs.putShort("dexn", speciesId);
   prefs.putShort("eggT2", eggTarget);
   prefs.putUChar("crack", eggTaps);
@@ -967,6 +973,11 @@ void Pet::load() {
   }
   bondDay = prefs.getUInt("bondD", 0);
   bondToday = prefs.getUChar("bondT", 0);
+  // crecimiento (v1.35). Un guardado anterior no trae "grow": el nivel salia de la edad
+  // (1 nivel por hora). Se traduce a la curva nueva con el mismo nivel y la barra igual de
+  // llena, para que nadie suba ni baje de nivel al actualizar. Va despues de speciesId.
+  if (prefs.isKey("grow")) growMin = prefs.getUInt("grow", 0);
+  else growMin = isEgg() ? 0 : growthFromLegacyAge(ageMinutes);
   // siembra: la mascota actual cuenta como criada (guardados antiguos)
   if (speciesId >= 1) registerSpecies(speciesId);
 }

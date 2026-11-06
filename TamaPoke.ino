@@ -44,7 +44,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.34"
+#define FW_VERSION "1.36"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -661,8 +661,10 @@ void handleSerial() {
       Serial.printf("especie #%d %s\n", n, DEX_TBL[n].name);
     }
     Serial.println("DONE");
-  } else if (line.startsWith("LVL ")) {
-    pet.ageMinutes = (uint32_t)line.substring(4).toInt() * MINUTES_PER_LEVEL;
+  } else if (line.startsWith("LVL ")) {  // al principio de ese nivel (crecimiento, no edad: v1.35)
+    int n = line.substring(4).toInt();
+    if (n >= 1 && n <= LEVEL_MAX) pet.setLevel((uint16_t)n);
+    Serial.printf("lv=%u grow=%lu\n", pet.level(), (unsigned long)pet.growMin);
     Serial.println("DONE");
   } else if (line.startsWith("TIME ")) {
     uint32_t e = (uint32_t)line.substring(5).toInt();
@@ -831,6 +833,9 @@ void handleSerial() {
     Serial.printf("shiny=%d streak=%u/%u bond=%u bondT=%u medals=0x%X(%u) nick=%s\n",
                   pet.shiny, pet.streak, pet.bestStreak, pet.bond, pet.bondGainedToday(), pet.medals,
                   pet.totalMedals, pet.nick);
+    // crecimiento (v1.35, growth.h): de el sale el nivel; la edad va aparte
+    Serial.printf("grow=%lu lv=%u into=%u/%u age=%lu\n", (unsigned long)pet.growMin, pet.level(),
+                  pet.levelMinutesInto(), pet.levelMinutesCost(), (unsigned long)pet.ageMinutes);
     Serial.printf("steps=%lu/%lu finds=%u bonus=%u goal=%u bpack=%u/%u/%u/%u charm=%u candy=%u imu=%d\n",
                   (unsigned long)pet.stepsToday, (unsigned long)pet.stepsTotal, pet.findsToday,
                   pet.bonusFindsToday, pet.goalTierOn(pet.dayNumber()), pet.items[IT_GOLDEN],
@@ -1787,7 +1792,8 @@ static uint32_t screenKey() {
     h = mixKey(h, audioEnabled());
     h = mixKey(h, gLang);
   } else if (cardOpen) {
-    for (uint32_t v : { (uint32_t)pet.speciesId, (uint32_t)pet.shiny, (uint32_t)pet.ageMinutes, (uint32_t)pet.streak,
+    // growMin: el nivel y su barra (v1.35); un Caramelo Raro o una meta lo saltan sin tocar la edad
+    for (uint32_t v : { (uint32_t)pet.speciesId, (uint32_t)pet.shiny, (uint32_t)pet.ageMinutes, pet.growMin, (uint32_t)pet.streak,
                         (uint32_t)pet.bestStreak, (uint32_t)pet.bond, (uint32_t)pet.medals, (uint32_t)pet.weight,
                         (uint32_t)pet.trAtk, (uint32_t)pet.trDef, (uint32_t)pet.trSpe, (uint32_t)pet.geneAtk,
                         (uint32_t)pet.geneDef, (uint32_t)pet.geneSpe, (uint32_t)pet.careMistakes,
@@ -2573,8 +2579,9 @@ void fxCollect(uint32_t now) {
     if (m & (1 << i)) fxq.push(FXB_MEDAL, i);
   uint16_t days = pet.takeMilestone();
   if (days) fxq.push(FXB_MILESTONE, days);
-  uint8_t tier = pet.takeGoalBanner();
-  if (tier) fxq.push(FXB_GOAL, tier);
+  uint8_t goalLv = 0;
+  uint8_t tier = pet.takeGoalBanner(&goalLv);
+  if (tier) fxq.push(FXB_GOAL, tier, goalLv);  // b = niveles que dieron (v1.36): "+N Lv"
   fxo.step(now, false);  // caducan los que no llegan a verse
 }
 
@@ -2621,8 +2628,8 @@ bool fxDebug(const String &k) {
   else if (k == "levelup6") fxq.push(FXB_LEVELUP, lv, lv + 6, false);
   else if (k == "medal") fxq.push(FXB_MEDAL, 0);
   else if (k == "streak") fxq.push(FXB_MILESTONE, 7);
-  else if (k == "goal") fxq.push(FXB_GOAL, 1);
-  else if (k == "goal3") fxq.push(FXB_GOAL, STEP_GOAL_TIERS);
+  else if (k == "goal") fxq.push(FXB_GOAL, 1, STEP_GOAL_LEVELS[0]);
+  else if (k == "goal3") fxq.push(FXB_GOAL, STEP_GOAL_TIERS, STEP_GOAL_LEVELS[STEP_GOAL_TIERS - 1]);
   else if (k == "stat") {
     fxo.push(FXO_STAT, 0, 25, now);
     fxo.push(FXO_STAT, 1, 10, now);
@@ -2748,24 +2755,32 @@ void drawFxBanner(uint32_t now) {
     uint8_t tier = ev.a ? (uint8_t)ev.a : 1;
     char l2[32];
     snprintf(l2, sizeof(l2), T(S_STEPS_FMT), (unsigned long)STEP_GOALS[tier - 1]);
-    if (tier == STEP_GOAL_TIERS) {  // 10000: banner mayor, con el Caramelo Raro y una bandera por meta
+    // niveles que dio la meta (v1.36): "+1 Lv" / "+2 Lv"; nada si se cruzo dormido
+    char lvl[12] = "";
+    if (ev.b) snprintf(lvl, sizeof(lvl), "+%u Lv", (unsigned)ev.b);
+    if (tier == STEP_GOAL_TIERS) {  // 10000: banner mayor, con una bandera por meta y "+2 Lv"
       gfx->fillRoundRect(53, 128 + oy, 360, 140, 18, UI_BAR_WARN);
       gfx->drawRoundRect(53, 128 + oy, 360, 140, 18, UI_INK);
       gfx->drawRoundRect(56, 131 + oy, 354, 134, 16, UI_INK);
       for (int k = 0; k < STEP_GOAL_TIERS; k++) drawMap(SPR_ICON_FLAG, 16, CX - 44 + k * 30 - 8, 142 + oy, 2, false);
       gfx->setTextColor(UI_INK);
       setSize(3);
-      setCur(centerX(T(S_GOAL_DONE), 3), 184 + oy);
+      setCur(centerX(T(S_GOAL_DONE), 3), 180 + oy);
       printT(T(S_GOAL_DONE));
       setSize(2);
-      setCur(centerX(l2, 2), 218 + oy);
+      setCur(centerX(l2, 2), 212 + oy);
       printT(l2);
-      drawMap(SPR_ICON_RARECANDY, 16, CX - 16, 236 + oy, 2, false);
+      if (lvl[0]) {
+        setSize(3);
+        setCur(centerX(lvl, 3), 236 + oy);
+        printT(lvl);
+      }
       drawConfetti(e);
       return;
     }
-    gfx->fillRoundRect(73, 150 + oy, 320, 96, 16, UI_BAR_WARN);
-    gfx->drawRoundRect(73, 150 + oy, 320, 96, 16, UI_INK);
+    int bh = lvl[0] ? 120 : 96;  // con "+N Lv", una linea mas
+    gfx->fillRoundRect(73, 150 + oy, 320, bh, 16, UI_BAR_WARN);
+    gfx->drawRoundRect(73, 150 + oy, 320, bh, 16, UI_INK);
     drawMap(SPR_ICON_FLAG, 16, 88, 166 + oy, 2, false);
     gfx->setTextColor(UI_INK);
     setSize(3);
@@ -2774,6 +2789,10 @@ void drawFxBanner(uint32_t now) {
     setSize(2);
     setCur(centerX(l2, 2), 212 + oy);
     printT(l2);
+    if (lvl[0]) {
+      setCur(centerX(lvl, 2), 238 + oy);
+      printT(lvl);
+    }
     return;
   }
   // medalla nueva o hito de racha
@@ -3090,18 +3109,22 @@ void renderCardProgress() {
   setCur(centerX(lv, 5), 86);
   printT(lv);
 
-  // barra de progreso al siguiente nivel (1 nivel = 60 min de juego)
-  uint8_t into = pet.ageMinutes % MINUTES_PER_LEVEL;
+  // barra de progreso al siguiente nivel (v1.35: cada nivel cuesta lo suyo, 20 a 180 min,
+  // growth.h). En el tope (999) la barra queda llena y sin "siguiente nivel".
+  bool lvMax = pet.level() >= LEVEL_MAX;
+  uint16_t into = pet.levelMinutesInto(), cost = pet.levelMinutesCost();
   int bx = 93, bw = 280, by = 158, bh = 22;
   gfx->fillRoundRect(bx, by, bw, bh, 6, UI_TRACK);
-  int fw = (bw - 4) * into / MINUTES_PER_LEVEL;
+  int fw = lvMax ? bw - 4 : (int)((uint32_t)(bw - 4) * into / cost);
   if (fw > 0) gfx->fillRoundRect(bx + 2, by + 2, fw, bh - 4, 5, UI_BAR_OK);
-  char nx[32];
-  snprintf(nx, sizeof(nx), T(S_NEXT_LVL_FMT), MINUTES_PER_LEVEL - into, pet.level() + 1);
-  gfx->setTextColor(UI_INK);
-  setSize(2);
-  setCur(centerX(nx, 2), by + 32);
-  printT(nx);
+  if (!lvMax) {
+    char nx[32];
+    snprintf(nx, sizeof(nx), T(S_NEXT_LVL_FMT), (unsigned)(cost - into), (unsigned)(pet.level() + 1));
+    gfx->setTextColor(UI_INK);
+    setSize(2);
+    setCur(centerX(nx, 2), by + 32);
+    printT(nx);
+  }
 
   // estado de evolucion
   gfx->setTextColor(UI_TRACK);

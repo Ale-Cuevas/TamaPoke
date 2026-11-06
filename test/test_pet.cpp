@@ -265,36 +265,41 @@ TEST(tick, buen_cuidado_12h_forja_defensa) {
 }
 
 // ---------------------------------------------------------------- niveles
-TEST(level, un_nivel_por_hora_de_juego) {
+// v1.35: el nivel sale del crecimiento (growth.h), no de la edad
+TEST(level, sale_del_crecimiento_no_de_la_edad) {
   Pet p;
   makePet(p, 4);
-  CHECK_EQ(p.level(), (uint8_t)1);
-  p.ageMinutes = 59;
-  CHECK_EQ(p.level(), (uint8_t)1);
-  p.ageMinutes = 60;
-  CHECK_EQ(p.level(), (uint8_t)2);
-  p.ageMinutes = 24 * 60;
-  CHECK_EQ(p.level(), (uint8_t)25);
+  CHECK_EQ(p.level(), (uint16_t)1);
+  p.growMin = 19;
+  CHECK_EQ(p.level(), (uint16_t)1);
+  p.growMin = 20;  // 20 min por nivel hasta el 10
+  CHECK_EQ(p.level(), (uint16_t)2);
+  p.ageMinutes = 24 * 60;  // la edad sola ya no sube de nivel
+  CHECK_EQ(p.level(), (uint16_t)2);
+  p.growMin = levelStart(25);
+  CHECK_EQ(p.level(), (uint16_t)25);
 }
 
 // Arreglado en v1.8: level() era uint8_t y daba la vuelta a 0 a los ~10,6 dias
 TEST(level, no_desborda_con_mascotas_longevas) {
   Pet p;
   makePet(p, 4);
-  p.ageMinutes = 254 * 60;
-  uint8_t before = p.level();
-  CHECK_EQ(before, (uint8_t)255);
-  p.ageMinutes = 255 * 60;  // nivel 256 -> deberia seguir subiendo (o saturar)
-  CHECK_MSG(p.level() >= before, "el nivel nunca deberia bajar al envejecer");
+  p.setLevel(255);
+  uint16_t before = p.level();
+  CHECK_EQ(before, (uint16_t)255);
+  p.setLevel(256);  // nivel 256 -> deberia seguir subiendo (o saturar)
+  CHECK_MSG(p.level() >= before, "el nivel nunca deberia bajar al crecer");
+  p.growMin = 0xFFFFFFF0UL;
+  CHECK_EQ(p.level(), (uint16_t)LEVEL_MAX);
 }
 
 // ---------------------------------------------------------------- evolucion
 TEST(evolve, requiere_nivel_y_buen_cuidado) {
   Pet p;
   makePet(p, 4);  // CHARMANDER evoluciona a nivel 16
-  p.ageMinutes = 14 * 60;  // nivel 15
+  p.setLevel(15);  // nivel 15
   CHECK(!p.canEvolveNow());
-  p.ageMinutes = 15 * 60;  // nivel 16
+  p.setLevel(16);  // nivel 16
   CHECK(p.canEvolveNow());
   p.fullness = 39;  // una barra por debajo de 40 lo bloquea
   CHECK(!p.canEvolveNow());
@@ -305,10 +310,10 @@ TEST(evolve, requiere_nivel_y_buen_cuidado) {
 TEST(evolve, cada_descuido_retrasa_un_nivel) {
   Pet p;
   makePet(p, 4);
-  p.ageMinutes = 15 * 60;  // nivel 16
+  p.setLevel(16);  // nivel 16
   p.careMistakes = 1;
   CHECK(!p.canEvolveNow());
-  p.ageMinutes = 16 * 60;  // nivel 17
+  p.setLevel(17);  // nivel 17
   CHECK(p.canEvolveNow());
 }
 
@@ -317,14 +322,14 @@ TEST(evolve, muchos_descuidos_no_adelantan_la_evolucion) {
   Pet p;
   makePet(p, 4);       // CHARMANDER: evoluciona a nivel 16
   p.careMistakes = 250;  // 250 descuidos: deberia estar lejisimos de evolucionar
-  p.ageMinutes = 9 * 60;  // nivel 10
+  p.setLevel(10);  // nivel 10
   CHECK_MSG(!p.canEvolveNow(), "con 250 descuidos no puede evolucionar a nivel 10");
 }
 
 TEST(evolve, no_evoluciona_dormido_ni_de_huevo_ni_en_ceremonia) {
   Pet p;
   makePet(p, 4);
-  p.ageMinutes = 20 * 60;
+  p.setLevel(21);
   CHECK(p.canEvolveNow());
   p.toggleLight();
   CHECK(!p.canEvolveNow());
@@ -341,7 +346,7 @@ TEST(evolve, no_evoluciona_dormido_ni_de_huevo_ni_en_ceremonia) {
 TEST(evolve, transforma_registra_y_anima) {
   Pet p;
   makePet(p, 4);
-  p.ageMinutes = 20 * 60;
+  p.setLevel(21);
   p.evolve();
   CHECK_EQ(p.speciesId, (int16_t)5);
   CHECK_EQ(p.prevSpeciesId, (int16_t)4);
@@ -355,7 +360,7 @@ TEST(evolve, transforma_registra_y_anima) {
 TEST(evolve, forma_final_no_evoluciona) {
   Pet p;
   makePet(p, 6);  // CHARIZARD
-  p.ageMinutes = 200 * 60;
+  p.setLevel(201);
   CHECK(!p.canEvolveNow());
   p.evolve();
   CHECK_EQ(p.speciesId, (int16_t)6);
@@ -366,7 +371,7 @@ TEST(evolve, eevee_se_ramifica_en_134_136) {
     randomSeed(seed);
     Pet p;
     makePet(p, DEX_EEVEE);
-    p.ageMinutes = 40 * 60;
+    p.setLevel(41);
     CHECK(p.canEvolveNow());
     p.evolve();
     CHECK_RANGE(p.speciesId, (int16_t)134, (int16_t)136);
@@ -377,12 +382,12 @@ TEST(evolve, eevee_se_ramifica_en_134_136) {
 TEST(evolve, boton_de_evolucion_se_pospone_al_declinar) {
   Pet p;
   makePet(p, 4);
-  p.ageMinutes = 15 * 60;  // nivel 16
+  p.setLevel(16);  // nivel 16
   CHECK(p.wantEvolveButton());
   p.declineEvolve();
   CHECK_MSG(!p.wantEvolveButton(), "'mantener forma' quita el boton");
   CHECK_MSG(p.canEvolveNow(), "pero la evolucion sigue disponible");
-  p.ageMinutes = 16 * 60;  // sube de nivel: se re-ofrece
+  p.setLevel(17);  // sube de nivel: se re-ofrece
   CHECK(p.wantEvolveButton());
 }
 
@@ -392,11 +397,11 @@ TEST(stats, formula_base_por_genes_mas_nivel_y_entreno) {
   makePet(p, 4);  // CHARMANDER: atk 52, def 43, spe 65
   p.geneAtk = p.geneDef = p.geneSpe = 100;
   p.trAtk = p.trDef = p.trSpe = 0;
-  p.ageMinutes = 0;  // nivel 1
+  p.setLevel(1);   // nivel 1
   CHECK_EQ(p.atkStat(), (uint16_t)(52 + 1));
   CHECK_EQ(p.defStat(), (uint16_t)(43 + 1));
   CHECK_EQ(p.speStat(), (uint16_t)(65 + 1));
-  p.ageMinutes = 9 * 60;  // nivel 10
+  p.setLevel(10);  // nivel 10
   p.trAtk = 20;
   CHECK_EQ(p.atkStat(), (uint16_t)(52 + 10 + 20));
   p.geneAtk = 110;
@@ -663,7 +668,7 @@ TEST(medals, nivel_10_da_medalla) {
   Pet p;
   makePet(p, 4);
   CHECK(!p.hasMedal(MED_LV10));
-  p.ageMinutes = 9 * 60 - 1;
+  p.growMin = levelStart(10) - 1;
   advance(p, 1);
   CHECK(p.hasMedal(MED_LV10));
   CHECK(p.takeMedal() & MED_LV10);  // (con EN FORMA a la vez: nivel >= 5 sin descuidos)
@@ -674,7 +679,7 @@ TEST(medals, en_forma_llega_al_nivel_5) {
   Pet p;
   makePet(p, 4);
   p.weight = 0;
-  p.ageMinutes = 4 * 60 - 1;
+  p.growMin = levelStart(5) - 1;
   advance(p, 1);
   CHECK(p.hasMedal(MED_FIT));
   CHECK_EQ(p.totalMedals, (uint16_t)1);
@@ -682,7 +687,7 @@ TEST(medals, en_forma_llega_al_nivel_5) {
   Pet q;
   makePet(q, 4);
   q.careMistakes = 1;   // un descuido la deja fuera
-  q.ageMinutes = 4 * 60 - 1;
+  q.growMin = levelStart(5) - 1;
   advance(q, 1);
   CHECK(!q.hasMedal(MED_FIT));
 }
@@ -691,7 +696,7 @@ TEST(medals, cada_medalla_nueva_suma_al_total) {
   Pet p;
   makePet(p, 4);
   p.weight = 0;
-  p.ageMinutes = 9 * 60 - 1;
+  p.growMin = levelStart(10) - 1;
   advance(p, 1);  // cruza nivel 10: MED_LV10 + MED_FIT de golpe
   CHECK(p.hasMedal(MED_LV10));
   CHECK(p.hasMedal(MED_FIT));
@@ -1088,16 +1093,17 @@ TEST(steps, tope_de_hallazgos_al_dia) {
   makeWalker(p);
   mockForceRandom(0);
   p.addSteps(2900, DIA);  // 3 hallazgos, sin la meta
-  p.addSteps(20000, DIA + 1);  // otro dia: 5 al azar, y aparte los regalos de las 3 metas
+  p.addSteps(20000, DIA + 1);  // otro dia: 5 al azar, y aparte los regalos de 3000 y 6000
   CHECK_EQ(p.randomFindsToday(), (uint8_t)FINDS_PER_DAY);
-  CHECK_EQ(p.bonusFindsToday, (uint8_t)STEP_GOAL_TIERS);
-  CHECK_EQ(p.findsToday, (uint8_t)(FINDS_PER_DAY + STEP_GOAL_TIERS));
+  CHECK_EQ(p.bonusFindsToday, (uint8_t)(STEP_GOAL_TIERS - 1));  // v1.36: la de 10000 da niveles, no objeto
+  CHECK_EQ(p.findsToday, (uint8_t)(FINDS_PER_DAY + STEP_GOAL_TIERS - 1));
   CHECK_EQ(p.items[IT_GOLDEN], (uint8_t)ITEM_MAX);  // azar 0: todo bayas (3 + 5 + 2, tope 9)
-  CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)1);      // el de la meta de 10000
-  // los avisos de un dia entero caben en la cola: el del Caramelo Raro no se pierde
-  uint8_t last = IT_COUNT;
-  while (p.hasFound()) { last = p.peekFound(); p.popFound(); }
-  CHECK_EQ(last, (uint8_t)IT_RARECANDY);
+  CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)0);
+  // la cola guarda los ultimos FOUND_QUEUE avisos: los 7 de hoy caben enteros (se pierden
+  // los mas antiguos, de ayer)
+  uint8_t n = 0;
+  while (p.hasFound()) { n++; p.popFound(); }
+  CHECK_EQ(n, (uint8_t)FOUND_QUEUE);
 }
 
 TEST(steps, probabilidades_de_cada_objeto) {
@@ -1345,41 +1351,88 @@ TEST(steps, las_tres_metas_saltan_una_vez_al_dia_y_en_orden) {
   makeWalker(p);
   setStats(p, 80, 20, 80, 100);
   mockForceRandom(400);  // hallazgos al azar cada 1200 pasos
+  uint8_t lv = 0;
+  CHECK_EQ(p.level(), (uint16_t)1);
   p.addSteps(3000, DIA);
   CHECK_EQ(p.goalTierOn(DIA), (uint8_t)1);
-  CHECK_EQ(p.takeGoalBanner(), (uint8_t)1);
+  CHECK_EQ(p.takeGoalBanner(&lv), (uint8_t)1);
+  CHECK_EQ(lv, (uint8_t)1);
+  CHECK_EQ(p.level(), (uint16_t)2);  // v1.36: +1 nivel
   CHECK_EQ(p.streak, (uint16_t)1);
   uint8_t joy = p.joy, bond = p.bond, bonus = p.bonusFindsToday;
   p.addSteps(2999, DIA);
   CHECK_EQ(p.goalTierOn(DIA), (uint8_t)1);
   CHECK_EQ(p.takeGoalBanner(), (uint8_t)0);
+  CHECK_EQ(p.level(), (uint16_t)2);
   p.addSteps(1, DIA);  // 6000
   CHECK_EQ(p.goalTierOn(DIA), (uint8_t)2);
-  CHECK_EQ(p.takeGoalBanner(), (uint8_t)2);
+  CHECK_EQ(p.takeGoalBanner(&lv), (uint8_t)2);
+  CHECK_EQ(lv, (uint8_t)1);
+  CHECK_EQ(p.level(), (uint16_t)3);  // +1 mas
   CHECK_EQ(p.bonusFindsToday, (uint8_t)(bonus + 1));
   CHECK_MSG(p.joy >= joy + GOAL2_JOY, "la meta de 6000 da felicidad");
   CHECK_MSG(p.bond >= bond + GOAL2_BOND, "y vinculo");
   CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)0);
+  bonus = p.bonusFindsToday;
   p.addSteps(4000, DIA);  // 10000
   CHECK_EQ(p.goalTierOn(DIA), (uint8_t)3);
-  CHECK_EQ(p.takeGoalBanner(), (uint8_t)3);
-  CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)1);
+  CHECK_EQ(p.takeGoalBanner(&lv), (uint8_t)3);
+  CHECK_EQ(lv, (uint8_t)2);
+  CHECK_EQ(p.level(), (uint16_t)5);  // +2: la de 10000 ya no da Caramelo Raro
+  CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)0);
+  CHECK_EQ(p.bonusFindsToday, bonus);  // ni un regalo en la mochila
   CHECK(p.hasMedal(MED_MARATHON));
   CHECK_EQ(p.streak, (uint16_t)1);  // la racha solo la cuenta la primera
   uint16_t total = p.totalMedals;
   p.addSteps(5000, DIA);
   CHECK_EQ(p.takeGoalBanner(), (uint8_t)0);  // ninguna se repite el mismo dia
-  CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)1);
+  CHECK_EQ(p.level(), (uint16_t)5);
   // al dia siguiente, otra vez las tres; la medalla no se cuenta dos veces
   p.setClock((DIA + 1) * 86400 + 3600);
   p.addSteps(10000, DIA + 1);
-  CHECK_EQ(p.takeGoalBanner(), (uint8_t)3);  // cruzadas de golpe: el banner muestra la mas alta
+  CHECK_EQ(p.takeGoalBanner(&lv), (uint8_t)3);  // cruzadas de golpe: el banner muestra la mas alta
+  CHECK_EQ(lv, (uint8_t)4);                     // y los niveles de las tres
+  CHECK_EQ(p.level(), (uint16_t)9);
   CHECK_EQ(p.goalTierOn(DIA + 1), (uint8_t)3);
   CHECK_EQ(p.goalTierOn(DIA), (uint8_t)0);
-  CHECK_EQ(p.bonusFindsToday, (uint8_t)STEP_GOAL_TIERS);
-  CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)2);
+  CHECK_EQ(p.bonusFindsToday, (uint8_t)(STEP_GOAL_TIERS - 1));  // los regalos de 3000 y 6000
+  CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)0);
   CHECK_EQ(p.streak, (uint16_t)2);
   CHECK_EQ(p.totalMedals, total);
+}
+
+// v1.36: la barra conserva lo que llevaba y la edad no cambia
+TEST(steps, los_niveles_de_las_metas_no_tiran_el_progreso_ni_envejecen) {
+  Pet p;
+  makeWalker(p);
+  p.growMin = levelStart(31) + 65;  // nivel 31 a medio camino (131 min)
+  uint32_t age = p.ageMinutes;
+  p.addSteps(3000, DIA);
+  CHECK_EQ(p.level(), (uint16_t)32);
+  CHECK_EQ(p.levelMinutesInto(), (uint16_t)(65 * levelCost(32) / levelCost(31)));
+  CHECK_EQ(p.ageMinutes, age);
+}
+
+TEST(steps, los_niveles_de_las_metas_se_paran_en_el_tope) {
+  Pet p;
+  makeWalker(p);
+  p.setLevel(LEVEL_MAX - 1);
+  uint8_t lv = 0;
+  p.addSteps(10000, DIA);  // +4, pero solo queda 1
+  CHECK_EQ(p.level(), (uint16_t)LEVEL_MAX);
+  CHECK_EQ(p.takeGoalBanner(&lv), (uint8_t)3);
+  CHECK_EQ(lv, (uint8_t)1);
+}
+
+// el nivel 10 de una meta da su medalla al momento, no en el siguiente minuto
+TEST(steps, un_nivel_de_meta_da_la_medalla_de_nivel) {
+  Pet p;
+  makeWalker(p);
+  p.setLevel(9);
+  p.medals = 0;
+  p.addSteps(3000, DIA);
+  CHECK_EQ(p.level(), (uint16_t)10);
+  CHECK(p.hasMedal(MED_LV10));
 }
 
 TEST(steps, el_vinculo_de_las_metas_va_fuera_del_tope_diario) {
@@ -1399,9 +1452,13 @@ TEST(steps, dormido_las_metas_marcan_el_dia_sin_premio) {
   makeWalker(p);
   setStats(p, 80, 50, 80, 100);
   p.toggleLight();  // a dormir
+  uint16_t lvBefore = p.level();
+  uint8_t lv = 9;
   p.addSteps(10000, DIA);
   CHECK_EQ(p.goalTierOn(DIA), (uint8_t)3);
-  CHECK_EQ(p.takeGoalBanner(), (uint8_t)3);
+  CHECK_EQ(p.takeGoalBanner(&lv), (uint8_t)3);
+  CHECK_EQ(lv, (uint8_t)0);                 // v1.36: dormido, sin niveles...
+  CHECK_EQ(p.level(), lvBefore);
   CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)0);
   CHECK(!p.hasMedal(MED_MARATHON));
   CHECK_EQ(p.joy, (uint8_t)50);
@@ -1412,22 +1469,23 @@ TEST(items, el_caramelo_raro_sube_un_nivel_y_abre_la_evolucion) {
   Pet p;
   makePet(p, 4);  // Charmander: evoluciona a Charmeleon a nivel 16
   setStats(p, 80, 80, 80, 80);
-  p.ageMinutes = 14 * MINUTES_PER_LEVEL + 37;  // nivel 15, a media hora del 16
+  p.growMin = levelStart(15) + 40;  // nivel 15 (79 min), a poco mas de medio camino del 16
+  uint32_t age = p.ageMinutes;
   CHECK_EQ(p.level(), (uint16_t)15);
   CHECK(!p.canEvolveNow());
   CHECK(!p.canUseItem(IT_RARECANDY));  // no hay
   p.items[IT_RARECANDY] = 2;
   CHECK(p.useItem(IT_RARECANDY));
   CHECK_EQ(p.level(), (uint16_t)(15 + RARE_CANDY_LEVELS));
-  CHECK_EQ(p.ageMinutes, (uint32_t)(15 * MINUTES_PER_LEVEL));  // al principio del nivel nuevo
+  CHECK_EQ(p.levelMinutesInto(), (uint16_t)(40 * levelCost(16) / levelCost(15)));  // la barra conserva lo que llevaba
+  CHECK_EQ(p.ageMinutes, age);  // v1.35: no envejece
   CHECK(p.canEvolveNow());
   CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)1);
   p.toggleLight();
   CHECK(!p.useItem(IT_RARECANDY));  // dormido no
   p.toggleLight();
-  p.ageMinutes = 9 * MINUTES_PER_LEVEL;  // nivel 10 -> la medalla de nivel 10 al cruzarlo
-  p.medals &= ~MED_LV10;
-  p.ageMinutes = 8 * MINUTES_PER_LEVEL + 59;  // nivel 9
+  p.medals &= ~MED_LV10;  // la medalla de nivel 10 al cruzarlo
+  p.growMin = levelStart(9) + 19;  // nivel 9
   CHECK(p.useItem(IT_RARECANDY));
   CHECK_EQ(p.level(), (uint16_t)10);
   CHECK(p.hasMedal(MED_LV10));
@@ -1614,7 +1672,7 @@ TEST(fx_pet, la_medalla_se_recoge_una_vez_y_el_bicho_no_la_hace_sonar) {
   Pet p;
   makePet(p, 4);
   mockSfxReset();
-  p.ageMinutes = 9 * 60 - 1;
+  p.growMin = levelStart(10) - 1;
   advance(p, 1);
   CHECK(p.hasMedal(MED_LV10));
   CHECK_EQ(mockSfxCount(SFX_MEDAL), 0);  // suena al verse el banner, no al ganarla
@@ -1628,9 +1686,9 @@ TEST(fx_pet, dos_medallas_sin_recoger_se_suman) {
   makePet(p, 4);
   p.takeMedal();
   p.weight = 0;
-  p.ageMinutes = 4 * 60 - 1;
+  p.growMin = levelStart(5) - 1;
   advance(p, 1);  // nivel 5: EN FORMA
-  p.ageMinutes = 9 * 60 - 1;
+  p.growMin = levelStart(10) - 1;
   advance(p, 1);  // nivel 10, sin haber recogido la anterior
   CHECK_EQ(p.takeMedal(), (uint16_t)(MED_FIT | MED_LV10));
 }
@@ -1640,7 +1698,7 @@ TEST(fx_pet, subir_de_nivel_no_suena_en_el_bicho) {
   makePet(p, 4);
   mockSfxReset();
   uint16_t lv = p.level();
-  advance(p, MINUTES_PER_LEVEL);
+  advance(p, levelCost(lv));
   CHECK_EQ(p.level(), (uint16_t)(lv + 1));
   CHECK_EQ(mockSfxCount(SFX_LEVEL), 0);  // la UI lo detecta y suena SFX_LEVELUP
   CHECK_EQ(mockSfxTotal(), 0);
@@ -1675,7 +1733,7 @@ TEST(fx_pet, el_hito_de_racha_queda_pendiente_hasta_recogerlo) {
 TEST(fx_pet, las_estadisticas_a_un_nivel_cuadran_con_las_de_ahora) {
   Pet p;
   makePet(p, 4);
-  p.ageMinutes = 12 * MINUTES_PER_LEVEL;
+  p.setLevel(13);
   uint16_t lv = p.level();
   CHECK_EQ(p.statAt(0, lv), p.atkStat());
   CHECK_EQ(p.statAt(1, lv), p.defStat());

@@ -1,13 +1,13 @@
 #pragma once
 #include <Arduino.h>
 #include <Preferences.h>
+#include "growth.h"  // ritmo de los niveles (v1.35): cuanto cuesta cada uno
 
 // 1 tick = 1 minuto de juego. Baja este valor para probar mas rapido
 // (p. ej. 5000UL = las estadisticas caen 12x mas rapido).
 #define PET_TICK_MS 60000UL
-// Minutos de juego por nivel. Con 60, CHARMANDER evoluciona a las ~16 h
-// de juego con cuidado perfecto. Baja a 1 para ver evoluciones al momento.
-#define MINUTES_PER_LEVEL 60
+// Los niveles ya no son las horas de edad (v1.35): ver growth.h. Con la curva nueva
+// CHARMANDER llega al nivel 16 a las ~8 h de juego con cuidado perfecto.
 #define EAT_ANIM_MS 2500UL
 #define HEART_MS 1500UL
 #define EVOLVE_ANIM_MS 5200UL              // animacion de evolucion (mas larga = mas epica)
@@ -49,15 +49,19 @@ enum PetMood : uint8_t { MOOD_HAPPY, MOOD_SAD, MOOD_EATING, MOOD_SLEEPING };
 
 // --- pasos (docs/FEATURES.md, Tarea 1). Valores de partida, para afinar jugando.
 // metas diarias de pasos (v1.25): 3000, 6000 y 10000, cada una una vez al dia y en orden.
-// La de 10000 no es para todos los dias: premia un paseo largo con un Caramelo Raro.
+// La de 10000 no es para todos los dias: premia un paseo largo.
 #define STEP_GOAL_TIERS 3
 static const uint32_t STEP_GOALS[STEP_GOAL_TIERS] = { 3000, 6000, 10000 };
+// niveles de cada meta (v1.36, docs/GAMEPLAY_TUNING.md #6): pasear acelera la crianza. Hasta 4
+// al dia, con el bicho despierto (como el resto de premios de caminar). La de 10000 daba un
+// Caramelo Raro (+1); ahora da +2 directamente y ya no da caramelo.
+static const uint8_t STEP_GOAL_LEVELS[STEP_GOAL_TIERS] = { 1, 1, 2 };
 #define STEP_GOAL 3000            // la primera meta (la de la racha), = STEP_GOALS[0]
 #define GOAL2_JOY 10              // premio de la meta de 6000...
 #define GOAL2_BOND 2              // ...con vinculo fuera del tope diario
-#define GOAL3_JOY 15              // premio de la de 10000: Caramelo Raro y medalla MARATON
+#define GOAL3_JOY 15              // premio de la de 10000: +2 niveles y medalla MARATON
 #define GOAL3_BOND 3
-#define RARE_CANDY_LEVELS 1       // Caramelo Raro: +1 nivel (un nivel = una hora de edad)
+#define RARE_CANDY_LEVELS 1       // Caramelo Raro: +1 nivel (addLevels: la barra conserva lo que llevaba)
 #define STEPS_PER_JOY 100         // +1 felicidad cada 100 pasos...
 #define STEP_JOY_DAY_CAP 30       // ...como mucho +30 al dia
 #define STEPS_PER_WEIGHT 1000     // -1 de peso cada 1000 pasos (v1.22: eran 250, 3000 pasos quemaban una chuche)
@@ -119,7 +123,10 @@ public:
   uint8_t trAtk = 0, trDef = 0, trSpe = 0;
   bool berryKnown = false;  // ya descubrio su baya favorita
   bool shiny = false;       // variante de color rara (se sortea en el huevo)
-  uint32_t ageMinutes = 0;
+  uint32_t ageMinutes = 0;     // edad real en minutos (huevo incluido): dias, despedida
+  // minutos de crecimiento (v1.35, growth.h): de ellos sale el nivel. Avanzan con la edad
+  // desde que nace, y los saltan el Caramelo Raro y las metas de pasos sin envejecerlo.
+  uint32_t growMin = 0;
   int16_t speciesId = -1;      // numero de Pokedex (1-151), -1 = huevo
   int16_t prevSpeciesId = -1;  // para la animacion de evolucion
   uint8_t careMistakes = 0;   // descuidos: cada uno retrasa la evolucion 1 nivel
@@ -203,14 +210,13 @@ public:
   void chooseStarter(int16_t dex) { eggTarget = dex; starterPick = false; save(); }
   void factoryReset() { prefs.clear(); }  // borra la NVS (test: comando serie WIPE)
   void dbgRunawayReady() { fullness = joy = energy = hygiene = 0; neglectTicks = RUNAWAY_TICKS; }  // test
-  // uint16_t, no uint8_t: con MINUTES_PER_LEVEL=60 el nivel son las horas, asi
-  // que un uint8_t da la vuelta a 0 en el nivel 256, a los ~10,6 dias. Y eso se
-  // alcanza jugando normal, porque "quedaros juntos" permite posponer la
-  // despedida indefinidamente. Se topa en 999 en vez de desbordar.
-  uint16_t level() const {
-    uint32_t lv = 1 + ageMinutes / MINUTES_PER_LEVEL;
-    return lv > 999 ? 999 : (uint16_t)lv;
-  }
+  // uint16_t, no uint8_t: un uint8_t daba la vuelta a 0 en el nivel 256, y eso se
+  // alcanza jugando, porque "quedaros juntos" permite posponer la despedida
+  // indefinidamente. Se topa en LEVEL_MAX (999) en vez de desbordar.
+  uint16_t level() const { return levelFor(growMin); }
+  uint16_t levelMinutesInto() const { return levelInto(growMin); }      // de levelCost(level())
+  uint16_t levelMinutesCost() const { return levelCost(level()); }
+  void setLevel(uint16_t lv) { growMin = levelStart(lv); }  // comando LVL y pruebas
   bool isRegistered(int16_t dex) const {
     return dex >= 1 && dex <= 151 && (dexReg[(dex - 1) >> 3] & (1 << ((dex - 1) & 7)));
   }
@@ -265,7 +271,15 @@ public:
   void popFound();
   // banner de la meta pendiente de mostrar (lo recoge la UI con la pantalla encendida)
   // devuelve la meta (1..STEP_GOAL_TIERS) del banner, la mas alta si se cruzaron varias; 0 = ninguno
-  uint8_t takeGoalBanner() { uint8_t g = goalBanner; goalBanner = 0; return g; }
+  // levels (opcional): niveles que dieron las metas desde el ultimo banner (0 si se cruzaron
+  // dormido); el banner los ensena como "+N Lv"
+  uint8_t takeGoalBanner(uint8_t *levels = nullptr) {
+    uint8_t g = goalBanner;
+    if (levels) *levels = goalBannerLv;
+    goalBanner = 0;
+    goalBannerLv = 0;
+    return g;
+  }
 
   // --- combate de practica (Tarea 3a)
   // puede combatir: nacido, despierto, sin ceremonia ni evolucion en curso
@@ -322,6 +336,7 @@ private:
   bool foundFull[FOUND_QUEUE];
   uint8_t foundN = 0;
   uint8_t goalBanner = 0;     // meta del banner pendiente (0 = ninguno)
+  uint8_t goalBannerLv = 0;   // niveles ganados con las metas desde el ultimo banner
   // trucos del IMU
   uint8_t emoteKind = EMOTE_NONE;
   uint32_t emoteUntil = 0;

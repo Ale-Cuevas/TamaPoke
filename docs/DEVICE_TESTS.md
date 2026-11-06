@@ -306,3 +306,27 @@ doesn't touch the record or give rewards.
 - [ ] The stat card's Battle page shows only the four bars (ATK, DEF, SPD, WGT), spread over the page, with no
   button; a tap anywhere on it closes the card.
 - [ ] USER = back still quits the bag (no reward while the time runs).
+
+### Levels (v1.35)
+([GAMEPLAY_TUNING.md, #5 CURVE](GAMEPLAY_TUNING.md#5-curve-the-level-pace-follows-how-hard-the-pet-is-to-raise).)
+`STATS` prints `grow=… lv=… into=…/… age=…`: the growth minutes, the level, the minutes done of the current
+level and what it costs (20 up to Lv 10, then 45, 60, … up to 180 from Lv 89), and the age. On a board with a
+real pet don't use `LVL`: it moves the level.
+- [ ] Before flashing v1.35, `STATS` on the old firmware: note `nv=`. After flashing, `STATS`: the same level on
+  `lv=`, `age=` unchanged, `into` about (old minutes into the hour) × cost / 60.
+- [ ] A restart after that (RESET or unplug): `grow=` the same or a few minutes more, same level. It no longer
+  comes from the age.
+- [ ] Progress card (swipe up, then left three times): the bar's fill and "N min to Lv.X" match `into` and the
+  cost from `STATS`.
+- [ ] A Rare Candy from the Backpack: +1 level, the level-up animation, the bar about as full as before; the age
+  on the profile card doesn't change.
+- [ ] Wait out a level with the pet awake: `grow=` goes up one a minute, and the level-up plays when `into`
+  reaches the cost.
+- [ ] v1.36 step goals ([#6 STEPLV](GAMEPLAY_TUNING.md#6-steplv-walking-speeds-up-levelling)), pet awake:
+  `FX goal` shows the 3000 banner with "+1 Lv", `FX goal3` the 10000 one with "+2 Lv" (look only, no save
+  change).
+- [ ] A real walk past 3000 steps with the pet awake: `STATS` shows `lv=` one higher, `into` about as full as
+  before, `age=` not pushed. The level-up plays, then the goal banner with "+1 Lv". The same at 6000 (+1) and
+  10000 (+2, no Rare Candy in the Backpack, the Marathon medal the first time).
+- [ ] A goal crossed while the pet sleeps: the banner when it wakes has no "+N Lv", and the level didn't move.
+

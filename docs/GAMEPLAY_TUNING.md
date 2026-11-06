@@ -379,6 +379,23 @@ A pure log curve climbs fastest right after Lv 10 (20 → 45 → 60 min for Lv 1
 - **On the board:** before flashing, `STATS` (note level and age); flash; `STATS` again → same level,
   same age. Don't use `LVL` on the board.
 
+### Built in v1.35
+
+- `growth.h` as planned: `LV_COST` (Lv 11–90), `levelCost`, `levelStart`, `levelFor`, `levelInto`,
+  `addLevels`, and `growthFromLegacyAge` for the migration. `MINUTES_PER_LEVEL` is gone; the migration
+  uses `LEGACY_MINUTES_PER_LEVEL` (60).
+- `Pet::growMin` (NVS `"grow"`) ticks right after the egg check in `tick()` and in the offline loop, so it
+  never counts egg minutes. Helpers on `Pet`: `levelMinutesInto()`, `levelMinutesCost()`, `setLevel()`.
+- Migration runs in `load()` when `"grow"` is missing (an egg gets 0). Host test
+  `growth_pet.un_guardado_sin_grow_conserva_el_nivel` loads a Wartortle save with the key removed:
+  Lv 31, same age, bar at 42 × 131 / 60.
+- `LVL n` now gives level n exactly (it used to give n + 1, through the age) and prints `lv=… grow=…`.
+  `STATS` has a new line `grow=… lv=… into=…/… age=…`.
+- The home/card repaint key includes `growMin`, so a level jump without an age change repaints the card.
+- At Lv 999 the progress card shows a full bar and no "next level" line.
+- `test_dex`: every line reaches its final form by `levelFor(4 days)` = Lv 55; the 3-day level (46) is
+  checked for reference.
+
 ---
 
 ## #6 STEPLV: walking speeds up levelling
@@ -416,6 +433,19 @@ A pure log curve climbs fastest right after Lv 10 (20 → 45 → 60 min for Lv 1
   - Lv 998 + 2 → capped at 999.
 - On the board: `FX goal` / `FX levelup` show the banners without touching the save. The user's real
   walk confirms the levels.
+
+### Built in v1.36
+
+- `STEP_GOAL_LEVELS[] = { 1, 1, 2 }` in `pet.h`; `goalReward()` calls `addLevels()` for a rewarded goal
+  and then `checkMedals(false)`, so a goal that reaches Lv 10/25/50 gives its medal at once.
+- Defaults taken for open questions 1 and 2: the 10000 goal gives +2 levels and no Rare Candy (it no longer
+  counts as a bonus find either); no levels while the pet sleeps.
+- The levels gained since the last banner travel with it: `takeGoalBanner(&levels)` → the FX event's `b`.
+  The banner prints "+N Lv" (the total when several goals came together, e.g. "+4 Lv"), and nothing for
+  a goal crossed asleep.
+- **Order on screen differs from the plan text:** FX shows a level-up before a goal banner (its existing
+  priority: level, medal, streak, goal), so the "Lv.a > Lv.b" pill comes first and the goal banner follows.
+- The `found-candy` render scene is gone (the candy is no longer found); `goal-3000` shows the small banner.
 
 ---
 

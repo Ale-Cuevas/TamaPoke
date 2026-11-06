@@ -37,6 +37,8 @@ Write the result on each line: a tick, or what you saw.
 | 28 | v1.32 PWR cycle: game → screensaver → off → game, awake and asleep; from the 5-min screensaver and a dimmed screen; wake paths; stays while eating; quits a battle; 4 s power-off | [Power, sleep, buttons](DEVICE_TESTS.md#power-sleep-buttons) | pending |
 | 29 | v1.33 ball game: speed rises with every point (`BALL 1`, `BALL 80`: same arcs, half the time in the air at 80), still playable at 80 and fun on the way | [Games](DEVICE_TESTS.md#games-v133) | pending |
 | 30 | v1.34 games menu: PLAY has ball, battle and training bag; each slot starts its game; the stat card has no training button | [Games menu](DEVICE_TESTS.md#games-menu-v134) | pending |
+| 31 | v1.35 level curve: the pet keeps its level after the update (`STATS` before and after), progress card bar and minutes, Rare Candy keeps the bar and does not age the pet | [Levels](DEVICE_TESTS.md#levels-v135) | pending |
+| 32 | v1.36 step goals give levels: 3000 +1, 6000 +1, 10000 +2 (no Rare Candy), "+N Lv" on the banners, none while asleep | [Levels](DEVICE_TESTS.md#levels-v135) | pending |
 
 Questions only the board can answer:
 - Where is the USB-C port relative to the screen's top? Bottom edge (buttons on top).

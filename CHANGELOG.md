@@ -8,6 +8,53 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.36] - 2026-11-06
+
+Walking speeds up levelling ([GAMEPLAY_TUNING.md, #6 STEPLV](docs/GAMEPLAY_TUNING.md#6-steplv-walking-speeds-up-levelling)).
+
+### Changed
+
+- **The daily step goals give levels:** 3000 → +1, 6000 → +1, 10000 → +2, so up to 4 a day.
+  The level bar keeps how full it was and the pet doesn't age. Several goals crossed at once
+  give all their levels together.
+- The goal banner shows "+1 Lv" / "+2 Lv" (or the total, "+4 Lv", when the goals came
+  together); the level-up animation and jingle play as well, one after the other.
+- **The 10000 goal no longer gives a Rare Candy**: the +2 levels replace it. Its joy, bond
+  and the Marathon medal stay. Candies already in the Backpack still work (+1).
+- As with every walking reward, a goal crossed while the pet sleeps gives no levels: it only
+  marks the day and the streak.
+- `FX goal` / `FX goal3` show the banners with "+1 Lv" / "+2 Lv".
+
+## [1.35] - 2026-11-06
+
+Level pace ([GAMEPLAY_TUNING.md, #5 CURVE](docs/GAMEPLAY_TUNING.md#5-curve-the-level-pace-follows-how-hard-the-pet-is-to-raise)):
+until now every level took one hour of age, from Lv 1 to Lv 999.
+
+### Changed
+
+- **Each level costs more than the last**, as a stronger pet is harder to raise:
+  - Lv 1–10: 20 min per level;
+  - Lv 11–89: a log curve, `20 + 160 · ln(L − 10) / ln 80` minutes, from 20 up to 180;
+  - Lv 90 on: 3 h per level.
+
+  First evolutions come sooner (Lv 16 after ~8 h instead of 15 h), later ones take longer
+  (Lv 36 after ~2 days instead of 1.5). Three days of growth are Lv 46; Lv 90 takes ~8 days.
+- **Levels come from a growth counter, not from age.** It runs with the age once the pet has
+  hatched (awake, asleep and while powered off), and the Rare Candy pushes it ahead. Age stays
+  real time: the days on the card and the 3-day farewell don't move when a candy is eaten.
+- **Rare Candy:** still +1 level, and now the level bar keeps how full it was (it used to jump
+  to the start of the next level). It no longer ages the pet.
+- **Progress card:** the bar and "N min to Lv.X" follow the cost of the current level
+  (20–180 min). At Lv 999 the bar stays full with no "next level" line.
+- **Serial:** `LVL n` now puts the pet at the start of level n (it used to give level n + 1,
+  through the age). `STATS` prints a new line, `grow=… lv=… into=…/… age=…`.
+
+### Updating
+
+A pet from an earlier version keeps its level and how full its bar was: the save has no
+growth yet, so it's worked out once from the age (old level = 1 + age / 60) and saved from
+then on.
+
 ## [1.34] - 2026-11-06
 
 All the games in one menu
