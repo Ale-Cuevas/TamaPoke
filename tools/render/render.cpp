@@ -234,6 +234,13 @@ static const std::vector<Scene> &scenes() {
     // the swaying tall-grass meadow (v1.26): mid-gust, at dusk
     { "home-gust", [] { pokemon(19, 11); gHostMillis = 114000; } },  // wind.h: the gust is mid-screen at 6 s of 12
     { "home-meadow-dusk", [] { pokemon(19, 19); } },
+    // new biomes (v1.27): power plant (electric), swamp (poison), ruins (ghost, psychic)
+    { "home-power-night", [] { pokemon(25, 22); }, 3 },
+    { "home-swamp", [] { pokemon(23, 11); } },
+    { "home-swamp-night", [] { pokemon(88, 23); } },
+    { "home-ruins", [] { pokemon(92, 14); } },
+    { "home-ruins-night", [] { pokemon(63, 23); } },
+    { "minigame-swamp", [] { pokemon(23, 13); startGame(); gameScore = 3; }, 4 },
     { "feed", [] { pokemon(133, 12); menuKind = MENU_FEED; menuUntil = millis() + 6000; } },
     { "play-menu", [] { pokemon(133, 12); menuKind = MENU_PLAY; menuUntil = millis() + 6000; } },
     { "release", [] { pokemon(54, 15); confirmUntil = millis() + 10000; } },

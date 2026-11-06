@@ -38,7 +38,7 @@ struct DexEntry {
   uint8_t rarity;       // sale de huevo si > 0
   uint16_t accent;      // color RGB565 del tipo para la UI
   uint8_t bHp, bAtk, bDef, bSpe;  // base stats reales de gen 1
-  uint8_t biome;        // 0 pradera 1 playa 2 bosque 3 volcan 4 montana 5 nieve
+  uint8_t biome;        // 0 pradera 1 playa 2 bosque 3 volcan 4 montana 5 nieve 6 central 7 pantano 8 ruinas
   uint8_t type1, type2; // TY_*; type2 = TY_NONE si solo tiene uno (combate)
   uint8_t base;         // primera forma de su linea evolutiva
 };
@@ -67,26 +67,26 @@ static const DexEntry DEX_TBL[DEX_COUNT + 1] = {
   { "RATICATE", 0, 0, R_EVO, 0x8C4D, 55, 81, 60, 97, 0, TY_NORMAL, TY_NONE, 19 },  // 20 normal
   { "SPEAROW", 22, 20, R_COMUN, 0x8C4D, 40, 60, 30, 70, 0, TY_NORMAL, TY_VOLADOR, 21 },  // 21 normal/volador
   { "FEAROW", 0, 0, R_EVO, 0x8C4D, 65, 90, 65, 100, 0, TY_NORMAL, TY_VOLADOR, 21 },  // 22 normal/volador
-  { "EKANS", 24, 22, R_COMUN, 0x8A73, 35, 60, 44, 55, 0, TY_VENENO, TY_NONE, 23 },  // 23 veneno
-  { "ARBOK", 0, 0, R_EVO, 0x8A73, 60, 95, 69, 80, 0, TY_VENENO, TY_NONE, 23 },  // 24 veneno
-  { "PIKACHU", 26, 30, R_COMUN, 0xBCA1, 35, 55, 40, 90, 0, TY_ELECTRICO, TY_NONE, 25 },  // 25 electrico
-  { "RAICHU", 0, 0, R_EVO, 0xBCA1, 60, 90, 55, 110, 0, TY_ELECTRICO, TY_NONE, 25 },  // 26 electrico
+  { "EKANS", 24, 22, R_COMUN, 0x8A73, 35, 60, 44, 55, 7, TY_VENENO, TY_NONE, 23 },  // 23 veneno
+  { "ARBOK", 0, 0, R_EVO, 0x8A73, 60, 95, 69, 80, 7, TY_VENENO, TY_NONE, 23 },  // 24 veneno
+  { "PIKACHU", 26, 30, R_COMUN, 0xBCA1, 35, 55, 40, 90, 6, TY_ELECTRICO, TY_NONE, 25 },  // 25 electrico
+  { "RAICHU", 0, 0, R_EVO, 0xBCA1, 60, 90, 55, 110, 6, TY_ELECTRICO, TY_NONE, 25 },  // 26 electrico
   { "SANDSHREW", 28, 22, R_COMUN, 0xB447, 50, 75, 85, 40, 4, TY_TIERRA, TY_NONE, 27 },  // 27 tierra
   { "SANDSLASH", 0, 0, R_EVO, 0xB447, 75, 100, 110, 65, 4, TY_TIERRA, TY_NONE, 27 },  // 28 tierra
-  { "NIDORAN H", 30, 16, R_COMUN, 0x8A73, 55, 47, 52, 41, 0, TY_VENENO, TY_NONE, 29 },  // 29 veneno
-  { "NIDORINA", 31, 30, R_EVO, 0x8A73, 70, 62, 67, 56, 0, TY_VENENO, TY_NONE, 29 },  // 30 veneno
-  { "NIDOQUEEN", 0, 0, R_EVO, 0x8A73, 90, 92, 87, 76, 0, TY_VENENO, TY_TIERRA, 29 },  // 31 veneno/tierra
-  { "NIDORAN M", 33, 16, R_COMUN, 0x8A73, 46, 57, 40, 50, 0, TY_VENENO, TY_NONE, 32 },  // 32 veneno
-  { "NIDORINO", 34, 30, R_EVO, 0x8A73, 61, 72, 57, 65, 0, TY_VENENO, TY_NONE, 32 },  // 33 veneno
-  { "NIDOKING", 0, 0, R_EVO, 0x8A73, 81, 102, 77, 85, 0, TY_VENENO, TY_TIERRA, 32 },  // 34 veneno/tierra
+  { "NIDORAN H", 30, 16, R_COMUN, 0x8A73, 55, 47, 52, 41, 7, TY_VENENO, TY_NONE, 29 },  // 29 veneno
+  { "NIDORINA", 31, 30, R_EVO, 0x8A73, 70, 62, 67, 56, 7, TY_VENENO, TY_NONE, 29 },  // 30 veneno
+  { "NIDOQUEEN", 0, 0, R_EVO, 0x8A73, 90, 92, 87, 76, 7, TY_VENENO, TY_TIERRA, 29 },  // 31 veneno/tierra
+  { "NIDORAN M", 33, 16, R_COMUN, 0x8A73, 46, 57, 40, 50, 7, TY_VENENO, TY_NONE, 32 },  // 32 veneno
+  { "NIDORINO", 34, 30, R_EVO, 0x8A73, 61, 72, 57, 65, 7, TY_VENENO, TY_NONE, 32 },  // 33 veneno
+  { "NIDOKING", 0, 0, R_EVO, 0x8A73, 81, 102, 77, 85, 7, TY_VENENO, TY_TIERRA, 32 },  // 34 veneno/tierra
   { "CLEFAIRY", 36, 30, R_COMUN, 0x8C4D, 70, 45, 48, 35, 0, TY_NORMAL, TY_NONE, 35 },  // 35 normal
   { "CLEFABLE", 0, 0, R_EVO, 0x8C4D, 95, 70, 73, 60, 0, TY_NORMAL, TY_NONE, 35 },  // 36 normal
   { "VULPIX", 38, 30, R_COMUN, 0xEA87, 38, 41, 40, 65, 3, TY_FUEGO, TY_NONE, 37 },  // 37 fuego
   { "NINETALES", 0, 0, R_EVO, 0xEA87, 73, 76, 75, 100, 3, TY_FUEGO, TY_NONE, 37 },  // 38 fuego
   { "JIGGLYPUFF", 40, 30, R_COMUN, 0x8C4D, 115, 45, 20, 20, 0, TY_NORMAL, TY_NONE, 39 },  // 39 normal
   { "WIGGLYTUFF", 0, 0, R_EVO, 0x8C4D, 140, 70, 45, 45, 0, TY_NORMAL, TY_NONE, 39 },  // 40 normal
-  { "ZUBAT", 42, 22, R_COMUN, 0x8A73, 40, 45, 35, 55, 0, TY_VENENO, TY_VOLADOR, 41 },  // 41 veneno/volador
-  { "GOLBAT", 0, 0, R_EVO, 0x8A73, 75, 80, 70, 90, 0, TY_VENENO, TY_VOLADOR, 41 },  // 42 veneno/volador
+  { "ZUBAT", 42, 22, R_COMUN, 0x8A73, 40, 45, 35, 55, 7, TY_VENENO, TY_VOLADOR, 41 },  // 41 veneno/volador
+  { "GOLBAT", 0, 0, R_EVO, 0x8A73, 75, 80, 70, 90, 7, TY_VENENO, TY_VOLADOR, 41 },  // 42 veneno/volador
   { "ODDISH", 44, 21, R_COMUN, 0x3C49, 45, 50, 55, 30, 2, TY_PLANTA, TY_VENENO, 43 },  // 43 planta/veneno
   { "GLOOM", 45, 36, R_EVO, 0x3C49, 60, 65, 70, 40, 2, TY_PLANTA, TY_VENENO, 43 },  // 44 planta/veneno
   { "VILEPLUME", 0, 0, R_EVO, 0x3C49, 75, 80, 85, 50, 2, TY_PLANTA, TY_VENENO, 43 },  // 45 planta/veneno
@@ -107,9 +107,9 @@ static const DexEntry DEX_TBL[DEX_COUNT + 1] = {
   { "POLIWAG", 61, 25, R_COMUN, 0x4C98, 40, 50, 40, 90, 1, TY_AGUA, TY_NONE, 60 },  // 60 agua
   { "POLIWHIRL", 62, 36, R_EVO, 0x4C98, 65, 65, 65, 90, 1, TY_AGUA, TY_NONE, 60 },  // 61 agua
   { "POLIWRATH", 0, 0, R_EVO, 0x4C98, 90, 95, 95, 70, 1, TY_AGUA, TY_LUCHA, 60 },  // 62 agua/lucha
-  { "ABRA", 64, 16, R_COMUN, 0xD28F, 25, 20, 15, 90, 0, TY_PSIQUICO, TY_NONE, 63 },  // 63 psiquico
-  { "KADABRA", 65, 40, R_EVO, 0xD28F, 40, 35, 30, 105, 0, TY_PSIQUICO, TY_NONE, 63 },  // 64 psiquico
-  { "ALAKAZAM", 0, 0, R_EVO, 0xD28F, 55, 50, 45, 120, 0, TY_PSIQUICO, TY_NONE, 63 },  // 65 psiquico
+  { "ABRA", 64, 16, R_COMUN, 0xD28F, 25, 20, 15, 90, 8, TY_PSIQUICO, TY_NONE, 63 },  // 63 psiquico
+  { "KADABRA", 65, 40, R_EVO, 0xD28F, 40, 35, 30, 105, 8, TY_PSIQUICO, TY_NONE, 63 },  // 64 psiquico
+  { "ALAKAZAM", 0, 0, R_EVO, 0xD28F, 55, 50, 45, 120, 8, TY_PSIQUICO, TY_NONE, 63 },  // 65 psiquico
   { "MACHOP", 67, 28, R_COMUN, 0xA2A5, 70, 80, 50, 35, 0, TY_LUCHA, TY_NONE, 66 },  // 66 lucha
   { "MACHOKE", 68, 40, R_EVO, 0xA2A5, 80, 100, 70, 45, 0, TY_LUCHA, TY_NONE, 66 },  // 67 lucha
   { "MACHAMP", 0, 0, R_EVO, 0xA2A5, 90, 130, 80, 55, 0, TY_LUCHA, TY_NONE, 66 },  // 68 lucha
@@ -125,27 +125,27 @@ static const DexEntry DEX_TBL[DEX_COUNT + 1] = {
   { "RAPIDASH", 0, 0, R_EVO, 0xEA87, 65, 100, 70, 105, 3, TY_FUEGO, TY_NONE, 77 },  // 78 fuego
   { "SLOWPOKE", 80, 37, R_COMUN, 0x4C98, 90, 65, 65, 15, 1, TY_AGUA, TY_PSIQUICO, 79 },  // 79 agua/psiquico
   { "SLOWBRO", 0, 0, R_EVO, 0x4C98, 95, 75, 110, 30, 1, TY_AGUA, TY_PSIQUICO, 79 },  // 80 agua/psiquico
-  { "MAGNEMITE", 82, 30, R_COMUN, 0xBCA1, 25, 35, 70, 45, 0, TY_ELECTRICO, TY_NONE, 81 },  // 81 electrico
-  { "MAGNETON", 0, 0, R_EVO, 0xBCA1, 50, 60, 95, 70, 0, TY_ELECTRICO, TY_NONE, 81 },  // 82 electrico
+  { "MAGNEMITE", 82, 30, R_COMUN, 0xBCA1, 25, 35, 70, 45, 6, TY_ELECTRICO, TY_NONE, 81 },  // 81 electrico
+  { "MAGNETON", 0, 0, R_EVO, 0xBCA1, 50, 60, 95, 70, 6, TY_ELECTRICO, TY_NONE, 81 },  // 82 electrico
   { "FARFETCHD", 0, 0, R_RARO, 0x8C4D, 52, 90, 55, 60, 0, TY_NORMAL, TY_VOLADOR, 83 },  // 83 normal/volador
   { "DODUO", 85, 31, R_COMUN, 0x8C4D, 35, 85, 45, 75, 0, TY_NORMAL, TY_VOLADOR, 84 },  // 84 normal/volador
   { "DODRIO", 0, 0, R_EVO, 0x8C4D, 60, 110, 70, 110, 0, TY_NORMAL, TY_VOLADOR, 84 },  // 85 normal/volador
   { "SEEL", 87, 34, R_COMUN, 0x4C98, 65, 45, 55, 45, 1, TY_AGUA, TY_NONE, 86 },  // 86 agua
   { "DEWGONG", 0, 0, R_EVO, 0x4C98, 90, 70, 80, 70, 1, TY_AGUA, TY_HIELO, 86 },  // 87 agua/hielo
-  { "GRIMER", 89, 38, R_RARO, 0x8A73, 80, 80, 50, 25, 0, TY_VENENO, TY_NONE, 88 },  // 88 veneno
-  { "MUK", 0, 0, R_EVO, 0x8A73, 105, 105, 75, 50, 0, TY_VENENO, TY_NONE, 88 },  // 89 veneno
+  { "GRIMER", 89, 38, R_RARO, 0x8A73, 80, 80, 50, 25, 7, TY_VENENO, TY_NONE, 88 },  // 88 veneno
+  { "MUK", 0, 0, R_EVO, 0x8A73, 105, 105, 75, 50, 7, TY_VENENO, TY_NONE, 88 },  // 89 veneno
   { "SHELLDER", 91, 30, R_COMUN, 0x4C98, 30, 65, 100, 40, 1, TY_AGUA, TY_NONE, 90 },  // 90 agua
   { "CLOYSTER", 0, 0, R_EVO, 0x4C98, 50, 95, 180, 70, 1, TY_AGUA, TY_HIELO, 90 },  // 91 agua/hielo
-  { "GASTLY", 93, 25, R_COMUN, 0x6AD3, 30, 35, 30, 80, 0, TY_FANTASMA, TY_VENENO, 92 },  // 92 fantasma/veneno
-  { "HAUNTER", 94, 40, R_EVO, 0x6AD3, 45, 50, 45, 95, 0, TY_FANTASMA, TY_VENENO, 92 },  // 93 fantasma/veneno
-  { "GENGAR", 0, 0, R_EVO, 0x6AD3, 60, 65, 60, 110, 0, TY_FANTASMA, TY_VENENO, 92 },  // 94 fantasma/veneno
+  { "GASTLY", 93, 25, R_COMUN, 0x6AD3, 30, 35, 30, 80, 8, TY_FANTASMA, TY_VENENO, 92 },  // 92 fantasma/veneno
+  { "HAUNTER", 94, 40, R_EVO, 0x6AD3, 45, 50, 45, 95, 8, TY_FANTASMA, TY_VENENO, 92 },  // 93 fantasma/veneno
+  { "GENGAR", 0, 0, R_EVO, 0x6AD3, 60, 65, 60, 110, 8, TY_FANTASMA, TY_VENENO, 92 },  // 94 fantasma/veneno
   { "ONIX", 0, 0, R_RARO, 0x9407, 35, 45, 160, 70, 4, TY_ROCA, TY_TIERRA, 95 },  // 95 roca/tierra
-  { "DROWZEE", 97, 26, R_COMUN, 0xD28F, 60, 48, 45, 42, 0, TY_PSIQUICO, TY_NONE, 96 },  // 96 psiquico
-  { "HYPNO", 0, 0, R_EVO, 0xD28F, 85, 73, 70, 67, 0, TY_PSIQUICO, TY_NONE, 96 },  // 97 psiquico
+  { "DROWZEE", 97, 26, R_COMUN, 0xD28F, 60, 48, 45, 42, 8, TY_PSIQUICO, TY_NONE, 96 },  // 96 psiquico
+  { "HYPNO", 0, 0, R_EVO, 0xD28F, 85, 73, 70, 67, 8, TY_PSIQUICO, TY_NONE, 96 },  // 97 psiquico
   { "KRABBY", 99, 28, R_COMUN, 0x4C98, 30, 105, 90, 50, 1, TY_AGUA, TY_NONE, 98 },  // 98 agua
   { "KINGLER", 0, 0, R_EVO, 0x4C98, 55, 130, 115, 75, 1, TY_AGUA, TY_NONE, 98 },  // 99 agua
-  { "VOLTORB", 101, 30, R_COMUN, 0xBCA1, 40, 30, 50, 100, 0, TY_ELECTRICO, TY_NONE, 100 },  // 100 electrico
-  { "ELECTRODE", 0, 0, R_EVO, 0xBCA1, 60, 50, 70, 150, 0, TY_ELECTRICO, TY_NONE, 100 },  // 101 electrico
+  { "VOLTORB", 101, 30, R_COMUN, 0xBCA1, 40, 30, 50, 100, 6, TY_ELECTRICO, TY_NONE, 100 },  // 100 electrico
+  { "ELECTRODE", 0, 0, R_EVO, 0xBCA1, 60, 50, 70, 150, 6, TY_ELECTRICO, TY_NONE, 100 },  // 101 electrico
   { "EXEGGCUTE", 103, 30, R_COMUN, 0x3C49, 60, 40, 80, 40, 2, TY_PLANTA, TY_PSIQUICO, 102 },  // 102 planta/psiquico
   { "EXEGGUTOR", 0, 0, R_EVO, 0x3C49, 95, 95, 85, 55, 2, TY_PLANTA, TY_PSIQUICO, 102 },  // 103 planta/psiquico
   { "CUBONE", 105, 28, R_COMUN, 0xB447, 50, 50, 95, 35, 4, TY_TIERRA, TY_NONE, 104 },  // 104 tierra
@@ -153,8 +153,8 @@ static const DexEntry DEX_TBL[DEX_COUNT + 1] = {
   { "HITMONLEE", 0, 0, R_RARO, 0xA2A5, 50, 120, 53, 87, 0, TY_LUCHA, TY_NONE, 106 },  // 106 lucha
   { "HITMONCHAN", 0, 0, R_RARO, 0xA2A5, 50, 105, 79, 76, 0, TY_LUCHA, TY_NONE, 107 },  // 107 lucha
   { "LICKITUNG", 0, 0, R_RARO, 0x8C4D, 90, 55, 75, 30, 0, TY_NORMAL, TY_NONE, 108 },  // 108 normal
-  { "KOFFING", 110, 35, R_COMUN, 0x8A73, 40, 65, 95, 35, 0, TY_VENENO, TY_NONE, 109 },  // 109 veneno
-  { "WEEZING", 0, 0, R_EVO, 0x8A73, 65, 90, 120, 60, 0, TY_VENENO, TY_NONE, 109 },  // 110 veneno
+  { "KOFFING", 110, 35, R_COMUN, 0x8A73, 40, 65, 95, 35, 7, TY_VENENO, TY_NONE, 109 },  // 109 veneno
+  { "WEEZING", 0, 0, R_EVO, 0x8A73, 65, 90, 120, 60, 7, TY_VENENO, TY_NONE, 109 },  // 110 veneno
   { "RHYHORN", 112, 42, R_RARO, 0xB447, 80, 85, 95, 25, 4, TY_TIERRA, TY_ROCA, 111 },  // 111 tierra/roca
   { "RHYDON", 0, 0, R_EVO, 0xB447, 105, 130, 120, 40, 4, TY_TIERRA, TY_ROCA, 111 },  // 112 tierra/roca
   { "CHANSEY", 0, 0, R_RARO, 0x8C4D, 250, 5, 5, 50, 0, TY_NORMAL, TY_NONE, 113 },  // 113 normal
@@ -166,10 +166,10 @@ static const DexEntry DEX_TBL[DEX_COUNT + 1] = {
   { "SEAKING", 0, 0, R_EVO, 0x4C98, 80, 92, 65, 68, 1, TY_AGUA, TY_NONE, 118 },  // 119 agua
   { "STARYU", 121, 30, R_COMUN, 0x4C98, 30, 45, 55, 85, 1, TY_AGUA, TY_NONE, 120 },  // 120 agua
   { "STARMIE", 0, 0, R_EVO, 0x4C98, 60, 75, 85, 115, 1, TY_AGUA, TY_PSIQUICO, 120 },  // 121 agua/psiquico
-  { "MR. MIME", 0, 0, R_RARO, 0xD28F, 40, 45, 65, 90, 0, TY_PSIQUICO, TY_NONE, 122 },  // 122 psiquico
+  { "MR. MIME", 0, 0, R_RARO, 0xD28F, 40, 45, 65, 90, 8, TY_PSIQUICO, TY_NONE, 122 },  // 122 psiquico
   { "SCYTHER", 0, 0, R_RARO, 0x7CC4, 70, 110, 80, 105, 2, TY_BICHO, TY_VOLADOR, 123 },  // 123 bicho/volador
   { "JYNX", 0, 0, R_RARO, 0x4DB8, 65, 50, 35, 95, 5, TY_HIELO, TY_PSIQUICO, 124 },  // 124 hielo/psiquico
-  { "ELECTABUZZ", 0, 0, R_RARO, 0xBCA1, 65, 83, 57, 105, 0, TY_ELECTRICO, TY_NONE, 125 },  // 125 electrico
+  { "ELECTABUZZ", 0, 0, R_RARO, 0xBCA1, 65, 83, 57, 105, 6, TY_ELECTRICO, TY_NONE, 125 },  // 125 electrico
   { "MAGMAR", 0, 0, R_RARO, 0xEA87, 65, 95, 57, 93, 3, TY_FUEGO, TY_NONE, 126 },  // 126 fuego
   { "PINSIR", 0, 0, R_RARO, 0x7CC4, 65, 125, 100, 85, 2, TY_BICHO, TY_NONE, 127 },  // 127 bicho
   { "TAUROS", 0, 0, R_RARO, 0x8C4D, 75, 100, 95, 110, 0, TY_NORMAL, TY_NONE, 128 },  // 128 normal
@@ -179,7 +179,7 @@ static const DexEntry DEX_TBL[DEX_COUNT + 1] = {
   { "DITTO", 0, 0, R_RARO, 0x8C4D, 48, 48, 48, 48, 0, TY_NORMAL, TY_NONE, 132 },  // 132 normal
   { "EEVEE", 134, 30, R_COMUN, 0x8C4D, 55, 55, 50, 55, 0, TY_NORMAL, TY_NONE, 133 },  // 133 normal
   { "VAPOREON", 0, 0, R_EVO, 0x4C98, 130, 65, 60, 65, 1, TY_AGUA, TY_NONE, 133 },  // 134 agua
-  { "JOLTEON", 0, 0, R_EVO, 0xBCA1, 65, 65, 60, 130, 0, TY_ELECTRICO, TY_NONE, 133 },  // 135 electrico
+  { "JOLTEON", 0, 0, R_EVO, 0xBCA1, 65, 65, 60, 130, 6, TY_ELECTRICO, TY_NONE, 133 },  // 135 electrico
   { "FLAREON", 0, 0, R_EVO, 0xEA87, 65, 130, 60, 65, 3, TY_FUEGO, TY_NONE, 133 },  // 136 fuego
   { "PORYGON", 0, 0, R_RARO, 0x8C4D, 65, 60, 70, 40, 0, TY_NORMAL, TY_NONE, 137 },  // 137 normal
   { "OMANYTE", 139, 40, R_RARO, 0x9407, 35, 40, 100, 35, 1, TY_ROCA, TY_AGUA, 138 },  // 138 roca/agua
@@ -189,13 +189,13 @@ static const DexEntry DEX_TBL[DEX_COUNT + 1] = {
   { "AERODACTYL", 0, 0, R_RARO, 0x9407, 80, 105, 65, 130, 4, TY_ROCA, TY_VOLADOR, 142 },  // 142 roca/volador
   { "SNORLAX", 0, 0, R_RARO, 0x8C4D, 160, 110, 65, 30, 0, TY_NORMAL, TY_NONE, 143 },  // 143 normal
   { "ARTICUNO", 0, 0, R_LEGENDARIO, 0x4DB8, 90, 85, 100, 85, 5, TY_HIELO, TY_VOLADOR, 144 },  // 144 hielo/volador
-  { "ZAPDOS", 0, 0, R_LEGENDARIO, 0xBCA1, 90, 90, 85, 100, 0, TY_ELECTRICO, TY_VOLADOR, 145 },  // 145 electrico/volador
+  { "ZAPDOS", 0, 0, R_LEGENDARIO, 0xBCA1, 90, 90, 85, 100, 6, TY_ELECTRICO, TY_VOLADOR, 145 },  // 145 electrico/volador
   { "MOLTRES", 0, 0, R_LEGENDARIO, 0xEA87, 90, 100, 90, 90, 3, TY_FUEGO, TY_VOLADOR, 146 },  // 146 fuego/volador
   { "DRATINI", 148, 30, R_RARO, 0x5A98, 41, 64, 45, 50, 1, TY_DRAGON, TY_NONE, 147 },  // 147 dragon
   { "DRAGONAIR", 149, 55, R_EVO, 0x5A98, 61, 84, 65, 70, 1, TY_DRAGON, TY_NONE, 147 },  // 148 dragon
   { "DRAGONITE", 0, 0, R_EVO, 0x5A98, 91, 134, 95, 80, 1, TY_DRAGON, TY_VOLADOR, 147 },  // 149 dragon/volador
-  { "MEWTWO", 0, 0, R_LEGENDARIO, 0xD28F, 106, 110, 90, 130, 0, TY_PSIQUICO, TY_NONE, 150 },  // 150 psiquico
-  { "MEW", 0, 0, R_LEGENDARIO, 0xD28F, 100, 100, 100, 100, 0, TY_PSIQUICO, TY_NONE, 151 },  // 151 psiquico
+  { "MEWTWO", 0, 0, R_LEGENDARIO, 0xD28F, 106, 110, 90, 130, 8, TY_PSIQUICO, TY_NONE, 150 },  // 150 psiquico
+  { "MEW", 0, 0, R_LEGENDARIO, 0xD28F, 100, 100, 100, 100, 8, TY_PSIQUICO, TY_NONE, 151 },  // 151 psiquico
 };
 
 // Nombres oficiales por idioma. FR y DE son los unicos latinos que difieren

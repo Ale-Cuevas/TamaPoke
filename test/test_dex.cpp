@@ -146,7 +146,7 @@ TEST(dex, las_stats_base_son_plausibles) {
     const DexEntry &e = DEX_TBL[d];
     CHECK_MSG(e.bHp > 0 && e.bAtk > 0 && e.bDef > 0 && e.bSpe > 0,
               std::string("stat base a cero en ") + e.name);
-    CHECK_MSG(e.biome <= 5, std::string("bioma desconocido en ") + e.name);
+    CHECK_MSG(e.biome <= 8, std::string("bioma desconocido en ") + e.name);
     CHECK_MSG(e.rarity <= R_LEGENDARIO, std::string("rareza desconocida en ") + e.name);
   }
 }
