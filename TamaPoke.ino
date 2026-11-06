@@ -43,7 +43,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.30"
+#define FW_VERSION "1.31"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -4382,7 +4382,7 @@ void renderScreensaver() {
   if (e) {
     char t[8];
     snprintf(t, sizeof(t), "%02u:%02u", (unsigned)((e / 3600) % 24), (unsigned)((e / 60) % 60));
-    gfx->setTextColor(pet.sleeping ? 0x4208 : 0x8410);  // gris tenue (mas aun con el bicho dormido)
+    gfx->setTextColor(0x8410);  // gris tenue, dormido o no (v1.31: dormido era 0x4208 y no se leia)
     setSize(SAVER_CLOCK_SIZE);
     setCur(x - textW(t, SAVER_CLOCK_SIZE) / 2, y);
     printT(t);

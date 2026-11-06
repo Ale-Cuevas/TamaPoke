@@ -172,6 +172,12 @@ so that's small. Note the next overnight battery reading in `PENDING_TESTS.md`.
 - Add a test: for every stage and brightness level, the result is the same asleep and awake.
 - Over serial: `BRIGHT` prints the current value, so compare it with the pet asleep (LIGHT) and awake.
 
+### Built in v1.31
+
+As planned. `brightnessFor()` ignores `sleeping` (the frame rate and the amplifier still use it),
+`SAVER_BRIGHT_SLEEP` is gone, and the screensaver clock is always `0x8410`. A new host test checks
+that asleep and awake give the same brightness for every stage, level, battery, face-down and off.
+
 ---
 
 ## #3 PWR: game → screensaver → off → game

@@ -36,7 +36,7 @@ TEST(power, el_brillo_no_cambia_con_bateria_normal) {
   c = ctx(100000);
   CHECK_EQ((int)brightnessFor(c), 60);        // atenuada
   c.sleeping = true;
-  CHECK_EQ((int)brightnessFor(c), 10);
+  CHECK_EQ((int)brightnessFor(c), 60);        // dormido, igual (v1.31: antes 10)
   c = ctx(400000);
   CHECK_EQ((int)brightnessFor(c), SAVER_BRIGHT);  // salvapantallas (v1.28)
   c.faceDown = true;
@@ -181,7 +181,7 @@ TEST(power, el_nivel_de_brillo_fija_el_brillo_despierto) {
   c.brightLevel = 0;  // el minimo (50)
   CHECK_EQ((int)brightnessFor(c), 50);
   c.sleeping = true;
-  CHECK_EQ((int)brightnessFor(c), 25);
+  CHECK_EQ((int)brightnessFor(c), 50);  // dormido, el mismo (v1.31: antes 25)
   c = ctx(100000);    // atenuada: 60, pero nunca mas que el nivel
   c.brightLevel = 0;
   CHECK_EQ((int)brightnessFor(c), 50);
@@ -212,7 +212,7 @@ TEST(power, el_salvapantallas_sale_a_los_5_minutos_y_no_boca_abajo_ni_apagada) {
   c = ctx(300001);
   CHECK(saverActive(c));
   c.sleeping = true;
-  CHECK_EQ((int)brightnessFor(c), SAVER_BRIGHT_SLEEP);
+  CHECK_EQ((int)brightnessFor(c), SAVER_BRIGHT);  // dormido, el mismo (v1.31: antes 16)
   c.faceDown = true;
   CHECK(!saverActive(c));
   c = ctx(400000);
@@ -223,4 +223,25 @@ TEST(power, el_salvapantallas_sale_a_los_5_minutos_y_no_boca_abajo_ni_apagada) {
   c = ctx(400000);
   CHECK_EQ((int)frameIntervalMs(c), 1000);  // un frame por segundo, como antes
   CHECK(lightSleepAllowed(c));
+}
+
+// v1.31: con el bicho dormido la pantalla se ve igual de bien que despierto, en todos los
+// escalones (activa, atenuada, salvapantallas, boca abajo, apagada) y con cualquier nivel o bateria
+TEST(power, dormido_el_brillo_es_el_mismo_que_despierto) {
+  const uint32_t idles[] = { 0, 70000, 100000, 300001, 400000 };
+  const int bats[] = { 80, 15, 5, -1 };
+  for (uint8_t lv = 0; lv < BRIGHT_LEVELS; lv++)
+    for (uint32_t idle : idles)
+      for (int bat : bats)
+        for (int fd = 0; fd < 2; fd++)
+          for (int off = 0; off < 2; off++) {
+            PowerCtx awake = ctx(idle);
+            awake.brightLevel = lv;
+            awake.batPct = bat;
+            awake.faceDown = fd;
+            awake.screenOff = off;
+            PowerCtx asleep = awake;
+            asleep.sleeping = true;
+            CHECK_EQ((int)brightnessFor(asleep), (int)brightnessFor(awake));
+          }
 }

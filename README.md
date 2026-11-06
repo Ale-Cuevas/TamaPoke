@@ -390,8 +390,8 @@ If one bottoms out it counts as a *slip-up*.
   gives a bonus) and a candy (+happiness but it fattens; weight makes it sluggish).
 - ⚽ **Play** → a menu: the pokeball minigame (trains SPEED) or a practice
   battle (crossed swords).
-- 🌙 **Light** → sleep/wake (recovers energy, dims the screen). While asleep,
-  needs decay much slower (rest).
+- 🌙 **Light** → sleep/wake (recovers energy, the scene goes dark). While asleep,
+  needs decay much slower (rest). The screen stays as bright as when it's awake.
 - 🫧 **Bath** → a foam scene that cleans up the poops.
 
 **Touch gestures:**
@@ -581,7 +581,7 @@ What the firmware does to save power (the policy is in `power.h`, covered by `te
   its usual place, so the header, bars, buttons and horizon never sit on the same pixels for long (the
   CO5300 only takes even positions; taps follow the picture). After 5 minutes untouched the screen shows a
   **screensaver** instead of the dimmed scene: black, with the pet and the clock drifting slowly around the
-  circle (brightness 40, 16 while the pet sleeps; most pixels are off). A touch, USER, BOOT or a shake brings
+  circle (brightness 40, asleep or awake; most pixels are off). A touch, USER, BOOT or a shake brings
   back whatever was open; the first touch only wakes. Face-down skips it (nobody is looking). `SAVER` and
   `ORBIT <n>` over serial show them at once.
 - **Static screens are not redrawn.** Keyboard, clock, card pages 2-4 and the starter choice are painted once
@@ -592,6 +592,8 @@ What the firmware does to save power (the policy is in `power.h`, covered by `te
 - **Speaker amplifier only when it can be used.** It is off while the pet sleeps and while the screen is dimmed
   or off; a sound requested meanwhile (e.g. "ready to evolve") switches it on for 4 s, and sounds wait 50 ms
   after a power-up so the start is not cut.
+- **Brightness** is the level you picked (BOOT), 60 when dimmed and 40 on the screensaver, the same whether
+  the pet is awake or asleep (until v1.30 a sleeping pet dropped it to 25 / 10 / 16, too dark to see).
 - **Low battery (< 20 %, not charging):** brightness capped (100, then 60 under 10 %) and frames twice as slow.
 - **Battery reads over I2C** every 10 s instead of 2 s when the screen is off or almost off.
 - **IMU:** accelerometer only (gyro off) at 62.5 Hz. Its FIFO holds about 2 s, so it is read once a second

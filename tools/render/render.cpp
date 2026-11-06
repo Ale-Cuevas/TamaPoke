@@ -259,6 +259,8 @@ static const std::vector<Scene> &scenes() {
     { "home-meadow-dusk", [] { pokemon(19, 19); } },
     // burn-in (v1.28): the screensaver after 5 min idle, and the picture moved by the orbit
     { "saver", [] { pokemon(25, 13); dimStage = DIM_OFF; }, 2 },
+    // v1.31: asleep the clock keeps its usual gray (it was a darker one)
+    { "saver-sleep", [] { pokemon(25, 2); pet.sleeping = true; dimStage = DIM_OFF; }, 2 },
     { "saver-egg-night", [] {
        resetUi();
        if (pet.awaitingStarter()) pet.chooseStarter(4);

@@ -135,6 +135,9 @@ yellow label to `/imu/` on the SD card, USER picks the label, a 1 s USER hold sw
   wakes it too (light sleep).
 - [ ] v1.23 the sun pill on the clock screen (swipe down) cycles the same level; after a restart (re-upload) the
   level is kept. At level 0 (dimmest) the 90 s dim doesn't get brighter.
+- [ ] v1.31 sleep brightness: put the pet to sleep (LIGHT). The screen stays as bright as awake (`BRIGHT`
+  prints `now=` equal to `value=`); after 90 s it dims to 60 and after 5 min (or `SAVER`) the screensaver shows
+  at 40 with the clock in the usual gray. Wake the pet: nothing changes. Next night on battery: note the drain.
 - [ ] Battery percentage close to the bring-up `[pmu]` reading; the charging bolt shows within a few seconds of plugging USB in.
 
 ### Save, time, sound, SD
