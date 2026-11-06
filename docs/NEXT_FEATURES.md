@@ -110,14 +110,14 @@ a dark screen.
   - the `LVL` serial command.
 - **FR-FX.2** Several levels at once (offline time, Rare Candy) play **one**
   effect that reads "Lv 12 → 18", not six.
-- **FR-FX.3** The effect waits until all of these are true:
+- **FR-FX.3** The **animation** waits until all of these are true:
   - the screen is awake (`DIM_AWAKE`, not the day-1 Task 6 screensaver);
-  - no dialog, card, game, sack, gallery, clock or keyboard is open;
+  - no dialog, card, game, sack, gallery, box, clock or keyboard is open;
   - the pet isn't evolving, in a ceremony, or asleep.
 
   This is the same "busy" rule as `drawWalkNews()`. The wait is RAM only: if
-  the board restarts first, the effect is dropped. The level itself is never
-  lost.
+  the board restarts first, the animation is dropped. The level itself is
+  never lost. The sound doesn't wait (FR-FX.5).
 - **FR-FX.4** The level-up animation, about 2.4 s:
   - the pet hops once (`PMD_HOP`; `PMD_POSE` if the sprite has no hop; a small
     bounce for the black-and-white fallback);
@@ -129,9 +129,20 @@ a dark screen.
   SPE +2". That is `atkStat()` / `defStat()` / `speStat()` at the new level
   minus the old one.
 - **FR-FX.5** The level-up sound is a new `SFX_LEVELUP`: a rising 4-note
-  arpeggio of about 500 ms that doesn't sound like any other effect. It plays
-  when the animation starts. The `sfxPlay(SFX_LEVEL)` in `Pet::tick()` goes
-  away.
+  arpeggio of about 500 ms that doesn't sound like any other effect.
+  - It plays **as soon as the level is reached**, even with the screen dim,
+    off, or in the screensaver: a chime in the pocket. It **never turns the
+    screen on** and doesn't reset the idle timer (no `wakeUI()`).
+  - The animation that follows later is silent, so the chime isn't heard
+    twice. If the screen is awake and free, chime and animation start
+    together.
+  - With the pet asleep there's no chime (FR-FX.15). The animation then plays
+    with its sound when the pet wakes.
+  - Levels gained while the board was off chime once, with the animation,
+    on the first awake frame.
+  - The `sfxPlay(SFX_LEVEL)` in `Pet::tick()` goes away.
+
+  *(Decided 2026-11-05.)*
 
 **One celebration at a time**
 - **FR-FX.6** Celebrations queue and play one at a time, in this order:
@@ -197,11 +208,19 @@ a dark screen.
   `FX_PRESS`, `FX_OOPS`.
 - **`LevelWatch`.** Remembers the last level seen. It is set up in `setup()`
   **before** `pet.syncClock()`, so levels gained while the board was off show
-  on the first awake frame. Each frame it compares `pet.level()` and pushes
-  `FX_LEVELUP(from, to)` on a rise.
-  - This catches every source (tick, offline, candy, `LVL`) without editing
-    each one.
-  - The save doesn't change.
+  on the first awake frame. On **every `loop()` pass**, not every rendered
+  frame, it compares `pet.level()`. Frames aren't drawn with the screen off,
+  and the chime mustn't wait for one. On a rise it:
+  - plays `SFX_LEVELUP` if the pet is awake;
+  - pushes `FX_LEVELUP(from, to, chimed)`. The `chimed` flag makes the later
+    animation silent.
+
+  This catches every source (tick, offline, candy, `LVL`) without editing
+  each one. The save doesn't change.
+
+  With the screen dim or off, `sfxPlay()` already powers the amplifier for
+  4 s, and `audioBusy()` keeps the CPU out of light sleep until the chime ends.
+  Nothing new is needed for the chime to play in the dark.
 
 **Changes in `Pet`**
 - Medals and milestones become flags the UI collects, like the existing
@@ -277,6 +296,9 @@ go at the end of the `Sfx` enum, which follows the table order.
 - While busy, the queue waits.
 - Overlay timers don't depend on each other.
 - A `LevelWatch` set up before an offline jump reports one event.
+- A level reached with the screen off chimes at once. The queued animation
+  carries `chimed` and plays silently. A level reached asleep doesn't chime,
+  and its animation isn't silent.
 
 **Host:** `test/test_pet.cpp`.
 - `takeMedal()` returns the Lv 10 medal exactly once, and nothing in `Pet`
@@ -297,8 +319,11 @@ go at the end of the `Sfx` enum, which follows the table order.
 **Board** (`DEVICE_TESTS.md`, "Feedback"):
 - `LVL 10`: the level-up plays, then the Lv 10 medal, one after the other.
 - Power off for 3 h, then on: "Lv a → b" plays once.
-- Screen off when a level is reached: the effect plays when the screen wakes,
-  with no sound in the dark.
+- Screen off when a level is reached (`LVL` with the screen off, or wait for
+  the hour): the chime plays at once, and the screen stays off. On the next
+  wake, the animation plays without a second chime.
+- Pet asleep when a level is reached: no chime. On wake, the animation plays
+  with its sound.
 - Sound off: animations play silently.
 - `PERF` with the level-up playing: no more than 3 ms above normal.
 
@@ -306,8 +331,9 @@ go at the end of the `Sfx` enum, which follows the table order.
 
 ### Open questions
 
-- A level reached with the screen off: play the sound right away (a chime in
-  the pocket) or wait for the screen? The spec says wait.
+- ~~A level reached with the screen off: chime right away, or wait?~~
+  **Answered 2026-11-05:** chime right away, without turning the screen on
+  (FR-FX.5).
 - Is the stat-gain line worth it? It makes the numbers on the stats card mean
   something.
 - Confetti on every medal, or only the rare ones?
@@ -433,11 +459,24 @@ At boot, before anything else:
 A host test cuts the power after every single write of every move (FR-BOX.9).
 
 **UI**
-- **Where the box is.** It becomes a **6th card page**, after Walk
-  (`CARD_PAGES` 6).
-  - Swiping up on the egg screen does nothing today. With BOX it opens the
-    card straight on the Box page, with the other pages hidden. That way a
-    stored pet can be woken while an egg is active.
+- **Where the box is: swipe right from home** *(decided 2026-11-05)*. Today
+  `onSwipe()` opens the Pokédex for a side swipe in either direction. BOX
+  splits the two directions (`dir` is +1 when the finger moves right):
+  - **swipe left** (`dir` −1) → the **Pokédex**, as today;
+  - **swipe right** (`dir` +1) → the **Box**, its own screen (`boxOpen`).
+    The card keeps its 5 pages.
+
+  The gestures inside each screen stay consistent:
+  - **Pokédex:** swiping left moves to the next page. Swiping right goes back
+    a page, and from the first page closes it, as today.
+  - **Box:** a single page. Swiping left closes it, back to home; swiping
+    right does nothing.
+  - **Egg screen:** a side swipe already works with an egg active (only the
+    card is blocked for eggs). So a stored pet can be woken while an egg is
+    active, with no special case.
+  - The same guards as the Pokédex today: no side swipe during the starter
+    pick, a ceremony, a confirm dialog or an open menu. While the clock, the
+    keyboard, the minigame or a battle is open, side swipes do nothing.
 - **Layout** inside the round frame:
   - "Box 3/6" at the top;
   - a 3×2 grid of 120×110 cells, each with the thumbnail (`thumbs.bin` through
@@ -448,12 +487,16 @@ A host test cuts the power after every single write of every move (FR-BOX.9).
 - **After a swap:**
   - reload the sprites (`pmd.unload()` then `ensureMon()`);
   - reset the pet's wandering (`beh`);
-  - close the card;
+  - close the box;
   - play the effect.
 - **UI hooks** (the `FEATURES.md` checklist): the `render()` chain, `onTap()`,
-  `onBack()`, both swipes, the long-press guard, `staticScreen()` /
-  `screenKey()`, `powerCtx()`, `resetUi()`, and a render scene. The slots'
-  contents and the open dialog go into `screenKey()`.
+  `onBack()` (USER closes the dialog first, then the box), both swipes, the
+  long-press guard, `staticScreen()` / `screenKey()`, `powerCtx()`,
+  `resetUi()`, and a render scene. The slots' contents and the open dialog go
+  into `screenKey()`. The box reads `thumbs.bin` like the Pokédex does, so it
+  shares the gallery's thumbnail loading.
+- **README:** the gestures section gets "swipe right: Box · swipe left:
+  Pokédex".
 - **Strings**, in all 8 languages:
   - `S_BOX_FMT` ("Box %u/%u")
   - `S_STORE_Q_FMT` ("Store %s?")
@@ -501,10 +544,13 @@ A host test cuts the power after every single write of every move (FR-BOX.9).
 **Renders:**
 - the box empty, with 3 pets, full, and with a damaged slot;
 - the store dialog, and the wake dialog with the swap note;
-- the Box page opened from the egg screen;
+- the box opened from the egg screen;
 - the store effect halfway through.
 
 **Board:**
+- swipe right opens the Box and swipe left opens the Pokédex, from the pet and
+  from the egg. Swiping left in the Box closes it. The Pokédex pages as
+  before;
 - store and wake with the real sprites;
 - a power cut during the effect (hold PWR);
 - `STATS` for both pets before and after;
@@ -517,7 +563,8 @@ A host test cuts the power after every single write of every move (FR-BOX.9).
 - A small "missed you" effect on waking (e.g. joy −10)? The spec says none:
   hibernation is a pause.
 - Release straight from the box, without waking the pet first?
-- A card page, or a screen of its own?
+- ~~A card page, or a screen of its own?~~ **Answered 2026-11-05:** its own
+  screen, opened by swiping right; swiping left stays the Pokédex.
 
 ---
 
@@ -582,7 +629,8 @@ itself.
 - **FR-OTA.5** Nothing is automatic in v1: no background checks, and no install
   without a tap.
 - **FR-OTA.6** Installing needs:
-  - USB power, or a battery at 40 % or more;
+  - USB power, or a battery at **50 %** or more (decided 2026-11-05, to be
+    safe);
   - the pet not evolving or in a ceremony;
   - the minigame closed.
 
@@ -749,7 +797,8 @@ The bar for v1 is:
   back to vA.
 - **Network errors** (wrong password, router off, router without internet):
   the right message for each.
-- **Battery** under 40 % and unplugged: refused, with the reason.
+- **Battery** under 50 % and unplugged: refused, with the reason. At 50 % or
+  more on battery: installs.
 - **Heap:** after 20 check/cancel cycles, `HEALTH` shows the free heap back at
   its starting value.
 - **Record:** firmware size, and the lowest free internal heap during HTTPS.
@@ -759,5 +808,6 @@ The bar for v1 is:
 - GitHub Releases, or GitHub Pages next to the web installer? Releases give
   versioned files and a stable "latest" link. Pages is the same host as the
   installer.
-- Is 40 % the right battery threshold?
+- ~~Is 40 % the right battery threshold?~~ **Answered 2026-11-05:** 50 %
+  (FR-OTA.6).
 - Should OTA-b's daily check while charging come in v1 after all?
