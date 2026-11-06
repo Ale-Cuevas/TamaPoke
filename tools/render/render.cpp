@@ -127,6 +127,14 @@ static void resetUi() {
   beh = decltype(beh){};
   walkLast = 0;
   galleryOpen = cardOpen = kbOpen = clockOpen = gameOpen = sackOpen = false;
+  // la caja (v1.37): cerrada, vacia y sin huevo esperando (newEgg() lo devuelve a su sitio)
+  boxOpen = false;
+  boxAsk = 0;
+  boxMove = BOXMV_NONE;
+  boxShakeUntil = 0;
+  boxShakeSlot = -1;
+  for (uint8_t k = 0; k < BOX_SLOTS; k++) pet.boxClear(k);
+  if (pet.eggHeld()) pet.newEgg();
   galleryDetail = 0;
   galleryPage = 0;
   cardPage = 0;
@@ -225,6 +233,36 @@ static void pokemon(int16_t dex, int hour, bool shiny = false) {
     pet.dexReg[(d - 1) >> 3] |= (uint8_t)(1 << ((d - 1) & 7));
   }
   ensureMon();
+}
+
+// a pet in box slot k (v1.37): Lv `lv`, asleep in the box as every stored pet
+static void boxPet(uint8_t k, int16_t dex, uint16_t lv, bool shiny = false, const char *nick = "") {
+  PetRecord r;
+  memset(&r, 0, sizeof(r));
+  r.speciesId = dex;
+  r.growMin = levelStart(lv) + 5;
+  r.ageMinutes = r.growMin + 45;
+  r.flags = shiny ? REC_SHINY : 0;
+  strncpy(r.nick, nick, sizeof(r.nick) - 1);
+  r.fullness = r.joy = r.energy = 70;
+  r.hygiene = 90;
+  r.geneAtk = r.geneDef = r.geneSpe = 100;
+  pet.boxPut(k, r);
+}
+
+// three pets in the box, one of them shiny and one with a nickname
+static void boxThree() {
+  boxPet(0, 7, 12);
+  boxPet(1, 133, 23, true);
+  boxPet(4, 6, 41, false, "BLAZE");
+}
+
+// the egg screen (not a starter pick), as "saver-egg-night" sets it
+static void eggNow() {
+  resetUi();
+  if (pet.awaitingStarter()) pet.chooseStarter(4);
+  pet.speciesId = -1;
+  pet.lastSeenEpoch = epochAt(10);
 }
 
 // steps the clock 85 ms at a time through the battle logic until `done` (or 60 s)
@@ -400,6 +438,55 @@ static const std::vector<Scene> &scenes() {
     { "hatch-shake", [] { pokemon(25, 13); fxo.push(FXO_HATCH, 0, 0, millis()); }, 6 },
     { "hatch-flash", [] { pokemon(25, 13); fxo.push(FXO_HATCH, 0, 0, millis()); }, 9 },
     { "hatch-reveal", [] { pokemon(25, 13); fxo.push(FXO_HATCH, 0, 0, millis()); }, 12 },
+    // the box (v1.37): swipe right from home. Frames run 85 ms: the light flies for 600 ms
+    { "box-empty", [] { pokemon(25, 13); openBox(); } },
+    { "box", [] { pokemon(25, 13); boxThree(); openBox(); } },
+    { "box-full", [] {
+       pokemon(25, 13);
+       const int16_t dex[BOX_SLOTS] = { 1, 4, 7, 16, 133, 143 };
+       for (uint8_t k = 0; k < BOX_SLOTS; k++) boxPet(k, dex[k], 8 + k * 9, k == 3);
+       openBox();
+     } },
+    { "box-damaged", [] {
+       pokemon(25, 13);
+       boxThree();
+       Preferences raw;  // a slot whose CRC doesn't match: "?", never loaded
+       raw.begin("tamapoke");
+       PetRecord bad = pet.boxRecord(0);
+       bad.joy ^= 1;
+       raw.putBytes("box2", &bad, sizeof(bad));
+       pet.boxReload();
+       openBox();
+     } },
+    { "box-store-ask", [] { pokemon(25, 13); boxThree(); openBox(); boxAsk = 3; boxAskUntil = millis() + 10000; } },
+    { "box-wake-ask", [] { pokemon(25, 13); boxThree(); openBox(); boxAsk = 5; boxAskUntil = millis() + 10000; } },
+    { "box-wake-ask-fr", [] {
+       pokemon(25, 13);
+       setLang(LANG_FR);
+       applyLangFont();
+       boxPet(0, 115, 30);  // Kangourex (9): the swap note at its longest
+       strcpy(pet.nick, "SPARKYBOLTS");  // a nickname of 11 letters
+       openBox();
+       boxAsk = 1;
+       boxAskUntil = millis() + 10000;
+     } },
+    { "box-egg", [] { eggNow(); boxThree(); openBox(); } },
+    { "box-held", [] {
+       eggNow();
+       boxThree();
+       pet.wake(1);  // woken with an egg active: the egg waits, shown asleep by "Now"
+       ensureMon();
+       openBox();
+     } },
+    { "box-store-fx", [] { pokemon(25, 13); boxThree(); openBox(); boxStartMove(2); }, 4 },
+    { "box-swap-fx", [] { pokemon(25, 13); boxThree(); openBox(); boxStartMove(4); }, 4 },
+    { "box-store-end", [] { pokemon(25, 13); boxThree(); openBox(); boxStartMove(2); }, 8 },
+    { "box-ja", [] { pokemon(25, 13); setLang(LANG_JA); applyLangFont(); boxThree(); openBox(); } },
+    { "box-ko", [] { pokemon(25, 13); setLang(LANG_KO); applyLangFont(); boxThree(); openBox(); boxAsk = 5; boxAskUntil = millis() + 10000; } },
+    { "box-de", [] { pokemon(25, 13); setLang(LANG_DE); applyLangFont(); boxThree(); boxPet(5, 2, 17); openBox(); } },
+    // back home: the pet that is now active comes out of a light (FXO_BOX)
+    { "box-appear", [] { pokemon(6, 15); fxo.push(FXO_BOX, 0, 0, millis()); }, 3 },
+    { "box-appear-egg", [] { eggNow(); fxo.push(FXO_BOX, 0, 0, millis()); }, 2 },
     // motion easter eggs (Task 2)
     { "grumpy", [] { pokemon(133, 23); pet.sleeping = true; pet.wakeGrumpy(); }, 4 },
     { "dizzy", [] { pokemon(25, 13); pet.shaken(); }, 4 },

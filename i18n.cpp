@@ -45,6 +45,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Toca para cargar!", "GANASTE!", "PERDISTE...", "EMPATE", "Felicidad +%u", "Premio: una vez por hora",
     // efectos (v1.30)
     "SUBE DE NIVEL!",
+    // la caja (v1.37)
+    "CAJA %u/%u", "Guardar a %s?", "Despertar a %s?", "%s va a la caja", "Ahora: %s", "Vac\241o", "Da\244ado",
   },
   // ---------------- EN ----------------
   {
@@ -84,6 +86,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Tap to charge!", "YOU WIN!", "YOU LOST...", "DRAW", "Joy +%u", "Reward: once an hour",
     // efectos (v1.30)
     "LEVEL UP!",
+    // la caja (v1.37)
+    "BOX %u/%u", "Store %s?", "Wake %s?", "%s goes in the box", "Now: %s", "Empty", "Damaged",
   },
   // ---------------- FR ----------------
   {
@@ -123,6 +127,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Tape pour charger!", "GAGN\220!", "PERDU...", "\220GALIT\220", "Bonheur +%u", "Prix: une fois par heure",
     // efectos (v1.30)
     "NOUVEAU NIVEAU!",
+    // la caja (v1.37)
+    "BOITE %u/%u", "Ranger %s?", "R\202veiller %s?", "%s va dans la bo\214te", "Actif: %s", "Vide", "Ab\214m\202",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -167,6 +173,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Tippen zum Laden!", "GEWONNEN!", "VERLOREN...", "UNENTSCHIEDEN", "Laune +%u", "Belohnung: 1x pro Stunde",
     // efectos (v1.30)
     "AUFGESTIEGEN!",
+    // la caja (v1.37)
+    "BOX %u/%u", "%s ablegen?", "%s wecken?", "%s kommt in die Box", "Jetzt: %s", "Leer", "Besch\204digt",
   },
   // ---------------- IT ----------------
   {
@@ -206,6 +214,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Tocca per caricare!", "HAI VINTO!", "HAI PERSO...", "PAREGGIO", "Felicit\205 +%u", "Premio: una volta l'ora",
     // efectos (v1.30)
     "NUOVO LIVELLO!",
+    // la caja (v1.37)
+    "BOX %u/%u", "Depositare %s?", "Svegliare %s?", "%s va nel box", "Ora: %s", "Vuoto", "Danneggiato",
   },
   // ---------------- PT ----------------
   {
@@ -245,6 +255,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Toque para carregar!", "VENCEU!", "PERDEU...", "EMPATE", "Alegria +%u", "Pr\210mio: 1 vez por hora",
     // efectos (v1.30)
     "SUBIU DE NIVEL!",
+    // la caja (v1.37)
+    "CAIXA %u/%u", "Guardar %s?", "Acordar %s?", "%s vai para a caixa", "Agora: %s", "Vazio", "Danificado",
   },
   // ---------------- JA ----------------
   {
@@ -307,6 +319,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "タッチで ためる！", "かった！", "まけた...", "ひきわけ", "ごきげん +%u", "ごほうびは 1じかんに 1かい",
     // efectos (v1.30)
     "レベルアップ！",
+    // la caja (v1.37)
+    "ボックス %u/%u", "%sを あずける？", "%sを おこす？", "%sは ボックスへ", "いま: %s", "あき", "こわれている",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -351,6 +365,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "탭해서 모으기!", "이겼다!", "졌다...", "무승부", "기분 +%u", "보상은 1시간에 1번",
     // efectos (v1.30)
     "레벨 업!",
+    // la caja (v1.37)
+    "박스 %u/%u", "%s 맡길까요?", "%s 깨울까요?", "%s는 박스로", "지금: %s", "빈 칸", "손상됨",
   },
 };
 

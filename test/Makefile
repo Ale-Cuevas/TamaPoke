@@ -13,14 +13,14 @@ BUILD    := build
 BIN      := $(BUILD)/tamapoke_tests
 
 SOURCES := main.cpp shim/shim.cpp test_pet.cpp test_dex.cpp test_i18n.cpp test_blit.cpp test_batcurve.cpp test_power.cpp test_roundmask.cpp test_button.cpp \
-           test_steps.cpp test_motion.cpp test_battle.cpp test_wind.cpp test_burnin.cpp test_fx.cpp test_ballgame.cpp test_growth.cpp \
+           test_steps.cpp test_motion.cpp test_battle.cpp test_wind.cpp test_burnin.cpp test_fx.cpp test_ballgame.cpp test_growth.cpp test_box.cpp \
            $(SRC_DIR)/pet.cpp $(SRC_DIR)/i18n.cpp
 
 .PHONY: all run clean asan
 all: run
 
 $(BIN): $(SOURCES) framework.h shim/Arduino.h shim/Preferences.h ../roundmask.h ../ui_frame.h ../board_amoled_216.h ../button.h \
-        ../steps.h ../motion.h imu_data.h ../battle.h ../dex.h ../wind.h ../burnin.h ../fx.h ../ballgame.h ../growth.h ../pet.h
+        ../steps.h ../motion.h imu_data.h ../battle.h ../dex.h ../wind.h ../burnin.h ../fx.h ../ballgame.h ../growth.h ../box.h ../pet.h
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) -I shim -o $@ $(SOURCES) $(LDFLAGS)
 

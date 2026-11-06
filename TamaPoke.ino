@@ -22,6 +22,7 @@
 #include <U8g2lib.h>  // fuentes CJK (japones); ver applyLangFont()
 #include <esp_sleep.h>
 #include <driver/gpio.h>
+#include <nvs.h>  // comando NVS: entradas usadas y libres (la caja, v1.37)
 #include "board_amoled_216.h"
 #include "round_display.h"
 #include "species.h"
@@ -44,7 +45,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.36"
+#define FW_VERSION "1.37"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -87,6 +88,19 @@ bool galleryOpen = false;
 bool galleryDirty = false;
 int galleryPage = 0;        // 10 paginas de 16
 int16_t galleryDetail = 0;  // dex en vista detalle, 0 = rejilla
+
+// la caja (v1.37, docs/NEXT_FEATURES.md BOX): deslizar a la derecha desde casa
+bool boxOpen = false;
+uint8_t boxAsk = 0;           // dialogo de guardar / despertar: hueco + 1 (0 = ninguno)
+uint32_t boxAskUntil = 0;     // se cierra solo, como "soltar?"
+enum : uint8_t { BOXMV_NONE = 0, BOXMV_STORE, BOXMV_WAKE, BOXMV_SWAP };
+uint8_t boxMove = BOXMV_NONE; // movimiento en marcha: la luz vuela, despues se escribe en flash
+uint8_t boxMoveSlot = 0;
+uint32_t boxMoveStart = 0;
+bool boxMoveDrawnEnd = false; // ya se vio el ultimo cuadro (como quedara): se puede escribir
+int8_t boxShakeSlot = -1;     // hueco que no se puede usar: tiembla (como un boton, fx.h)
+uint32_t boxShakeUntil = 0;
+int boxNowCx = 233;           // centro de la miniatura del activo (de ahi sale o ahi llega la luz)
 
 bool screenOff = false;       // pulsacion corta del boton PWR (la tercera de cada vuelta, v1.32)
 // salvapantallas puesto con PWR (v1.32): comer, el corazon o una evolucion no lo quitan solos,
@@ -406,6 +420,7 @@ void loop() {
   }
 
   updateBrightness(now);
+  boxTick(millis());  // caja (v1.37): cuando la luz llega a su hueco, se escribe en flash
 
   // bateria al limite seguro (sin USB): se guarda la partida y se apaga el PMU antes de que la
   // celda baje mas; el RTC conserva la hora
@@ -498,7 +513,7 @@ void onShake() {
   if (dimStage > 0) { wakeUI(); return; }
   wakeUI();
   if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen || battleOpen()) return;
-  if (galleryOpen || cardOpen || kbOpen || clockOpen) return;  // el bicho no esta en pantalla
+  if (galleryOpen || boxOpen || cardOpen || kbOpen || clockOpen) return;  // el bicho no esta en pantalla
   if (pet.sleeping) pet.wakeGrumpy();
   else pet.shaken();  // tambien el huevo: se tambalea
 }
@@ -521,7 +536,7 @@ PowerCtx powerCtx(uint32_t now) {
   c.idleMs = idleSince(now, lastInteract);
   c.screenOff = screenOff;
   c.sleeping = pet.sleeping;
-  c.gameOpen = gameOpen || sackOpen || battleOpen();  // el combate tambien va a 85 ms por frame
+  c.gameOpen = gameOpen || sackOpen || battleOpen() || boxMove;  // combate y luz de la caja, tambien a 85 ms
   c.usb = usbPresent();
   c.charging = batCharging();
   c.batPct = batPercent();
@@ -763,7 +778,7 @@ void handleSerial() {
   } else if (line.startsWith("FX")) {  // FX <efecto>: lanza un efecto de respuesta para verlo en la placa
     String k = line.length() > 3 ? line.substring(3) : String("");
     k.trim();
-    if (!fxDebug(k)) Serial.println("FX levelup|levelup6|medal|streak|goal|goal3|stat|bond|train|deny|press|oops|hatch");
+    if (!fxDebug(k)) Serial.println("FX levelup|levelup6|medal|streak|goal|goal3|stat|bond|train|deny|press|oops|hatch|box");
     Serial.println("DONE");
   } else if (line.startsWith("BRIGHT")) {  // BRIGHT: nivel y brillo; BRIGHT <n>: lo fija (como BOOT)
     if (line.length() > 7) {
@@ -815,6 +830,49 @@ void handleSerial() {
       Serial.printf("ball: score=%ld speed=%.2f\n", n, ballSpeed((uint16_t)n));
     }
     Serial.println("DONE");
+  } else if (line == "BOX") {  // la caja (v1.37): cada hueco con uid, especie, nivel y CRC
+    boxReport();
+    Serial.println("DONE");
+  } else if (line.startsWith("STORE ") || line.startsWith("WAKE ")) {  // STORE <k> / WAKE <k>, k = 0-5
+    bool toStore = line.startsWith("STORE ");
+    String a = line.substring(toStore ? 6 : 5);
+    a.trim();
+    const char *c = a.c_str();
+    int k = (a.length() == 1 && c[0] >= '0' && c[0] <= '9') ? c[0] - '0' : -1;
+    bool ok = k >= 0 && k < BOX_SLOTS && (toStore ? pet.store((uint8_t)k) : pet.wake((uint8_t)k));
+    if (ok) boxAfterMove();  // como al tocar SI, sin la luz
+    else Serial.printf("%s: no se puede (hueco 0-%u %s; sin despedida, evolucion ni eleccion de inicial)\n",
+                       toStore ? "store" : "wake", BOX_SLOTS - 1, toStore ? "vacio y un bicho nacido" : "con un bicho");
+    boxReport();
+    Serial.println("DONE");
+  } else if (line == "BOXFILL") {  // bichos inventados en los huecos vacios (pruebas, capturas)
+    boxFill();
+    boxReport();
+    Serial.println("DONE");
+  } else if (line.startsWith("BOXCLR ")) {  // BOXCLR <k>: vacia un hueco (tambien uno danado)
+    String a = line.substring(7);
+    a.trim();
+    const char *c = a.c_str();
+    int k = (a.length() == 1 && c[0] >= '0' && c[0] <= '9') ? c[0] - '0' : -1;
+    if (k < 0 || !pet.boxClear((uint8_t)k)) Serial.printf("boxclr: hueco 0-%u\n", BOX_SLOTS - 1);
+    boxReport();
+    Serial.println("DONE");
+  } else if (line == "NVS") {  // entradas de la NVS (20 KB, ~500 de 32 bytes): cuanto ocupa la partida
+    nvs_stats_t st;
+    if (nvs_get_stats(NULL, &st) == ESP_OK) {
+      size_t mine = 0;
+      nvs_handle_t h;
+      if (nvs_open("tamapoke", NVS_READONLY, &h) == ESP_OK) {
+        nvs_get_used_entry_count(h, &mine);
+        nvs_close(h);
+      }
+      Serial.printf("nvs used=%u free=%u available=%u total=%u namespaces=%u tamapoke=%u\n", (unsigned)st.used_entries,
+                    (unsigned)st.free_entries, (unsigned)st.available_entries, (unsigned)st.total_entries,
+                    (unsigned)st.namespace_count, (unsigned)mine);
+    } else {
+      Serial.println("nvs: sin estadisticas");
+    }
+    Serial.println("DONE");
   } else if (line == "SHAKE") {            // como una sacudida de verdad
     onShake();
     Serial.println("DONE");
@@ -845,6 +903,9 @@ void handleSerial() {
     Serial.printf("fx queue=%u showing=%d kind=%d busy=%d sleep=%d dim=%u off=%d saver=%d\n", fxq.n,
                   fxq.active ? 1 : 0, fxq.active ? fxq.cur.kind : -1, fxScreenBusy() ? 1 : 0, pet.sleeping ? 1 : 0,
                   dimStage, screenOff ? 1 : 0, saverOn() ? 1 : 0);
+    // la caja (v1.37): quien es el activo y si hay un huevo esperando
+    Serial.printf("box used=%u/%u uid=%08lX eggHeld=%d\n", pet.boxUsed(), BOX_SLOTS, (unsigned long)pet.uid,
+                  pet.eggHeld() ? 1 : 0);
     Serial.println("DONE");
   }
 }
@@ -929,7 +990,7 @@ void handleTouch() {
     tXl = x;
     tYl = y;
     // pulsacion larga sin moverse sobre el bicho -> dialogo de soltar
-    if (!holdFired && !swallowGesture && !galleryOpen && !cardOpen && !kbOpen && !clockOpen && !menuKind && millis() - tStart > 3000 &&
+    if (!holdFired && !swallowGesture && !galleryOpen && !boxOpen && !cardOpen && !kbOpen && !clockOpen && !menuKind && millis() - tStart > 3000 &&
         abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && inPetZone(tX0, tY0) &&
         !pet.isEgg() && !confirmUntil && !pet.ceremony) {
       confirmUntil = millis() + 10000;
@@ -953,7 +1014,7 @@ void openClock();  // prototipo
 
 void onSwipeV(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (gameOpen || galleryOpen || kbOpen || sackOpen || battleOpen() || pet.ceremony) return;
+  if (gameOpen || galleryOpen || boxOpen || kbOpen || sackOpen || battleOpen() || pet.ceremony) return;
   if (clockOpen) { clockOpen = false; return; }
   if (cardOpen) {
     if (dir < 0) { cardOpen = false; itemConfirm = 0; }  // arriba cierra la ficha
@@ -977,13 +1038,21 @@ void onSwipe(int dir) {
     itemConfirm = 0;
     return;
   }
+  if (boxOpen) {  // la caja es una sola pagina: a la izquierda vuelve a casa, a la derecha nada
+    if (dir < 0 && !boxMove) closeBox();
+    return;
+  }
   if (!galleryOpen) {
     // con un menu abierto no: la galeria se abria encima del de comida
     if (!pet.ceremony && !confirmUntil && !menuKind) {
-      galleryOpen = true;
-      galleryPage = 0;
-      galleryDetail = 0;
-      galleryDirty = true;
+      if (dir > 0) {  // a la derecha: la caja (v1.37), desde el bicho o desde el huevo
+        if (boxCanOpen()) openBox();
+      } else {        // a la izquierda: la Pokedex
+        galleryOpen = true;
+        galleryPage = 0;
+        galleryDetail = 0;
+        galleryDirty = true;
+      }
     }
     return;
   }
@@ -1063,6 +1132,12 @@ void onBack() {
     galleryPmd.unload();
     return;
   }
+  if (boxOpen) {
+    if (boxMove) return;                   // la luz ya vuela: el movimiento no se corta
+    if (boxAsk) { boxAsk = 0; return; }    // "guardar?" / "despertar?": NO
+    closeBox();
+    return;
+  }
   if (kbOpen) { kbOpen = false; return; }        // descarta el nombre y vuelve a la ficha
   if (clockOpen) { clockOpen = false; return; }  // sin aplicar la hora, como al deslizar
   if (pet.ceremony) return;                      // durante la despedida no hay vuelta atras
@@ -1090,6 +1165,10 @@ void onTap(int16_t x, int16_t y) {
   }
   if (galleryOpen) {
     galleryTap(x, y);
+    return;
+  }
+  if (boxOpen) {
+    boxTap(x, y);
     return;
   }
   if (kbOpen) {
@@ -1772,6 +1851,7 @@ void printT(const char *s) {
 static bool staticScreen() {
   if (pet.awaitingStarter()) return true;
   if (galleryOpen || gameOpen || sackOpen || battleOpen()) return false;  // la galeria gestiona su propio repintado
+  if (boxOpen) return !boxMove && !timeLeft(boxShakeUntil);  // la caja, quieta salvo la luz o un hueco que tiembla
   if (kbOpen || clockOpen) return true;
   return cardOpen && cardPage != 0;  // la pagina 0 tiene el retrato animado
 }
@@ -1779,12 +1859,22 @@ uint32_t walkStepsToday();
 static uint32_t mixKey(uint32_t h, uint32_t v) { return (h ^ v) * 16777619u; }
 static uint32_t screenKey() {
   uint32_t h = 2166136261u;
-  h = mixKey(h, pet.awaitingStarter() ? 1 : kbOpen ? 2 : clockOpen ? 3 : 4 + cardPage);
+  h = mixKey(h, pet.awaitingStarter() ? 1 : boxOpen ? 20 : kbOpen ? 2 : clockOpen ? 3 : 4 + cardPage);
   h = mixKey(h, sdEpoch);
   h = mixKey(h, gBright);                      // el aviso de brillo va encima de todo
   h = mixKey(h, timeLeft(briToastUntil) > 0);  // y al irse tiene que repintarse
   h = mixKey(h, gOrbitStep);                   // la orbita la mueve: hay que volver a mandarla
-  if (kbOpen) {
+  if (boxOpen) {
+    // cada hueco (su CRC cambia con cualquier cosa del bicho), el activo, el huevo que espera y el dialogo
+    for (uint8_t k = 0; k < BOX_SLOTS; k++) {
+      h = mixKey(h, pet.boxState(k));
+      if (pet.boxState(k) == BOX_OK) h = mixKey(h, pet.boxRecord(k).crc);
+    }
+    for (uint32_t v : { (uint32_t)pet.speciesId, (uint32_t)pet.shiny, pet.uid, (uint32_t)pet.eggHeld(),
+                        (uint32_t)pet.canBoxMove(), (uint32_t)boxAsk, (uint32_t)gLang })
+      h = mixKey(h, v);
+    for (const char *c = pet.nick; *c; c++) h = mixKey(h, (uint8_t)*c);
+  } else if (kbOpen) {
     h = mixKey(h, nameLen);
     for (int i = 0; i < nameLen; i++) h = mixKey(h, (uint8_t)nameBuf[i]);
   } else if (clockOpen) {
@@ -1816,6 +1906,7 @@ uint32_t lastScreenKey = 0;
 // Dibuja un frame y devuelve true si lo ha volcado al panel.
 bool render() {
   if (itemConfirm && !timeLeft(itemConfirmUntil)) itemConfirm = 0;  // antes de la clave: asi se repinta
+  if (boxAsk && !timeLeft(boxAskUntil)) boxAsk = 0;                  // (lo mismo, el dialogo de la caja)
   foundShown = false;  // lo vuelve a poner drawWalkNews() si el hallazgo sigue en pantalla
   if (saverOn()) {  // 5 min sin tocar: salvapantallas, encima de cualquier pantalla
     screenKeyValid = false;  // al despertar, la pantalla de debajo se vuelve a pintar entera
@@ -1836,6 +1927,10 @@ bool render() {
   }
   if (galleryOpen) {
     renderGallery();
+    return true;
+  }
+  if (boxOpen) {
+    renderBox();
     return true;
   }
   if (gameOpen) {
@@ -1890,6 +1985,7 @@ bool render() {
     if (pet.emote() == EMOTE_WOBBLE)  // agitado: se tambalea y se va calmando
       dx = (int)(8.0f * (1.0f - pet.emoteT()) * sinf(millis() * 0.035f));
     drawEggSprite(dx, pet.eggCracks());
+    drawBoxAppear(millis());  // guardado: el huevo sale de una luz
     if (pet.eggRarity() >= R_RARO) {
       const char *rar = (pet.eggRarity() == R_LEGENDARIO) ? T(S_EGG_LEGEND) : T(S_EGG_RARE);
       gfx->setTextColor(pet.eggRarity() == R_LEGENDARIO ? UI_BAR_WARN : 0x4C98);
@@ -1920,6 +2016,7 @@ bool render() {
     drawSceneFront(homeBiome(), millis(), gNight);  // hierba delante de los pies
     drawBath();
     drawPoops();
+    drawBoxAppear(millis());  // recien guardado o despertado (caja): sale de una luz
     // panel inferior: base limpia para barras y botones sobre el paisaje
     gfx->fillRect(0, 312, 466, 154, gNight ? UI_BG_NIGHT : UI_BG_DAY);
     drawBars();
@@ -2589,7 +2686,8 @@ void fxCollect(uint32_t now) {
 // algo encima (dialogo, menu, bano, evolucion, despedida, eclosion)
 bool fxScreenBusy() {
   return !fxScreenAwake() || pet.sleeping || pet.ceremony || pet.evolving() || choiceKind || confirmUntil ||
-         menuKind || bathUntil || fxo.find(FXO_HATCH) || fxo.waiting(FXO_HATCH);
+         menuKind || bathUntil || fxo.find(FXO_HATCH) || fxo.waiting(FXO_HATCH) || fxo.find(FXO_BOX) ||
+         fxo.waiting(FXO_BOX);
 }
 
 // pose de un gesto del bicho (PMD): una vez, sosteniendo el ultimo frame hasta minMs
@@ -2644,6 +2742,7 @@ bool fxDebug(const String &k) {
     fxo.push(FXO_OOPS, 0, 0, now);
     sfxPlay(SFX_OOPS);
   } else if (k == "hatch" && !pet.isEgg()) fxo.push(FXO_HATCH, 0, 0, now);
+  else if (k == "box") fxo.push(FXO_BOX, 0, 0, now);  // el activo sale de una luz (caja, v1.37)
   else return false;
   wakeUI();
   return true;
@@ -3529,6 +3628,505 @@ void galleryTap(int16_t x, int16_t y) {
   if (dex > 151) return;
   galleryDetail = dex;
   galleryPmd.load(dex, pet.isShinyRegistered(dex));
+}
+
+// ---------- la caja (docs/NEXT_FEATURES.md, Tarea BOX, v1.37) ----------
+// Deslizar a la derecha desde casa (a la izquierda sigue la Pokedex). Seis huecos en una rejilla
+// de 3x2: uno vacio pregunta "guardar?" y uno ocupado "despertar?". Al decir SI, una luz vuela
+// entre el bicho activo (la fila de abajo) y el hueco en BOX_FX_MS; el ultimo cuadro ya ensena
+// como queda, y con el en pantalla se escribe en la NVS (~1 s quieta, no parece colgada). Luego se
+// vuelve a casa, donde el que queda activo sale de una luz (FXO_BOX).
+
+#define BOX_X 47       // rejilla de 3x2 huecos de 124x110 (las esquinas quedan ~8 px dentro del circulo)
+#define BOX_Y 92
+#define BOX_CW 124
+#define BOX_CH 110
+#define BOX_NOW_Y 350  // centro de la fila "Ahora: ..."
+#define BOX_SLEEP_BG C565(0xe2, 0xe5, 0xf4)  // fondo de un hueco ocupado: azulado, duermen
+#define BOX_LIGHT C565(0xff, 0xe7, 0x9f)     // halo dorado de la luz
+#define BOX_NOTE_INK C565(0x6a, 0x6a, 0x7a)  // segunda linea del dialogo
+
+int boxCellX(uint8_t k) { return BOX_X + (k % 3) * BOX_CW; }
+int boxCellY(uint8_t k) { return BOX_Y + (k / 3) * BOX_CH; }
+
+int boxSlotAt(int16_t x, int16_t y) {
+  if (x < BOX_X || y < BOX_Y) return -1;  // filtrar antes de dividir, como en la Pokedex
+  int c = (x - BOX_X) / BOX_CW, r = (y - BOX_Y) / BOX_CH;
+  if (c > 2 || r > 1) return -1;
+  return r * 3 + c;
+}
+
+const char *recName(const PetRecord &r) { return r.nick[0] ? r.nick : dexName(r.speciesId); }
+const char *petName() { return pet.nick[0] ? pet.nick : dexName(pet.speciesId); }
+
+// la caja se abre desde la casa sin nada encima: ni dialogo, ni menu, ni bano, ni evolucion
+bool boxCanOpen() {
+  return !pet.ceremony && !confirmUntil && !choiceKind && !menuKind && !bathUntil && !pet.evolving();
+}
+
+void openBox() {
+  boxOpen = true;
+  boxAsk = 0;
+  boxMove = BOXMV_NONE;
+  boxShakeUntil = 0;
+}
+
+void closeBox() {
+  boxOpen = false;
+  boxAsk = 0;
+}
+
+// Texto centrado en cx a tamano 2 sin pasar de maxW: si no cabe, junta las letras (1 px, o 2) en
+// vez de bajar a tamano 1, que en este panel no se lee. Con la fuente CJK se pinta tal cual (los
+// nombres en japones o coreano caben).
+void printTight(const char *s, int cx, int y, int maxW) {
+  setSize(2);
+  int w = textW(s, 2);
+  if (gCjkFont || w <= maxW) {
+    setCur(cx - w / 2, y);
+    printT(s);
+    return;
+  }
+  int n = (int)strlen(s);
+  int adv = (n * 11 - 1 <= maxW) ? 11 : 10;
+  if (n * adv - 2 > maxW) {  // ni asi: el ultimo recurso
+    setSize(1);
+    setCur(cx - textW(s, 1) / 2, y + 4);
+    printT(s);
+    return;
+  }
+  int x = cx - (n * adv - 2) / 2;
+  for (int i = 0; i < n; i++) {
+    setCur(x + i * adv, y);
+    printT(s[i]);
+  }
+}
+
+// Miniatura de thumbs.bin sin su margen transparente (los fotogramas PMD traen mucho aire: lo
+// visible es como mucho 33x28 de 40x40), centrada en (cx, cy), a 2x si cabe en maxW x maxH y si no a
+// 1x. dim = dormido: los colores se acercan al fondo bg.
+void drawThumbFit(const uint8_t *b, int cx, int cy, int maxW, int maxH, bool dim, uint16_t bg) {
+  uint8_t w = b[0], h = b[1], n = b[2];
+  const uint8_t *pal = b + 3;
+  const uint8_t *d = pal + n * 2;
+  int x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (int r = 0; r < h; r++)
+    for (int c = 0; c < w; c++)
+      if (d[r * w + c] != 0xFF) {
+        if (c < x0) x0 = c;
+        if (c > x1) x1 = c;
+        if (r < y0) y0 = r;
+        if (r > y1) y1 = r;
+      }
+  if (x1 < 0) return;  // toda transparente
+  int bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+  int s = (bw * 2 <= maxW && bh * 2 <= maxH) ? 2 : 1;
+  int ox = cx - bw * s / 2, oy = cy - bh * s / 2;
+  for (int r = y0; r <= y1; r++) {
+    const uint8_t *row = d + r * w + x0;
+    forRuns(bw, [&](int c) { return indexedKey(row[c], false); },
+            [&](int c0, int len, int k) {
+              uint16_t col = (uint16_t)(pal[k * 2] | (pal[k * 2 + 1] << 8));
+              if (dim) col = lerp565(col, bg, 9, 16);
+              gfx->fillRect(ox + c0 * s, oy + (r - y0) * s, len * s, s, col);
+            });
+  }
+}
+
+// un hueco: miniatura dormida (con su "z" y la estrella si es shiny), nombre y nivel; "?" si esta
+// danado; vacio, con un "+" si el activo se puede guardar. hide = su miniatura se fue con la luz
+void drawBoxSlot(uint8_t k, uint8_t st, const PetRecord *r, bool hide, int dx) {
+  int x = boxCellX(k) + 4 + dx, y = boxCellY(k) + 4, w = BOX_CW - 8, h = BOX_CH - 8;
+  int cx = x + w / 2;
+  if (st == BOX_OK && r) {
+    gfx->fillRoundRect(x, y, w, h, 12, BOX_SLEEP_BG);
+    gfx->drawRoundRect(x, y, w, h, 12, UI_INK);
+    if (!hide) {
+      const uint8_t *t = thumbs.get(r->speciesId);
+      if (t) {
+        drawThumbFit(t, cx, y + 34, w - 40, 58, true, BOX_SLEEP_BG);
+      } else {  // sin thumbs.bin: el numero, como la Pokedex
+        char num[6];
+        snprintf(num, sizeof(num), "%d", r->speciesId);
+        gfx->setTextColor(UI_TRACK);
+        setSize(3);
+        setCur(cx - textW(num, 3) / 2, y + 22);
+        printT(num);
+      }
+    }
+    gfx->setTextColor(0x4C98);  // "z": duerme
+    setSize(2);
+    setCur(x + w - 18, y + 6);
+    printT("z");
+    if (r->flags & REC_SHINY) {
+      gfx->setTextColor(UI_BAR_WARN);
+      setCur(x + 7, y + 6);
+      printT("*");
+    }
+    gfx->setTextColor(UI_INK);
+    printTight(recName(*r), cx, y + 68, w - 6);
+    char lv[16];
+    snprintf(lv, sizeof(lv), T(S_LVL_FMT), (unsigned)levelFor(r->growMin));
+    setSize(2);
+    setCur(cx - textW(lv, 2) / 2, y + 86);
+    printT(lv);
+    return;
+  }
+  if (st == BOX_DAMAGED) {
+    gfx->drawRoundRect(x, y, w, h, 12, UI_BAR_BAD);
+    gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, 11, UI_BAR_BAD);
+    gfx->setTextColor(UI_BAR_BAD);
+    setSize(4);
+    setCur(cx - textW("?", 4) / 2, y + 18);
+    printT("?");
+    printTight(T(S_BOX_DAMAGED), cx, y + 74, w - 4);
+    return;
+  }
+  gfx->drawRoundRect(x, y, w, h, 12, UI_TRACK);
+  gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, 11, UI_TRACK);
+  if (pet.canStore(k)) {  // aqui cabe el activo
+    gfx->fillRoundRect(cx - 14, y + 34, 28, 6, 3, UI_TRACK);
+    gfx->fillRoundRect(cx - 3, y + 23, 6, 28, 3, UI_TRACK);
+  }
+  gfx->setTextColor(UI_TRACK);
+  printTight(T(S_BOX_EMPTY), cx, y + 74, w - 4);
+}
+
+// fila del activo: su miniatura (o el huevo) y "Ahora: <nombre>"; con un huevo esperando a su turno,
+// el huevo dormido a la derecha. Deja en boxNowCx el centro de la miniatura (de ahi sale la luz).
+void drawBoxNow(const PetRecord *r, bool hide, bool held) {
+  char line[48];
+  snprintf(line, sizeof(line), T(S_NOW_FMT), r ? recName(*r) : T(S_EGG_HDR));
+  setSize(2);
+  int tw = textW(line, 2);
+  int total = 48 + tw + (held ? 46 : 0);
+  int x = CX - total / 2;
+  boxNowCx = x + 20;
+  if (!hide) {
+    if (r) {
+      const uint8_t *t = thumbs.get(r->speciesId);
+      if (t) drawThumbFit(t, boxNowCx, BOX_NOW_Y, 58, 58, false, UI_BG_DAY);
+    } else {
+      drawMap(SPR_EGG, SPRITE_H, boxNowCx - 16, BOX_NOW_Y - 16, 1, false);
+    }
+  }
+  gfx->setTextColor(UI_INK);
+  setCur(x + 48, BOX_NOW_Y - 7);
+  printT(line);
+  if (held) {  // el huevo que espera (FR-BOX.5): no se ha perdido
+    int ex = x + 48 + tw + 10;
+    drawMapTint(SPR_EGG, SPRITE_H, ex, BOX_NOW_Y - 16, 1, UI_TRACK);
+    gfx->setTextColor(0x4C98);
+    setSize(2);
+    setCur(ex + 26, BOX_NOW_Y - 22);
+    printT("z");
+  }
+}
+
+// la luz: primero envuelve al bicho (lo "encoge"), luego vuela en arco de a a b con su estela
+void drawLightBall(int x, int y, int r) {
+  gfx->fillCircle(x, y, r + 4, BOX_LIGHT);
+  gfx->fillCircle(x, y, r, UI_WHITE);
+}
+
+// bend: hacia donde se curva el arco (en un cambio van dos luces entre los mismos puntos: una por
+// arriba y otra por abajo, para que no se tapen)
+void boxLightAt(int ax, int ay, int bx, int by, int bend, float u, int *x, int *y) {
+  int mx = (ax + bx) / 2 + bend, my = (bend < 0 ? (ay < by ? ay : by) - 70 : (ay + by) / 2 + 40);
+  float v = 1.0f - u;
+  *x = (int)(v * v * ax + 2 * v * u * mx + u * u * bx);
+  *y = (int)(v * v * ay + 2 * v * u * my + u * u * by);
+}
+
+void drawBoxLight(int ax, int ay, int bx, int by, int bend, float t) {
+  if (t < 0.3f) {
+    drawLightBall(ax, ay, 4 + (int)(t / 0.3f * 18));
+    return;
+  }
+  float u = (t - 0.3f) / 0.55f;
+  if (u > 1) u = 1;
+  for (int i = 3; i >= 1; i--) {  // estela
+    float uu = u - i * 0.07f;
+    if (uu < 0) continue;
+    int x, y;
+    boxLightAt(ax, ay, bx, by, bend, uu, &x, &y);
+    gfx->fillCircle(x, y, 9 - 2 * i, BOX_LIGHT);
+  }
+  int x, y;
+  boxLightAt(ax, ay, bx, by, bend, u, &x, &y);
+  drawLightBall(x, y, 12 - (int)(u * 4));
+}
+
+// al llegar: un aro que se abre y se va (el ultimo cuadro queda limpio)
+void drawBoxLanding(int x, int y, float t) {
+  if (t >= 1) return;
+  float k = (t - 0.85f) / 0.15f;
+  int r = 14 + (int)(k * 40);
+  gfx->drawCircle(x, y, r, UI_WHITE);
+  gfx->drawCircle(x, y, r + 1, BOX_LIGHT);
+  gfx->drawCircle(x, y, r + 3, UI_WHITE);
+}
+
+// "guardar a X?" / "despertar a X?" (+ "Y va a la caja" si hay un bicho activo), SI / NO como "soltar?"
+void drawBoxAsk() {
+  uint8_t k = boxAsk - 1;
+  bool wake = pet.boxState(k) == BOX_OK;
+  char q[64];
+  char note[64];
+  note[0] = 0;
+  if (wake) {
+    snprintf(q, sizeof(q), T(S_WAKE_Q_FMT), recName(pet.boxRecord(k)));
+    if (!pet.isEgg()) snprintf(note, sizeof(note), T(S_SWAP_NOTE_FMT), petName());
+  } else {
+    snprintf(q, sizeof(q), T(S_STORE_Q_FMT), petName());
+  }
+  gfx->fillRoundRect(73, 160, 320, 160, 16, UI_WHITE);
+  gfx->drawRoundRect(73, 160, 320, 160, 16, UI_INK);
+  gfx->setTextColor(UI_INK);
+  printTight(q, CX, note[0] ? 182 : 198, 296);
+  if (note[0]) {
+    gfx->setTextColor(BOX_NOTE_INK);
+    printTight(note, CX, 214, 296);
+  }
+  setSize(2);
+  gfx->fillRoundRect(118, 252, 100, 52, 12, UI_BAR_OK);
+  gfx->setTextColor(UI_WHITE);
+  setCur(118 + (100 - textW(T(S_YES), 2)) / 2, 270);
+  printT(T(S_YES));
+  gfx->fillRoundRect(248, 252, 100, 52, 12, UI_BAR_BAD);
+  setCur(248 + (100 - textW(T(S_NO), 2)) / 2, 270);
+  printT(T(S_NO));
+}
+
+void renderBox() {
+  uint32_t now = millis();
+  gfx->fillScreen(RGB565_BLACK);
+  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+
+  // el movimiento en marcha (0..1); desde 0,85 se ve como quedara
+  float t = 0;
+  if (boxMove) {
+    t = (float)(now - boxMoveStart) / (float)BOX_FX_MS;
+    if (t >= 1) {
+      t = 1;
+      boxMoveDrawnEnd = true;
+    }
+  }
+  bool outcome = boxMove && t >= 0.85f;
+
+  unsigned used = pet.boxUsed();
+  if (outcome && boxMove == BOXMV_STORE) used++;
+  if (outcome && boxMove == BOXMV_WAKE) used--;
+  char head[32];
+  snprintf(head, sizeof(head), T(S_BOX_FMT), used, (unsigned)BOX_SLOTS);
+  gfx->setTextColor(UI_INK);
+  setSize(3);
+  setCur(centerX(head, 3), 36);
+  printT(head);
+  bool hatched = !pet.isEgg();
+  PetRecord act;
+  memset(&act, 0, sizeof(act));
+  if (hatched) act = pet.toRecord();
+  uint8_t mk = boxMoveSlot;
+
+  for (uint8_t k = 0; k < BOX_SLOTS; k++) {
+    uint8_t st = pet.boxState(k);
+    const PetRecord *r = st == BOX_OK ? &pet.boxRecord(k) : nullptr;
+    bool hide = false;
+    if (boxMove && k == mk) {
+      if (outcome) {  // guardar o cambiar: el activo en el hueco; despertar con huevo: vacio
+        st = boxMove == BOXMV_WAKE ? BOX_EMPTY : BOX_OK;
+        r = boxMove == BOXMV_WAKE ? nullptr : &act;
+      } else if (boxMove != BOXMV_STORE && t >= 0.3f) {
+        hide = true;  // el de la caja ya es la luz
+      }
+    }
+    int dx = 0;
+    if (k == boxShakeSlot && timeLeft(boxShakeUntil)) {
+      float s = 1.0f - (float)timeLeft(boxShakeUntil) / (float)FX_DENY_MS;
+      dx = (int)(4.0f * (1.0f - s) * sinf(s * 6.0f * (float)PI));
+    }
+    drawBoxSlot(k, st, r, hide, dx);
+  }
+
+  // la fila del activo, tambien como quedara al final
+  const PetRecord *nowRec = hatched ? &act : nullptr;
+  bool held = pet.eggHeld();
+  if (outcome) {
+    nowRec = boxMove == BOXMV_STORE ? nullptr : &pet.boxRecord(mk);
+    held = boxMove == BOXMV_WAKE ? true : (boxMove == BOXMV_STORE ? false : held);
+  }
+  bool hideNow = boxMove && !outcome && boxMove != BOXMV_WAKE && t >= 0.3f;
+  drawBoxNow(nowRec, hideNow, held);
+
+  if (boxMove) {
+    int sx = boxCellX(mk) + BOX_CW / 2, sy = boxCellY(mk) + 4 + 34;
+    if (!outcome) {
+      if (boxMove != BOXMV_WAKE) drawBoxLight(boxNowCx, BOX_NOW_Y, sx, sy, -1, t);  // el activo, al hueco, por arriba
+      if (boxMove != BOXMV_STORE)  // el de la caja, fuera: por abajo si se cruza con el otro
+        drawBoxLight(sx, sy, boxNowCx, BOX_NOW_Y, boxMove == BOXMV_SWAP ? 60 : -1, t);
+    } else {
+      if (boxMove != BOXMV_WAKE) drawBoxLanding(sx, sy, t);
+      if (boxMove != BOXMV_STORE) drawBoxLanding(boxNowCx, BOX_NOW_Y, t);
+    }
+  }
+
+  if (boxAsk) drawBoxAsk();
+  gfx->flush();
+}
+
+// un hueco que no se puede usar tiembla, con el sonido de "no" (como un boton, FR-FX.11)
+void boxDeny(int k) {
+  sfxPlay(SFX_DENY);
+  boxShakeSlot = (int8_t)k;
+  boxShakeUntil = millis() + FX_DENY_MS;
+}
+
+void boxStartMove(uint8_t k) {
+  bool toStore = pet.boxState(k) == BOX_EMPTY;
+  if (toStore ? !pet.canStore(k) : !pet.canWake(k)) {
+    boxDeny(k);
+    return;
+  }
+  boxMove = toStore ? BOXMV_STORE : (pet.isEgg() ? BOXMV_WAKE : BOXMV_SWAP);
+  boxMoveSlot = k;
+  boxMoveStart = millis();
+  boxMoveDrawnEnd = false;
+  sfxPlay(toStore ? SFX_STORE : SFX_WAKE);
+}
+
+void boxTap(int16_t x, int16_t y) {
+  if (boxMove) return;  // la luz vuela: un momento
+  if (boxAsk) {         // dialogo: SI / NO (o fuera = NO)
+    uint8_t k = boxAsk - 1;
+    boxAsk = 0;
+    if (timeLeft(boxAskUntil) && x >= 118 && x <= 218 && y >= 252 && y <= 304) boxStartMove(k);
+    return;
+  }
+  if (y < 72) {  // tocar la cabecera = salir, como en la Pokedex
+    closeBox();
+    return;
+  }
+  int k = boxSlotAt(x, y);
+  if (k < 0) return;
+  bool ok = pet.boxState(k) == BOX_EMPTY ? pet.canStore(k) : pet.canWake(k);
+  if (!ok) {  // vacio con un huevo activo (nada que guardar), o un hueco danado
+    boxDeny(k);
+    return;
+  }
+  boxAsk = (uint8_t)(k + 1);
+  boxAskUntil = millis() + 10000;
+  sfxPlay(SFX_TAP);
+}
+
+// Despues de cualquier movimiento (tambien STORE / WAKE por serie): sprites del activo nuevo, su
+// paseo desde el centro, y los efectos del otro bicho fuera (fx.h: subida y medalla pendientes, "+N",
+// barras). Los vigilantes miran al nuevo sin evento: si no, verian "subir" su nivel o "nacer" al
+// que sustituye a un huevo. De vuelta a casa, el activo sale de una luz.
+void boxAfterMove() {
+  boxOpen = false;
+  boxAsk = 0;
+  boxMove = BOXMV_NONE;
+  monFor = -2;  // recarga aunque sea la misma especie: ensureMon tambien vuelve a centrar el paseo
+  ensureMon();
+  fxq.drop(FXB_LEVELUP);
+  fxq.drop(FXB_MEDAL);
+  fxo.clear();
+  for (auto &b : fxBar) b.init = false;
+  fxArmWatches();
+  fxo.push(FXO_BOX, 0, 0, millis());
+  wakeUI();  // la escritura tardo ~1 s: el siguiente cuadro, ya
+}
+
+// en cada vuelta del loop: cuando la luz llega (y se ha visto el cuadro final) se escribe en flash
+void boxTick(uint32_t now) {
+  if (!boxMove) return;
+  uint32_t e = now - boxMoveStart;
+  if (e < BOX_FX_MS) return;
+  if (!boxMoveDrawnEnd && e < BOX_FX_MS + 400) return;  // a oscuras no se dibuja: no se espera mas
+  uint8_t mv = boxMove, k = boxMoveSlot;
+  boxMove = BOXMV_NONE;
+  bool ok = (mv == BOXMV_STORE) ? pet.store(k) : pet.wake(k);  // ~1 s con la pantalla quieta
+  if (!ok) {  // no cambio nada (p. ej. la NVS llena): se queda en la caja
+    boxDeny(k);
+    wakeUI();
+    return;
+  }
+  boxAfterMove();
+}
+
+// el activo que sale de una luz en casa, tras guardar o despertar (FXO_BOX): la luz se encoge y un
+// aro se abre con chispas
+void drawBoxAppear(uint32_t now) {
+  const FxOverlay *o = fxo.find(FXO_BOX);
+  if (!o) return;
+  float t = FxOverlays::t(*o, now);
+  int cx = pet.isEgg() ? CX : (int)beh.x;
+  int cy = (pet.isEgg() || !pmd.loaded) ? PET_CY : PET_GROUND - pmdIdleHeight() / 2;
+  float k = 1.0f - t;
+  int r = (int)(118 * k * k);
+  if (r > 2) {
+    gfx->fillCircle(cx, cy, r + 6, BOX_LIGHT);
+    gfx->fillCircle(cx, cy, r, UI_WHITE);
+  }
+  int rr = 40 + (int)(t * 140);
+  gfx->drawCircle(cx, cy, rr, UI_WHITE);
+  gfx->drawCircle(cx, cy, rr + 2, BOX_LIGHT);
+  for (int i = 0; i < 8; i++) {  // chispas en el aro
+    float a = i * 0.785f + t * 1.5f;
+    int x = cx + (int)(cosf(a) * rr), y = cy + (int)(sinf(a) * rr * 0.8f);
+    uint16_t c = (i & 1) ? BOX_LIGHT : UI_WHITE;
+    gfx->fillRect(x - 1, y - 5, 3, 11, c);
+    gfx->fillRect(x - 5, y - 1, 11, 3, c);
+  }
+}
+
+// comando BOX: la caja por serie (uid, especie, nivel, CRC) y el huevo de la incubadora
+void boxReport() {
+  Serial.printf("active uid=%08lX spec=%d lv=%u egg=%d eggHeld=%d eggT=%d eggShiny=%d box=%u/%u\n",
+                (unsigned long)pet.uid, pet.speciesId, pet.isEgg() ? 0 : pet.level(), pet.isEgg() ? 1 : 0,
+                pet.eggHeld() ? 1 : 0, pet.eggSpecies(), pet.eggIsShiny() ? 1 : 0, pet.boxUsed(), BOX_SLOTS);
+  for (uint8_t k = 0; k < BOX_SLOTS; k++) {
+    uint8_t st = pet.boxState(k);
+    if (st == BOX_EMPTY) {
+      Serial.printf("box%u empty\n", k);
+    } else if (st == BOX_DAMAGED) {
+      Serial.printf("box%u damaged (bad CRC or unknown version: BOXCLR %u clears it)\n", k, k);
+    } else {
+      const PetRecord &r = pet.boxRecord(k);
+      Serial.printf("box%u uid=%08lX spec=%d %s lv=%u grow=%lu age=%lu shiny=%d sleep=%d nick=%s stored=%lu crc=ok\n",
+                    k, (unsigned long)r.uid, r.speciesId, DEX_TBL[r.speciesId].name, levelFor(r.growMin),
+                    (unsigned long)r.growMin, (unsigned long)r.ageMinutes, (r.flags & REC_SHINY) ? 1 : 0,
+                    (r.flags & REC_SLEEP) ? 1 : 0, r.nick, (unsigned long)r.storedEpoch);
+    }
+  }
+}
+
+// BOXFILL: bichos inventados en los huecos vacios, para pruebas y capturas (al despertarlos no
+// cuentan en la Pokedex: no los ha criado nadie)
+void boxFill() {
+  for (uint8_t k = 0; k < BOX_SLOTS; k++) {
+    if (pet.boxState(k) != BOX_EMPTY) continue;
+    PetRecord r;
+    memset(&r, 0, sizeof(r));
+    r.speciesId = (int16_t)(1 + random(151));
+    r.growMin = levelStart((uint16_t)(2 + random(58))) + (uint32_t)random(20);
+    r.ageMinutes = r.growMin + (uint32_t)random(600);
+    r.flags = (random(8) == 0 ? REC_SHINY : 0) | (random(2) ? REC_SLEEP : 0);
+    r.fullness = (uint8_t)(40 + random(61));
+    r.joy = (uint8_t)(40 + random(61));
+    r.energy = (uint8_t)(40 + random(61));
+    r.hygiene = (uint8_t)(40 + random(61));
+    r.geneAtk = (uint8_t)(90 + random(21));
+    r.geneDef = (uint8_t)(90 + random(21));
+    r.geneSpe = (uint8_t)(90 + random(21));
+    r.trAtk = (uint8_t)random(30);
+    r.trDef = (uint8_t)random(30);
+    r.trSpe = (uint8_t)random(30);
+    r.bond = (uint8_t)random(100);
+    r.storedEpoch = pet.lastSeenEpoch;
+    pet.boxPut(k, r);
+  }
 }
 
 #define BAT_ICON_W 27  // 24 de cuerpo + 3 de borne

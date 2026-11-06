@@ -8,6 +8,72 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.37] - 2026-11-06
+
+The Box ([NEXT_FEATURES.md, Task BOX](docs/NEXT_FEATURES.md#task-box-store-a-pet-raise-another)):
+store a pet, raise another, and swap back any time.
+
+### Added
+
+- **The Box.** Swipe right from home, from the pet or from the egg: 6 slots where pets
+  **hibernate**. Each slot shows the pet dimmed with a "z", its name, level and a star if it's
+  shiny; "Now" below shows the active pet. Swipe left, tap the title or press USER to go back.
+  - **Store:** tap an empty slot ("+") and confirm. The pet goes in and an egg takes its place:
+    the egg that was waiting, or a new one. Storing isn't an ending, so the next egg's odds don't
+    change. A sleeping pet can be stored and comes back asleep.
+  - **Wake:** tap a stored pet and confirm. With a hatched pet active the two swap places in that
+    slot (a full box can still swap), and the dialog says who goes in. With an egg active, the egg
+    **waits as it is** (species, shiny roll, cracks) and comes back after the next store or
+    ending; a small sleeping egg next to "Now" shows it. Storing and waking never re-roll an egg
+    or spend the Shiny Charm twice.
+  - **Hibernation is total:** a stored pet doesn't age, grow, get hungry or slip up, also while
+    the board is off. Each pet keeps its bond, its own daily bond cap and its medals; streak,
+    steps, finds, goals, the Backpack, records and the Pokédex stay with the player.
+  - Not while the pet is evolving or saying goodbye. A tap that can't work (an empty slot with
+    the egg active, a damaged slot) shakes the slot with the deny sound.
+- **Effects:** after YES, a light flies between the pet at "Now" and the slot (two cross in a
+  swap) in 0.6 s, with a falling or rising sparkle sound. The last frame already shows the result
+  and stays on screen during the ~1 s flash write. Back home, the active pet (or egg) comes out of
+  a light. Celebrations of the other pet still waiting (a level-up, a medal) are dropped; the
+  streak and goal banners stay.
+- **Each pet has a `uid`**, rolled when it hatches (the Link's friend list can use it later).
+- **Damaged slots** (bad CRC, unknown record version) show "?" and are never loaded or
+  overwritten; only `WIPE` or `BOXCLR` clears them.
+- Serial: `BOX` (each slot's uid, species, level, CRC, and the waiting egg), `STORE <k>` /
+  `WAKE <k>` (slot 0–5, like YES without the light), `BOXFILL` (made-up pets in the empty slots),
+  `BOXCLR <k>`, `NVS` (used and free NVS entries), `FX box` (the home effect alone). `STATS` ends
+  with `box used=… uid=… eggHeld=…`.
+- Strings for the Box in all eight languages.
+
+### Changed
+
+- **Side swipes split:** left opens the Pokédex (as any side swipe did), right opens the Box.
+- After an ending, the egg that was waiting comes back instead of a new roll.
+
+### Power cuts
+
+Moving a pet writes to flash at once, and a cut at any moment never loses a pet. Every move first
+writes a whole copy of the pet being moved, the active pet's `uid` is the last key `save()`
+writes, and the boot finishes or undoes a move that was cut:
+- store: the slot copy first, then the egg. Cut before the egg's `uid` is written, the pet comes
+  back from its slot copy (the spec cleared the slot instead; the active keys can be half
+  overwritten by then, and the host tests showed that loses the pet);
+- wake: a transfer copy (`boxT`) first. Cut before the woken pet's `uid` is written, the swap is
+  finished from `boxT`, or the egg is rebuilt from the incubator (it only loses its minutes).
+
+The host tests cut the power after every single write of a store, a store with a waiting egg, a
+swap and a wake with an egg, and boot twice: every pet is there exactly once, unchanged.
+
+### Updating
+
+A save from v1.36 loads with an empty box, and the current pet gets its `uid`. The Box should
+take about 4 NVS entries per slot (24 when full) of the ~500; `NVS` measures it on the board.
+
+### Fixed
+
+- `tools/test_i18n_formats.py` expected 8 medals since the Marathon medal (v1.25) made 9; it reads
+  `MED_COUNT` from `pet.h` now.
+
 ## [1.36] - 2026-11-06
 
 Walking speeds up levelling ([GAMEPLAY_TUNING.md, #6 STEPLV](docs/GAMEPLAY_TUNING.md#6-steplv-walking-speeds-up-levelling)).

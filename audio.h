@@ -22,6 +22,8 @@ enum Sfx : uint8_t {
   SFX_LOSE,     // derrota
   SFX_LEVELUP,  // subida de nivel (v1.30): arpegio que sube, mas agudo que eclosion y evolucion
   SFX_OOPS,     // descuido (v1.30): dos notas que caen, mas suave que SFX_DENY
+  SFX_STORE,    // caja (v1.37): la luz entra en su hueco (destello que baja)
+  SFX_WAKE,     // caja: sale de el (destello que sube)
   SFX_COUNT
 };
 

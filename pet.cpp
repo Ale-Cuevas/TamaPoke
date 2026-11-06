@@ -10,6 +10,12 @@ void Pet::begin() {
   } else {
     load();
   }
+  boxBoot();  // la caja (v1.37): la lee y termina o deshace un movimiento que corto la luz
+  // guardado anterior a la caja: el bicho de ahora recibe su identidad (FR-BOX.11)
+  if (!isEgg() && !uid) {
+    uid = newUid();
+    prefs.putUInt("uid", uid);
+  }
   lastTick = millis();
 }
 
@@ -19,14 +25,23 @@ void Pet::newEgg() {
   weight = 0;
   speciesId = -1;
   prevSpeciesId = -1;
-  eggTarget = pickEggSpecies();  // especie oculta segun rareza y pokedex
-  starterPick = (registeredCount() == 0);  // primera partida: el jugador elige inicial
-  // amuleto shiny de la mochila: lo gasta este huevo. No el inicial, ni
-  // pickEggSpecies(), que tambien usa la simulacion de tiradas (comando EGGS).
-  bool charm = items[IT_CHARM] && !starterPick;
-  if (charm) items[IT_CHARM] = 0;
-  eggShiny = (random(shinyOdds(charm)) == 0);
-  eggTaps = 0;
+  uid = 0;  // un huevo aun no es nadie: el uid se sortea al nacer
+  if (eggHeldFlag) {
+    // el huevo que espero en la incubadora mientras otro bicho estaba despierto (caja,
+    // FR-BOX.5): vuelve tal cual, con su especie, su tirada shiny y sus grietas. Asi guardar y
+    // despertar no vuelven a tirar huevos: cada uno se tira una vez, y el amuleto con el.
+    eggHeldFlag = false;
+    starterPick = false;
+  } else {
+    eggTarget = pickEggSpecies();  // especie oculta segun rareza y pokedex
+    starterPick = (registeredCount() == 0);  // primera partida: el jugador elige inicial
+    // amuleto shiny de la mochila: lo gasta este huevo. No el inicial, ni
+    // pickEggSpecies(), que tambien usa la simulacion de tiradas (comando EGGS).
+    bool charm = items[IT_CHARM] && !starterPick;
+    if (charm) items[IT_CHARM] = 0;
+    eggShiny = (random(shinyOdds(charm)) == 0);
+    eggTaps = 0;
+  }
   fullness = 80;
   joy = 80;
   energy = 80;
@@ -436,6 +451,7 @@ void Pet::hatch() {
   medals = 0;
   newMedal = 0;
   nick[0] = 0;
+  uid = newUid();    // identidad del individuo (caja, v1.37)
   registerSpecies(speciesId);  // criado = registrado en la pokedex
   checkMedals();     // por si nace ya en forma final (legendario)
   // sin sonido aqui: la UI ve la eclosion y suena en el destello de su animacion (fx.h), o
@@ -894,6 +910,12 @@ void Pet::save() {
   prefs.putBytes("bpack", items, sizeof(items));
   prefs.putUInt("bondD", bondDay);
   prefs.putUChar("bondT", bondToday);
+  // caja (v1.37). El uid va el ULTIMO: la NVS escribe en orden, asi que si un corte de luz
+  // deja el uid nuevo, todo lo demas del bicho ya esta escrito. boxBoot() se fia de eso para
+  // saber si un movimiento llego a cambiar el bicho activo. "eggH" va despues: un corte entre
+  // los dos deja un huevo activo con eggH puesto, y boxBoot() lo quita.
+  prefs.putUInt("uid", uid);
+  prefs.putBool("eggH", eggHeldFlag);
 }
 
 void Pet::load() {
@@ -980,4 +1002,237 @@ void Pet::load() {
   else growMin = isEgg() ? 0 : growthFromLegacyAge(ageMinutes);
   // siembra: la mascota actual cuenta como criada (guardados antiguos)
   if (speciesId >= 1) registerSpecies(speciesId);
+  // caja (v1.37). Sin la clave "uid" (guardado anterior) queda a 0 y begin() le da una despues
+  // de boxBoot(); un 0 guardado es un huevo, y boxBoot() lo necesita tal cual
+  uid = prefs.getUInt("uid", 0);
+  eggHeldFlag = prefs.getBool("eggH", false);
+}
+
+// ---------- la caja (docs/NEXT_FEATURES.md, Tarea BOX, v1.37) ----------
+//
+// Cada movimiento escribe primero la copia entera del bicho que se mueve y borra la de sobra al
+// final, y el uid es lo ultimo que escribe save(). Asi, corte la luz donde corte, el siguiente
+// arranque (boxBoot) encuentra al bicho entero en algun sitio y, como mucho, repetido:
+//   guardar A en k:        1. box k = A                2. huevo activo, save() (uid 0 al final)
+//   despertar B con A:     1. boxT = B   2. box k = A   3. B activo, save()   4. borrar boxT
+//   despertar B con huevo: 1. boxT = B   2. eggH        3. B activo, save()   4. vaciar k   5. borrar boxT
+
+static_assert(sizeof(((PetRecord *)0)->nick) == sizeof(((Pet *)0)->nick), "el apodo cabe entero en el registro");
+
+static void slotKey(char *key, uint8_t k) {
+  key[0] = 'b';
+  key[1] = 'o';
+  key[2] = 'x';
+  key[3] = (char)('0' + k);
+  key[4] = 0;
+}
+
+PetRecord Pet::toRecord() const {
+  PetRecord r;
+  memset(&r, 0, sizeof(r));
+  r.flags = (shiny ? REC_SHINY : 0) | (berryKnown ? REC_BERRY : 0) | (sleeping ? REC_SLEEP : 0);
+  r.uid = uid;
+  r.speciesId = speciesId;
+  memcpy(r.nick, nick, sizeof(r.nick));
+  r.nick[sizeof(r.nick) - 1] = 0;
+  r.ageMinutes = ageMinutes;
+  r.growMin = growMin;
+  r.fullness = fullness;
+  r.joy = joy;
+  r.energy = energy;
+  r.hygiene = hygiene;
+  r.poops = poops;
+  r.weight = weight;
+  r.geneAtk = geneAtk;
+  r.geneDef = geneDef;
+  r.geneSpe = geneSpe;
+  r.trAtk = trAtk;
+  r.trDef = trDef;
+  r.trSpe = trSpe;
+  r.careMistakes = careMistakes;
+  r.bond = bond;
+  r.bondToday = bondToday;
+  r.bondDay = bondDay;
+  r.medals = medals;
+  r.storedEpoch = lastSeenEpoch;
+  recordSeal(r);
+  return r;
+}
+
+// Pasa a ser el bicho de r. Solo cambia lo del individuo: racha, pasos, mochila, records,
+// Pokedex y la incubadora son del jugador y se quedan. Lo que solo vive en RAM (enfriamientos,
+// "mantener forma", animaciones) empieza de cero, como tras un reinicio.
+void Pet::fromRecord(const PetRecord &r) {
+  uid = r.uid;
+  speciesId = r.speciesId;
+  prevSpeciesId = r.speciesId;
+  shiny = (r.flags & REC_SHINY) != 0;
+  berryKnown = (r.flags & REC_BERRY) != 0;
+  sleeping = (r.flags & REC_SLEEP) != 0;
+  memcpy(nick, r.nick, sizeof(nick));
+  nick[sizeof(nick) - 1] = 0;
+  ageMinutes = r.ageMinutes;
+  growMin = r.growMin;
+  fullness = r.fullness;
+  joy = r.joy;
+  energy = r.energy;
+  hygiene = r.hygiene;
+  poops = r.poops > 3 ? 3 : r.poops;
+  weight = r.weight;
+  geneAtk = r.geneAtk;
+  geneDef = r.geneDef;
+  geneSpe = r.geneSpe;
+  trAtk = r.trAtk;
+  trDef = r.trDef;
+  trSpe = r.trSpe;
+  careMistakes = r.careMistakes;
+  bond = r.bond;
+  bondToday = r.bondToday;
+  bondDay = r.bondDay;
+  medals = r.medals;
+  ceremony = CER_NONE;
+  mistakeCooldown = 0;
+  neglectTicks = 0;
+  goodTicks = 0;
+  petBondUntil = 0;
+  evoDeclinedLv = 0;
+  farDeclinedAge = 0;
+  eatUntil = heartUntil = evolveUntil = 0;
+  emoteUntil = 0;
+  newMedal = 0;
+  pendingMedals = 0;
+}
+
+void Pet::readSlot(uint8_t k) {
+  char key[6];
+  slotKey(key, k);
+  memset(&boxRec[k], 0, sizeof(PetRecord));
+  if (!prefs.isKey(key)) {
+    boxSt[k] = BOX_EMPTY;
+    return;
+  }
+  size_t n = prefs.getBytes(key, &boxRec[k], sizeof(PetRecord));
+  boxSt[k] = (n == sizeof(PetRecord) && recordValid(boxRec[k])) ? BOX_OK : BOX_DAMAGED;
+}
+
+bool Pet::writeSlot(uint8_t k, PetRecord r) {
+  char key[6];
+  slotKey(key, k);
+  recordSeal(r);
+  if (prefs.putBytes(key, &r, sizeof(r)) != sizeof(r)) return false;
+  boxRec[k] = r;
+  boxSt[k] = BOX_OK;
+  return true;
+}
+
+bool Pet::clearSlot(uint8_t k) {
+  char key[6];
+  slotKey(key, k);
+  prefs.remove(key);
+  if (prefs.isKey(key)) return false;  // no se pudo borrar: sigue donde estaba
+  memset(&boxRec[k], 0, sizeof(PetRecord));
+  boxSt[k] = BOX_EMPTY;
+  return true;
+}
+
+int8_t Pet::slotOf(uint32_t id) const {
+  if (!id) return -1;
+  for (uint8_t k = 0; k < BOX_SLOTS; k++)
+    if (boxSt[k] == BOX_OK && boxRec[k].uid == id) return (int8_t)k;
+  return -1;
+}
+
+uint32_t Pet::newUid() const {
+  for (;;) {
+    uint32_t id = ((uint32_t)random(0x10000) << 16) | (uint32_t)random(0x10000);
+    if (id && id != uid && slotOf(id) < 0) return id;
+  }
+}
+
+uint8_t Pet::boxUsed() const {
+  uint8_t n = 0;
+  for (uint8_t k = 0; k < BOX_SLOTS; k++)
+    if (boxSt[k] != BOX_EMPTY) n++;
+  return n;
+}
+
+bool Pet::store(uint8_t k) {
+  if (!canStore(k)) return false;
+  if (!writeSlot(k, toRecord())) return false;  // 1. la copia entera, a su hueco
+  newEgg();  // 2. el huevo que esperaba o uno nuevo; save() deja el uid (0) para el final
+  return true;
+}
+
+bool Pet::wake(uint8_t k) {
+  if (!canWake(k)) return false;
+  PetRecord b = boxRec[k];
+  // 1. la copia de transferencia: mientras exista, el arranque sabe que hay un despertar a medias
+  if (prefs.putBytes("boxT", &b, sizeof(b)) != sizeof(b)) return false;
+  if (isEgg()) {
+    eggHeldFlag = true;  // 2. el huevo espera en la incubadora, tal cual
+    prefs.putBool("eggH", true);
+    fromRecord(b);  // 3. B activo (save() escribe su uid lo ultimo)
+    save();
+    if (!clearSlot(k)) return true;  // 4. su hueco, libre (si falla, boxT se queda y lo hace el arranque)
+  } else {
+    if (!writeSlot(k, toRecord())) {  // 2. el activo, al hueco de B
+      prefs.remove("boxT");
+      return false;
+    }
+    fromRecord(b);  // 3.
+    save();
+  }
+  prefs.remove("boxT");  // hecho
+  return true;
+}
+
+bool Pet::boxClear(uint8_t k) {
+  if (k >= BOX_SLOTS) return false;
+  return boxSt[k] == BOX_EMPTY || clearSlot(k);
+}
+
+bool Pet::boxPut(uint8_t k, PetRecord r) {
+  if (k >= BOX_SLOTS || boxSt[k] != BOX_EMPTY || r.speciesId < 1 || r.speciesId > 151) return false;
+  r.uid = newUid();
+  return writeSlot(k, r);
+}
+
+// Al arrancar, antes que nada: lee los huecos y, si un corte de luz pillo un movimiento a medias,
+// lo termina o lo deshace. El uid guardado del activo dice hasta donde llego save() (va el ultimo).
+void Pet::boxBoot() {
+  for (uint8_t k = 0; k < BOX_SLOTS; k++) readSlot(k);
+  if (prefs.isKey("boxT")) {
+    PetRecord t;
+    memset(&t, 0, sizeof(t));
+    bool ok = prefs.getBytes("boxT", &t, sizeof(t)) == sizeof(t) && recordValid(t);
+    if (ok && uid == t.uid) {
+      // el despertar llego a guardar a B: solo puede quedar su copia en el hueco (si habia huevo)
+      for (uint8_t k = 0; k < BOX_SLOTS; k++)
+        if (boxSt[k] == BOX_OK && boxRec[k].uid == uid) clearSlot(k);
+    } else if (ok && uid && slotOf(uid) >= 0) {
+      // intercambio cortado con el activo ya en el hueco de B: B solo esta en boxT. Se termina.
+      fromRecord(t);
+      save();
+    } else if (!uid) {
+      // despertar con un huevo activo que no llego a guardar a B. El huevo sigue siendo el
+      // activo, pero el save() de B pudo empezar a pisarlo: se rehace desde la incubadora
+      // (especie, tirada shiny y grietas; solo pierde los minutos que llevaba)
+      eggHeldFlag = true;
+      newEgg();
+    }
+    prefs.remove("boxT");
+  }
+  // un guardado cortado antes de que el huevo quedara escrito: la copia del hueco esta entera y
+  // la del activo puede estar a medias. Gana la del hueco y el hueco se vacia (se guarda otra vez)
+  int8_t k = slotOf(uid);
+  if (k >= 0) {
+    fromRecord(boxRec[k]);
+    save();
+    clearSlot((uint8_t)k);
+  }
+  // el huevo solo espera mientras hay un bicho nacido despierto (un corte entre el uid y "eggH")
+  if (isEgg() && eggHeldFlag) {
+    eggHeldFlag = false;
+    prefs.putBool("eggH", false);
+  }
 }

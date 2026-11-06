@@ -43,3 +43,10 @@ private:
 // helpers de test: borra toda la "NVS" simulada
 void mockNvsReset();
 size_t mockNvsKeyCount(const char *ns);
+// corte de luz (caja, v1.37): tras n escrituras mas (put*, remove, clear) las siguientes no
+// llegan a la NVS, como si la placa se hubiera apagado; -1 = sin corte. mockNvsReset() lo quita.
+void mockNvsCutAfter(long n);
+long mockNvsWrites();       // escrituras hechas desde el ultimo mockNvsReset()
+// foto de toda la NVS, para repetir un movimiento desde el mismo estado
+void mockNvsSnapshot();
+void mockNvsRestore();

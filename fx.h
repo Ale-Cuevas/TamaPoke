@@ -104,6 +104,16 @@ struct FxQueue {
     return active ? &cur : nullptr;
   }
 
+  // Quita las de un tipo, tambien la que se ve. Tras un cambio de bicho en la caja (v1.37), la
+  // subida de nivel y la medalla que esperaban eran del otro; el hito y la meta son del jugador.
+  void drop(uint8_t kind) {
+    uint8_t j = 0;
+    for (uint8_t i = 0; i < n; i++)
+      if (q[i].kind != kind) q[j++] = q[i];
+    n = j;
+    if (active && cur.kind == kind) active = false;
+  }
+
   // progreso de la actual, 0..1 (0 si no hay)
   float t(uint32_t now) const {
     if (!active || !cur.dur) return 0.0f;
@@ -122,6 +132,7 @@ enum : uint8_t {
   FXO_PRESS,     // el boton tocado se hunde (a = boton)
   FXO_OOPS,      // "!" del descuido
   FXO_HATCH,     // eclosion: el huevo tiembla, salta la cascara, destello
+  FXO_BOX,       // caja (v1.37): el bicho (o el huevo) que queda activo sale de una luz
   FXO_KINDS
 };
 
@@ -131,6 +142,7 @@ enum : uint8_t {
 #define FX_PRESS_MS 120UL
 #define FX_OOPS_MS 2000UL
 #define FX_HATCH_MS 1200UL
+#define FX_APPEAR_MS 600UL     // caja: la luz se encoge y deja ver al que queda activo
 #define FX_WAIT_MS 8000UL      // un efecto que no llega a verse en este tiempo se descarta
 #define FX_OVERLAYS 10
 
@@ -141,6 +153,7 @@ inline uint32_t fxOverlayMs(uint8_t kind) {
     case FXO_DENY: return FX_DENY_MS;
     case FXO_PRESS: return FX_PRESS_MS;
     case FXO_OOPS: return FX_OOPS_MS;
+    case FXO_BOX: return FX_APPEAR_MS;
     default: return FX_HATCH_MS;
   }
 }

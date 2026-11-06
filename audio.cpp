@@ -131,6 +131,10 @@ static const Note N_LOSE[]    = {{392, 200}, {370, 200}, {349, 200}, {330, 450}}
 // empiezan en 523, asi que no se confunden; el descuido cae suave, sin el zumbido grave de DENY
 static const Note N_LEVELUP[] = {{784, 60}, {988, 60}, {1175, 60}, {1568, 240}};
 static const Note N_OOPS[]    = {{392, 90}, {330, 160}};
+// caja (v1.37): un destello rapido que baja al guardar y sube al despertar. Notas de 35 ms, mas
+// cortas que las del arpegio de subida de nivel, y por encima de el (hasta 2093)
+static const Note N_STORE[]   = {{2093, 35}, {1568, 35}, {1047, 35}, {784, 35}, {523, 90}};
+static const Note N_WAKE[]    = {{523, 35}, {784, 35}, {1047, 35}, {1568, 35}, {2093, 90}};
 
 struct SfxDef { const Note *n; uint8_t len; };
 #define SFX_ENTRY(n) { n, (uint8_t)(sizeof(n) / sizeof(n[0])) }
@@ -141,7 +145,7 @@ static const SfxDef SFX[] = {
   SFX_ENTRY(N_TAP), SFX_ENTRY(N_EAT), SFX_ENTRY(N_PLAY), SFX_ENTRY(N_HEART), SFX_ENTRY(N_HATCH),
   SFX_ENTRY(N_EVOLVE), SFX_ENTRY(N_MEDAL), SFX_ENTRY(N_DENY), SFX_ENTRY(N_BYE), SFX_ENTRY(N_LEVEL),
   SFX_ENTRY(N_BATTLE), SFX_ENTRY(N_HIT), SFX_ENTRY(N_CRIT), SFX_ENTRY(N_SPECIAL), SFX_ENTRY(N_WIN),
-  SFX_ENTRY(N_LOSE), SFX_ENTRY(N_LEVELUP), SFX_ENTRY(N_OOPS),
+  SFX_ENTRY(N_LOSE), SFX_ENTRY(N_LEVELUP), SFX_ENTRY(N_OOPS), SFX_ENTRY(N_STORE), SFX_ENTRY(N_WAKE),
 };
 static_assert(sizeof(SFX) / sizeof(SFX[0]) == SFX_COUNT, "SFX[] tiene que tener un efecto por cada Sfx");
 
