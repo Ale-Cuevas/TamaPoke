@@ -38,11 +38,20 @@ inline uint32_t orbitStepAt(uint32_t ms) { return ms / ORBIT_STEP_MS; }
 // --- salvapantallas
 #define SAVER_CX 233
 #define SAVER_CY 233
-#define SAVER_RX 112          // recorrido horizontal a cada lado del centro
-#define SAVER_RY 96           // y vertical
+#define SAVER_RX 50           // recorrido horizontal a cada lado del centro (v1.29: era 112, con
+#define SAVER_RY 50           // la hora tres veces mas grande el bloque es mucho mas ancho)
 #define SAVER_PERIOD_X_MS 251000UL  // periodos distintos y sin divisor comun: una figura de
 #define SAVER_PERIOD_Y_MS 337000UL  // Lissajous que tarda horas en repetirse
-#define SAVER_BLOCK_R 64      // radio de lo que se dibuja alrededor de la posicion (bicho + hora)
+// el bloque alrededor de la posicion (x, y): el bicho encima, con los pies en y - SAVER_PET_GAP,
+// y la hora debajo, de y a y + SAVER_CLOCK_H (tamano de texto SAVER_CLOCK_SIZE: "HH:MM" son
+// 5 caracteres de 6 px x 8 px por cada punto de tamano)
+#define SAVER_CLOCK_SIZE 9
+#define SAVER_CLOCK_HALF_W (5 * 6 * SAVER_CLOCK_SIZE / 2)  // 135
+#define SAVER_CLOCK_H (8 * SAVER_CLOCK_SIZE)              // 72
+#define SAVER_PET_GAP 10
+#define SAVER_PET_H 100       // lo mas alto que sale el bicho (PMD x2) sobre sus pies
+#define SAVER_PET_HALF_W 60
+#define SAVER_INNER_R 228     // lo que se ve dentro del marco redondo, con margen
 
 // seno * 127 con 1024 pasos por vuelta, interpolando la tabla de 64
 inline int saverSin(uint32_t phase1024) {

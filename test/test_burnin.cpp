@@ -33,12 +33,20 @@ TEST(burnin, cada_paso_de_la_orbita_es_pequeno) {
   CHECK_EQ(orbitStepAt(ORBIT_STEP_MS), 1u);
 }
 
+// las esquinas del bicho y de la hora caen siempre dentro del marco redondo
 TEST(burnin, el_salvapantallas_no_se_sale_del_circulo) {
+  auto inside = [](int px, int py) {
+    double dx = px - SAVER_CX, dy = py - SAVER_CY;
+    return std::sqrt(dx * dx + dy * dy) <= SAVER_INNER_R;
+  };
   for (uint32_t t = 0; t < 2 * SAVER_PERIOD_Y_MS; t += 997) {
     int x, y;
     saverPos(t, &x, &y);
-    double d = std::sqrt((double)(x - SAVER_CX) * (x - SAVER_CX) + (double)(y - SAVER_CY) * (y - SAVER_CY));
-    CHECK(d + SAVER_BLOCK_R <= 231);
+    for (int sx : { -1, 1 }) {
+      CHECK(inside(x + sx * SAVER_CLOCK_HALF_W, y));                  // hora: arriba
+      CHECK(inside(x + sx * SAVER_CLOCK_HALF_W, y + SAVER_CLOCK_H));  // y abajo
+      CHECK(inside(x + sx * SAVER_PET_HALF_W, y - SAVER_PET_GAP - SAVER_PET_H));  // cabeza del bicho
+    }
   }
 }
 

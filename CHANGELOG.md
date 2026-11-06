@@ -8,6 +8,15 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.29] - 2026-11-05
+
+### Changed
+
+- **The screensaver's clock is three times bigger** (text size 9, was 3): it
+  was hard to read from a distance. The pet and the clock now drift over a
+  smaller area (±50 px, was ±112 / ±96) so the wider clock never reaches the
+  round edge; the test checks the clock's and the pet's corners, not a circle.
+
 ## [1.28] - 2026-11-05
 
 AMOLED burn-in protection: the background and the UI chrome were static, and the
