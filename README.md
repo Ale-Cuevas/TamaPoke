@@ -1,7 +1,7 @@
 # TamaPoke
 
 ![Board](https://img.shields.io/badge/board-ESP32--S3%20AMOLED%202.16-E7352C?logo=espressif&logoColor=white)
-![Firmware](https://img.shields.io/badge/firmware-v1.24-8A2BE2)
+![Firmware](https://img.shields.io/badge/firmware-v1.25-8A2BE2)
 [![CI](https://github.com/Ale-Cuevas/TamaPoke/actions/workflows/ci.yml/badge.svg)](https://github.com/Ale-Cuevas/TamaPoke/actions/workflows/ci.yml)
 ![Code](https://img.shields.io/badge/code-MIT-blue)
 ![Languages](https://img.shields.io/badge/languages-8-FFCB05)
@@ -144,7 +144,7 @@ After any ending, a **new egg** appears.
 - **Bond** (per pet, resets on hatch): grows with affection (**cap +10/day**, plus +4 for
   the first care of the day; petting counts once per 15 min), so max bond takes about
   8 days of full care. Cools on neglect. Both streak & bond improve egg/shiny odds.
-- **8 medals** (Lv10/25/50, favorite berry found, 7-day streak, max bond, final form,
+- **9 medals** (Lv10/25/50, favorite berry found, 7-day streak, max bond, final form, 10000 steps in a day,
   "fit" = weight 0 & no slip-ups), per-pet + a global counter.
 - **Pokédex:** raising a species registers it; **151 + shinies** to complete.
 
@@ -191,22 +191,31 @@ waving it around doesn't farm anything.
 - While the pet is **hatched and awake**, walking is care: **+1 JOY per 100
   steps** (at most +30 a day), **−1 weight per 1000**, **+1 bond per 1000** (the
   daily bond cap still applies). Walking costs no energy.
-- **Daily goal: 3000 steps.** The first time each day: +10 JOY, a bonus find,
-  and the day counts toward your **streak** (a banner and a jingle when you next
-  look at the screen).
+- **Daily goals: 3000, 6000 and 10000 steps**, each once a day (a banner and a
+  jingle when you next look at the screen):
+
+  | Goal | Reward |
+  |---|---|
+  | 3000 | +10 JOY, a bonus find, and the day counts toward your **streak** |
+  | 6000 | +10 JOY, +2 bond, a bonus find |
+  | 10000 | +15 JOY, +3 bond, a **Rare Candy**, and the **Marathon** medal the first time. Meant for long walks, not every day. |
+
+  The goal bond comes on top of the daily bond cap.
 - **Finds:** every 800–1200 rewarded steps the pet finds something (at most 5 a
-  day, the goal's bonus included). A popup shows it next time the screen is on;
-  tap to dismiss.
+  day; the goals' gifts come on top). A popup shows it next time the screen is
+  on; tap to dismiss.
 
   | Item | Odds | Use |
   |---|---|---|
   | Golden Berry | 55 % | +50 FOOD, +15 JOY, a heart |
   | Protein / Iron / Carbos | 35 % (1/3 each) | +3 ATK / DEF / SPD training (cap 100) |
   | Shiny Charm | 10 % | Held, not used: the **next egg** gets ×3 shiny odds (never better than 1/8). One at a time; a second one becomes a Golden Berry. |
+  | Rare Candy | the 10000 goal | **+1 level** (it can make the pet ready to evolve) |
 
 - The **Backpack** holds up to 9 of each item. Open it on the stat card's 5th
   page, **WALK** (swipe up, then left four times): today's steps with a ring
-  toward the goal, the total, today's finds, and the items. Tap an item to use it.
+  toward the next goal and a flag per goal reached, the total, today's finds
+  (random ones out of 5, "+n" for the goals' gifts), and the items. Tap an item to use it.
 
 <details>
 <summary>Secrets (spoilers)</summary>

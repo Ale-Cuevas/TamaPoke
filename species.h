@@ -621,6 +621,25 @@ static const char* const SPR_ICON_CHARM[16] = {  // 16x16
   "................",
 };
 
+static const char* const SPR_ICON_RARECANDY[16] = {  // 16x16
+  "...........w....",
+  "..........f.f...",
+  "...........w....",
+  "................",
+  "................",
+  ".k....kkkkk...k.",
+  ".kk..kwwbbbk.kk.",
+  ".kLkkbwbbbbbkLk.",
+  ".kLlbbbbbbbblLk.",
+  ".kLlbbbbbbbblLk.",
+  ".kLkkbbbbbbBkLk.",
+  ".kk..kbbbbBk.kk.",
+  ".k....kkkkk...k.",
+  "................",
+  "................",
+  "................",
+};
+
 static const char* const SPR_ICON_FLAG[16] = {  // 16x16
   "................",
   "...kk...........",

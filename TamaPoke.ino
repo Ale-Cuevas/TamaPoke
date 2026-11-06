@@ -40,7 +40,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.24"
+#define FW_VERSION "1.25"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -95,7 +95,8 @@ uint8_t itemConfirm = 0;      // pagina de paseo: objeto de la mochila a confirm
 uint32_t itemConfirmUntil = 0;
 uint32_t goalBannerUntil = 0; // banner de la meta de pasos en pantalla hasta este millis
 bool foundShown = false;      // el ultimo frame enseno un hallazgo: un toque lo cierra
-static_assert(S_IT_CHARM - S_IT_GOLDEN == IT_CHARM - IT_GOLDEN, "nombres de objeto en el orden de IT_*");
+static_assert(S_IT_RARECANDY - S_IT_GOLDEN == IT_RARECANDY - IT_GOLDEN, "nombres de objeto en el orden de IT_*");
+uint8_t goalBannerTier = 0;   // meta (1..3) del banner en pantalla
 bool clockOpen = false;       // pantalla de ajuste de hora (deslizar abajo)
 int clockH = 12, clockM = 0;  // hora en edicion
 
@@ -673,8 +674,9 @@ void handleSerial() {
   } else if (line.startsWith("STEPS ")) {  // pasos inyectados por el mismo camino que el IMU
     long n = line.substring(6).toInt();
     if (n > 0) pet.addSteps((uint32_t)n, pet.dayNumber());
-    Serial.printf("steps today=%lu total=%lu finds=%u goal=%d\n", (unsigned long)pet.stepsToday,
-                  (unsigned long)pet.stepsTotal, pet.findsToday, pet.goalDoneOn(pet.dayNumber()) ? 1 : 0);
+    Serial.printf("steps today=%lu total=%lu finds=%u bonus=%u goal=%u\n", (unsigned long)pet.stepsToday,
+                  (unsigned long)pet.stepsTotal, pet.findsToday, pet.bonusFindsToday,
+                  pet.goalTierOn(pet.dayNumber()));
     Serial.println("DONE");
   } else if (line == "IMU") {
     imuReport();
@@ -704,9 +706,11 @@ void handleSerial() {
     Serial.printf("shiny=%d streak=%u/%u bond=%u bondT=%u medals=0x%X(%u) nick=%s\n",
                   pet.shiny, pet.streak, pet.bestStreak, pet.bond, pet.bondGainedToday(), pet.medals,
                   pet.totalMedals, pet.nick);
-    Serial.printf("steps=%lu/%lu finds=%u bpack=%u/%u/%u/%u charm=%u imu=%d\n", (unsigned long)pet.stepsToday,
-                  (unsigned long)pet.stepsTotal, pet.findsToday, pet.items[IT_GOLDEN], pet.items[IT_PROTEIN],
-                  pet.items[IT_IRON], pet.items[IT_CARBOS], pet.items[IT_CHARM], imuPresent() ? 1 : 0);
+    Serial.printf("steps=%lu/%lu finds=%u bonus=%u goal=%u bpack=%u/%u/%u/%u charm=%u candy=%u imu=%d\n",
+                  (unsigned long)pet.stepsToday, (unsigned long)pet.stepsTotal, pet.findsToday,
+                  pet.bonusFindsToday, pet.goalTierOn(pet.dayNumber()), pet.items[IT_GOLDEN],
+                  pet.items[IT_PROTEIN], pet.items[IT_IRON], pet.items[IT_CARBOS], pet.items[IT_CHARM],
+                  pet.items[IT_RARECANDY], imuPresent() ? 1 : 0);
     Serial.println("DONE");
   }
 }
@@ -1359,6 +1363,7 @@ static uint32_t screenKey() {
       h = mixKey(h, v);
     // pagina de paseo: sin estos campos no se repintaria al llegar pasos
     for (uint32_t v : { walkStepsToday(), pet.stepsTotal, (uint32_t)pet.findsToday, pet.stepDay, pet.goalDay,
+                        (uint32_t)pet.goalTier, (uint32_t)pet.bonusFindsToday,
                         (uint32_t)imuPresent(), (uint32_t)itemConfirm, pet.dayNumber() })
       h = mixKey(h, v);
     for (uint8_t n : pet.items) h = mixKey(h, n);
@@ -2051,7 +2056,7 @@ void clockTap(int16_t x, int16_t y) {
 
 // iconos de la mochila, en el orden de IT_* (pet.h)
 static const char *const *const ITEM_ICON[IT_COUNT] = {
-  SPR_ICON_GOLDEN, SPR_ICON_PROTEIN, SPR_ICON_IRON, SPR_ICON_CARBOS, SPR_ICON_CHARM,
+  SPR_ICON_GOLDEN, SPR_ICON_PROTEIN, SPR_ICON_IRON, SPR_ICON_CARBOS, SPR_ICON_CHARM, SPR_ICON_RARECANDY,
 };
 
 // llama + numero de racha arriba a la izquierda
@@ -2109,13 +2114,33 @@ void drawWalkNews() {
   uint32_t now = millis();
   bool busy = screenOff || dimStage != DIM_AWAKE || choiceKind || confirmUntil || menuKind ||
               pet.evolving() || bathUntil || pet.showMedal() || pet.showMilestone();
-  if (!busy && !timeLeft(goalBannerUntil) && pet.takeGoalBanner()) {
-    goalBannerUntil = now + 4500;
-    sfxPlay(SFX_MEDAL);
+  if (!busy && !timeLeft(goalBannerUntil)) {
+    uint8_t tier = pet.takeGoalBanner();
+    if (tier) {
+      goalBannerTier = tier;
+      goalBannerUntil = now + (tier == STEP_GOAL_TIERS ? 6000 : 4500);  // la de 10000 dura mas
+      sfxPlay(SFX_MEDAL);
+    }
   }
   if (timeLeft(goalBannerUntil)) {
+    uint8_t tier = goalBannerTier ? goalBannerTier : 1;
     char l2[32];
-    snprintf(l2, sizeof(l2), T(S_STEPS_FMT), (unsigned long)STEP_GOAL);
+    snprintf(l2, sizeof(l2), T(S_STEPS_FMT), (unsigned long)STEP_GOALS[tier - 1]);
+    if (tier == STEP_GOAL_TIERS) {  // 10000: banner mayor, con el Caramelo Raro y una bandera por meta
+      gfx->fillRoundRect(53, 128, 360, 140, 18, UI_BAR_WARN);
+      gfx->drawRoundRect(53, 128, 360, 140, 18, UI_INK);
+      gfx->drawRoundRect(56, 131, 354, 134, 16, UI_INK);
+      for (int k = 0; k < STEP_GOAL_TIERS; k++) drawMap(SPR_ICON_FLAG, 16, CX - 44 + k * 30 - 8, 142, 2, false);
+      gfx->setTextColor(UI_INK);
+      setSize(3);
+      setCur(centerX(T(S_GOAL_DONE), 3), 184);
+      printT(T(S_GOAL_DONE));
+      setSize(2);
+      setCur(centerX(l2, 2), 218);
+      printT(l2);
+      drawMap(SPR_ICON_RARECANDY, 16, CX - 16, 236, 2, false);
+      return;
+    }
     gfx->fillRoundRect(73, 150, 320, 96, 16, UI_BAR_WARN);
     gfx->drawRoundRect(73, 150, 320, 96, 16, UI_INK);
     drawMap(SPR_ICON_FLAG, 16, 88, 166, 2, false);
@@ -2260,6 +2285,7 @@ void renderCardMedals() {
 
   for (int i = 0; i < MED_COUNT; i++) {
     int x = 28 + (i % 2) * 206, y = 104 + (i / 2) * 54;
+    if (i == MED_COUNT - 1 && MED_COUNT % 2) x = CX - 98;  // la impar (MARATON), centrada abajo
     bool g = pet.hasMedal(1 << i);
     gfx->fillRoundRect(x, y, 196, 44, 10, g ? UI_BAR_OK : UI_TRACK);
     if (g) {  // marca de conseguida
@@ -2341,9 +2367,9 @@ void renderCardProgress() {
 #define WALK_RING_Y 140
 #define WALK_RING_R 60   // radio exterior del anillo (el interior, 13 px menos)
 #define WALK_SLOT_Y 262
-#define WALK_SLOT_W 64
+#define WALK_SLOT_W 60   // 6 casillas (v1.25, el Caramelo Raro): 64 y 8 rozaban el borde redondo
 #define WALK_SLOT_H 62
-#define WALK_SLOT_GAP 8
+#define WALK_SLOT_GAP 6
 #define WALK_SLOT_X (CX - (IT_COUNT * WALK_SLOT_W + (IT_COUNT - 1) * WALK_SLOT_GAP) / 2)
 
 // pasos de hoy en pantalla: los del bicho mas los que el IMU aun no le ha pasado
@@ -2372,9 +2398,13 @@ void renderCardWalk() {
     printT(T(S_NO_IMU));
   } else {
     uint32_t st = walkStepsToday();
-    bool done = pet.goalDoneOn(day) || st >= STEP_GOAL;
+    // metas alcanzadas hoy (las del bicho, o las que los pasos pendientes ya cruzan)
+    uint8_t tiers = pet.goalTierOn(day);
+    while (tiers < STEP_GOAL_TIERS && st >= STEP_GOALS[tiers]) tiers++;
+    // el anillo se llena hacia la siguiente meta; con las tres, entero y verde
+    uint32_t next = STEP_GOALS[tiers < STEP_GOAL_TIERS ? tiers : STEP_GOAL_TIERS - 1];
     gfx->fillArc(CX, WALK_RING_Y, WALK_RING_R, WALK_RING_R - 13, 0, 360, UI_TRACK);
-    float frac = st >= STEP_GOAL ? 1.0f : (float)st / STEP_GOAL;
+    float frac = tiers >= STEP_GOAL_TIERS ? 1.0f : (float)st / next;
     if (frac >= 1.0f) gfx->fillArc(CX, WALK_RING_Y, WALK_RING_R, WALK_RING_R - 13, 0, 360, UI_BAR_OK);
     else if (frac > 0.003f)  // de las 12 en el sentido de las agujas del reloj
       gfx->fillArc(CX, WALK_RING_Y, WALK_RING_R, WALK_RING_R - 13, 270, 270 + 360 * frac, 0x4C98);
@@ -2386,12 +2416,13 @@ void renderCardWalk() {
     setCur(centerX(num, ns), WALK_RING_Y - (ns == 3 ? 18 : 14));
     printT(num);
     char goal[10];
-    snprintf(goal, sizeof(goal), "/%u", (unsigned)STEP_GOAL);
+    snprintf(goal, sizeof(goal), "/%lu", (unsigned long)next);
     gfx->setTextColor(UI_TRACK);
     setSize(2);
     setCur(centerX(goal, 2), WALK_RING_Y + 12);
     printT(goal);
-    if (done) drawMap(SPR_ICON_FLAG, 16, CX + 50, WALK_RING_Y - 70, 2, false);
+    // una bandera por meta de hoy, en fila arriba a la derecha del anillo
+    for (int k = 0; k < tiers; k++) drawMap(SPR_ICON_FLAG, 16, CX + 48 + k * 26, WALK_RING_Y - 74, 2, false);
 
     char tot[32];
     snprintf(tot, sizeof(tot), T(S_STEPS_TOTAL_FMT), (unsigned long)(pet.stepsTotal + imuStepsPending()));
@@ -2399,8 +2430,14 @@ void renderCardWalk() {
     setCur(centerX(tot, 2), 212);
     printT(tot);
     char fnd[32];
-    snprintf(fnd, sizeof(fnd), T(S_FINDS_FMT), (unsigned)(pet.stepDay == day ? pet.findsToday : 0),
+    // hallazgos al azar hacia el tope, y aparte los regalos de las metas
+    bool isToday = pet.stepDay == day;
+    snprintf(fnd, sizeof(fnd), T(S_FINDS_FMT), (unsigned)(isToday ? pet.randomFindsToday() : 0),
              (unsigned)FINDS_PER_DAY);
+    if (isToday && pet.bonusFindsToday) {
+      size_t L = strlen(fnd);
+      snprintf(fnd + L, sizeof(fnd) - L, " +%u", (unsigned)pet.bonusFindsToday);
+    }
     setCur(centerX(fnd, 2), 236);
     printT(fnd);
   }
@@ -2460,7 +2497,7 @@ void walkTap(int16_t x, int16_t y) {
     if (timeLeft(itemConfirmUntil) && x >= 118 && x <= 218 && y >= 252 && y <= 304) {
       if (pet.useItem(it)) {
         sfxPlay(it == IT_GOLDEN ? SFX_EAT : SFX_LEVEL);
-        if (it == IT_GOLDEN) cardOpen = false;  // a ver como se la come
+        if (it == IT_GOLDEN || it == IT_RARECANDY) cardOpen = false;  // a verlo comer / subir de nivel
       } else {
         sfxPlay(SFX_DENY);
       }

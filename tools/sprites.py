@@ -561,6 +561,20 @@ def icon_charm():
     return g.rows()
 
 
+def icon_rarecandy():
+    # caramelo raro (v1.25): caramelo azul envuelto, puntas lavanda y un destello
+    g = G(16)
+    g.disk(8, 8.5, 4.6, 4.3, 'b', 'B')
+    for i in range(3):  # puntas del envoltorio: abanicos que se abren hacia fuera
+        g.rect(3 - i, 7 - i, 3 - i, 10 + i, 'l')
+        g.rect(12 + i, 7 - i, 12 + i, 10 + i, 'l')
+    g.outline()
+    g.rect(2, 7, 2, 10, 'L'); g.rect(13, 7, 13, 10, 'L')  # sombra del pliegue
+    g.px(6, 6, 'w'); g.px(7, 6, 'w'); g.px(6, 7, 'w')       # brillo
+    g.px(11, 0, 'w'); g.px(10, 1, 'f'); g.px(12, 1, 'f'); g.px(11, 2, 'w')  # destello
+    return g.rows()
+
+
 def icon_flag():
     # banderin de la meta de pasos
     g = G(16)
@@ -619,6 +633,7 @@ SPRITES = {
     "ICON_IRON": icon_iron(),
     "ICON_CARBOS": icon_carbos(),
     "ICON_CHARM": icon_charm(),
+    "ICON_RARECANDY": icon_rarecandy(),
     "ICON_FLAG": icon_flag(),
     "ICON_BATTLE": icon_battle(),
     "EGG": egg(),

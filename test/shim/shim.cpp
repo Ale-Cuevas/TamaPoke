@@ -146,7 +146,8 @@ size_t Preferences::getBytes(const char *k, void *buf, size_t maxLen) {
   KV &kv = gStore[ns_];
   KV::iterator it = kv.find(k);
   if (it == kv.end()) return 0;   // como la NVS real: deja el buffer intacto
-  size_t n = it->second.size() < maxLen ? it->second.size() : maxLen;
+  size_t n = it->second.size();
+  if (n > maxLen) return 0;       // como la real: un blob mayor que el buffer no se lee
   memcpy(buf, &it->second[0], n);
   return n;
 }

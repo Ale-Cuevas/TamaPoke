@@ -172,6 +172,13 @@ and the steps not yet handed to the pet; `STATS` shows steps today/total and the
   does the recording). (`IMULOG 3`: 180 samples ✓; the script
   choked on the closing `[imulog] end` and now skips any line that isn't a sample. Walks: pending)
 
+- [ ] v1.25 goals: `STEPS 6000` with the pet awake on a day without steps: the 6000 banner, JOY up, bond +2 even
+  with the day's cap full (`STATS`: `goal=2`, `bonus=2`). `STEPS 4000` more: the larger 10000 banner with three
+  flags and the candy, the Marathon medal banner, the Rare Candy popup (`candy=1`). The WALK ring shows `/6000`
+  after 3000 and `/10000` after 6000, with a flag per goal; FINDS shows `n/5 +k`. Use the Rare Candy from the
+  Backpack: the level goes up by 1 (and the evolve button appears if that level is the evolution level).
+- [ ] v1.25 a real 10000-step day: the goals fire as they're reached, with the screen dark in between.
+
 ### Pacing (v1.22)
 Weight and bond move slower. `STATS` prints them; `STEPS <n>` injects steps.
 - [ ] A candy: the WGT bar (Battle page) goes up 12 and is still above 0 an hour later (−1 every 15 min

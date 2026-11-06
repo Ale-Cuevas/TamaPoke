@@ -1015,8 +1015,10 @@ TEST(steps, a_medianoche_hoy_vuelve_a_cero_y_el_total_no) {
   mockForceRandom(0);
   for (int i = 0; i < 40; i++) p.addSteps(100, DIA);  // agota felicidad y hallazgos
   CHECK_EQ(p.stepJoyToday, (uint8_t)STEP_JOY_DAY_CAP);
-  CHECK_EQ(p.findsToday, (uint8_t)FINDS_PER_DAY);
+  CHECK_EQ(p.randomFindsToday(), (uint8_t)FINDS_PER_DAY);
+  CHECK_EQ(p.bonusFindsToday, (uint8_t)1);  // el regalo de la meta de 3000
   p.addSteps(10, DIA + 1);
+  CHECK_EQ(p.bonusFindsToday, (uint8_t)0);
   CHECK_EQ(p.stepsToday, (uint32_t)10);
   CHECK_EQ(p.stepsTotal, (uint32_t)4010);
   CHECK_EQ(p.findsToday, (uint8_t)0);
@@ -1084,9 +1086,16 @@ TEST(steps, tope_de_hallazgos_al_dia) {
   makeWalker(p);
   mockForceRandom(0);
   p.addSteps(2900, DIA);  // 3 hallazgos, sin la meta
-  p.addSteps(20000, DIA + 1);  // otro dia: cap de 5, el regalo de la meta incluido
-  CHECK_EQ(p.findsToday, (uint8_t)FINDS_PER_DAY);
-  CHECK_EQ(p.itemCount(), (uint8_t)(3 + FINDS_PER_DAY));
+  p.addSteps(20000, DIA + 1);  // otro dia: 5 al azar, y aparte los regalos de las 3 metas
+  CHECK_EQ(p.randomFindsToday(), (uint8_t)FINDS_PER_DAY);
+  CHECK_EQ(p.bonusFindsToday, (uint8_t)STEP_GOAL_TIERS);
+  CHECK_EQ(p.findsToday, (uint8_t)(FINDS_PER_DAY + STEP_GOAL_TIERS));
+  CHECK_EQ(p.items[IT_GOLDEN], (uint8_t)ITEM_MAX);  // azar 0: todo bayas (3 + 5 + 2, tope 9)
+  CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)1);      // el de la meta de 10000
+  // los avisos de un dia entero caben en la cola: el del Caramelo Raro no se pierde
+  uint8_t last = IT_COUNT;
+  while (p.hasFound()) { last = p.peekFound(); p.popFound(); }
+  CHECK_EQ(last, (uint8_t)IT_RARECANDY);
 }
 
 TEST(steps, probabilidades_de_cada_objeto) {
@@ -1326,6 +1335,136 @@ TEST(care, el_vinculo_maximo_cuesta_mas_de_cinco_dias) {
   }
   CHECK_MSG(dayFull >= 5 && dayFull <= 8, "vinculo 100 entre el dia 5 y el 8");
   CHECK_EQ(dayFull, 8);
+}
+
+// ---------------------------------------------------------------- metas de 3000 / 6000 / 10000 (v1.25)
+TEST(steps, las_tres_metas_saltan_una_vez_al_dia_y_en_orden) {
+  Pet p;
+  makeWalker(p);
+  setStats(p, 80, 20, 80, 100);
+  mockForceRandom(400);  // hallazgos al azar cada 1200 pasos
+  p.addSteps(3000, DIA);
+  CHECK_EQ(p.goalTierOn(DIA), (uint8_t)1);
+  CHECK_EQ(p.takeGoalBanner(), (uint8_t)1);
+  CHECK_EQ(p.streak, (uint16_t)1);
+  uint8_t joy = p.joy, bond = p.bond, bonus = p.bonusFindsToday;
+  p.addSteps(2999, DIA);
+  CHECK_EQ(p.goalTierOn(DIA), (uint8_t)1);
+  CHECK_EQ(p.takeGoalBanner(), (uint8_t)0);
+  p.addSteps(1, DIA);  // 6000
+  CHECK_EQ(p.goalTierOn(DIA), (uint8_t)2);
+  CHECK_EQ(p.takeGoalBanner(), (uint8_t)2);
+  CHECK_EQ(p.bonusFindsToday, (uint8_t)(bonus + 1));
+  CHECK_MSG(p.joy >= joy + GOAL2_JOY, "la meta de 6000 da felicidad");
+  CHECK_MSG(p.bond >= bond + GOAL2_BOND, "y vinculo");
+  CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)0);
+  p.addSteps(4000, DIA);  // 10000
+  CHECK_EQ(p.goalTierOn(DIA), (uint8_t)3);
+  CHECK_EQ(p.takeGoalBanner(), (uint8_t)3);
+  CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)1);
+  CHECK(p.hasMedal(MED_MARATHON));
+  CHECK_EQ(p.streak, (uint16_t)1);  // la racha solo la cuenta la primera
+  uint16_t total = p.totalMedals;
+  p.addSteps(5000, DIA);
+  CHECK_EQ(p.takeGoalBanner(), (uint8_t)0);  // ninguna se repite el mismo dia
+  CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)1);
+  // al dia siguiente, otra vez las tres; la medalla no se cuenta dos veces
+  p.setClock((DIA + 1) * 86400 + 3600);
+  p.addSteps(10000, DIA + 1);
+  CHECK_EQ(p.takeGoalBanner(), (uint8_t)3);  // cruzadas de golpe: el banner muestra la mas alta
+  CHECK_EQ(p.goalTierOn(DIA + 1), (uint8_t)3);
+  CHECK_EQ(p.goalTierOn(DIA), (uint8_t)0);
+  CHECK_EQ(p.bonusFindsToday, (uint8_t)STEP_GOAL_TIERS);
+  CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)2);
+  CHECK_EQ(p.streak, (uint16_t)2);
+  CHECK_EQ(p.totalMedals, total);
+}
+
+TEST(steps, el_vinculo_de_las_metas_va_fuera_del_tope_diario) {
+  Pet p;
+  makeWalker(p);
+  for (int i = 0; i < 20; i++) p.play();  // tope del dia lleno
+  uint8_t bond = p.bond;
+  mockForceRandom(400);
+  p.addSteps(6000, DIA);  // la de 3000 (ya cuidado hoy: sin +4) y la de 6000
+  CHECK_EQ(p.bond, (uint8_t)(bond + GOAL2_BOND));
+  p.addSteps(4000, DIA);
+  CHECK_EQ(p.bond, (uint8_t)(bond + GOAL2_BOND + GOAL3_BOND));
+}
+
+TEST(steps, dormido_las_metas_marcan_el_dia_sin_premio) {
+  Pet p;
+  makeWalker(p);
+  setStats(p, 80, 50, 80, 100);
+  p.toggleLight();  // a dormir
+  p.addSteps(10000, DIA);
+  CHECK_EQ(p.goalTierOn(DIA), (uint8_t)3);
+  CHECK_EQ(p.takeGoalBanner(), (uint8_t)3);
+  CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)0);
+  CHECK(!p.hasMedal(MED_MARATHON));
+  CHECK_EQ(p.joy, (uint8_t)50);
+  CHECK_EQ(p.streak, (uint16_t)1);  // la racha si: es el dia del jugador
+}
+
+TEST(items, el_caramelo_raro_sube_un_nivel_y_abre_la_evolucion) {
+  Pet p;
+  makePet(p, 4);  // Charmander: evoluciona a Charmeleon a nivel 16
+  setStats(p, 80, 80, 80, 80);
+  p.ageMinutes = 14 * MINUTES_PER_LEVEL + 37;  // nivel 15, a media hora del 16
+  CHECK_EQ(p.level(), (uint16_t)15);
+  CHECK(!p.canEvolveNow());
+  CHECK(!p.canUseItem(IT_RARECANDY));  // no hay
+  p.items[IT_RARECANDY] = 2;
+  CHECK(p.useItem(IT_RARECANDY));
+  CHECK_EQ(p.level(), (uint16_t)(15 + RARE_CANDY_LEVELS));
+  CHECK_EQ(p.ageMinutes, (uint32_t)(15 * MINUTES_PER_LEVEL));  // al principio del nivel nuevo
+  CHECK(p.canEvolveNow());
+  CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)1);
+  p.toggleLight();
+  CHECK(!p.useItem(IT_RARECANDY));  // dormido no
+  p.toggleLight();
+  p.ageMinutes = 9 * MINUTES_PER_LEVEL;  // nivel 10 -> la medalla de nivel 10 al cruzarlo
+  p.medals &= ~MED_LV10;
+  p.ageMinutes = 8 * MINUTES_PER_LEVEL + 59;  // nivel 9
+  CHECK(p.useItem(IT_RARECANDY));
+  CHECK_EQ(p.level(), (uint16_t)10);
+  CHECK(p.hasMedal(MED_LV10));
+  CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)0);
+}
+
+TEST(save, metas_y_caramelo_sobreviven_y_un_guardado_de_la_v124_migra) {
+  Pet p;
+  makeWalker(p);
+  mockForceRandom(400);
+  p.addSteps(6000, DIA);
+  p.items[IT_RARECANDY] = 3;
+  p.flushSave();
+  Pet b;
+  b.begin();
+  CHECK_EQ(b.goalTierOn(DIA), (uint8_t)2);
+  CHECK_EQ(b.bonusFindsToday, p.bonusFindsToday);
+  CHECK_EQ(b.items[IT_RARECANDY], (uint8_t)3);
+
+  // v1.24: una sola meta (goalD) y una mochila de 5 objetos
+  {
+    Preferences raw;
+    raw.begin("tamapoke", false);
+    raw.remove("goalN");
+    raw.remove("fndB");
+    uint8_t old[5] = { 2, 1, 0, 3, 1 };
+    raw.putBytes("bpack", old, sizeof(old));
+    raw.end();
+  }
+  Pet c;
+  c.begin();
+  CHECK_EQ(c.goalTierOn(DIA), (uint8_t)1);  // tenia la meta: cuenta como la primera
+  CHECK_EQ(c.bonusFindsToday, (uint8_t)0);
+  CHECK_EQ(c.items[IT_GOLDEN], (uint8_t)2);
+  CHECK_EQ(c.items[IT_CHARM], (uint8_t)1);
+  CHECK_EQ(c.items[IT_RARECANDY], (uint8_t)0);
+  c.addSteps(1, DIA);  // 6001: la de 3000 no se repite, la de 6000 ya estaba cruzada
+  CHECK_EQ(c.goalTierOn(DIA), (uint8_t)2);
+  CHECK_EQ(c.takeGoalBanner(), (uint8_t)2);
 }
 
 // ---------------------------------------------------------------- trucos del IMU (Tarea 2)

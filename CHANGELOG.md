@@ -8,6 +8,34 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.25] - 2026-11-05
+
+Saves from v1.24 load as they are: a goal already reached today counts as the
+3000 one, and the Backpack gets an empty Rare Candy slot.
+
+### Added
+
+- **Step goals at 3000, 6000 and 10000.** Each fires once a day, in order: 3000
+  as before (+10 JOY, a bonus find, a streak day); 6000 gives +10 JOY, +2 bond
+  and a bonus find; 10000 gives +15 JOY, +3 bond and a **Rare Candy**, and the
+  first time the **Marathon** medal (the 9th). The goals' bond comes on top of
+  the daily bond cap and their gifts on top of the 5 random finds a day. If one
+  batch of steps crosses several goals, all of them pay out and the banner
+  shows the highest; the 10000 banner is larger, with three flags and the candy.
+- **Rare Candy**, a new Backpack item (at most 9), only from the 10000 goal:
+  using it gives +1 level, which can make the pet ready to evolve.
+- The WALK page's ring fills toward the next goal (`/6000`, `/10000`), with a
+  flag per goal reached; FINDS shows the random finds out of 5 and `+n` for the
+  goals' gifts. The Backpack has 6 slots, slightly narrower.
+- `STEPS` and `STATS` over serial print the goal reached today, the gift finds
+  and the Rare Candy count.
+
+### Changed
+
+- The found-item popups now keep the newest when more than 8 pile up with the
+  screen dark (they used to keep the oldest 6 and drop the rest), so the Rare
+  Candy's popup isn't lost. The items always reach the Backpack either way.
+
 ## [1.24] - 2026-11-05
 
 Practice battles, part 3a of the link task in

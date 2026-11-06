@@ -48,7 +48,16 @@ enum : uint8_t { CER_NONE = 0, CER_FAREWELL, CER_RUNAWAY, CER_RELEASE };
 enum PetMood : uint8_t { MOOD_HAPPY, MOOD_SAD, MOOD_EATING, MOOD_SLEEPING };
 
 // --- pasos (docs/FEATURES.md, Tarea 1). Valores de partida, para afinar jugando.
-#define STEP_GOAL 3000            // meta diaria
+// metas diarias de pasos (v1.25): 3000, 6000 y 10000, cada una una vez al dia y en orden.
+// La de 10000 no es para todos los dias: premia un paseo largo con un Caramelo Raro.
+#define STEP_GOAL_TIERS 3
+static const uint32_t STEP_GOALS[STEP_GOAL_TIERS] = { 3000, 6000, 10000 };
+#define STEP_GOAL 3000            // la primera meta (la de la racha), = STEP_GOALS[0]
+#define GOAL2_JOY 10              // premio de la meta de 6000...
+#define GOAL2_BOND 2              // ...con vinculo fuera del tope diario
+#define GOAL3_JOY 15              // premio de la de 10000: Caramelo Raro y medalla MARATON
+#define GOAL3_BOND 3
+#define RARE_CANDY_LEVELS 1       // Caramelo Raro: +1 nivel (un nivel = una hora de edad)
 #define STEPS_PER_JOY 100         // +1 felicidad cada 100 pasos...
 #define STEP_JOY_DAY_CAP 30       // ...como mucho +30 al dia
 #define STEPS_PER_WEIGHT 1000     // -1 de peso cada 1000 pasos (v1.22: eran 250, 3000 pasos quemaban una chuche)
@@ -56,7 +65,7 @@ enum PetMood : uint8_t { MOOD_HAPPY, MOOD_SAD, MOOD_EATING, MOOD_SLEEPING };
 #define GOAL_JOY 10               // premio de la meta
 #define FIND_MIN_STEPS 800        // pasos premiados entre dos hallazgos (al azar entre MIN y MAX)
 #define FIND_MAX_STEPS 1200
-#define FINDS_PER_DAY 5           // tope de hallazgos al dia (el de la meta incluido)
+#define FINDS_PER_DAY 5           // tope de hallazgos al azar al dia (los regalos de las metas van aparte)
 #define ODDS_BERRY 55             // probabilidad de cada objeto (%)
 #define ODDS_VITAMIN 35
 #define ODDS_CHARM 10
@@ -65,10 +74,12 @@ enum PetMood : uint8_t { MOOD_HAPPY, MOOD_SAD, MOOD_EATING, MOOD_SLEEPING };
 #define GOLDEN_JOY 15
 #define VITAMIN_TRAIN 3           // vitaminas: +3 de entrenamiento
 #define CHARM_SHINY_MULT 3        // amuleto: el siguiente huevo, x3 de probabilidad shiny
-#define FOUND_QUEUE 6             // hallazgos que esperan a que se encienda la pantalla
+#define FOUND_QUEUE (FINDS_PER_DAY + STEP_GOAL_TIERS)  // hallazgos que esperan a que se encienda la pantalla: los de un dia entero (8)
 
 // objetos de la mochila (del jugador). El amuleto no se usa a mano: se lleva.
-enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_COUNT };
+// IT_RARECANDY va al final: la mochila se guarda por posicion ("bpack") y un guardado
+// anterior trae solo las 5 primeras.
+enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_RARECANDY, IT_COUNT };
 
 // --- trucos del IMU (Tarea 2)
 #define GRUMPY_JOY 5                 // despertarlo agitando: -5 felicidad...
@@ -90,8 +101,9 @@ enum : uint16_t {
   MED_LV10 = 1 << 0, MED_LV25 = 1 << 1, MED_LV50 = 1 << 2,
   MED_BERRY = 1 << 3, MED_STREAK7 = 1 << 4, MED_BOND = 1 << 5,
   MED_FINAL = 1 << 6, MED_FIT = 1 << 7,
+  MED_MARATHON = 1 << 8,  // 10000 pasos en un dia, con el bicho despierto (v1.25)
 };
-#define MED_COUNT 8
+#define MED_COUNT 9
 
 class Pet {
 public:
@@ -133,9 +145,11 @@ public:
   uint32_t stepsToday = 0;   // desde la medianoche local (el mismo dia que la racha)
   uint32_t stepsTotal = 0;   // de toda la vida
   uint32_t stepDay = 0;      // dia al que pertenecen stepsToday y los topes diarios
-  uint8_t findsToday = 0;    // hallazgos de hoy (FINDS_PER_DAY como mucho)
+  uint8_t findsToday = 0;    // hallazgos de hoy, al azar y regalos de las metas
+  uint8_t bonusFindsToday = 0;  // de ellos, regalos de las metas (fuera de FINDS_PER_DAY)
   uint8_t stepJoyToday = 0;  // felicidad ganada hoy caminando (STEP_JOY_DAY_CAP)
-  uint32_t goalDay = 0;      // ultimo dia en que se alcanzo la meta
+  uint32_t goalDay = 0;      // ultimo dia en que se alcanzo una meta
+  uint8_t goalTier = 0;      // metas alcanzadas ese dia (0..STEP_GOAL_TIERS)
   uint8_t items[IT_COUNT] = { 0 };  // mochila; items[IT_CHARM] es 0 o 1
 
   void begin();                 // carga estado de NVS (o crea el primer huevo)
@@ -229,7 +243,9 @@ public:
   void addSteps(uint32_t n, uint32_t day);  // n pasos contados; day = dayNumber() (0 = sin reloj)
   uint32_t dayNumber() const { return today(); }
   uint32_t stepsOn(uint32_t day) const { return day == stepDay ? stepsToday : 0; }  // "hoy" visto desde day
-  bool goalDoneOn(uint32_t day) const { return day && goalDay == day; }
+  uint8_t goalTierOn(uint32_t day) const { return day && goalDay == day ? goalTier : 0; }
+  bool goalDoneOn(uint32_t day) const { return goalTierOn(day) > 0; }  // la primera (3000)
+  uint8_t randomFindsToday() const { return findsToday - bonusFindsToday; }
   // efecto de usar un objeto de la mochila (false = no se pudo: dormido, huevo, no hay)
   bool canUseItem(uint8_t it) const;
   bool useItem(uint8_t it);
@@ -243,7 +259,8 @@ public:
   }
   void popFound();
   // banner de la meta pendiente de mostrar (lo recoge la UI con la pantalla encendida)
-  bool takeGoalBanner() { bool g = goalBanner; goalBanner = false; return g; }
+  // devuelve la meta (1..STEP_GOAL_TIERS) del banner, la mas alta si se cruzaron varias; 0 = ninguno
+  uint8_t takeGoalBanner() { uint8_t g = goalBanner; goalBanner = 0; return g; }
 
   // --- combate de practica (Tarea 3a)
   // puede combatir: nacido, despierto, sin ceremonia ni evolucion en curso
@@ -300,7 +317,7 @@ private:
   uint8_t foundQ[FOUND_QUEUE];
   bool foundFull[FOUND_QUEUE];
   uint8_t foundN = 0;
-  bool goalBanner = false;
+  uint8_t goalBanner = 0;     // meta del banner pendiente (0 = ninguno)
   // trucos del IMU
   uint8_t emoteKind = EMOTE_NONE;
   uint32_t emoteUntil = 0;
@@ -321,6 +338,9 @@ private:
   void persist(bool now) { if (now) save(); else pendingSave = true; }
   void rollStepDay(uint32_t day);
   void findItem();
+  void giveFound(uint8_t it);       // a la mochila y a la cola de avisos
+  void goalReward(uint8_t tier, bool rewarded);
+  uint16_t pendingMedals = 0;      // medallas ganadas por un evento (MARATON) que checkMedals celebra
   void startEmote(uint8_t kind) { emoteKind = kind; emoteUntil = millis() + EMOTE_MS; }
   void tick();
   void hatch();
