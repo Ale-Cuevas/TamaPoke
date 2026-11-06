@@ -29,6 +29,7 @@ Write the result on each line: a tick, or what you saw.
 | 20 | v1.24 practice battle: PLAY menu, VS card and jingle, attacks and captions, special (taps, flash, cooldown), result and reward | [Battle](DEVICE_TESTS.md#battle) | ✓ "works like a charm" (user, 2026-11-05) |
 | 21 | v1.24 battle lengths 10–20 s; big Attack sprites without stutter; heap flat over 20 battles | [Battle](DEVICE_TESTS.md#battle) | ✓ battles fine on the board (user, 2026-11-05); 20-battle heap check not run |
 | 22 | v1.25 goals at 3000 / 6000 / 10000: banners, rewards, Rare Candy found and used (+1 level), Marathon medal, WALK ring and flags | [Steps](DEVICE_TESTS.md#steps) | pending |
+| 23 | v1.26 swaying meadow (`BIOME 0`): smooth sway, gust every 12 s, front tufts over the feet, night tint; forest tips sway | [Backgrounds](DEVICE_TESTS.md#backgrounds-v126) | draw time ✓ (16.7 ms vs 14.8 beach); look: pending |
 
 Questions only the board can answer:
 - Where is the USB-C port relative to the screen's top? Bottom edge (buttons on top).

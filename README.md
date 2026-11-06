@@ -1,7 +1,7 @@
 # TamaPoke
 
 ![Board](https://img.shields.io/badge/board-ESP32--S3%20AMOLED%202.16-E7352C?logo=espressif&logoColor=white)
-![Firmware](https://img.shields.io/badge/firmware-v1.25-8A2BE2)
+![Firmware](https://img.shields.io/badge/firmware-v1.26-8A2BE2)
 [![CI](https://github.com/Ale-Cuevas/TamaPoke/actions/workflows/ci.yml/badge.svg)](https://github.com/Ale-Cuevas/TamaPoke/actions/workflows/ci.yml)
 ![Code](https://img.shields.io/badge/code-MIT-blue)
 ![Languages](https://img.shields.io/badge/languages-8-FFCB05)
@@ -503,6 +503,12 @@ U8g2 unifont subset carries ♀ or ♂, so each language picks its own substitut
 The idle screen paints the sky from the **RTC's real time** (dawn / day / dusk /
 night with moon and stars) and the ground from the **type's biome** (meadow,
 beach, forest, volcano, mountain, snow). Sleeping forces night.
+
+The meadow is **tall grass that sways in the wind**, with flowers, and a front
+row of tufts brushing the pet's feet; a gust sweeps across it from left to right
+every 12 s, and the forest's conifers sway with it (`wind.h`). `BIOME <n>` over
+serial previews another biome without touching the pet (`BIOME` alone goes
+back), and `PERF` prints how long the background takes to draw.
 
 ## Layout
 
