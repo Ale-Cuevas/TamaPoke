@@ -8,6 +8,26 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.26] - 2026-11-05
+
+### Added
+
+- **The meadow is tall grass that sways.** The meadow background (normal,
+  electric, fighting, poison, psychic and ghost types, and the egg) used to have
+  four static tufts. It now has a jagged edge of grass along the hill, tufts of
+  fanned blades with flowers in the middle, and a front row of tufts drawn over
+  the pet's feet. Everything sways with `wind.h`: a gentle back-and-forth,
+  out of phase across the screen, plus a gust that sweeps from left to right
+  every 12 s. At night the grass and flowers darken with the rest.
+- The forest's conifer tips sway with the same wind.
+- `BIOME <n>` over serial previews another biome on the home screen without
+  touching the pet or the save (`BIOME` alone goes back); `PERF` prints the
+  background's draw time. On the board the meadow takes 16.7 ms against the
+  beach's 14.8 ms.
+- `test/test_wind.cpp`: the sway stays in range, is the same for the same
+  instant, the gust crosses left to right, and neighbouring columns move out of
+  phase. Render scenes for the meadow mid-gust and at dusk.
+
 ## [1.25] - 2026-11-05
 
 Saves from v1.24 load as they are: a goal already reached today counts as the

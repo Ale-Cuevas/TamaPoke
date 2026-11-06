@@ -179,6 +179,15 @@ and the steps not yet handed to the pet; `STATS` shows steps today/total and the
   Backpack: the level goes up by 1 (and the evolve button appears if that level is the evolution level).
 - [ ] v1.25 a real 10000-step day: the goals fire as they're reached, with the screen dark in between.
 
+### Backgrounds (v1.26)
+`BIOME <n>` shows biome n on the home screen without changing the pet (`BIOME` alone goes back); `PERF` prints
+the background's draw time.
+- [ ] `BIOME 0`: tall grass on the hill, tufts with flowers, front tufts over the pet's feet; it sways smoothly,
+  and every 12 s a gust leans it to the right from left to right. At night (or with the pet asleep) it darkens.
+- [ ] `BIOME 2`: the forest's conifer tips sway a little with the same gust.
+- [ ] `PERF` with `BIOME 0` within ~3 ms of the beach (`BIOME 1`). (2026-11-05, v1.26 on the board: beach 14.8 ms,
+  meadow 16.7 ms, forest 15.0 ms ✓)
+
 ### Pacing (v1.22)
 Weight and bond move slower. `STATS` prints them; `STEPS <n>` injects steps.
 - [ ] A candy: the WGT bar (Battle page) goes up 12 and is still above 0 an hour later (−1 every 15 min

@@ -37,10 +37,11 @@
 #include "imu.h"    // pasos y trucos de movimiento (QMI8658); SensorLib queda en imu.cpp
 #include "steps.h"  // STEP_FLUSH_MS
 #include "battle.h" // motor del combate de practica (logica pura)
+#include "wind.h"   // viento del paisaje: hierba, flores y copas que se mecen (logica pura)
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.25"
+#define FW_VERSION "1.26"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -204,6 +205,11 @@ uint32_t briSaveAt = 0;      // millis en que se guarda el nivel (0 = nada pendi
 uint32_t briToastUntil = 0;  // aviso del nivel en pantalla
 #define BRI_SAVE_DELAY_MS 3000
 #define BRI_TOAST_MS 1500
+// tiempo de dibujo del paisaje (comando serie PERF): el ultimo y el peor desde el ultimo PERF
+uint32_t gSceneUs = 0, gSceneMaxUs = 0;
+// BIOME <n> (serie): muestra otro paisaje sin tocar el bicho ni el guardado; -1 = el suyo
+int8_t gBiomeOverride = -1;
+#define BIOME_COUNT 6  // paisajes (dex.h: biome)
 bool swallowGesture = false; // el toque que despierta no acciona nada
 uint32_t holdStart = 0;     // pulsacion larga sobre el bicho
 uint32_t confirmUntil = 0;  // dialogo "soltar?" activo hasta este millis
@@ -653,6 +659,17 @@ void handleSerial() {
       if (pet.isRegistered(i)) Serial.printf(" %d", i);
     Serial.println();
     Serial.println("DONE");
+  } else if (line.startsWith("BIOME")) {  // BIOME <n>: ver otro paisaje (solo RAM); BIOME: el del bicho
+    gBiomeOverride = line.length() > 6 ? (int8_t)line.substring(6).toInt() : -1;
+    if (gBiomeOverride >= BIOME_COUNT) gBiomeOverride = -1;
+    wakeUI();
+    Serial.printf("biome=%u%s\n", homeBiome(), gBiomeOverride >= 0 ? " (override)" : "");
+    Serial.println("DONE");
+  } else if (line == "PERF") {  // cuanto tarda el paisaje (drawScene) en dibujarse, en us
+    Serial.printf("scene=%luus max=%luus biome=%u\n", (unsigned long)gSceneUs, (unsigned long)gSceneMaxUs,
+                  homeBiome());
+    gSceneMaxUs = 0;
+    Serial.println("DONE");
   } else if (line.startsWith("BRIGHT")) {  // BRIGHT: nivel y brillo; BRIGHT <n>: lo fija (como BOOT)
     if (line.length() > 7) {
       int lv = line.substring(7).toInt();
@@ -1092,7 +1109,7 @@ int sceneHour() {
 }
 
 // suelo de cada bioma de dia (de noche se mezcla hacia el azul nocturno)
-static const uint16_t BIOME_SOIL[6] = {
+static const uint16_t BIOME_SOIL[BIOME_COUNT] = {
   C565(0x7e, 0xc0, 0x7f),  // 0 pradera
   C565(0xdc, 0xca, 0x94),  // 1 playa (arena)
   C565(0x4f, 0x8a, 0x55),  // 2 bosque
@@ -1109,6 +1126,108 @@ void drawClouds(uint32_t now, uint16_t col) {
     gfx->fillCircle(cx + 18, cy + 3, 13, col);
     gfx->fillCircle(cx - 15, cy + 4, 12, col);
   }
+}
+
+// paisaje de la pantalla principal: el del tipo del bicho (el prado para el huevo)
+uint8_t homeBiome() {
+  if (gBiomeOverride >= 0) return (uint8_t)gBiomeOverride;
+  return pet.isEgg() ? 0 : DEX_TBL[pet.speciesId].biome;
+}
+
+void perfNote(uint32_t us) {
+  gSceneUs = us;
+  if (us > gSceneMaxUs) gSceneMaxUs = us;
+}
+
+// ---------- prado de hierba alta (bioma 0, v1.26) ----------
+// Hierba que se mece con el viento (wind.h), en tres planos: un borde dentado de hierba
+// sobre la loma, matas altas en medio con flores, y matas delante que rozan los pies del
+// bicho (drawSceneFront, despues de dibujarlo). Posiciones fijas, sorteadas una vez con
+// una semilla propia: el prado es siempre el mismo y no gasta el random() del juego.
+#define MEADOW_EDGE_STEP 6     // un diente del borde cada 6 px
+#define MEADOW_MID 15          // matas de en medio
+#define MEADOW_FRONT 9         // matas de delante (con huecos: el bicho se ve entre ellas)
+#define MEADOW_TUFT 5          // briznas por mata, abiertas en abanico
+#define MEADOW_FLOWERS 7
+#define MEADOW_EDGE_N (466 / MEADOW_EDGE_STEP + 2)
+struct Tuft { int16_t x; int16_t y; uint8_t h[MEADOW_TUFT]; };
+static Tuft meadowMid[MEADOW_MID], meadowFront[MEADOW_FRONT];
+static uint8_t meadowEdge[MEADOW_EDGE_N];  // altura de cada diente del borde
+static int16_t meadowFlower[MEADOW_FLOWERS][4];  // x, y, alto del tallo, color
+static const uint16_t FLOWER_COL[3] = { C565(0xff, 0xff, 0xff), C565(0xff, 0xd9, 0x5e), C565(0xf0, 0x8a, 0xa4) };
+
+static void meadowInit() {
+  static bool done = false;
+  if (done) return;
+  done = true;
+  uint32_t seed = 0x5eed1e5u;
+  auto rnd = [&](int n) { seed = seed * 1664525u + 1013904223u; return (int)((seed >> 16) % (uint32_t)n); };
+  for (auto &e : meadowEdge) e = (uint8_t)(8 + rnd(9));
+  for (int i = 0; i < MEADOW_MID; i++) {
+    meadowMid[i].x = (int16_t)(12 + i * 446 / MEADOW_MID + rnd(16));
+    meadowMid[i].y = (int16_t)(HORIZON + 34 + rnd(14));
+    for (auto &h : meadowMid[i].h) h = (uint8_t)(12 + rnd(11));
+  }
+  for (int i = 0; i < MEADOW_FLOWERS; i++) {
+    meadowFlower[i][0] = (int16_t)(30 + i * 410 / MEADOW_FLOWERS + rnd(30));
+    meadowFlower[i][1] = (int16_t)(HORIZON + 30 + rnd(20));
+    meadowFlower[i][2] = (int16_t)(17 + rnd(7));
+    meadowFlower[i][3] = (int16_t)rnd(3);
+  }
+  for (int i = 0; i < MEADOW_FRONT; i++) {
+    meadowFront[i].x = (int16_t)(20 + i * 430 / (MEADOW_FRONT - 1) - 8 + rnd(16));
+    meadowFront[i].y = 313;  // la base queda bajo el panel de abajo
+    for (int b = 0; b < MEADOW_TUFT; b++) meadowFront[i].h[b] = (uint8_t)((b == 2 ? 18 : 10) + rnd(8));
+  }
+}
+
+// una brizna: triangulo con la base en (x, y) y la punta h px mas arriba, inclinada por el
+// viento (las altas, mas) y por `splay`, lo que se abre hacia fuera dentro de su mata.
+// (enteros y no un struct: el conversor del .ino pone los prototipos antes de los structs)
+static void drawBlade(int x, int y, int h, int w, int splay, uint32_t now, uint16_t col) {
+  int lean = splay + windSway(now, x) * h / 16;
+  gfx->fillTriangle(x - w, y, x + w, y, x + lean, y - h, col);
+}
+
+// mata de MEADOW_TUFT briznas en abanico, alternando el tono oscuro y el claro
+static void drawTuft(const int16_t x, const int16_t y, const uint8_t *h, uint32_t now, uint16_t dark, uint16_t light) {
+  for (int b = 0; b < MEADOW_TUFT; b++) {
+    int off = (b - MEADOW_TUFT / 2) * 3;
+    drawBlade(x + off, y, h[b], 2, off * h[b] / 14, now, (b & 1) ? light : dark);
+  }
+}
+
+static void drawMeadow(uint32_t now, bool night, uint16_t soil, uint16_t dk) {
+  meadowInit();
+  uint16_t back = lerp565(soil, dk, 5, 16), mid = lerp565(soil, dk, 10, 16);
+  uint16_t light = lerp565(soil, night ? C565(0x30, 0x40, 0x48) : C565(0xd8, 0xf0, 0xa0), 6, 16);
+  // borde dentado de hierba sobre la loma: se mece todo junto, como un campo visto de lejos
+  for (int i = 0; i < MEADOW_EDGE_N; i++) {
+    int x = i * MEADOW_EDGE_STEP;
+    drawBlade(x, HORIZON + 8, meadowEdge[i], 4, 0, now, back);
+  }
+  gfx->fillRect(0, HORIZON + 8, 466, 6, back);  // la base del borde, sin huecos
+  for (auto &f : meadowFlower) {  // flores: tallo que se mece y cabeza que lo sigue
+    int lean = windSway(now, f[0]) * f[2] / 16;
+    int hx = f[0] + lean, hy = f[1] - f[2];
+    gfx->drawLine(f[0], f[1], hx, hy, mid);
+    gfx->drawLine(f[0] + 1, f[1], hx + 1, hy, mid);
+    uint16_t pc = night ? lerp565(FLOWER_COL[f[3]], C565(0x16, 0x1c, 0x30), 9, 16) : FLOWER_COL[f[3]];
+    gfx->fillCircle(hx, hy, 4, pc);
+    gfx->fillRect(hx - 1, hy - 1, 2, 2, night ? C565(0x80, 0x70, 0x30) : C565(0xe8, 0xa2, 0x3c));
+  }
+  for (auto &t : meadowMid) drawTuft(t.x, t.y, t.h, now, mid, light);
+}
+
+// las matas de delante, encima del bicho (render() la llama tras dibujarlo y antes del panel)
+void drawSceneFront(uint8_t biome, uint32_t now, bool night) {
+  if (biome != 0) return;
+  meadowInit();
+  uint16_t soil = BIOME_SOIL[0];
+  if (night) soil = lerp565(soil, C565(0x16, 0x1c, 0x30), 9, 16);
+  uint16_t dk = lerp565(soil, C565(0x10, 0x18, 0x20), night ? 11 : 7, 16);
+  uint16_t front = lerp565(soil, dk, 13, 16), frontL = lerp565(soil, dk, 9, 16);
+  for (auto &t : meadowFront) drawTuft(t.x, t.y, t.h, now, front, frontL);
 }
 
 void drawScene(uint8_t biome, uint32_t now, bool night) {
@@ -1136,7 +1255,7 @@ void drawScene(uint8_t biome, uint32_t now, bool night) {
   }
 
   // mar de la playa: una franja de agua sobre la arena
-  uint16_t soil = BIOME_SOIL[biome < 6 ? biome : 0];
+  uint16_t soil = BIOME_SOIL[biome < BIOME_COUNT ? biome : 0];
   if (night) soil = lerp565(soil, C565(0x16, 0x1c, 0x30), 9, 16);
   if (biome == 1) {
     uint16_t sea = night ? C565(0x1c, 0x34, 0x52) : C565(0x4f, 0x96, 0xc4);
@@ -1158,8 +1277,9 @@ void drawScene(uint8_t biome, uint32_t now, bool night) {
   uint16_t dk = lerp565(soil, C565(0x10, 0x18, 0x20), night ? 11 : 7, 16);
   if (biome == 2) {  // bosque: coniferas en silueta
     for (int tx : { 60, 150, 360, 416 }) {
-      gfx->fillTriangle(tx, HORIZON - 46, tx - 16, HORIZON, tx + 16, HORIZON, dk);
-      gfx->fillTriangle(tx, HORIZON - 60, tx - 12, HORIZON - 28, tx + 12, HORIZON - 28, dk);
+      int sw = windSway(now, tx);  // las copas se mecen un poco con el viento (v1.26)
+      gfx->fillTriangle(tx + sw / 3, HORIZON - 46, tx - 16, HORIZON, tx + 16, HORIZON, dk);
+      gfx->fillTriangle(tx + sw / 2, HORIZON - 60, tx - 12, HORIZON - 28, tx + 12, HORIZON - 28, dk);
     }
   } else if (biome == 3) {  // volcan: rocas y brasas
     gfx->fillTriangle(70, HORIZON, 40, HORIZON + 30, 100, HORIZON + 30, dk);
@@ -1176,10 +1296,8 @@ void drawScene(uint8_t biome, uint32_t now, bool night) {
       int fy = (f * 90 + now / 18) % HORIZON;
       gfx->fillRect(fx, fy, 3, 3, UI_WHITE);
     }
-  } else if (biome == 0) {  // pradera: matas de hierba
-    for (int gx : { 80, 175, 300, 395 })
-      for (int b = -1; b <= 1; b++)
-        gfx->fillRect(gx + b * 5, HORIZON + 6, 2, 8 + (b == 0 ? 4 : 0), dk);
+  } else if (biome == 0) {  // pradera: hierba alta que se mece (la fila de delante, en drawSceneFront)
+    drawMeadow(now, night, soil, dk);
   }
 }
 
@@ -1419,7 +1537,9 @@ bool render() {
   gNight = pet.sleeping || h < 6 || h >= 20;
   // drawScene cubre los 466x466 completos: sin fillScreen(NEGRO) previo para
   // que un flush DMA solapado nunca capture negro a medias (anti-parpadeo)
-  drawScene(pet.isEgg() ? 0 : DEX_TBL[pet.speciesId].biome, millis(), gNight);
+  uint32_t sceneT0 = micros();
+  drawScene(homeBiome(), millis(), gNight);
+  perfNote(micros() - sceneT0);
 
   if (pet.ceremony) {
     const DexEntry &d = DEX_TBL[pet.speciesId];
@@ -1463,6 +1583,7 @@ bool render() {
     snprintf(name, sizeof(name), T(S_NAME_FMT), pet.shiny ? "*" : "", base, pet.level());
     drawHeader(name, gNight ? UI_INK_NIGHT : d.accent, statusMsg());  // con la racha
     drawPet();
+    drawSceneFront(homeBiome(), millis(), gNight);  // hierba delante de los pies
     drawBath();
     drawPoops();
     // panel inferior: base limpia para barras y botones sobre el paisaje

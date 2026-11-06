@@ -231,6 +231,9 @@ static const std::vector<Scene> &scenes() {
     { "home-dusk", [] { pokemon(7, 19); } },
     { "home-night", [] { pokemon(133, 23); pet.sleeping = true; } },
     { "home-forest", [] { pokemon(1, 9); pet.poops = 2; pet.fullness = 20; } },
+    // the swaying tall-grass meadow (v1.26): mid-gust, at dusk
+    { "home-gust", [] { pokemon(19, 11); gHostMillis = 114000; } },  // wind.h: the gust is mid-screen at 6 s of 12
+    { "home-meadow-dusk", [] { pokemon(19, 19); } },
     { "feed", [] { pokemon(133, 12); menuKind = MENU_FEED; menuUntil = millis() + 6000; } },
     { "play-menu", [] { pokemon(133, 12); menuKind = MENU_PLAY; menuUntil = millis() + 6000; } },
     { "release", [] { pokemon(54, 15); confirmUntil = millis() + 10000; } },
