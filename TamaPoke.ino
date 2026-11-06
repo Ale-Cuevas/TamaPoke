@@ -42,7 +42,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.28"
+#define FW_VERSION "1.29"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -3946,7 +3946,7 @@ void renderScreensaver() {
   gfx->fillScreen(RGB565_BLACK);
   int x, y;
   saverPos(now, &x, &y);
-  int ground = y + 26;  // los pies del bicho; la hora, debajo
+  int ground = y - SAVER_PET_GAP;  // los pies del bicho; la hora, debajo (burnin.h)
   if (pet.awaitingStarter()) {
     // nada que mostrar aun: solo la hora
   } else if (pet.isEgg()) {
@@ -3965,8 +3965,8 @@ void renderScreensaver() {
     char t[8];
     snprintf(t, sizeof(t), "%02u:%02u", (unsigned)((e / 3600) % 24), (unsigned)((e / 60) % 60));
     gfx->setTextColor(pet.sleeping ? 0x4208 : 0x8410);  // gris tenue (mas aun con el bicho dormido)
-    setSize(3);
-    setCur(x - textW(t, 3) / 2, ground + 8);
+    setSize(SAVER_CLOCK_SIZE);
+    setCur(x - textW(t, SAVER_CLOCK_SIZE) / 2, y);
     printT(t);
   }
   gfx->flush();
