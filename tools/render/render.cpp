@@ -324,14 +324,16 @@ static const std::vector<Scene> &scenes() {
        while (pet.hasFound()) pet.popFound();
        collect();
      }, 5 },
-    { "found-candy", [] {
-       pokemon(25, 13);
+    // v1.36: each goal gives levels ("+1 Lv" on the 3000 banner); the 10000 one no longer
+    // gives a Rare Candy, so the old found-candy scene is gone
+    { "goal-3000", [] {
+       pokemon(7, 10);
        pet.lastCareDay = pet.dayNumber();
-       pet.medals = (1 << MED_COUNT) - 1;  // every medal already won: no medal banner on top
-       pet.addSteps(STEP_GOALS[STEP_GOAL_TIERS - 1], pet.dayNumber());
-       pet.takeGoalBanner();
-       while (pet.hasFound() && pet.peekFound() != IT_RARECANDY) pet.popFound();
-     }, 2 },
+       pet.medals = (1 << MED_COUNT) - 1;  // every medal already won: only the goal banner on top
+       pet.addSteps(STEP_GOALS[0], pet.dayNumber());
+       while (pet.hasFound()) pet.popFound();
+       collect();
+     }, 5 },
     { "card-medals-9", [] { pokemon(25, 13); pet.medals = MED_LV10 | MED_BERRY | MED_MARATHON; cardOpen = true; cardPage = 2; } },
     { "walk-confirm", [] {
        pokemon(25, 13);

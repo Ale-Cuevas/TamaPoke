@@ -8,6 +8,23 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.36] - 2026-11-06
+
+Walking speeds up levelling ([GAMEPLAY_TUNING.md, #6 STEPLV](docs/GAMEPLAY_TUNING.md#6-steplv-walking-speeds-up-levelling)).
+
+### Changed
+
+- **The daily step goals give levels:** 3000 → +1, 6000 → +1, 10000 → +2, so up to 4 a day.
+  The level bar keeps how full it was and the pet doesn't age. Several goals crossed at once
+  give all their levels together.
+- The goal banner shows "+1 Lv" / "+2 Lv" (or the total, "+4 Lv", when the goals came
+  together); the level-up animation and jingle play as well, one after the other.
+- **The 10000 goal no longer gives a Rare Candy**: the +2 levels replace it. Its joy, bond
+  and the Marathon medal stay. Candies already in the Backpack still work (+1).
+- As with every walking reward, a goal crossed while the pet sleeps gives no levels: it only
+  marks the day and the streak.
+- `FX goal` / `FX goal3` show the banners with "+1 Lv" / "+2 Lv".
+
 ## [1.35] - 2026-11-06
 
 Level pace ([GAMEPLAY_TUNING.md, #5 CURVE](docs/GAMEPLAY_TUNING.md#5-curve-the-level-pace-follows-how-hard-the-pet-is-to-raise)):

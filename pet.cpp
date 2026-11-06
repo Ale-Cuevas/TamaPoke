@@ -665,8 +665,13 @@ void Pet::addSteps(uint32_t n, uint32_t day) {
 // premio de cada meta. El banner y la racha (la primera) se dan siempre; lo demas, con el
 // bicho nacido y despierto, como el resto de premios de caminar. Los regalos no cuentan
 // para el tope de hallazgos al azar, y el vinculo va fuera del tope diario de addBond.
+// v1.36: cada meta sube niveles (STEP_GOAL_LEVELS: +1, +1, +2), con la barra igual de llena.
 void Pet::goalReward(uint8_t tier, bool rewarded) {
   if (rewarded) {
+    uint16_t before = level();
+    growMin = addLevels(growMin, STEP_GOAL_LEVELS[tier - 1]);
+    uint16_t gained = level() - before;  // menos en el tope (999)
+    goalBannerLv = (uint8_t)(goalBannerLv + gained);
     if (tier == 1) {
       joy = clamp100(joy + GOAL_JOY);
       bonusFindsToday++;
@@ -676,15 +681,12 @@ void Pet::goalReward(uint8_t tier, bool rewarded) {
       bond = clamp100(bond + GOAL2_BOND);
       bonusFindsToday++;
       findItem();
-    } else {
+    } else {  // 10000: +2 niveles (arriba) en vez del Caramelo Raro de la v1.25
       joy = clamp100(joy + GOAL3_JOY);
       bond = clamp100(bond + GOAL3_BOND);
-      bonusFindsToday++;
-      findsToday++;
-      giveFound(IT_RARECANDY);
       pendingMedals |= MED_MARATHON;
-      checkMedals(false);
     }
+    checkMedals(false);  // las de nivel (10, 25, 50) que abran los niveles nuevos, y MARATON
   }
   if (tier == 1) registerCare(false);  // cuenta como dia de cuidado para la racha
 }
@@ -706,7 +708,7 @@ void Pet::giveFound(uint8_t it) {
   bool full = items[it] >= cap;
   if (!full) items[it]++;
   // cola llena (muchos sin ver con la pantalla apagada): se pierde el aviso mas antiguo, no
-  // el nuevo, que puede ser el Caramelo Raro de la meta de 10000. El objeto ya esta en la mochila.
+  // el nuevo, que puede ser el regalo de una meta. El objeto ya esta en la mochila.
   if (foundN == FOUND_QUEUE) popFound();
   foundQ[foundN] = it;
   foundFull[foundN] = full;

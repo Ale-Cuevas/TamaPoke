@@ -220,11 +220,14 @@ waving it around doesn't farm anything.
 
   | Goal | Reward |
   |---|---|
-  | 3000 | +10 JOY, a bonus find, and the day counts toward your **streak** |
-  | 6000 | +10 JOY, +2 bond, a bonus find |
-  | 10000 | +15 JOY, +3 bond, a **Rare Candy**, and the **Marathon** medal the first time. Meant for long walks, not every day. |
+  | 3000 | **+1 level**, +10 JOY, a bonus find, and the day counts toward your **streak** |
+  | 6000 | **+1 level**, +10 JOY, +2 bond, a bonus find |
+  | 10000 | **+2 levels**, +15 JOY, +3 bond, and the **Marathon** medal the first time. Meant for long walks, not every day. |
 
-  The goal bond comes on top of the daily bond cap.
+  Walking can add up to 4 levels a day (v1.36). The levels keep how full the level bar was
+  and don't age the pet; the banner shows "+N Lv" and the level-up plays as well. The goal
+  bond comes on top of the daily bond cap. Like every walking reward, the levels and the
+  rest need the pet awake: a goal crossed while it sleeps only marks the day (and the streak).
 - **Finds:** every 800–1200 rewarded steps the pet finds something (at most 5 a
   day; the goals' gifts come on top). A popup shows it next time the screen is
   on; tap to dismiss.
@@ -234,7 +237,7 @@ waving it around doesn't farm anything.
   | Golden Berry | 55 % | +50 FOOD, +15 JOY, a heart |
   | Protein / Iron / Carbos | 35 % (1/3 each) | +3 ATK / DEF / SPD training (cap 100) |
   | Shiny Charm | 10 % | Held, not used: the **next egg** gets ×3 shiny odds (never better than 1/8). One at a time; a second one becomes a Golden Berry. |
-  | Rare Candy | the 10000 goal | **+1 level**, keeping how full the level bar was, without ageing the pet (it can make the pet ready to evolve) |
+  | Rare Candy | the 10000 goal, v1.25–v1.35 (it now gives +2 levels directly) | **+1 level**, keeping how full the level bar was, without ageing the pet (it can make the pet ready to evolve). Candies already in the Backpack still work. |
 
 - The **Backpack** holds up to 9 of each item. Open it on the stat card's 5th
   page, **WALK** (swipe up, then left four times): today's steps with a ring

@@ -49,13 +49,17 @@ enum PetMood : uint8_t { MOOD_HAPPY, MOOD_SAD, MOOD_EATING, MOOD_SLEEPING };
 
 // --- pasos (docs/FEATURES.md, Tarea 1). Valores de partida, para afinar jugando.
 // metas diarias de pasos (v1.25): 3000, 6000 y 10000, cada una una vez al dia y en orden.
-// La de 10000 no es para todos los dias: premia un paseo largo con un Caramelo Raro.
+// La de 10000 no es para todos los dias: premia un paseo largo.
 #define STEP_GOAL_TIERS 3
 static const uint32_t STEP_GOALS[STEP_GOAL_TIERS] = { 3000, 6000, 10000 };
+// niveles de cada meta (v1.36, docs/GAMEPLAY_TUNING.md #6): pasear acelera la crianza. Hasta 4
+// al dia, con el bicho despierto (como el resto de premios de caminar). La de 10000 daba un
+// Caramelo Raro (+1); ahora da +2 directamente y ya no da caramelo.
+static const uint8_t STEP_GOAL_LEVELS[STEP_GOAL_TIERS] = { 1, 1, 2 };
 #define STEP_GOAL 3000            // la primera meta (la de la racha), = STEP_GOALS[0]
 #define GOAL2_JOY 10              // premio de la meta de 6000...
 #define GOAL2_BOND 2              // ...con vinculo fuera del tope diario
-#define GOAL3_JOY 15              // premio de la de 10000: Caramelo Raro y medalla MARATON
+#define GOAL3_JOY 15              // premio de la de 10000: +2 niveles y medalla MARATON
 #define GOAL3_BOND 3
 #define RARE_CANDY_LEVELS 1       // Caramelo Raro: +1 nivel (addLevels: la barra conserva lo que llevaba)
 #define STEPS_PER_JOY 100         // +1 felicidad cada 100 pasos...
@@ -267,7 +271,15 @@ public:
   void popFound();
   // banner de la meta pendiente de mostrar (lo recoge la UI con la pantalla encendida)
   // devuelve la meta (1..STEP_GOAL_TIERS) del banner, la mas alta si se cruzaron varias; 0 = ninguno
-  uint8_t takeGoalBanner() { uint8_t g = goalBanner; goalBanner = 0; return g; }
+  // levels (opcional): niveles que dieron las metas desde el ultimo banner (0 si se cruzaron
+  // dormido); el banner los ensena como "+N Lv"
+  uint8_t takeGoalBanner(uint8_t *levels = nullptr) {
+    uint8_t g = goalBanner;
+    if (levels) *levels = goalBannerLv;
+    goalBanner = 0;
+    goalBannerLv = 0;
+    return g;
+  }
 
   // --- combate de practica (Tarea 3a)
   // puede combatir: nacido, despierto, sin ceremonia ni evolucion en curso
@@ -324,6 +336,7 @@ private:
   bool foundFull[FOUND_QUEUE];
   uint8_t foundN = 0;
   uint8_t goalBanner = 0;     // meta del banner pendiente (0 = ninguno)
+  uint8_t goalBannerLv = 0;   // niveles ganados con las metas desde el ultimo banner
   // trucos del IMU
   uint8_t emoteKind = EMOTE_NONE;
   uint32_t emoteUntil = 0;

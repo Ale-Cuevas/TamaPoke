@@ -395,6 +395,19 @@ A pure log curve climbs fastest right after Lv 10 (20 → 45 → 60 min for Lv 1
 - On the board: `FX goal` / `FX levelup` show the banners without touching the save. The user's real
   walk confirms the levels.
 
+### Built in v1.36
+
+- `STEP_GOAL_LEVELS[] = { 1, 1, 2 }` in `pet.h`; `goalReward()` calls `addLevels()` for a rewarded goal
+  and then `checkMedals(false)`, so a goal that reaches Lv 10/25/50 gives its medal at once.
+- Defaults taken for open questions 1 and 2: the 10000 goal gives +2 levels and no Rare Candy (it no longer
+  counts as a bonus find either); no levels while the pet sleeps.
+- The levels gained since the last banner travel with it: `takeGoalBanner(&levels)` → the FX event's `b`.
+  The banner prints "+N Lv" (the total when several goals came together, e.g. "+4 Lv"), and nothing for
+  a goal crossed asleep.
+- **Order on screen differs from the plan text:** FX shows a level-up before a goal banner (its existing
+  priority: level, medal, streak, goal), so the "Lv.a > Lv.b" pill comes first and the goal banner follows.
+- The `found-candy` render scene is gone (the candy is no longer found); `goal-3000` shows the small banner.
+
 ---
 
 ## Open questions (the plan goes with the default unless the user says otherwise)
