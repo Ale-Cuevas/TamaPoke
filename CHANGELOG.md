@@ -8,6 +8,28 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.34] - 2026-11-06
+
+All the games in one menu
+([GAMEPLAY_TUNING.md, #4 GAMES](docs/GAMEPLAY_TUNING.md#4-games-all-games-in-the-play-menu)).
+
+### Changed
+
+- **The training bag moves into the PLAY menu**, next to the ball game and the practice
+  battle. The menu has three slots now (ball | crossed swords | red bag), the same size as
+  the food menu's. The bag works as before: 10 s of hits, trains STRENGTH.
+- **The stat card's Battle page** loses its "Train strength" button. The four bars (ATK,
+  DEF, SPD, WGT) spread over the page, and a tap anywhere closes the card as on the other
+  pages.
+
+### Added
+
+- `ICON_SACK`: a 16×16 red bag icon in `tools/sprites.py` (regenerated `species.h`).
+
+### Removed
+
+- The `S_TRAIN_STR` string, in all eight languages.
+
 ## [1.33] - 2026-11-06
 
 The ball game speeds up all the time

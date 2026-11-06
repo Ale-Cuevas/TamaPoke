@@ -611,6 +611,23 @@ def icon_battle():
     return g.rows()
 
 
+def icon_sack():
+    # saco de entrenamiento rojo colgado de su cadena (menu de JUGAR, v1.34), como el de
+    # la escena del saco: cuerpo rojo, tapa y costura mas oscuras
+    g = G(16)
+    g.rect(4, 3, 11, 15, 'r')
+    for x, y in ((4, 3), (11, 3), (4, 15), (11, 15)):  # esquinas redondeadas
+        g.px(x, y, '.')
+    g.rect(10, 5, 10, 14, 'R')         # sombra a la derecha
+    g.rect(5, 3, 10, 4, 'R')           # tapa
+    g.rect(4, 9, 11, 9, 'R')           # costura
+    g.outline()
+    g.rect(6, 6, 6, 7, 'p')            # brillo
+    g.rect(7, 0, 8, 2, 'S')            # cadena
+    g.px(7, 1, 's')
+    return g.rows()
+
+
 SPRITES = {
     "CHARMANDER": charmander(),
     "CHARMELEON": charmeleon(),
@@ -636,6 +653,7 @@ SPRITES = {
     "ICON_RARECANDY": icon_rarecandy(),
     "ICON_FLAG": icon_flag(),
     "ICON_BATTLE": icon_battle(),
+    "ICON_SACK": icon_sack(),
     "EGG": egg(),
     "POOP": poop(),
     "HEART": heart(),

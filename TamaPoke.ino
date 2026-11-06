@@ -44,7 +44,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.33"
+#define FW_VERSION "1.34"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -110,7 +110,11 @@ struct { int16_t x, y; uint8_t r, ph; } bubbles[14];
 enum : uint8_t { MENU_NONE = 0, MENU_FEED, MENU_PLAY };
 uint8_t menuKind = MENU_NONE;
 uint32_t menuUntil = 0;       // se cierra solo a este millis
-#define PLAY_MENU_X (CX - 66)  // menu de JUGAR: pelota | combate, 132 x 64
+// menu de JUGAR (v1.34): pelota | combate | saco de entrenamiento, 3 huecos de 66 como los
+// del menu de comida, 198 x 64. Todos los juegos estan aqui; el saco antes salia de la ficha.
+#define PLAY_MENU_SLOT 66
+#define PLAY_MENU_W (3 * PLAY_MENU_SLOT)
+#define PLAY_MENU_X (CX - PLAY_MENU_W / 2)
 
 // minijuego "toques": mantener la pokeball en el aire
 bool gameOpen = false;
@@ -1056,12 +1060,7 @@ void onTap(int16_t x, int16_t y) {
   if (cardOpen) {
     if (cardPage == 4) { walkTap(x, y); return; }  // paseo: mochila
     if (cardPage == 0 && y < 84) openKeyboard();  // tocar el nombre = renombrar
-    else if (cardPage == 1 && y >= 300 && y <= 340 && x >= 96 && x <= 370) {
-      cardOpen = false;            // boton ENTRENAR FUERZA
-      startSack();
-    } else {
-      cardOpen = false;
-    }
+    else cardOpen = false;
     return;
   }
   if (gameOpen) {
@@ -1100,9 +1099,11 @@ void onTap(int16_t x, int16_t y) {
       else pet.feedBerry(item);
       fxNeeds(ns);  // "+25" sobre la barra de comida
       sfxPlay(SFX_EAT);
-    } else if (kind == MENU_PLAY && x >= PLAY_MENU_X && x < PLAY_MENU_X + 132) {
+    } else if (kind == MENU_PLAY && x >= PLAY_MENU_X && x < PLAY_MENU_X + PLAY_MENU_W) {
       sfxPlay(SFX_TAP);
-      if (x < CX) startGame();
+      int slot = (x - PLAY_MENU_X) / PLAY_MENU_SLOT;  // pelota | combate | saco
+      if (slot == 0) startGame();
+      else if (slot == 2) startSack();
       else if (pet.canBattle()) startPractice(0);
       else {
         sfxPlay(SFX_DENY);
@@ -1903,13 +1904,14 @@ bool render() {
   fxPerfNote(fxUs + (micros() - fxT0));
   drawWalkNews();
 
-  // menus emergentes: comida (4 opciones) o juego (pelota | combate)
+  // menus emergentes: comida (4 opciones) o juego (pelota | combate | saco)
   if (menuKind && !timeLeft(menuUntil)) menuKind = MENU_NONE;
   if (menuKind == MENU_PLAY) {
-    gfx->fillRoundRect(PLAY_MENU_X, 288, 132, 64, 14, UI_WHITE);
-    gfx->drawRoundRect(PLAY_MENU_X, 288, 132, 64, 14, inkColor());
+    gfx->fillRoundRect(PLAY_MENU_X, 288, PLAY_MENU_W, 64, 14, UI_WHITE);
+    gfx->drawRoundRect(PLAY_MENU_X, 288, PLAY_MENU_W, 64, 14, inkColor());
     drawMap(SPR_ICON_PLAY, 16, PLAY_MENU_X + 9, 296, 3, false);
-    drawMap(SPR_ICON_BATTLE, 16, PLAY_MENU_X + 75, 296, 3, false);
+    drawMap(SPR_ICON_BATTLE, 16, PLAY_MENU_X + PLAY_MENU_SLOT + 9, 296, 3, false);
+    drawMap(SPR_ICON_SACK, 16, PLAY_MENU_X + 2 * PLAY_MENU_SLOT + 9, 296, 3, false);
   }
   if (menuKind == MENU_FEED) {
     {
@@ -2988,24 +2990,18 @@ void renderCardProfile() {
   printT(T(S_RENAME_HINT));
 }
 
-// pagina 1: combate (4 barras + boton de entrenar)
+// pagina 1: combate (4 barras). El saco de entrenamiento ya no sale de aqui sino del menu de
+// JUGAR (v1.34), con los otros juegos: las barras ocupan el sitio del boton.
 void renderCardStats() {
   gfx->setTextColor(UI_INK);
   setSize(3);
   setCur(centerX(T(S_BATTLE), 3), 48);
   printT(T(S_BATTLE));
 
-  drawCardStat(118, T(S_STAT_ATK), pet.atkStat(), 260, UI_BAR_BAD);
-  drawCardStat(160, T(S_STAT_DEF), pet.defStat(), 260, 0x4C98);
-  drawCardStat(202, T(S_STAT_SPE), pet.speStat(), 260, UI_BAR_WARN);
-  drawCardStat(244, T(S_STAT_WGT), pet.weight, 100, 0xB3C8);
-
-  // boton: saco de entrenamiento de fuerza
-  gfx->fillRoundRect(96, 300, 274, 40, 12, UI_BAR_BAD);
-  gfx->setTextColor(UI_BG_DAY);
-  setSize(2);
-  setCur(centerX(T(S_TRAIN_STR), 2), 311);
-  printT(T(S_TRAIN_STR));
+  drawCardStat(124, T(S_STAT_ATK), pet.atkStat(), 260, UI_BAR_BAD);
+  drawCardStat(180, T(S_STAT_DEF), pet.defStat(), 260, 0x4C98);
+  drawCardStat(236, T(S_STAT_SPE), pet.speStat(), 260, UI_BAR_WARN);
+  drawCardStat(292, T(S_STAT_WGT), pet.weight, 100, 0xB3C8);
 }
 
 // pagina 2: medallas con etiqueta descriptiva

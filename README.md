@@ -96,10 +96,11 @@ While **awake**, per minute:
 - 🍎 **Berry** (3 flavors): +25 FOOD. Each species has a **hidden favorite flavor**
   → +35 FOOD, +10 JOY, ♥, bond, and it gets revealed.
 - 🍬 **Candy:** +10 FOOD, +12 JOY, but **+12 weight** (fattening).
-- ⚽ **Play:** a menu with the **ball minigame** (+JOY, −ENE; trains **SPEED** and burns weight;
-  the ball keeps speeding up as you score: twice as fast at 80 as at 1, up to 3×)
-  and a **practice battle** (+3 JOY, at most once an hour; see Battles below).
-- 🥊 **Training bag:** trains **STRENGTH** (~4 hits = 1 pt, cap +18/session), tires it.
+- ⚽ **Play:** a menu with all the games: the **ball minigame** (+JOY, −ENE; trains **SPEED** and
+  burns weight; the ball keeps speeding up as you score: twice as fast at 80 as at 1, up to 3×),
+  a **practice battle** (+3 JOY, at most once an hour; see Battles below) and the training bag.
+- 🥊 **Training bag** (third slot of the Play menu): trains **STRENGTH** (~4 hits = 1 pt, cap
+  +18/session), tires it.
 - 🫧 **Bath:** clears poops, HYG → 100.
 - 👆 **Pet it:** +5 JOY + bond.
 - 🌙 **Sleep:** rest — ENE **+6/min**, needs drain ~**4× slower** with floors
@@ -389,8 +390,8 @@ If one bottoms out it counts as a *slip-up*.
 **Buttons (bottom arc, icons):**
 - 🍎 **Feed** → food menu: 3 berries (each species has a hidden favourite that
   gives a bonus) and a candy (+happiness but it fattens; weight makes it sluggish).
-- ⚽ **Play** → a menu: the pokeball minigame (trains SPEED) or a practice
-  battle (crossed swords).
+- ⚽ **Play** → a menu with every game: the pokeball minigame (trains SPEED), a practice
+  battle (crossed swords) or the training bag (red bag, trains STRENGTH).
 - 🌙 **Light** → sleep/wake (recovers energy, dims the screen). While asleep,
   needs decay much slower (rest).
 - 🫧 **Bath** → a foam scene that cleans up the poops.
@@ -399,8 +400,8 @@ If one bottoms out it counts as a *slip-up*.
 - Tap the creature = pet it (+happiness, bond).
 - Horizontal swipe = open the **Pokédex / gallery**.
 - Vertical swipe up = open the **stat card** (5 pages: Profile / Battle / Medals /
-  Progress / Walk; swipe between them; tap the name on Profile to rename; on Battle the
-  "Train strength" button opens the bag; on Walk, tap a Backpack item to use it).
+  Progress / Walk; swipe between them; tap the name on Profile to rename; on Walk, tap a
+  Backpack item to use it; the bag moved to the Play menu in v1.34).
 - Swipe down = **set the clock** and pick the **language**, sound on/off and
   **brightness** (the sun pill: 4 levels, tap to cycle).
 - Long press (3 s) on the creature = **release** dialog.

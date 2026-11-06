@@ -287,3 +287,13 @@ doesn't touch the record or give rewards.
 - [ ] `BALL 159`: 3× (`speed=3.00`); still possible to hit, the ball never jumps through the finger.
 - [ ] A normal game from PLAY: the ball speeds up with every point, with no plateau past ~48 as before.
 - [ ] The pet still follows the ball along the ground at every speed.
+
+### Games menu (v1.34)
+([GAMEPLAY_TUNING.md, #4 GAMES](GAMEPLAY_TUNING.md#4-games-all-games-in-the-play-menu).)
+- [ ] PLAY opens a wider menu with three icons: ball | crossed swords | red bag. Each slot starts its game: the
+  ball game, a practice battle, the training bag (10 s of hits, then the result as before).
+- [ ] While the pet is evolving or can't battle, the swords slot still shakes PLAY with the deny sound; the
+  ball and bag slots still work.
+- [ ] The stat card's Battle page shows only the four bars (ATK, DEF, SPD, WGT), spread over the page, with no
+  button; a tap anywhere on it closes the card.
+- [ ] USER = back still quits the bag (no reward while the time runs).
