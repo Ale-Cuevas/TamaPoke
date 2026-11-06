@@ -247,3 +247,33 @@ serial starts one; the log prints the matchup and the result.
   `BATTLE 130`).
 - [ ] `HEALTH` before and after 20 battles: the minimum heap stays flat (the opponent's sprite is freed each time).
 
+### Feedback (v1.30)
+([NEXT_FEATURES.md, Task FX](NEXT_FEATURES.md#task-fx-feedback-for-what-the-pet-does).) `FX <effect>` over
+serial shows any effect without touching the save. `STATS` prints the queue (`fx queue=… showing=… busy=…
+sleep=…`). Banners wait while the pet sleeps, so wake it first. `PERF` prints the effects' draw time
+(`fx=…us fxmax=…us`).
+- [ ] `FX levelup`, pet awake: the jingle plays, the pet poses, sparkles rise, "LEVEL UP!" slides in with the
+  level, and the header level flashes. For the last 1.5 s the pill shows "ATK +n DEF +n SPD +n".
+  `FX levelup6`: "Lv.a > Lv.b".
+- [ ] A real level-up with the screen off (PWR, then wait for the hour): the jingle plays at once and the screen
+  stays off. On the next wake the animation plays with no second jingle.
+- [ ] A level-up while the pet sleeps: no jingle. On waking it, the animation plays with its jingle.
+- [ ] Power off for 2+ hours, then on: one "Lv.a > Lv.b" after the boot jingle.
+- [ ] A level that earns a medal (Lv.10, 25, 50): the level-up first, then the medal banner with confetti, never
+  both at once. The evolve button waits until both are gone.
+- [ ] `FX medal`, `FX streak`, `FX goal`, `FX goal3`: each banner slides in from above. Medal and goal3 have
+  confetti. Several at once come one after another in the order level, medal, streak, goal.
+- [ ] Feeding: the FOOD bar slides up and "+25" (or "+35" for the favourite) floats from it. The same for the
+  bath (HYG), items, and after the minigame and the bag.
+- [ ] Bond: a small heart with "+n" left of the pet when bond rises (petting gives it at most every 15 min;
+  `FX bond`).
+- [ ] Vitamins from the Backpack: the card closes and "ATK +3" (or DEF/SPD) floats while the pet attacks
+  (`FX train`).
+- [ ] With the pet asleep, FOOD, PLAY and BATH shake with the deny sound. LIGHT still works. Every tapped button
+  looks pressed for a moment.
+- [ ] Hatching (the third egg tap, or `FX hatch` on a hatched pet): the egg shakes harder, the shell bursts in a
+  white flash with the hatch jingle, and the pet appears posing inside a ring of light. The header says EGG
+  until then.
+- [ ] A care slip-up with the screen on: "!" bubble and a soft falling sound (`FX oops`).
+- [ ] `PERF` while a level-up, the floats and the hatch play: `fx` stays under 3000 us.
+

@@ -11,6 +11,10 @@
 // ---- reloj falso -----------------------------------------------------------
 uint32_t millis();
 void mockSetMillis(uint32_t ms);
+// sonidos pedidos con sfxPlay() desde el ultimo mockSfxReset() (el de cada test)
+int mockSfxCount(uint8_t id);
+int mockSfxTotal();
+void mockSfxReset();
 void mockAdvanceMillis(uint32_t ms);
 
 // ---- random determinista (misma semantica que Arduino: [0, howbig) ) -------

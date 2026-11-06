@@ -20,11 +20,11 @@ three:
 Code is referred to by function name, not line number: with several branches
 in flight, line numbers move every day.
 
-| Task | What | Needs | Size | Suggested release |
+| Task | What | Needs | Size | Release |
 |---|---|---|---|---|
-| [FX](#task-fx-feedback-for-what-the-pet-does) | Level-up sound and animation; feedback for stats, bond, training, hatching and buttons; one queue so celebrations never overlap | Best after day-1 Task 3 (Rare Candy) and Task 6 (screensaver) | M | 1.28 |
-| [BOX](#task-box-store-a-pet-raise-another) | Put the pet into hibernation in a 6-slot box, raise a new egg, swap back any time | — (uses FX's overlay for its effect if FX is in) | M–L | 1.29 |
-| [OTA](#task-ota-firmware-updates-over-wi-fi) | Update the firmware over Wi-Fi from GitHub Releases, with automatic rollback | — (shares the radio rules with the Link, `FEATURES.md` Task 3) | L | 1.30 |
+| [FX](#task-fx-feedback-for-what-the-pet-does) | Level-up sound and animation; feedback for stats, bond, training, hatching and buttons; one queue so celebrations never overlap | Best after day-1 Task 3 (Rare Candy) and Task 6 (screensaver) | M | **1.30 (built)** |
+| [BOX](#task-box-store-a-pet-raise-another) | Put the pet into hibernation in a 6-slot box, raise a new egg, swap back any time | — (uses FX's overlay for its effect) | M–L | 1.31 |
+| [OTA](#task-ota-firmware-updates-over-wi-fi) | Update the firmware over Wi-Fi from GitHub Releases, with automatic rollback | — (shares the radio rules with the Link, `FEATURES.md` Task 3) | L | 1.32 |
 
 **Suggested order: FX → BOX → OTA.**
 - FX is the smallest, and the other two reuse its queue: BOX for the
@@ -336,7 +336,46 @@ go at the end of the `Sfx` enum, which follows the table order.
   (FR-FX.5).
 - Is the stat-gain line worth it? It makes the numbers on the stats card mean
   something.
-- Confetti on every medal, or only the rare ones?
+- Confetti on every medal, or only the rare ones? (Built: every medal.)
+
+### Built in v1.30
+
+Branch `feature/fx`, 2026-11-05. The day-1 plan had already shipped (v1.22–v1.29), so FX
+is v1.30, and BOX and OTA move to 1.31 and 1.32. Where the build differs from the text
+above, or settles something it left open:
+
+- **Watches instead of new `Pet` fields.** `bondGain` and `mistakeNew` weren't added.
+  `fx.h`'s `FxWatch` watches `pet.bond`, `pet.careMistakes` and the three training values
+  from the UI, the same way `LevelWatch` watches the level.
+  - This catches every source without editing each one: steps, the first care of the day,
+    the minigame, the bag, vitamins, and DEF from good care.
+  - `Pet` only gained `takeMedal()`, `takeMilestone()` and `statAt()`.
+  - `medalUntil` and `milestoneUntil` are gone. Two medals not yet shown add up instead of
+    the second replacing the first.
+- **"Ready to evolve" isn't a queue entry.** Its chime stays in `loop()`, where it was. The
+  evolve, farewell and runaway buttons are hidden while any celebration is up, so they
+  appear after it.
+- **Every banner waits for the pet to be awake**, not just the level-up, so nothing
+  celebrates over the night scene. The level-up jingle follows FR-FX.5: at once if the pet
+  is awake, with the animation if it was asleep.
+- **Pose.** `PMD_POSE`, with `PMD_HOP` only if the sprite has no pose. The idle picker
+  already leaves Hop out because it jumps over the header. The black-and-white fallback
+  sprite bounces.
+- **Renders pick the moment by frame count** (85 ms each, as the existing scenes do), not
+  through an `fxDebug(kind, t)` freeze. The board has `FX <effect>`, which shows an effect
+  without touching the save.
+- **Vitamins close the card**, like the Golden Berry and the Rare Candy, so the
+  "ATK +3" and the attack can be seen.
+- **The milestone banner plays `SFX_MEDAL` when shown.** It had no sound before. Medal and
+  goal banners play it when shown too, instead of when earned.
+- **Buttons that deny:** FOOD, PLAY and BATH while the pet sleeps, BATH during a bath, and
+  PLAY's battle when a battle isn't possible. They played `SFX_TAP` and did nothing before.
+- **Hatching.** The header shows EGG until the pet appears. With the screen not in view,
+  the hatch jingle plays at once with no animation.
+- **Measured on the board** (2026-11-05, serial, pet asleep): the effects take 40 µs per
+  frame idle, at most 1.5 ms with four floats at once, and 1.05 ms for the hatch. That's
+  within the 3 ms budget. The banners' draw time is still to measure with the pet awake
+  (`PENDING_TESTS.md` row 26).
 
 ---
 
@@ -597,7 +636,7 @@ the **app-only** `firmware.bin` instead.
 
 ### Goal
 
-A board on v1.30 or later updates itself from GitHub Releases over Wi-Fi:
+A board on v1.32 or later updates itself from GitHub Releases over Wi-Fi:
 - started from the settings (clock) screen;
 - without USB;
 - keeping the pet.

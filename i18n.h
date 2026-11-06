@@ -69,6 +69,8 @@ enum StrId : uint8_t {
   // combate de practica (v1.24): tarjeta VS, rotulos de cada golpe, resultado
   S_PRACTICE, S_SUPER_EFF, S_NOT_EFF, S_NO_EFFECT, S_CRITICAL, S_SPECIAL, S_TAP_CHARGE,
   S_WIN, S_LOSE, S_DRAW, S_PRACTICE_JOY_FMT, S_PRACTICE_NONE,
+  // efectos de respuesta (v1.30): pildora de la subida de nivel
+  S_LEVEL_UP,
   STR_COUNT
 };
 

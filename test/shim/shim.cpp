@@ -57,7 +57,15 @@ void MockSerial::begin(unsigned long) {}
 // ---------------- audio (stubs) ----------------
 static bool gAudioOn = true;
 void audioBegin() {}
-void sfxPlay(uint8_t) {}
+static int gSfx[256];
+static int gSfxTotal = 0;
+void sfxPlay(uint8_t id) { gSfx[id]++; gSfxTotal++; }
+int mockSfxCount(uint8_t id) { return gSfx[id]; }
+int mockSfxTotal() { return gSfxTotal; }
+void mockSfxReset() {
+  for (int &n : gSfx) n = 0;
+  gSfxTotal = 0;
+}
 void audioSetEnabled(bool on) { gAudioOn = on; }
 bool audioEnabled() { return gAudioOn; }
 

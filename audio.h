@@ -13,13 +13,15 @@ enum Sfx : uint8_t {
   SFX_MEDAL,    // medalla / hito
   SFX_DENY,     // accion no permitida
   SFX_BYE,      // despedida
-  SFX_LEVEL,    // sube de nivel
+  SFX_LEVEL,    // "+" pequeno: objeto usado, fin del minijuego (la subida de nivel es SFX_LEVELUP)
   SFX_BATTLE,   // jingle de entrada al combate (~2,5 s)
   SFX_HIT,      // golpe normal
   SFX_CRIT,     // golpe critico
   SFX_SPECIAL,  // ataque especial
   SFX_WIN,      // victoria
   SFX_LOSE,     // derrota
+  SFX_LEVELUP,  // subida de nivel (v1.30): arpegio que sube, mas agudo que eclosion y evolucion
+  SFX_OOPS,     // descuido (v1.30): dos notas que caen, mas suave que SFX_DENY
   SFX_COUNT
 };
 

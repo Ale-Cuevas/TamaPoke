@@ -39,6 +39,7 @@ int main(int argc, char **argv) {
     gFailures.clear();
     // estado limpio para cada test
     mockSetMillis(0);
+    mockSfxReset();
     mockClearForcedRandom();
     randomSeed(0xC0FFEE);
     tc.fn();

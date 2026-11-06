@@ -139,17 +139,23 @@ static void resetUi() {
   pet.ceremony = CER_NONE;
   // paseo e IMU (v1.20)
   itemConfirm = 0;
-  goalBannerUntil = 0;
   foundShown = false;
   while (pet.hasFound()) pet.popFound();
   pet.takeGoalBanner();
+  pet.takeMedal();       // (v1.30) las celebraciones pendientes no pasan de una escena a otra
+  pet.takeMilestone();
   pet.clearEmote();
   pet.stepsToday = pet.stepsTotal = 0;
   pet.findsToday = 0;
   pet.goalDay = 0;
   pet.goalTier = 0;
   pet.bonusFindsToday = 0;
-  goalBannerTier = 0;
+  // efectos (fx.h, v1.30): nada pendiente de la escena anterior; las barras arrancan quietas
+  fxq.clear();
+  fxo.clear();
+  fxBan = nullptr;
+  for (auto &b : fxBar) b.init = false;
+  fxBondGate = FxGate{};
   memset(pet.items, 0, sizeof(pet.items));
   gStubImuPresent = true;
   gStubTiltSide = 0;
@@ -161,6 +167,20 @@ static void resetUi() {
   briToastUntil = briSaveAt = 0;
   screenKeyValid = false;
   if (gLang != LANG_EN) { setLang(LANG_EN); applyLangFont(); }
+}
+
+// what the loop does each pass for the effects (fx.h): the watches note the pet as it is now,
+// then anything pending (a goal, a medal, a level the scene added) goes into the queue
+static void collect() {
+  fxArmWatches();
+  fxCollect(millis());
+}
+
+// a level-up through the real path: the watch sees the level rise, as in the loop
+static void levelUp(uint16_t levels) {
+  fxArmWatches();
+  pet.ageMinutes += (uint32_t)levels * MINUTES_PER_LEVEL;
+  fxCollect(millis());
 }
 
 // steps and Backpack for the WALK page scenes
@@ -301,7 +321,8 @@ static const std::vector<Scene> &scenes() {
        pet.medals = (1 << MED_COUNT) - 1;  // every medal already won: only the goal banner on top
        pet.addSteps(STEP_GOALS[STEP_GOAL_TIERS - 1], pet.dayNumber());
        while (pet.hasFound()) pet.popFound();
-     }, 2 },
+       collect();
+     }, 5 },
     { "found-candy", [] {
        pokemon(25, 13);
        pet.lastCareDay = pet.dayNumber();
@@ -333,7 +354,47 @@ static const std::vector<Scene> &scenes() {
        pokemon(7, 10);
        pet.lastCareDay = pet.dayNumber();  // already cared for today: no streak/medal banner on top
        pet.addSteps(STEP_GOAL, pet.dayNumber());
+       collect();
+     }, 4 },
+    // feedback effects (fx.h, v1.30). Frames run 85 ms each: the count picks the moment shown
+    { "levelup-slide", [] { pokemon(25, 13); levelUp(1); }, 1 },
+    { "levelup", [] { pokemon(25, 13); levelUp(1); }, 7 },
+    { "levelup-late", [] { pokemon(4, 16); levelUp(1); }, 18 },
+    { "levelup-multi", [] { pokemon(7, 10); levelUp(6); }, 7 },
+    { "levelup-gains", [] { pokemon(25, 13); levelUp(1); }, 32 },
+    { "levelup-ja", [] { pokemon(25, 13); setLang(LANG_JA); applyLangFont(); levelUp(1); }, 7 },
+    { "levelup-gains-ja", [] { pokemon(25, 13); setLang(LANG_JA); applyLangFont(); levelUp(1); }, 32 },
+    { "levelup-ko", [] { pokemon(25, 13); setLang(LANG_KO); applyLangFont(); levelUp(1); }, 7 },
+    { "levelup-gains-fr", [] { pokemon(25, 13); setLang(LANG_FR); applyLangFont(); levelUp(1); }, 32 },
+    { "medal-slide", [] { pokemon(25, 13); fxq.push(FXB_MEDAL, 0); }, 1 },
+    { "medal-confetti", [] { pokemon(25, 13); fxq.push(FXB_MEDAL, 0); }, 6 },
+    { "streak-banner", [] { pokemon(25, 13); fxq.push(FXB_MILESTONE, 7); }, 4 },
+    // (needs set by hand, not feedBerry(): its eating timer would leak into the next scenes,
+    // which restart the host clock)
+    { "stat-float", [] {
+       pokemon(133, 12);
+       pet.fullness = 40;
+       FxNeedSnap ns = fxSnap();
+       pet.fullness = 75;
+       pet.joy = 98;
+       fxNeeds(ns);
+     }, 4 },
+    { "stat-tween", [] {
+       pokemon(133, 12);
+       pet.fullness = 30;
+       render();
+       FxNeedSnap ns = fxSnap();
+       pet.fullness = 65;
+       fxNeeds(ns);
      }, 2 },
+    { "bond-float", [] { pokemon(25, 13); fxo.push(FXO_BOND, 0, 2, millis()); }, 4 },
+    { "train-float", [] { pokemon(66, 13); fxo.push(FXO_TRAIN, 0, 3, millis()); }, 5 },
+    { "oops", [] { pokemon(25, 13); fxo.push(FXO_OOPS, 0, 0, millis()); }, 4 },
+    { "button-press", [] { pokemon(25, 13); fxo.push(FXO_PRESS, 1, 0, millis()); }, 1 },
+    { "button-deny", [] { pokemon(25, 13); pet.sleeping = true; fxo.push(FXO_DENY, 0, 0, millis()); }, 2 },
+    { "hatch-shake", [] { pokemon(25, 13); fxo.push(FXO_HATCH, 0, 0, millis()); }, 6 },
+    { "hatch-flash", [] { pokemon(25, 13); fxo.push(FXO_HATCH, 0, 0, millis()); }, 9 },
+    { "hatch-reveal", [] { pokemon(25, 13); fxo.push(FXO_HATCH, 0, 0, millis()); }, 12 },
     // motion easter eggs (Task 2)
     { "grumpy", [] { pokemon(133, 23); pet.sleeping = true; pet.wakeGrumpy(); }, 4 },
     { "dizzy", [] { pokemon(25, 13); pet.shaken(); }, 4 },
