@@ -124,10 +124,14 @@ TEST(dex, toda_especie_es_alcanzable) {
     CHECK_MSG(reach[d], std::string("inalcanzable: ") + DEX_TBL[d].name);
 }
 
-// con la despedida a los 3 dias (nivel 72), toda linea tiene que poder llegar a
-// su forma final antes de que la mascota cumpla el ciclo
-TEST(dex, toda_linea_se_completa_antes_de_la_despedida) {
-  const uint32_t maxLevel = FAREWELL_AGE_MIN / MINUTES_PER_LEVEL;
+// v1.35 (growth.h): con la curva nueva 3 dias de crecimiento son el nivel 46, no el 72. La
+// despedida ya espera a la forma final (canFarewellNow pide evolvesTo == 0), asi que una linea
+// lenta solo se despide mas tarde. Lo que se exige: toda linea llega a su forma final en 4 dias
+// de crecimiento sin pasear (nivel 55, el de Dragonite).
+TEST(dex, toda_linea_se_completa_en_4_dias_de_crecimiento) {
+  const uint32_t maxLevel = levelFor(4UL * 24 * 60);
+  CHECK_EQ(maxLevel, (uint32_t)55);
+  CHECK_EQ((uint32_t)levelFor(FAREWELL_AGE_MIN), (uint32_t)46);  // referencia: el nivel a los 3 dias
   for (int d = 1; d <= N; d++) {
     if (DEX_TBL[d].rarity == R_EVO) continue;
     int cur = d, guard = 0;

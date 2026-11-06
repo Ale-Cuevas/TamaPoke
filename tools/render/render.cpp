@@ -179,7 +179,7 @@ static void collect() {
 // a level-up through the real path: the watch sees the level rise, as in the loop
 static void levelUp(uint16_t levels) {
   fxArmWatches();
-  pet.ageMinutes += (uint32_t)levels * MINUTES_PER_LEVEL;
+  pet.growMin = addLevels(pet.growMin, levels);
   fxCollect(millis());
 }
 
@@ -204,7 +204,8 @@ static void pokemon(int16_t dex, int hour, bool shiny = false) {
   if (pet.awaitingStarter()) pet.chooseStarter(dex);  // a fresh save asks for a starter first
   pet.speciesId = dex;
   pet.shiny = shiny;
-  pet.ageMinutes = 14 * MINUTES_PER_LEVEL + 20;
+  pet.ageMinutes = 14 * 60 + 20;                 // age: 14 h 20 min
+  pet.growMin = levelStart(15) + levelCost(15) / 3;  // Lv.15, a third of the way to 16
   pet.fullness = 72;
   pet.joy = 88;
   pet.energy = 64;
@@ -278,7 +279,7 @@ static const std::vector<Scene> &scenes() {
     { "feed", [] { pokemon(133, 12); menuKind = MENU_FEED; menuUntil = millis() + 6000; } },
     { "play-menu", [] { pokemon(133, 12); menuKind = MENU_PLAY; menuUntil = millis() + 6000; } },
     { "release", [] { pokemon(54, 15); confirmUntil = millis() + 10000; } },
-    { "evolve", [] { pokemon(4, 11); pet.ageMinutes = 17 * MINUTES_PER_LEVEL; choiceKind = 1; choiceUntil = millis() + 12000; } },
+    { "evolve", [] { pokemon(4, 11); pet.setLevel(18); choiceKind = 1; choiceUntil = millis() + 12000; } },
     { "card-profile", [] { pokemon(25, 13); cardOpen = true; cardPage = 0; } },
     { "card-battle", [] { pokemon(25, 13); cardOpen = true; cardPage = 1; } },
     { "card-medals", [] { pokemon(25, 13); cardOpen = true; cardPage = 2; } },

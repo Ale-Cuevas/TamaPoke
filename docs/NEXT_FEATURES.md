@@ -395,7 +395,7 @@ care mistakes. They can't run away or reach farewell age.
 
 | Kind | Fields | In a swap |
 |---|---|---|
-| **The individual** | `speciesId`, `shiny`, `nick`, `ageMinutes`, `fullness`, `joy`, `energy`, `hygiene`, `poops`, `weight`, `geneAtk/Def/Spe`, `trAtk/Def/Spe`, `berryKnown`, `careMistakes`, `sleeping`, `bond`, `bondToday`, `bondDay`, `medals` | goes into the box |
+| **The individual** | `speciesId`, `shiny`, `nick`, `ageMinutes`, `growMin` (v1.35: the level comes from it), `fullness`, `joy`, `energy`, `hygiene`, `poops`, `weight`, `geneAtk/Def/Spe`, `trAtk/Def/Spe`, `berryKnown`, `careMistakes`, `sleeping`, `bond`, `bondToday`, `bondDay`, `medals` | goes into the box |
 | (individual, RAM only today) | `mistakeCooldown`, `neglectTicks`, `goodTicks`, `petBondUntil`, `evoDeclinedLv`, `farDeclinedAge` | reset on wake, as they are on a reboot |
 | **The player** | `dexReg`, `dexShinyReg`, `streak`, `bestStreak`, `lastCareDay`, `lastMilestone`, `totalMedals`, `gameHi`, `strHi`, the step fields (`stepsToday` … `goalDay`, Task 3's `goalTier`, the remainders), `items`, `lastEnd`, `lastSeenEpoch` | stays |
 | **The next egg** ("incubator") | `eggTarget`, `eggShiny`, `eggTaps` | stays |
@@ -459,7 +459,9 @@ care mistakes. They can't run away or reach farewell age.
 - Keys `box0` … `box5` in the `tamapoke` namespace. Each is a `putBytes` of a
   packed `PetRecord` of at most 64 bytes:
   - a version number and the `uid`;
-  - every "individual" field from the table above;
+  - every "individual" field from the table above, including `growMin` (uint32, v1.35,
+    `docs/GAMEPLAY_TUNING.md` #5). A boxed pet keeps its growth, so it wakes at the same
+    level with the same bar; frozen pets don't grow, the same as they don't age;
   - `storedEpoch` (when it went in);
   - a CRC-16.
 

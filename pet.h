@@ -1,13 +1,13 @@
 #pragma once
 #include <Arduino.h>
 #include <Preferences.h>
+#include "growth.h"  // ritmo de los niveles (v1.35): cuanto cuesta cada uno
 
 // 1 tick = 1 minuto de juego. Baja este valor para probar mas rapido
 // (p. ej. 5000UL = las estadisticas caen 12x mas rapido).
 #define PET_TICK_MS 60000UL
-// Minutos de juego por nivel. Con 60, CHARMANDER evoluciona a las ~16 h
-// de juego con cuidado perfecto. Baja a 1 para ver evoluciones al momento.
-#define MINUTES_PER_LEVEL 60
+// Los niveles ya no son las horas de edad (v1.35): ver growth.h. Con la curva nueva
+// CHARMANDER llega al nivel 16 a las ~8 h de juego con cuidado perfecto.
 #define EAT_ANIM_MS 2500UL
 #define HEART_MS 1500UL
 #define EVOLVE_ANIM_MS 5200UL              // animacion de evolucion (mas larga = mas epica)
@@ -57,7 +57,7 @@ static const uint32_t STEP_GOALS[STEP_GOAL_TIERS] = { 3000, 6000, 10000 };
 #define GOAL2_BOND 2              // ...con vinculo fuera del tope diario
 #define GOAL3_JOY 15              // premio de la de 10000: Caramelo Raro y medalla MARATON
 #define GOAL3_BOND 3
-#define RARE_CANDY_LEVELS 1       // Caramelo Raro: +1 nivel (un nivel = una hora de edad)
+#define RARE_CANDY_LEVELS 1       // Caramelo Raro: +1 nivel (addLevels: la barra conserva lo que llevaba)
 #define STEPS_PER_JOY 100         // +1 felicidad cada 100 pasos...
 #define STEP_JOY_DAY_CAP 30       // ...como mucho +30 al dia
 #define STEPS_PER_WEIGHT 1000     // -1 de peso cada 1000 pasos (v1.22: eran 250, 3000 pasos quemaban una chuche)
@@ -119,7 +119,10 @@ public:
   uint8_t trAtk = 0, trDef = 0, trSpe = 0;
   bool berryKnown = false;  // ya descubrio su baya favorita
   bool shiny = false;       // variante de color rara (se sortea en el huevo)
-  uint32_t ageMinutes = 0;
+  uint32_t ageMinutes = 0;     // edad real en minutos (huevo incluido): dias, despedida
+  // minutos de crecimiento (v1.35, growth.h): de ellos sale el nivel. Avanzan con la edad
+  // desde que nace, y los saltan el Caramelo Raro y las metas de pasos sin envejecerlo.
+  uint32_t growMin = 0;
   int16_t speciesId = -1;      // numero de Pokedex (1-151), -1 = huevo
   int16_t prevSpeciesId = -1;  // para la animacion de evolucion
   uint8_t careMistakes = 0;   // descuidos: cada uno retrasa la evolucion 1 nivel
@@ -203,14 +206,13 @@ public:
   void chooseStarter(int16_t dex) { eggTarget = dex; starterPick = false; save(); }
   void factoryReset() { prefs.clear(); }  // borra la NVS (test: comando serie WIPE)
   void dbgRunawayReady() { fullness = joy = energy = hygiene = 0; neglectTicks = RUNAWAY_TICKS; }  // test
-  // uint16_t, no uint8_t: con MINUTES_PER_LEVEL=60 el nivel son las horas, asi
-  // que un uint8_t da la vuelta a 0 en el nivel 256, a los ~10,6 dias. Y eso se
-  // alcanza jugando normal, porque "quedaros juntos" permite posponer la
-  // despedida indefinidamente. Se topa en 999 en vez de desbordar.
-  uint16_t level() const {
-    uint32_t lv = 1 + ageMinutes / MINUTES_PER_LEVEL;
-    return lv > 999 ? 999 : (uint16_t)lv;
-  }
+  // uint16_t, no uint8_t: un uint8_t daba la vuelta a 0 en el nivel 256, y eso se
+  // alcanza jugando, porque "quedaros juntos" permite posponer la despedida
+  // indefinidamente. Se topa en LEVEL_MAX (999) en vez de desbordar.
+  uint16_t level() const { return levelFor(growMin); }
+  uint16_t levelMinutesInto() const { return levelInto(growMin); }      // de levelCost(level())
+  uint16_t levelMinutesCost() const { return levelCost(level()); }
+  void setLevel(uint16_t lv) { growMin = levelStart(lv); }  // comando LVL y pruebas
   bool isRegistered(int16_t dex) const {
     return dex >= 1 && dex <= 151 && (dexReg[(dex - 1) >> 3] & (1 << ((dex - 1) & 7)));
   }

@@ -33,6 +33,7 @@ void Pet::newEgg() {
   hygiene = 100;
   poops = 0;
   ageMinutes = 0;
+  growMin = 0;
   careMistakes = 0;
   mistakeCooldown = 0;
   sleeping = false;
@@ -81,6 +82,7 @@ void Pet::syncClock(uint32_t nowEpoch) {
       if (ageMinutes >= 3) hatch();  // eclosiona en tu ausencia
       continue;
     }
+    growMin++;  // crece igual apagado que en vivo, dormido o despierto
     if (sleeping) {  // descanso: baja lento y con suelo, igual que en vivo
       energy = clamp100(energy + 6);
       if (ageMinutes % 2 == 0) {
@@ -131,6 +133,7 @@ void Pet::tick() {
     if (ageMinutes >= 3) hatch();  // si no lo tocas, eclosiona solo a los 3 min
     return;
   }
+  growMin++;  // el nivel sale de aqui (growth.h), despierto o dormido
 
   // el sueño es descanso: la energia se recupera y las necesidades bajan MUCHO
   // mas lento que despierto y con suelo (amanece pidiendo algo de mimo, no a
@@ -744,9 +747,9 @@ bool Pet::useItem(uint8_t it) {
     eatUntil = millis() + EAT_ANIM_MS;
     heartUntil = millis() + HEART_MS;
   } else if (it == IT_RARECANDY) {
-    // +1 nivel: la edad salta al principio del siguiente (el nivel son las horas de edad),
-    // asi que puede abrir la evolucion y las medallas de nivel
-    ageMinutes = (ageMinutes / MINUTES_PER_LEVEL + RARE_CANDY_LEVELS) * MINUTES_PER_LEVEL;
+    // +1 nivel (v1.35): salta el crecimiento, no la edad, y la barra conserva lo que llevaba.
+    // Puede abrir la evolucion y las medallas de nivel.
+    growMin = addLevels(growMin, RARE_CANDY_LEVELS);
     heartUntil = millis() + HEART_MS;
     checkMedals(false);
   } else {
@@ -853,6 +856,7 @@ void Pet::save() {
   prefs.putBool("stpk", starterPick);
   prefs.putBytes("dexsh", dexShinyReg, sizeof(dexShinyReg));
   prefs.putUInt("age", ageMinutes);
+  prefs.putUInt("grow", growMin);
   prefs.putShort("dexn", speciesId);
   prefs.putShort("eggT2", eggTarget);
   prefs.putUChar("crack", eggTaps);
@@ -967,6 +971,11 @@ void Pet::load() {
   }
   bondDay = prefs.getUInt("bondD", 0);
   bondToday = prefs.getUChar("bondT", 0);
+  // crecimiento (v1.35). Un guardado anterior no trae "grow": el nivel salia de la edad
+  // (1 nivel por hora). Se traduce a la curva nueva con el mismo nivel y la barra igual de
+  // llena, para que nadie suba ni baje de nivel al actualizar. Va despues de speciesId.
+  if (prefs.isKey("grow")) growMin = prefs.getUInt("grow", 0);
+  else growMin = isEgg() ? 0 : growthFromLegacyAge(ageMinutes);
   // siembra: la mascota actual cuenta como criada (guardados antiguos)
   if (speciesId >= 1) registerSpecies(speciesId);
 }

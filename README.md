@@ -68,10 +68,22 @@ test. See **Roadmap**.
 A quick reference to how the game really works (values straight from the code).
 
 ### Time & leveling
-- **1 real minute = 1 in-game minute.** Your Pokémon gains **+1 level every hour**
-  of real time. Leveling is purely time-based — caring well doesn't speed it up,
-  but neglect *delays evolution*.
-- It keeps **aging while powered off** (the RTC runs), catching up to **2 weeks** max.
+- **1 real minute = 1 in-game minute.** Each level costs more than the last (v1.35),
+  as a stronger pet is harder to raise:
+  - **Lv 1–10:** 20 min per level;
+  - **Lv 11–89:** a log curve, `20 + 160 · ln(L − 10) / ln 80` minutes, rising from 20 to 180;
+  - **Lv 90 on:** 3 h per level.
+
+  | Level | 10 | 16 | 20 | 25 | 31 | 36 | 40 | 50 | 55 | 90 |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | Reached after (no walking) | 3 h | 7.9 h | 14 h | 23 h | 36 h | 47 h | 56 h | 3.4 d | 3.9 d | 8.1 d |
+
+- Levels come from a **growth** counter that runs with the pet's age (awake or asleep, and
+  while powered off) and that the Rare Candy can push ahead. Age stays real time: the days on
+  the card and the 3-day farewell don't move. Caring well doesn't speed leveling up, but
+  neglect *delays evolution*.
+- It keeps **aging and growing while powered off** (the RTC runs), catching up to **2 weeks** max.
+- A pet from before v1.35 keeps its level and how full its bar was.
 - **Level-up (v1.30):** a rising jingle as soon as it happens, even with the screen off
   (the screen stays off; asleep, it waits for the wake). On the home screen there are
   sparkles and a "LEVEL UP!" pill ("Lv.12 > Lv.18" after time away), then the ATK/DEF/SPD
@@ -222,7 +234,7 @@ waving it around doesn't farm anything.
   | Golden Berry | 55 % | +50 FOOD, +15 JOY, a heart |
   | Protein / Iron / Carbos | 35 % (1/3 each) | +3 ATK / DEF / SPD training (cap 100) |
   | Shiny Charm | 10 % | Held, not used: the **next egg** gets ×3 shiny odds (never better than 1/8). One at a time; a second one becomes a Golden Berry. |
-  | Rare Candy | the 10000 goal | **+1 level** (it can make the pet ready to evolve) |
+  | Rare Candy | the 10000 goal | **+1 level**, keeping how full the level bar was, without ageing the pet (it can make the pet ready to evolve) |
 
 - The **Backpack** holds up to 9 of each item. Open it on the stat card's 5th
   page, **WALK** (swipe up, then left four times): today's steps with a ring
