@@ -137,7 +137,7 @@ public:
   char nick[12] = "";    // apodo (vacio = nombre de especie)
   // medallas: del individuo + contador acumulado entre todas las crianzas
   uint16_t medals = 0, totalMedals = 0;
-  uint16_t newMedal = 0;   // recien conseguida(s), para celebrar
+  uint16_t newMedal = 0;   // recien conseguida(s), sin celebrar aun (takeMedal)
   uint16_t lastMilestone = 0;  // hito de racha ya celebrado
   uint16_t gameHi = 0;     // record del minijuego (del jugador)
   uint16_t strHi = 0;      // record de golpes al saco
@@ -233,8 +233,13 @@ public:
   void rename(const char *name);
   bool hasMedal(uint16_t m) const { return medals & m; }
   uint8_t bondGainedToday() const { return bondToday; }  // diagnostico (STATS)
-  bool showMedal() const { return timeLeft(medalUntil) > 0; }
-  bool showMilestone() const { return timeLeft(milestoneUntil) > 0; }
+  // celebraciones pendientes (v1.30, fx.h): las recoge la UI, que decide cuando se ven y
+  // cuanto duran. Antes el bicho fijaba el plazo al ganarlas y caducaban sin verse con la
+  // pantalla apagada. takeMedal = bits de las medallas nuevas; takeMilestone = dias del hito.
+  uint16_t takeMedal() { uint16_t m = newMedal; newMedal = 0; return m; }
+  uint16_t takeMilestone() { uint16_t d = milestoneNew; milestoneNew = 0; return d; }
+  // ATK (0), DEF (1) o VEL (2) a un nivel dado: la subida de nivel ensena lo que gano
+  uint16_t statAt(uint8_t which, uint16_t lv) const;
   int careBonus() const;  // mejora del huevo por racha + vinculo
   int shinyOdds(bool charm) const;  // denominador de la tirada shiny del huevo
 
@@ -308,8 +313,7 @@ private:
   uint32_t ceremonyUntil = 0;
   uint8_t bondToday = 0;       // tope diario de subida de vinculo
   uint32_t bondDay = 0;        // dia de bondToday: el tope vuelve a 0 a medianoche
-  uint32_t medalUntil = 0;     // celebracion de medalla en pantalla
-  uint32_t milestoneUntil = 0; // celebracion de hito de racha
+  uint16_t milestoneNew = 0;   // hito de racha sin celebrar (dias; takeMilestone)
   // pasos: restos hacia el siguiente punto de cada premio (nada se pierde entre lecturas)
   uint16_t joyRem = 0, weightRem = 0, bondRem = 0;
   uint16_t findRem = 0;        // pasos premiados hacia el siguiente hallazgo

@@ -39,10 +39,11 @@
 #include "battle.h" // motor del combate de practica (logica pura)
 #include "wind.h"   // viento del paisaje: hierba, flores y copas que se mecen (logica pura)
 #include "burnin.h" // contra el quemado del AMOLED: orbita de la imagen y salvapantallas (logica pura)
+#include "fx.h"     // efectos de respuesta: celebraciones en cola, "+N", botones, eclosion (logica pura)
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.29"
+#define FW_VERSION "1.30"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -95,10 +96,8 @@ uint8_t cardPage = 0;         // 0 perfil, 1 combate, 2 medallas, 3 progreso, 4 
 #define CARD_PAGES 5
 uint8_t itemConfirm = 0;      // pagina de paseo: objeto de la mochila a confirmar + 1 (0 = ninguno)
 uint32_t itemConfirmUntil = 0;
-uint32_t goalBannerUntil = 0; // banner de la meta de pasos en pantalla hasta este millis
 bool foundShown = false;      // el ultimo frame enseno un hallazgo: un toque lo cierra
 static_assert(S_IT_RARECANDY - S_IT_GOLDEN == IT_RARECANDY - IT_GOLDEN, "nombres de objeto en el orden de IT_*");
-uint8_t goalBannerTier = 0;   // meta (1..3) del banner en pantalla
 bool clockOpen = false;       // pantalla de ajuste de hora (deslizar abajo)
 int clockH = 12, clockM = 0;  // hora en edicion
 
@@ -215,6 +214,19 @@ int8_t gBiomeOverride = -1;
 uint8_t gOrbitStep = 0;
 int8_t gOrbitForce = -1;
 bool gFaceDown = false;
+// efectos de respuesta (fx.h, v1.30). Las celebraciones (subida de nivel, medalla, hito, meta)
+// salen de una en una cuando la pantalla esta libre; los efectos pequenos ("+N", botones, "!",
+// eclosion) esperan a verse. Los vigilantes ven subir nivel, vinculo, descuidos y entrenamiento
+// sin tocar cada sitio que los cambia.
+FxQueue fxq;
+FxOverlays fxo;
+FxWatch fxLevelW, fxBondW, fxMistakeW, fxTrainW[3];
+FxGate fxBondGate;
+FxTween fxBar[4];                 // barras de necesidades que se deslizan
+bool fxWasEgg = false;            // para ver la eclosion
+const FxEvent *fxBan = nullptr;   // celebracion en pantalla este frame (la fija fxFrame)
+int16_t fxGain[3] = { 0, 0, 0 };  // ATK/DEF/VEL que gano la subida que se ve
+uint32_t gFxUs = 0, gFxMaxUs = 0; // PERF: lo que tardan los efectos en dibujarse
 #define BIOME_COUNT 9  // paisajes (dex.h: biome)
 bool swallowGesture = false; // el toque que despierta no acciona nada
 uint32_t holdStart = 0;     // pulsacion larga sobre el bicho
@@ -314,6 +326,9 @@ void setup() {
     Serial.printf("RTC sin hora: sembrado en %u%s\n", seed,
                   seen > 1767225600UL ? " (desde la ultima hora guardada)" : "");
   }
+  // los vigilantes de efectos se arman ANTES de aplicar el tiempo apagado: asi los niveles que
+  // subio sin verse se anuncian (una sola vez, "Nv.12 > Nv.18") en la primera vuelta del loop
+  fxArmWatches();
   pet.syncClock(e);
 
   audioBegin();  // ES8311 + I2S + amplificador (suena un jingle de arranque)
@@ -349,6 +364,7 @@ void loop() {
   // Aqui cubre todas las vias: el boton de luz, el sueno nocturno y el que llega
   // aplicado desde la progresion offline.
   audioSetSleeping(pet.sleeping);
+  fxCollect(now);  // subidas de nivel, medallas, metas... (fx.h)
 
   // avisa con un sonido cuando el bicho pasa a estar listo para evolucionar
   // (incluye el caso de cumplir al despertar). canEvolveNow es false durmiendo.
@@ -691,9 +707,15 @@ void handleSerial() {
     gFaceDown = false;
     Serial.println("DONE");
   } else if (line == "PERF") {  // cuanto tarda el paisaje (drawScene) en dibujarse, en us
-    Serial.printf("scene=%luus max=%luus biome=%u\n", (unsigned long)gSceneUs, (unsigned long)gSceneMaxUs,
-                  homeBiome());
+    Serial.printf("scene=%luus max=%luus biome=%u fx=%luus fxmax=%luus\n", (unsigned long)gSceneUs,
+                  (unsigned long)gSceneMaxUs, homeBiome(), (unsigned long)gFxUs, (unsigned long)gFxMaxUs);
     gSceneMaxUs = 0;
+    gFxMaxUs = 0;
+    Serial.println("DONE");
+  } else if (line.startsWith("FX")) {  // FX <efecto>: lanza un efecto de respuesta para verlo en la placa
+    String k = line.length() > 3 ? line.substring(3) : String("");
+    k.trim();
+    if (!fxDebug(k)) Serial.println("FX levelup|levelup6|medal|streak|goal|goal3|stat|bond|train|deny|press|oops|hatch");
     Serial.println("DONE");
   } else if (line.startsWith("BRIGHT")) {  // BRIGHT: nivel y brillo; BRIGHT <n>: lo fija (como BOOT)
     if (line.length() > 7) {
@@ -753,6 +775,10 @@ void handleSerial() {
                   pet.bonusFindsToday, pet.goalTierOn(pet.dayNumber()), pet.items[IT_GOLDEN],
                   pet.items[IT_PROTEIN], pet.items[IT_IRON], pet.items[IT_CARBOS], pet.items[IT_CHARM],
                   pet.items[IT_RARECANDY], imuPresent() ? 1 : 0);
+    // efectos (v1.30): celebraciones en cola y la que se ve, y por que podria estar esperando
+    Serial.printf("fx queue=%u showing=%d kind=%d busy=%d sleep=%d dim=%u off=%d saver=%d\n", fxq.n,
+                  fxq.active ? 1 : 0, fxq.active ? fxq.cur.kind : -1, fxScreenBusy() ? 1 : 0, pet.sleeping ? 1 : 0,
+                  dimStage, screenOff ? 1 : 0, saverOn() ? 1 : 0);
     Serial.println("DONE");
   }
 }
@@ -1051,14 +1077,19 @@ void onTap(int16_t x, int16_t y) {
     if (!live || y < 288 || y > 352) return;
     if (kind == MENU_FEED && x >= 101 && x <= 365) {
       int item = (x - 101) / 66;
+      FxNeedSnap ns = fxSnap();
       if (item == 3) pet.feedCandy();
       else pet.feedBerry(item);
+      fxNeeds(ns);  // "+25" sobre la barra de comida
       sfxPlay(SFX_EAT);
     } else if (kind == MENU_PLAY && x >= PLAY_MENU_X && x < PLAY_MENU_X + 132) {
       sfxPlay(SFX_TAP);
       if (x < CX) startGame();
       else if (pet.canBattle()) startPractice(0);
-      else sfxPlay(SFX_DENY);
+      else {
+        sfxPlay(SFX_DENY);
+        fxo.push(FXO_DENY, 1, 0, millis());  // tiembla JUGAR, debajo del menu ya cerrado
+      }
     }
     return;
   }
@@ -1089,6 +1120,13 @@ void onTap(int16_t x, int16_t y) {
     int dx = x - buttons[i].cx, dy = y - buttons[i].cy;
     if (dx * dx + dy * dy <= BTN_HIT * BTN_HIT) {
       Serial.printf("BTN %d\n", i);
+      fxo.push(FXO_PRESS, i, 0, millis());
+      // dormido solo funciona LUZ, y el bano no se repite a medias: el boton tiembla (fx.h)
+      if ((pet.sleeping && i != 2) || (i == 3 && bathUntil)) {
+        sfxPlay(SFX_DENY);
+        fxo.push(FXO_DENY, i, 0, millis());
+        return;
+      }
       sfxPlay(SFX_TAP);
       if (i == 0) {
         if (!pet.sleeping) { menuKind = MENU_FEED; menuUntil = millis() + 6000; }
@@ -1776,16 +1814,18 @@ bool render() {
     return true;
   }
 
+  // efectos (fx.h): la cola avanza antes de dibujar, para saber si hay celebracion en este
+  // frame (fija la pose y oculta los botones de evolucion o despedida mientras se ve)
+  uint32_t fxT0 = micros();
+  fxFrame(millis());
+  uint32_t fxUs = micros() - fxT0;
+
   if (pet.isEgg()) {
     drawHeader(T(S_EGG_HDR), inkColor(), eggMsg());
-    int s = 5, x = CX - 16 * s, y = PET_CY - 16 * s;
+    int dx = 0;
     if (pet.emote() == EMOTE_WOBBLE)  // agitado: se tambalea y se va calmando
-      x += (int)(8.0f * (1.0f - pet.emoteT()) * sinf(millis() * 0.035f));
-    drawMap(SPR_EGG, SPRITE_H, x, y, s, false);
-    if (pet.eggCracks() >= 1)
-      for (auto &c : CRACK1) gfx->fillRect(x + c[0] * s, y + c[1] * s, s, s, INK_K);
-    if (pet.eggCracks() >= 2)
-      for (auto &c : CRACK2) gfx->fillRect(x + c[0] * s, y + c[1] * s, s, s, INK_K);
+      dx = (int)(8.0f * (1.0f - pet.emoteT()) * sinf(millis() * 0.035f));
+    drawEggSprite(dx, pet.eggCracks());
     if (pet.eggRarity() >= R_RARO) {
       const char *rar = (pet.eggRarity() == R_LEGENDARIO) ? T(S_EGG_LEGEND) : T(S_EGG_RARE);
       gfx->setTextColor(pet.eggRarity() == R_LEGENDARIO ? UI_BAR_WARN : 0x4C98);
@@ -1805,7 +1845,13 @@ bool render() {
     char name[28];
     const char *base = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
     snprintf(name, sizeof(name), T(S_NAME_FMT), pet.shiny ? "*" : "", base, pet.level());
-    drawHeader(name, gNight ? UI_INK_NIGHT : d.accent, statusMsg());  // con la racha
+    uint16_t nameCol = gNight ? UI_INK_NIGHT : d.accent;
+    if (fxBan && fxBan->kind == FXB_LEVELUP) {  // subida de nivel: el nivel de la cabecera parpadea
+      uint32_t e = fxq.elapsed(millis());
+      if (e < 1200 && (e / 150) % 2 == 0) nameCol = UI_BAR_WARN;
+    }
+    if (fxHatchHidesPet(millis())) drawHeader(T(S_EGG_HDR), inkColor(), T(S_EGG_ALMOST));  // aun se rompe el huevo
+    else drawHeader(name, nameCol, statusMsg());  // con la racha
     drawPet();
     drawSceneFront(homeBiome(), millis(), gNight);  // hierba delante de los pies
     drawBath();
@@ -1814,10 +1860,14 @@ bool render() {
     gfx->fillRect(0, 312, 466, 154, gNight ? UI_BG_NIGHT : UI_BG_DAY);
     drawBars();
     drawButtons();
-    drawCelebration();
-    if (pet.wantEvolveButton()) drawEvolveButton();        // CTA rojo: evolucionar
-    else if (pet.canRunawayNow()) drawRunawayButton();     // CTA sombrio: escapada (abandono)
-    else if (pet.wantFarewellButton()) drawFarewellButton();  // CTA dorado: despedida
+    fxT0 = micros();
+    drawFxOverlays(millis());  // "+N", corazon de vinculo, entrenamiento, "!", aro de la eclosion
+    fxUs += micros() - fxT0;
+    if (!fxBan) {  // con una celebracion encima, los botones grandes esperan a que acabe
+      if (pet.wantEvolveButton()) drawEvolveButton();        // CTA rojo: evolucionar
+      else if (pet.canRunawayNow()) drawRunawayButton();     // CTA sombrio: escapada (abandono)
+      else if (pet.wantFarewellButton()) drawFarewellButton();  // CTA dorado: despedida
+    }
   }
 
   if (pet.sleeping) {
@@ -1830,6 +1880,9 @@ bool render() {
   // noticias del paseo (meta y hallazgos), por encima de todo lo de la pantalla
   // principal (tambien del boton de evolucion: un toque cierra antes el hallazgo)
   // y por debajo de los dialogos, que las aplazan (drawWalkNews mira si hay alguno)
+  fxT0 = micros();
+  drawFxBanner(millis());  // celebracion en curso (fx.h): subida, medalla, hito o meta
+  fxPerfNote(fxUs + (micros() - fxT0));
   drawWalkNews();
 
   // menus emergentes: comida (4 opciones) o juego (pelota | combate)
@@ -1967,7 +2020,9 @@ void stepGame() {
   if (ballY > 384) {  // al suelo
     if (++gameMisses >= 3) {
       gameNewHi = (gameScore > pet.gameHi);
+      FxNeedSnap ns = fxSnap();
       pet.playResult(gameScore);  // actualiza el record y da felicidad
+      fxNeeds(ns);  // los "+N" salen al volver a la pantalla principal
       sfxPlay(gameNewHi && gameScore > 0 ? SFX_MEDAL : SFX_LEVEL);
       gameOverUntil = millis() + 4000;
     } else {
@@ -2041,7 +2096,9 @@ void renderSack() {
   // se acabaron los 10 s: aplicar entrenamiento
   if (!timeLeft(sackUntil)) {
     sackNewHi = (sackHits > pet.strHi);
+    FxNeedSnap ns = fxSnap();
     sackGain = pet.trainStrength(sackHits);
+    fxNeeds(ns);
     sfxPlay(sackNewHi ? SFX_MEDAL : SFX_PLAY);
     sackOverUntil = now + 3500;
     gfx->flush();
@@ -2425,79 +2482,419 @@ void drawStreakBadge(int x, int y) {
   printT(s);
 }
 
-// banner temporal: medalla nueva o hito de racha
-void drawCelebration() {
-  const char *l1 = nullptr, *l2 = nullptr;
-  // 32 y no 20: "%u にちれんぞく！" ya pasa de 20 con una sola cifra, y snprintf
-  // cortaba a mitad de un caracter de 3 bytes.
-  char buf[32];
-  if (pet.showMedal()) {
-    for (int i = 0; i < MED_COUNT; i++)
-      if (pet.newMedal & (1 << i)) { l2 = medalName(i); break; }
-    l1 = T(S_MEDAL_BANNER);
-  } else if (pet.showMilestone()) {
-    snprintf(buf, sizeof(buf), T(S_STREAK_DAYS_FMT), pet.streak);
-    l1 = T(S_GREAT);
-    l2 = buf;
+// ---------- efectos de respuesta (fx.h, v1.30) ----------
+
+// los vigilantes apuntan los valores de ahora (sin evento): al arrancar, antes del tiempo
+// apagado, y en el renderizador del PC entre escenas
+void fxArmWatches() {
+  if (pet.isEgg()) fxLevelW.disarm();
+  else fxLevelW.reset(pet.level());
+  fxBondW.reset(pet.bond);
+  fxMistakeW.reset(pet.careMistakes);
+  fxTrainW[0].reset(pet.trAtk);
+  fxTrainW[1].reset(pet.trDef);
+  fxTrainW[2].reset(pet.trSpe);
+  fxWasEgg = pet.isEgg();
+}
+
+// alguien puede estar mirando: pantalla encendida, sin atenuar y sin salvapantallas
+bool fxScreenAwake() { return !screenOff && dimStage == DIM_AWAKE && !saverOn(); }
+
+// En cada vuelta del loop (tambien con la pantalla apagada, que no dibuja): recoge lo que el
+// bicho dejo pendiente y lo que vigilan los vigilantes. La subida de nivel suena AL MOMENTO,
+// tambien a oscuras, sin encender la pantalla (decidido el 2026-11-05); su animacion espera.
+void fxCollect(uint32_t now) {
+  bool awake = fxScreenAwake();
+  if (fxWasEgg && !pet.isEgg()) {  // eclosion: con la pantalla a la vista, animacion y sonido en su destello
+    if (awake) fxo.push(FXO_HATCH, 0, 0, now);
+    else sfxPlay(SFX_HATCH);
   }
-  if (!l1) return;
-  gfx->fillRoundRect(73, 150, 320, 96, 16, UI_BAR_WARN);
-  gfx->drawRoundRect(73, 150, 320, 96, 16, UI_INK);
+  fxWasEgg = pet.isEgg();
+  if (pet.isEgg() || pet.ceremony) {  // ni nivel ni vinculo que vigilar
+    fxLevelW.disarm();
+    fxBondW.disarm();
+    fxMistakeW.disarm();
+    for (auto &w : fxTrainW) w.disarm();
+  } else {
+    uint32_t from = 0;
+    if (fxLevelW.rose(pet.level(), &from)) {
+      bool chime = !pet.sleeping;  // dormido no suena (como todo): sonara al verse, cuando despierte
+      if (chime) sfxPlay(SFX_LEVELUP);
+      fxq.push(FXB_LEVELUP, (uint16_t)from, pet.level(), chime);
+    }
+    if (fxBondW.rose(pet.bond, &from) && awake && fxBondGate.allow(now, FX_BOND_GAP_MS))
+      fxo.push(FXO_BOND, 0, (int16_t)(pet.bond - from), now);
+    if (fxMistakeW.rose(pet.careMistakes) && awake && !pet.sleeping) {
+      fxo.push(FXO_OOPS, 0, 0, now);
+      sfxPlay(SFX_OOPS);
+    }
+    const uint8_t tr[3] = { pet.trAtk, pet.trDef, pet.trSpe };
+    for (uint8_t i = 0; i < 3; i++)
+      if (fxTrainW[i].rose(tr[i], &from)) fxo.push(FXO_TRAIN, i, (int16_t)(tr[i] - from), now);
+  }
+  uint16_t m = pet.takeMedal();
+  for (uint8_t i = 0; i < MED_COUNT; i++)
+    if (m & (1 << i)) fxq.push(FXB_MEDAL, i);
+  uint16_t days = pet.takeMilestone();
+  if (days) fxq.push(FXB_MILESTONE, days);
+  uint8_t tier = pet.takeGoalBanner();
+  if (tier) fxq.push(FXB_GOAL, tier);
+  fxo.step(now, false);  // caducan los que no llegan a verse
+}
+
+// la pantalla principal no puede empezar una celebracion: nadie la ve, el bicho duerme o hay
+// algo encima (dialogo, menu, bano, evolucion, despedida, eclosion)
+bool fxScreenBusy() {
+  return !fxScreenAwake() || pet.sleeping || pet.ceremony || pet.evolving() || choiceKind || confirmUntil ||
+         menuKind || bathUntil || fxo.find(FXO_HATCH) || fxo.waiting(FXO_HATCH);
+}
+
+// pose de un gesto del bicho (PMD): una vez, sosteniendo el ultimo frame hasta minMs
+void fxPose(uint8_t act, uint32_t now, uint32_t minMs) {
+  if (!pmd.has(act)) return;
+  uint32_t ms = pmdActTotalMs(pmd.acts[act]);
+  beh.mode = 2;
+  beh.act = act;
+  beh.t0 = now;
+  beh.until = now + (ms < minMs ? minMs : ms);
+}
+
+// cada frame de la pantalla principal, antes de dibujar: avanza la cola y los efectos
+void fxFrame(uint32_t now) {
+  fxo.step(now, fxScreenAwake());
+  bool started = false;
+  fxBan = fxq.step(now, fxScreenBusy(), &started);
+  if (!started || !fxBan) return;
+  if (fxBan->kind == FXB_LEVELUP) {
+    if (!fxBan->chimed) sfxPlay(SFX_LEVELUP);
+    for (uint8_t w = 0; w < 3; w++)
+      fxGain[w] = (int16_t)pet.statAt(w, fxBan->b) - (int16_t)pet.statAt(w, fxBan->a);
+    // la pose de alegria; el salto (Hop) solo si no tiene: sube tanto que pisa la cabecera
+    fxPose(pmd.has(PMD_POSE) ? PMD_POSE : PMD_HOP, now, 1200);
+  } else {
+    sfxPlay(SFX_MEDAL);
+  }
+}
+
+// comando serie FX <efecto>: lanza cada efecto para mirarlo en la placa. Solo se ve: no cambia
+// el nivel ni el guardado (para una subida de verdad, LVL <n>)
+bool fxDebug(const String &k) {
+  uint32_t now = millis();
+  uint16_t lv = pet.level();
+  if (k == "levelup") fxq.push(FXB_LEVELUP, lv, lv + 1, false);
+  else if (k == "levelup6") fxq.push(FXB_LEVELUP, lv, lv + 6, false);
+  else if (k == "medal") fxq.push(FXB_MEDAL, 0);
+  else if (k == "streak") fxq.push(FXB_MILESTONE, 7);
+  else if (k == "goal") fxq.push(FXB_GOAL, 1);
+  else if (k == "goal3") fxq.push(FXB_GOAL, STEP_GOAL_TIERS);
+  else if (k == "stat") {
+    fxo.push(FXO_STAT, 0, 25, now);
+    fxo.push(FXO_STAT, 1, 10, now);
+    fxo.push(FXO_STAT, 2, -12, now);
+  } else if (k == "bond") fxo.push(FXO_BOND, 0, 2, now);
+  else if (k == "train") fxo.push(FXO_TRAIN, 0, 3, now);
+  else if (k == "deny") {
+    fxo.push(FXO_DENY, 0, 0, now);
+    sfxPlay(SFX_DENY);
+  } else if (k == "press") fxo.push(FXO_PRESS, 1, 0, now);
+  else if (k == "oops") {
+    fxo.push(FXO_OOPS, 0, 0, now);
+    sfxPlay(SFX_OOPS);
+  } else if (k == "hatch" && !pet.isEgg()) fxo.push(FXO_HATCH, 0, 0, now);
+  else return false;
+  wakeUI();
+  return true;
+}
+
+void fxPerfNote(uint32_t us) {
+  gFxUs = us;
+  if (us > gFxMaxUs) gFxMaxUs = us;
+}
+
+// cabeza del bicho en pantalla, aproximada (donde van el "!", el entrenamiento y la pildora)
+int fxHeadY() {
+  if (!pmd.loaded) return PET_CY - 60;
+  int head = PET_GROUND - pmdIdleHeight() + 24;
+  return head < 130 ? 130 : head;
+}
+
+// desplazamiento de un banner que entra desde arriba (0 al llegar a su sitio)
+int fxSlide(uint32_t e) {
+  if (e >= FX_BANNER_IN_MS) return 0;
+  float k = 1.0f - (float)e / FX_BANNER_IN_MS;
+  return -(int)(k * k * 240);
+}
+
+// numero "+N"/"-N" en una pastilla blanca, centrado en cx
+void fxNumber(int cx, int y, int v, uint16_t col) {
+  char s[8];
+  snprintf(s, sizeof(s), v > 0 ? "+%d" : "%d", v);
+  setSize(2);
+  int w = textW(s, 2);
+  gfx->fillRoundRect(cx - w / 2 - 5, y - 3, w + 10, 22, 7, UI_WHITE);
+  gfx->drawRoundRect(cx - w / 2 - 5, y - 3, w + 10, 22, 7, UI_INK);
+  gfx->setTextColor(col);
+  setCur(cx - w / 2, y);
+  printT(s);
+}
+
+// confeti que cae por delante del banner (medallas y la meta de 10000)
+void drawConfetti(uint32_t e) {
+  if (e >= FX_CONFETTI_MS) return;
+  static const uint16_t COL[5] = { UI_BAR_WARN, UI_BAR_BAD, UI_BAR_OK, 0x4C98, UI_WHITE };
+  for (int i = 0; i < FX_CONFETTI; i++) {
+    uint32_t h = fxHash((uint32_t)i * 7919u + 13u);
+    int v = 150 + (int)((h >> 9) % 170);  // px/s
+    int y = 100 - (int)((h >> 17) % 90) + (int)(v * e / 1000);
+    if (y > 300) continue;  // no cae sobre las barras
+    int x = 76 + (int)(h % 314) + (int)(10 * sinf(e * 0.008f + i));
+    bool flat = (((e / 90) + i) & 1) != 0;  // gira: alterna ancho y alto
+    gfx->fillRect(x, y, flat ? 8 : 3, flat ? 3 : 8, COL[i % 5]);
+  }
+}
+
+// subida de nivel: chispas que suben alrededor del bicho y la pildora "LEVEL UP!" con el
+// nivel; en el ultimo tramo, lo que gano en ATK/DEF/VEL
+void drawLevelUpFx(const FxEvent &ev, uint32_t e) {
+  int px = (int)beh.x;
+  if (e < 2000) {
+    for (int i = 0; i < FX_SPARKS; i++) {
+      uint32_t h = fxHash((uint32_t)i * 2654435761u + 7u);
+      uint32_t ph = (e + h % 700) % 700;  // cada chispa sube en 0,7 s y vuelve a empezar
+      int side = (i & 1) ? 1 : -1;
+      int x = px + side * (44 + (int)((h >> 8) % 64));
+      int y = PET_GROUND - 12 - (int)(ph * 190 / 700);
+      uint16_t c = (i % 3) ? C565(0xff, 0xdc, 0x4a) : UI_WHITE;
+      gfx->fillRect(x - 1, y - 5, 3, 11, c);
+      gfx->fillRect(x - 5, y - 1, 11, 3, c);
+    }
+  }
+  int w = 320, h = 74, x = CX - w / 2, y = 112 + fxSlide(e);
+  gfx->fillRoundRect(x, y, w, h, 18, UI_BAR_WARN);
+  gfx->drawRoundRect(x, y, w, h, 18, UI_INK);
+  gfx->drawRoundRect(x + 2, y + 2, w - 4, h - 4, 16, UI_WHITE);
+  const char *t1 = T(S_LEVEL_UP);
   gfx->setTextColor(UI_INK);
   setSize(3);
-  setCur(centerX(l1, 3), 176);
-  printT(l1);
+  setCur(centerX(t1, 3), y + 12);
+  printT(t1);
+  char l2[80];
+  if (e < FX_LEVELUP_MS) {
+    char lvNew[16];
+    snprintf(lvNew, sizeof(lvNew), T(S_LVL_FMT), (unsigned)ev.b);
+    if (ev.b > ev.a + 1) {  // varios de golpe (apagada, Caramelo Raro): "Lv.12 > Lv.18"
+      char lvOld[16];
+      snprintf(lvOld, sizeof(lvOld), T(S_LVL_FMT), (unsigned)ev.a);
+      snprintf(l2, sizeof(l2), "%s > %s", lvOld, lvNew);
+    } else {
+      snprintf(l2, sizeof(l2), "%s", lvNew);
+    }
+  } else {
+    snprintf(l2, sizeof(l2), "%s +%d  %s +%d  %s +%d", T(S_STAT_ATK), fxGain[0], T(S_STAT_DEF), fxGain[1],
+             T(S_STAT_SPE), fxGain[2]);
+  }
   setSize(2);
-  setCur(centerX(l2, 2), 212);
+  setCur(centerX(l2, 2), y + 46);
   printT(l2);
 }
 
-// Noticias del paseo sobre la pantalla principal: el banner de la meta (4,5 s) y
-// los hallazgos (hasta que se toca). Esperan a que la pantalla este encendida y
-// no haya otro dialogo, medalla o animacion encima (FR-1.4 / FR-1.5).
-void drawWalkNews() {
-  uint32_t now = millis();
-  bool busy = screenOff || dimStage != DIM_AWAKE || choiceKind || confirmUntil || menuKind ||
-              pet.evolving() || bathUntil || pet.showMedal() || pet.showMilestone();
-  if (!busy && !timeLeft(goalBannerUntil)) {
-    uint8_t tier = pet.takeGoalBanner();
-    if (tier) {
-      goalBannerTier = tier;
-      goalBannerUntil = now + (tier == STEP_GOAL_TIERS ? 6000 : 4500);  // la de 10000 dura mas
-      sfxPlay(SFX_MEDAL);
-    }
+// la celebracion en pantalla (la eligio fxFrame en este frame)
+void drawFxBanner(uint32_t now) {
+  if (!fxBan) return;
+  const FxEvent &ev = *fxBan;
+  uint32_t e = fxq.elapsed(now);
+  if (ev.kind == FXB_LEVELUP) {
+    drawLevelUpFx(ev, e);
+    return;
   }
-  if (timeLeft(goalBannerUntil)) {
-    uint8_t tier = goalBannerTier ? goalBannerTier : 1;
+  int oy = fxSlide(e);
+  if (ev.kind == FXB_GOAL) {
+    uint8_t tier = ev.a ? (uint8_t)ev.a : 1;
     char l2[32];
     snprintf(l2, sizeof(l2), T(S_STEPS_FMT), (unsigned long)STEP_GOALS[tier - 1]);
     if (tier == STEP_GOAL_TIERS) {  // 10000: banner mayor, con el Caramelo Raro y una bandera por meta
-      gfx->fillRoundRect(53, 128, 360, 140, 18, UI_BAR_WARN);
-      gfx->drawRoundRect(53, 128, 360, 140, 18, UI_INK);
-      gfx->drawRoundRect(56, 131, 354, 134, 16, UI_INK);
-      for (int k = 0; k < STEP_GOAL_TIERS; k++) drawMap(SPR_ICON_FLAG, 16, CX - 44 + k * 30 - 8, 142, 2, false);
+      gfx->fillRoundRect(53, 128 + oy, 360, 140, 18, UI_BAR_WARN);
+      gfx->drawRoundRect(53, 128 + oy, 360, 140, 18, UI_INK);
+      gfx->drawRoundRect(56, 131 + oy, 354, 134, 16, UI_INK);
+      for (int k = 0; k < STEP_GOAL_TIERS; k++) drawMap(SPR_ICON_FLAG, 16, CX - 44 + k * 30 - 8, 142 + oy, 2, false);
       gfx->setTextColor(UI_INK);
       setSize(3);
-      setCur(centerX(T(S_GOAL_DONE), 3), 184);
+      setCur(centerX(T(S_GOAL_DONE), 3), 184 + oy);
       printT(T(S_GOAL_DONE));
       setSize(2);
-      setCur(centerX(l2, 2), 218);
+      setCur(centerX(l2, 2), 218 + oy);
       printT(l2);
-      drawMap(SPR_ICON_RARECANDY, 16, CX - 16, 236, 2, false);
+      drawMap(SPR_ICON_RARECANDY, 16, CX - 16, 236 + oy, 2, false);
+      drawConfetti(e);
       return;
     }
-    gfx->fillRoundRect(73, 150, 320, 96, 16, UI_BAR_WARN);
-    gfx->drawRoundRect(73, 150, 320, 96, 16, UI_INK);
-    drawMap(SPR_ICON_FLAG, 16, 88, 166, 2, false);
+    gfx->fillRoundRect(73, 150 + oy, 320, 96, 16, UI_BAR_WARN);
+    gfx->drawRoundRect(73, 150 + oy, 320, 96, 16, UI_INK);
+    drawMap(SPR_ICON_FLAG, 16, 88, 166 + oy, 2, false);
     gfx->setTextColor(UI_INK);
     setSize(3);
-    setCur(centerX(T(S_GOAL_DONE), 3), 176);
+    setCur(centerX(T(S_GOAL_DONE), 3), 176 + oy);
     printT(T(S_GOAL_DONE));
     setSize(2);
-    setCur(centerX(l2, 2), 212);
+    setCur(centerX(l2, 2), 212 + oy);
     printT(l2);
     return;
   }
+  // medalla nueva o hito de racha
+  const char *l1, *l2;
+  // 32 y no 20: "%u にちれんぞく！" ya pasa de 20 con una sola cifra, y snprintf
+  // cortaba a mitad de un caracter de 3 bytes.
+  char buf[32];
+  if (ev.kind == FXB_MEDAL) {
+    l1 = T(S_MEDAL_BANNER);
+    l2 = medalName(ev.a);
+  } else {
+    snprintf(buf, sizeof(buf), T(S_STREAK_DAYS_FMT), (unsigned)ev.a);
+    l1 = T(S_GREAT);
+    l2 = buf;
+  }
+  gfx->fillRoundRect(73, 150 + oy, 320, 96, 16, UI_BAR_WARN);
+  gfx->drawRoundRect(73, 150 + oy, 320, 96, 16, UI_INK);
+  gfx->setTextColor(UI_INK);
+  setSize(3);
+  setCur(centerX(l1, 3), 176 + oy);
+  printT(l1);
+  setSize(2);
+  setCur(centerX(l2, 2), 212 + oy);
+  printT(l2);
+  if (ev.kind == FXB_MEDAL) drawConfetti(e);
+}
+
+// caja de la barra i (0 comida, 1 felicidad, 2 energia, 3 higiene), como la pinta drawBar
+void fxBarBox(int i, int *bx, int *by, int *bw) {
+  setSize(2);  // barLabelGap mide las etiquetas a tamano 2
+  int gap = barLabelGap();
+  int w = 232 - (78 + gap);
+  if (w > 100) w = 100;
+  *bx = (i % 2 ? 244 : 78) + gap;
+  *by = i < 2 ? 318 : 346;
+  *bw = w;
+}
+
+// necesidades antes y despues de una accion: los cambios de FX_STAT_MIN o mas sacan su "+N"
+FxNeedSnap fxSnap() { return FxNeedSnap{ { pet.fullness, pet.joy, pet.energy, pet.hygiene } }; }
+void fxNeeds(const FxNeedSnap &before) {
+  const uint8_t v[4] = { pet.fullness, pet.joy, pet.energy, pet.hygiene };
+  uint32_t now = millis();
+  for (uint8_t i = 0; i < 4; i++) {
+    int d = (int)v[i] - (int)before.v[i];
+    if (d >= FX_STAT_MIN || d <= -FX_STAT_MIN) fxo.push(FXO_STAT, i, (int16_t)d, now);
+  }
+}
+
+// eclosion: mientras se rompe el huevo (las primeras tres cuartas partes) el bicho aun no se ve
+bool fxHatchHidesPet(uint32_t now) {
+  for (auto &x : fxo.o)
+    if (x.on && x.kind == FXO_HATCH && (!x.started || FxOverlays::t(x, now) < 0.75f)) return true;
+  return false;
+}
+
+// el huevo de la pantalla principal (y el de la eclosion), desplazado dx, con sus grietas
+void drawEggSprite(int dx, uint8_t cracks) {
+  int s = 5, x = CX - 16 * s + dx, y = PET_CY - 16 * s;
+  drawMap(SPR_EGG, SPRITE_H, x, y, s, false);
+  if (cracks >= 1)
+    for (auto &c : CRACK1) gfx->fillRect(x + c[0] * s, y + c[1] * s, s, s, INK_K);
+  if (cracks >= 2)
+    for (auto &c : CRACK2) gfx->fillRect(x + c[0] * s, y + c[1] * s, s, s, INK_K);
+}
+
+// eclosion (FX_HATCH_MS): el huevo tiembla cada vez mas, salta la cascara con un destello
+// blanco y aparece el bicho haciendo su pose. true = esta parte ocupa el sitio del bicho.
+bool drawHatchFx(uint32_t now) {
+  const FxOverlay *h = fxo.find(FXO_HATCH);
+  if (!h) return false;
+  float t = FxOverlays::t(*h, now);
+  static uint32_t soundFor = 0, poseFor = 0;
+  if (t < 0.55f) {
+    float k = t / 0.55f;
+    drawEggSprite((int)(k * 10 * sinf(now * 0.06f)), 2);
+    return true;
+  }
+  if (soundFor != h->start) {
+    soundFor = h->start;
+    sfxPlay(SFX_HATCH);
+  }
+  if (t < 0.75f) {
+    float k = (t - 0.55f) / 0.2f;
+    gfx->fillCircle(CX, PET_CY, 40 + (int)(k * 110), UI_WHITE);
+    const uint16_t shell = C565(0xf6, 0xea, 0xc2);
+    for (int i = 0; i < 10; i++) {  // trozos de cascara volando (y cayendo), girando
+      float a = i * 0.628f + 0.3f;
+      int d = 120 + (int)(k * 90);
+      int sx = CX + (int)(cosf(a) * d), sy = PET_CY + (int)(sinf(a) * d * 0.7f) + (int)(k * k * 70);
+      float r = a + k * 5.0f;
+      int x1 = sx + (int)(cosf(r) * 12), y1 = sy + (int)(sinf(r) * 12);
+      int x2 = sx + (int)(cosf(r + 2.3f) * 10), y2 = sy + (int)(sinf(r + 2.3f) * 10);
+      int x3 = sx + (int)(cosf(r + 4.1f) * 8), y3 = sy + (int)(sinf(r + 4.1f) * 8);
+      gfx->fillTriangle(x1, y1, x2, y2, x3, y3, shell);
+      gfx->drawTriangle(x1, y1, x2, y2, x3, y3, INK_K);
+    }
+    return true;
+  }
+  if (poseFor != h->start) {
+    poseFor = h->start;
+    fxPose(PMD_POSE, now, 0);
+  }
+  return false;
+}
+
+// efectos pequenos de la pantalla principal (los botones los pinta drawButtons)
+void drawFxOverlays(uint32_t now) {
+  int head = fxHeadY();
+  for (auto &x : fxo.o) {
+    if (!x.on || !x.started) continue;
+    float t = FxOverlays::t(x, now);
+    if (x.kind == FXO_STAT) {  // "+25" que sube desde su barra
+      int bx, by, bw;
+      fxBarBox(x.a, &bx, &by, &bw);
+      fxNumber(bx + bw / 2, by - 6 - (int)(t * 26), x.v, x.v > 0 ? UI_BAR_OK : UI_BAR_BAD);
+    } else if (x.kind == FXO_BOND) {  // corazon pequeno con "+N", a la izquierda del bicho
+      int cx = (int)beh.x - 78, y = PET_GROUND - 150 - (int)(t * 40);
+      drawMap(SPR_HEART, 32, cx - 34, y, 1, false);
+      fxNumber(cx + 18, y + 6, x.v, UI_BAR_BAD);
+    } else if (x.kind == FXO_TRAIN) {  // "ATK +3" sobre la cabeza, y un ataque
+      static uint32_t poseFor = 0;
+      if (poseFor != x.start) {
+        poseFor = x.start;
+        fxPose(PMD_ATTACK, now, 0);
+      }
+      char s[24];
+      snprintf(s, sizeof(s), "%s +%d", T((StrId)(S_STAT_ATK + x.a)), x.v);
+      setSize(2);
+      int w = textW(s, 2), y = head - 44 - x.a * 30 - (int)(t * 16);
+      gfx->fillRoundRect(CX - w / 2 - 8, y - 4, w + 16, 24, 8, UI_BAR_OK);
+      gfx->drawRoundRect(CX - w / 2 - 8, y - 4, w + 16, 24, 8, UI_INK);
+      gfx->setTextColor(UI_WHITE);
+      setCur(CX - w / 2, y);
+      printT(s);
+    } else if (x.kind == FXO_OOPS) {  // "!" en un bocadillo junto a la cabeza
+      int bx = (int)beh.x + 58, by = head - 40 + (int)(3 * sinf(now * 0.012f));
+      gfx->fillTriangle(bx - 14, by + 10, bx - 4, by + 16, bx - 22, by + 26, UI_WHITE);
+      gfx->fillCircle(bx, by, 19, UI_WHITE);
+      gfx->drawCircle(bx, by, 19, UI_INK);
+      gfx->setTextColor(UI_BAR_BAD);
+      setSize(3);
+      setCur(bx - 7, by - 11);
+      printT("!");
+    } else if (x.kind == FXO_HATCH && t >= 0.75f) {  // aro de luz que se abre al nacer
+      float k = (t - 0.75f) / 0.25f;
+      for (int r = 0; r < 3; r++) gfx->drawCircle(CX, PET_CY, 120 + (int)(k * 110) + r * 3, UI_WHITE);
+    }
+  }
+}
+
+// Noticias del paseo sobre la pantalla principal: los hallazgos (hasta que se toca). Esperan a
+// que la pantalla este encendida y no haya otro dialogo, celebracion o animacion encima
+// (FR-1.5). El banner de la meta va en la cola de celebraciones (fx.h) desde la v1.30.
+void drawWalkNews() {
+  bool busy = screenOff || dimStage != DIM_AWAKE || choiceKind || confirmUntil || menuKind ||
+              pet.evolving() || bathUntil || fxq.busy();
   static bool wasShown = false;
   if (busy || !pet.hasFound()) { wasShown = false; return; }
   bool full = false;
@@ -2840,9 +3237,12 @@ void walkTap(int16_t x, int16_t y) {
     uint8_t it = itemConfirm - 1;
     itemConfirm = 0;
     if (timeLeft(itemConfirmUntil) && x >= 118 && x <= 218 && y >= 252 && y <= 304) {
+      FxNeedSnap ns = fxSnap();
       if (pet.useItem(it)) {
+        fxNeeds(ns);
         sfxPlay(it == IT_GOLDEN ? SFX_EAT : SFX_LEVEL);
-        if (it == IT_GOLDEN || it == IT_RARECANDY) cardOpen = false;  // a verlo comer / subir de nivel
+        // a la pantalla principal a verlo: comer, subir de nivel o entrenar (v1.30, "ATK +3")
+        cardOpen = false;
       } else {
         sfxPlay(SFX_DENY);
       }
@@ -3297,6 +3697,7 @@ void drawEvolveFX(uint32_t now) {
 }
 
 void drawPet() {
+  if (drawHatchFx(millis())) return;  // eclosion (fx.h): aun se rompe el huevo
   if (pmd.loaded) {
     drawPetPMD();
     return;
@@ -3377,7 +3778,9 @@ void drawBath() {
     bathUntil = 0;
     if (bathPending) {
       bathPending = false;
+      FxNeedSnap ns = fxSnap();
       pet.clean();
+      fxNeeds(ns);  // "+60" de higiene
       // pose de alegria al quedar limpio
       if (pmd.has(PMD_POSE)) {
         beh.mode = 2;
@@ -3635,6 +4038,8 @@ void drawPetSD() {
   bool sil = false;
   if (pet.evolving()) {
     sil = (millis() / 300) % 2;
+  } else if (fxBan && fxBan->kind == FXB_LEVELUP && fxq.elapsed(millis()) < 1200) {
+    y -= (int)(14 * fabsf(sinf(fxq.elapsed(millis()) * 0.008f)));  // sube de nivel: rebota (sin PMD)
   } else if (pet.mood() == MOOD_HAPPY && (millis() / 500) % 2) {
     y -= 6;  // saltito
   }
@@ -3679,10 +4084,14 @@ void drawPoops() {
 }
 
 void drawBars() {
-  drawBar(78, 318, T(S_BAR_FOOD), pet.fullness);
-  drawBar(244, 318, T(S_BAR_JOY), pet.joy);
-  drawBar(78, 346, T(S_BAR_ENE), pet.energy);
-  drawBar(244, 346, T(S_BAR_HYG), pet.hygiene);
+  // cada barra se desliza a su valor nuevo en FX_TWEEN_MS (fx.h) en vez de saltar
+  uint32_t now = millis();
+  const uint8_t v[4] = { pet.fullness, pet.joy, pet.energy, pet.hygiene };
+  for (int i = 0; i < 4; i++) fxBar[i].target(v[i], now);
+  drawBar(78, 318, T(S_BAR_FOOD), (uint8_t)fxBar[0].value(now));
+  drawBar(244, 318, T(S_BAR_JOY), (uint8_t)fxBar[1].value(now));
+  drawBar(78, 346, T(S_BAR_ENE), (uint8_t)fxBar[2].value(now));
+  drawBar(244, 346, T(S_BAR_HYG), (uint8_t)fxBar[3].value(now));
 }
 
 // Separacion entre la etiqueta y su barra en la fila de necesidades. Estaba fija
@@ -3721,12 +4130,21 @@ void drawBar(int x, int y, const char *label, uint8_t val) {
 }
 
 void drawButtons() {
+  uint32_t now = millis();
   for (int i = 0; i < 4; i++) {
     bool off = pet.sleeping && i != 2;  // durmiendo solo funciona LUZ
-    int bx = buttons[i].cx - BTN_HALF, by = buttons[i].cy - BTN_HALF;
-    if (!pet.sleeping) gfx->fillRoundRect(bx, by, 2 * BTN_HALF, 2 * BTN_HALF, 14, UI_WHITE);
+    // efectos (fx.h): el boton tocado se hunde 2 px; si no se puede usar, tiembla de lado
+    int ox = 0, oy = 0;
+    bool pressed = fxo.find(FXO_PRESS, i) != nullptr;
+    if (pressed) oy = 2;
+    if (const FxOverlay *d = fxo.find(FXO_DENY, i)) {
+      float t = FxOverlays::t(*d, now);
+      ox = (int)(4.0f * (1.0f - t) * sinf(t * 6.0f * (float)PI));  // 3 vaivenes que se calman
+    }
+    int bx = buttons[i].cx - BTN_HALF + ox, by = buttons[i].cy - BTN_HALF + oy;
+    if (!pet.sleeping || pressed) gfx->fillRoundRect(bx, by, 2 * BTN_HALF, 2 * BTN_HALF, 14, pressed ? UI_TRACK : UI_WHITE);
     gfx->drawRoundRect(bx, by, 2 * BTN_HALF, 2 * BTN_HALF, 14, inkColor());
-    if (!off) drawMap(buttons[i].icon, 16, buttons[i].cx - 16, buttons[i].cy - 16, 2, false);
+    if (!off) drawMap(buttons[i].icon, 16, buttons[i].cx - 16 + ox, buttons[i].cy - 16 + oy, 2, false);
   }
 }
 

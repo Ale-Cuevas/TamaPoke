@@ -1,7 +1,7 @@
 # TamaPoke
 
 ![Board](https://img.shields.io/badge/board-ESP32--S3%20AMOLED%202.16-E7352C?logo=espressif&logoColor=white)
-![Firmware](https://img.shields.io/badge/firmware-v1.29-8A2BE2)
+![Firmware](https://img.shields.io/badge/firmware-v1.30-8A2BE2)
 [![CI](https://github.com/Ale-Cuevas/TamaPoke/actions/workflows/ci.yml/badge.svg)](https://github.com/Ale-Cuevas/TamaPoke/actions/workflows/ci.yml)
 ![Code](https://img.shields.io/badge/code-MIT-blue)
 ![Languages](https://img.shields.io/badge/languages-8-FFCB05)
@@ -72,6 +72,10 @@ A quick reference to how the game really works (values straight from the code).
   of real time. Leveling is purely time-based — caring well doesn't speed it up,
   but neglect *delays evolution*.
 - It keeps **aging while powered off** (the RTC runs), catching up to **2 weeks** max.
+- **Level-up (v1.30):** a rising jingle as soon as it happens, even with the screen off
+  (the screen stays off; asleep, it waits for the wake). On the home screen there are
+  sparkles and a "LEVEL UP!" pill ("Lv.12 > Lv.18" after time away), then the ATK/DEF/SPD
+  it gained.
 
 ### The four stats (0–100)
 Needs: **FOOD**, **JOY**, **ENE** (energy), **HYG** (hygiene). Start 80 / 80 / 80 / 100.
@@ -99,6 +103,14 @@ While **awake**, per minute:
 - 👆 **Pet it:** +5 JOY + bond.
 - 🌙 **Sleep:** rest — ENE **+6/min**, needs drain ~**4× slower** with floors
   (FOOD 30 / JOY 35 / HYG 45). No poops, no slip-ups, can't run away while asleep.
+- **Feedback (v1.30):**
+  - the bars slide, and every action floats a "+N" over what it changed;
+  - bond rising shows a small heart;
+  - training shows "ATK +3";
+  - a slip-up shows a "!";
+  - a button that can't be used (asleep) shakes;
+  - celebrations (level-up, medal, streak, step goal) come one at a time, each when you
+    can see it.
 
 ### Eggs & who you get (spawn odds)
 - **First ever pet:** you pick a starter — **Bulbasaur / Charmander / Squirtle**.
@@ -597,7 +609,10 @@ runaway-ready state) · `WIPE` (factory reset → new game) · `BEEP` (audio tes
 `IMU` (FIFO reads, samples/s, acceleration, tilt) · `IMULOG <s>` (stream samples
 as CSV, the `test/data/imu/` format; any key stops it) · `SHAKE` /
 `FACEDOWN` / `FACEDOWN 0` (inject the motion events) · `BATTLE` / `BATTLE <dex>`
-(a practice battle, against a random or the given species; the result is logged).
+(a practice battle, against a random or the given species; the result is logged) ·
+`FX <effect>` (show a feedback effect without touching the save: `levelup`, `levelup6`,
+`medal`, `streak`, `goal`, `goal3`, `stat`, `bond`, `train`, `deny`, `press`, `oops`,
+`hatch`) · `PERF` (scene and effects draw time).
 
 To test fast: lower `PET_TICK_MS`, `MINUTES_PER_LEVEL` and `FAREWELL_AGE_MIN` in `pet.h`.
 
@@ -612,6 +627,11 @@ Specified in [docs/FEATURES.md](docs/FEATURES.md), each one its own task:
 - ~~**Practice battle**~~ — done in v1.24: the battle engine (Gen 1 types and
   stats, tap-charged special, PMD Attack/Hurt animations) against a simulated
   opponent on one board.
+- ~~**Feedback effects**~~ — done in v1.30: level-up animation and jingle, one
+  celebration at a time, sliding bars with "+N", button, hatch and slip-up effects.
+  Specified in [docs/NEXT_FEATURES.md](docs/NEXT_FEATURES.md), with two more tasks:
+  - **Pet box**: hibernate up to 6 pets and raise another;
+  - **OTA**: firmware updates over Wi-Fi.
 - **Link** — two nearby boards meet over ESP-NOW for playdates (visit & play,
   gifts, friendship egg) and battles, on the v1.24 engine; includes a build for
   the round 1.75" board.

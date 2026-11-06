@@ -127,6 +127,10 @@ static const Note N_CRIT[]    = {{1245, 30}, {311, 40}, {165, 90}};
 static const Note N_SPECIAL[] = {{523, 40}, {784, 40}, {1047, 40}, {1568, 90}, {392, 50}, {196, 90}};
 static const Note N_WIN[]     = {{523, 100}, {659, 100}, {784, 100}, {1047, 240}, {0, 60}, {988, 120}, {1047, 360}};
 static const Note N_LOSE[]    = {{392, 200}, {370, 200}, {349, 200}, {330, 450}};
+// efectos de respuesta (v1.30, fx.h). La subida de nivel empieza en 784 Hz: eclosion y evolucion
+// empiezan en 523, asi que no se confunden; el descuido cae suave, sin el zumbido grave de DENY
+static const Note N_LEVELUP[] = {{784, 60}, {988, 60}, {1175, 60}, {1568, 240}};
+static const Note N_OOPS[]    = {{392, 90}, {330, 160}};
 
 struct SfxDef { const Note *n; uint8_t len; };
 #define SFX_ENTRY(n) { n, (uint8_t)(sizeof(n) / sizeof(n[0])) }
@@ -137,7 +141,7 @@ static const SfxDef SFX[] = {
   SFX_ENTRY(N_TAP), SFX_ENTRY(N_EAT), SFX_ENTRY(N_PLAY), SFX_ENTRY(N_HEART), SFX_ENTRY(N_HATCH),
   SFX_ENTRY(N_EVOLVE), SFX_ENTRY(N_MEDAL), SFX_ENTRY(N_DENY), SFX_ENTRY(N_BYE), SFX_ENTRY(N_LEVEL),
   SFX_ENTRY(N_BATTLE), SFX_ENTRY(N_HIT), SFX_ENTRY(N_CRIT), SFX_ENTRY(N_SPECIAL), SFX_ENTRY(N_WIN),
-  SFX_ENTRY(N_LOSE),
+  SFX_ENTRY(N_LOSE), SFX_ENTRY(N_LEVELUP), SFX_ENTRY(N_OOPS),
 };
 static_assert(sizeof(SFX) / sizeof(SFX[0]) == SFX_COUNT, "SFX[] tiene que tener un efecto por cada Sfx");
 

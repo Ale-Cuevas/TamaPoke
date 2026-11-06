@@ -3,6 +3,7 @@
 #include "shim/Arduino.h"
 #include "../pet.h"
 #include "../dex.h"
+#include "../audio.h"
 #include <string.h>
 
 // ---------------------------------------------------------------- helpers
@@ -641,7 +642,8 @@ TEST(streak, celebra_los_hitos) {
     p.caress();
   }
   CHECK_EQ(p.streak, (uint16_t)3);
-  CHECK_MSG(p.showMilestone(), "hito de 3 dias celebrado");
+  CHECK_EQ(p.takeMilestone(), (uint16_t)3);  // hito de 3 dias, para celebrar
+  CHECK_EQ(p.takeMilestone(), (uint16_t)0);  // se recoge una vez
   CHECK_EQ(p.lastMilestone, (uint16_t)3);
 }
 
@@ -664,7 +666,7 @@ TEST(medals, nivel_10_da_medalla) {
   p.ageMinutes = 9 * 60 - 1;
   advance(p, 1);
   CHECK(p.hasMedal(MED_LV10));
-  CHECK(p.showMedal());
+  CHECK(p.takeMedal() & MED_LV10);  // (con EN FORMA a la vez: nivel >= 5 sin descuidos)
 }
 
 // sin sobrepeso, nivel 5 y cero descuidos
@@ -1603,4 +1605,84 @@ TEST(battle, la_practica_no_toca_energia_ni_comida) {
   p.practiceDone();
   CHECK_EQ(p.fullness, (uint8_t)60);
   CHECK_EQ(p.energy, (uint8_t)40);
+}
+
+// ---------------------------------------------------------------- efectos (v1.30, fx.h)
+// El bicho ya no cronometra ni hace sonar sus celebraciones: deja pendientes que la UI recoge
+// y ensena cuando se pueden ver. Asi una medalla ganada con la pantalla apagada no caduca.
+TEST(fx_pet, la_medalla_se_recoge_una_vez_y_el_bicho_no_la_hace_sonar) {
+  Pet p;
+  makePet(p, 4);
+  mockSfxReset();
+  p.ageMinutes = 9 * 60 - 1;
+  advance(p, 1);
+  CHECK(p.hasMedal(MED_LV10));
+  CHECK_EQ(mockSfxCount(SFX_MEDAL), 0);  // suena al verse el banner, no al ganarla
+  mockAdvanceMillis(60UL * 60 * 1000);   // una hora despues sigue pendiente
+  CHECK(p.takeMedal() & MED_LV10);       // (y EN FORMA, ganada en el mismo salto)
+  CHECK_EQ(p.takeMedal(), (uint16_t)0);
+}
+
+TEST(fx_pet, dos_medallas_sin_recoger_se_suman) {
+  Pet p;
+  makePet(p, 4);
+  p.takeMedal();
+  p.weight = 0;
+  p.ageMinutes = 4 * 60 - 1;
+  advance(p, 1);  // nivel 5: EN FORMA
+  p.ageMinutes = 9 * 60 - 1;
+  advance(p, 1);  // nivel 10, sin haber recogido la anterior
+  CHECK_EQ(p.takeMedal(), (uint16_t)(MED_FIT | MED_LV10));
+}
+
+TEST(fx_pet, subir_de_nivel_no_suena_en_el_bicho) {
+  Pet p;
+  makePet(p, 4);
+  mockSfxReset();
+  uint16_t lv = p.level();
+  advance(p, MINUTES_PER_LEVEL);
+  CHECK_EQ(p.level(), (uint16_t)(lv + 1));
+  CHECK_EQ(mockSfxCount(SFX_LEVEL), 0);  // la UI lo detecta y suena SFX_LEVELUP
+  CHECK_EQ(mockSfxTotal(), 0);
+}
+
+TEST(fx_pet, la_eclosion_no_suena_en_el_bicho) {
+  Pet p;
+  mockNvsReset();
+  mockSetMillis(0);
+  p.begin();
+  if (p.awaitingStarter()) p.chooseStarter(4);
+  mockSfxReset();
+  p.eggTap();
+  p.eggTap();
+  p.eggTap();
+  CHECK(!p.isEgg());
+  CHECK_EQ(mockSfxCount(SFX_HATCH), 0);  // suena en el destello de la animacion (UI)
+}
+
+TEST(fx_pet, el_hito_de_racha_queda_pendiente_hasta_recogerlo) {
+  Pet p;
+  makePet(p, 4);
+  for (uint32_t d = 200; d < 207; d++) {
+    p.setClock(d * 86400);
+    p.caress();
+  }
+  CHECK_EQ(p.streak, (uint16_t)7);
+  CHECK_EQ(p.takeMilestone(), (uint16_t)7);  // el de 3 dias se piso con el de 7: se ve el ultimo
+  CHECK_EQ(p.takeMilestone(), (uint16_t)0);
+}
+
+TEST(fx_pet, las_estadisticas_a_un_nivel_cuadran_con_las_de_ahora) {
+  Pet p;
+  makePet(p, 4);
+  p.ageMinutes = 12 * MINUTES_PER_LEVEL;
+  uint16_t lv = p.level();
+  CHECK_EQ(p.statAt(0, lv), p.atkStat());
+  CHECK_EQ(p.statAt(1, lv), p.defStat());
+  CHECK_EQ(p.statAt(2, lv), p.speStat());
+  for (uint8_t w = 0; w < 3; w++) CHECK(p.statAt(w, lv + 6) > p.statAt(w, lv));  // 6 niveles mas: sube
+  Pet egg;
+  mockNvsReset();
+  egg.begin();
+  CHECK_EQ(egg.statAt(0, 10), (uint16_t)0);
 }

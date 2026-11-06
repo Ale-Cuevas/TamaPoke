@@ -149,7 +149,8 @@ void Pet::tick() {
     return;
   }
 
-  if (ageMinutes % MINUTES_PER_LEVEL == 0) sfxPlay(SFX_LEVEL);  // subio de nivel (despierto)
+  // la subida de nivel ya no suena aqui: la detecta la UI (fx.h) por cualquier via (minuto,
+  // tiempo apagado, Caramelo Raro, LVL) y la anuncia con su propio sonido
 
   fullness = clamp100(fullness - 2);
   energy = clamp100(energy - 1);
@@ -299,7 +300,7 @@ void Pet::registerCare(bool saveNow) {
               : (streak >= 7)   ? 7   : (streak >= 3)  ? 3 : 0;
   if (ms > lastMilestone) {
     lastMilestone = ms;
-    milestoneUntil = millis() + 4500;
+    milestoneNew = streak;  // lo celebra la UI cuando se pueda ver
   }
   checkMedals(saveNow);
   persist(saveNow);
@@ -335,9 +336,7 @@ void Pet::checkMedals(bool saveNow) {
   uint16_t gained = medals & ~before;
   if (gained) {
     for (uint16_t m = gained; m; m &= (m - 1)) totalMedals++;
-    newMedal = gained;
-    medalUntil = millis() + 4000;
-    if (!sleeping) sfxPlay(SFX_MEDAL);
+    newMedal |= gained;  // la UI la celebra (y suena) cuando se pueda ver: fx.h
     persist(saveNow);
   }
 }
@@ -350,6 +349,14 @@ void Pet::rename(const char *name) {
 
 static uint16_t calcStat(uint8_t base, uint8_t gene, uint16_t lvl, uint8_t tr) {
   return (uint16_t)base * gene / 100 + lvl + tr;
+}
+
+uint16_t Pet::statAt(uint8_t which, uint16_t lv) const {
+  if (isEgg()) return 0;
+  const DexEntry &d = DEX_TBL[speciesId];
+  if (which == 0) return calcStat(d.bAtk, geneAtk, lv, trAtk);
+  if (which == 1) return calcStat(d.bDef, geneDef, lv, trDef);
+  return calcStat(d.bSpe, geneSpe, lv, trSpe);
 }
 
 uint16_t Pet::atkStat() const {
@@ -428,7 +435,8 @@ void Pet::hatch() {
   nick[0] = 0;
   registerSpecies(speciesId);  // criado = registrado en la pokedex
   checkMedals();     // por si nace ya en forma final (legendario)
-  sfxPlay(SFX_HATCH);
+  // sin sonido aqui: la UI ve la eclosion y suena en el destello de su animacion (fx.h), o
+  // al momento si la pantalla no estaba a la vista
   save();
 }
 

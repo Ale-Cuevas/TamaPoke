@@ -8,6 +8,62 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.30] - 2026-11-05
+
+Feedback effects ([NEXT_FEATURES.md, Task FX](docs/NEXT_FEATURES.md#task-fx-feedback-for-what-the-pet-does)):
+until now a level-up only beeped (even with the screen off), the bars jumped, and a medal
+earned with the screen off was never seen.
+
+### Added
+
+- **Level-up animation and sound.** Every level-up, whatever caused it (the hour, time
+  powered off, a Rare Candy, `LVL`), plays a new rising jingle (`SFX_LEVELUP`) and then, on
+  the home screen:
+  - sparkles rise around the pet;
+  - it does its pose;
+  - a "LEVEL UP!" pill shows "Lv.13", or "Lv.12 > Lv.18" for several levels at once;
+  - the level in the header flashes;
+  - for the last 1.5 s the pill shows the ATK/DEF/SPD gained.
+
+  The jingle plays **as soon as the level is reached**, even with the screen off, and
+  doesn't turn the screen on. The animation waits until someone can see it and is then
+  silent. With the pet asleep there's no jingle; animation and sound come when it wakes.
+- **One celebration at a time.** Level-up, medal, streak milestone and step goal banners
+  queue in that order. Each banner's time starts when it's shown, not when it's earned:
+  - a medal earned with the screen off is no longer lost;
+  - the Lv.10 medal now follows the level-up instead of drawing over it.
+
+  Banners slide in from above. Medals and the 10000-step goal add confetti. The evolve,
+  farewell and runaway buttons wait while a banner is up. The streak milestone now has a
+  sound.
+- **Needs bars slide** to their new value instead of jumping. Feeding, the bath, items, the
+  minigame and the training bag float a green "+N" (or red "−N") up from each bar that
+  changed by 3 or more.
+- **Small effects:**
+  - a little heart with "+N" when bond rises (at most every 10 s);
+  - "ATK +3" (or DEF/SPD) with an attack when training rises: vitamins, the bag, the
+    minigame;
+  - a "!" bubble and a soft falling sound (`SFX_OOPS`) when a care slip-up is counted,
+    only with the screen on;
+  - a hatching effect: the egg shakes, the shell bursts with a white flash, and the pet
+    appears posing;
+  - tapped buttons look pressed;
+  - FOOD, PLAY and BATH shake (with the deny sound) when they can't be used: asleep, or
+    already bathing.
+- `FX <effect>` over serial shows any effect without changing the save. `PERF` adds the
+  effects' draw time, and `STATS` adds the queue and why it waits. 21 tests in
+  `test/test_fx.cpp`, 6 more in `test/test_pet.cpp`, and 23 render scenes.
+
+### Changed
+
+- Vitamins close the Pokémon card like the Golden Berry and the Rare Candy, so you see the
+  "ATK +3".
+- `Pet` no longer times or plays its celebrations. Medals and milestones are flags the UI
+  collects (`takeMedal()`, `takeMilestone()`). Level-up, medal and hatch sounds moved to the
+  UI.
+- Two medals earned before either is shown both get their banner. Before, the second
+  overwrote the first.
+
 ## [1.29] - 2026-11-05
 
 ### Changed

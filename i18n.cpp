@@ -43,6 +43,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // combate (v1.24)
     "ENTRENAMIENTO", "Es muy eficaz!", "No es muy eficaz...", "No le afecta...", "Golpe cr\241tico!", "Especial!",
     "Toca para cargar!", "GANASTE!", "PERDISTE...", "EMPATE", "Felicidad +%u", "Premio: una vez por hora",
+    // efectos (v1.30)
+    "SUBE DE NIVEL!",
   },
   // ---------------- EN ----------------
   {
@@ -80,6 +82,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // combate (v1.24)
     "PRACTICE", "Super effective!", "Not very effective...", "No effect...", "Critical hit!", "Special!",
     "Tap to charge!", "YOU WIN!", "YOU LOST...", "DRAW", "Joy +%u", "Reward: once an hour",
+    // efectos (v1.30)
+    "LEVEL UP!",
   },
   // ---------------- FR ----------------
   {
@@ -117,6 +121,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // combate (v1.24)
     "ENTRA\214NEMENT", "Super efficace!", "Pas tr\212s efficace...", "Aucun effet...", "Coup critique!", "Sp\202cial!",
     "Tape pour charger!", "GAGN\220!", "PERDU...", "\220GALIT\220", "Bonheur +%u", "Prix: une fois par heure",
+    // efectos (v1.30)
+    "NOUVEAU NIVEAU!",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -159,6 +165,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // combate (v1.24)
     "TRAINING", "Sehr effektiv!", "Nicht sehr effektiv...", "Keine Wirkung...", "Volltreffer!", "Spezial!",
     "Tippen zum Laden!", "GEWONNEN!", "VERLOREN...", "UNENTSCHIEDEN", "Laune +%u", "Belohnung: 1x pro Stunde",
+    // efectos (v1.30)
+    "AUFGESTIEGEN!",
   },
   // ---------------- IT ----------------
   {
@@ -196,6 +204,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // combate (v1.24)
     "ALLENAMENTO", "Superefficace!", "Non \212 molto efficace...", "Nessun effetto...", "Brutto colpo!", "Speciale!",
     "Tocca per caricare!", "HAI VINTO!", "HAI PERSO...", "PAREGGIO", "Felicit\205 +%u", "Premio: una volta l'ora",
+    // efectos (v1.30)
+    "NUOVO LIVELLO!",
   },
   // ---------------- PT ----------------
   {
@@ -233,6 +243,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // combate (v1.24)
     "TREINO", "Super efetivo!", "Pouco efetivo...", "Sem efeito...", "Golpe cr\241tico!", "Especial!",
     "Toque para carregar!", "VENCEU!", "PERDEU...", "EMPATE", "Alegria +%u", "Pr\210mio: 1 vez por hora",
+    // efectos (v1.30)
+    "SUBIU DE NIVEL!",
   },
   // ---------------- JA ----------------
   {
@@ -293,6 +305,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // combate (v1.24)
     "れんしゅう", "こうかは ばつぐんだ！", "こうかは いまひとつ...", "こうかが ない...", "きゅうしょに あたった！", "ひっさつ！",
     "タッチで ためる！", "かった！", "まけた...", "ひきわけ", "ごきげん +%u", "ごほうびは 1じかんに 1かい",
+    // efectos (v1.30)
+    "レベルアップ！",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -335,6 +349,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // combate (v1.24)
     "연습", "효과가 굉장했다!", "효과가 별로인 듯...", "효과가 없다...", "급소에 맞았다!", "필살기!",
     "탭해서 모으기!", "이겼다!", "졌다...", "무승부", "기분 +%u", "보상은 1시간에 1번",
+    // efectos (v1.30)
+    "레벨 업!",
   },
 };
 
