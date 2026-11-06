@@ -197,3 +197,22 @@ the events without moving the board.
   "!" past about 45°, and wanders again when level.
 - [ ] 8 h battery drain with the motion checks on (the same firmware as the steps test: one figure covers
   both).
+
+### Battle
+(v1.24, [FEATURES.md 3a](FEATURES.md#3a-battle-engine-and-practice-battle).) `BATTLE` or `BATTLE <dex>` over
+serial starts one; the log prints the matchup and the result.
+- [ ] PLAY opens the menu (ball | crossed swords); the ball starts the minigame as before, the swords a battle.
+  Asleep or as an egg, PLAY does nothing. A horizontal swipe with a menu open no longer opens the Pokédex.
+- [ ] The VS card and jingle play together, the pets walk in from the sides, then the attacks start: Attack frames
+  lunge, the target flinches (Hurt), the HP bar slides down, a sound per hit, captions under the field.
+- [ ] Taps fill the 5 pips (none count during the VS card); full, they blink and the next attack of yours is a
+  Special: white flash, shake, "Special!". The pips then show grey for 2 of your attacks.
+- [ ] 10 battles at different levels: each lasts 10–20 s after the intro (time a few): ____
+- [ ] The result screen shows the winner posing, "Joy +3" (or "once an hour" on a second battle within the hour);
+  a tap or USER closes it, and it closes by itself after 7 s. USER or PWR mid-battle quits with no reward.
+- [ ] Opponent without a sprite on the card (rename `/mons/pNNN.bin` for one species and `BATTLE NNN`): its
+  thumbnail is drawn instead; with no thumbnail either, a "?".
+- [ ] No stutter in the 85 ms frames when big Attack frames are drawn (Onix, Gyarados, Dragonite: `SPEC 95`, then
+  `BATTLE 130`).
+- [ ] `HEALTH` before and after 20 battles: the minimum heap stays flat (the opponent's sprite is freed each time).
+

@@ -11,7 +11,7 @@ except where a dependency is named.
 |---|---|---|---|
 | [1. Steps](#task-1-steps) | Steps counted from the IMU feed the pet: walk care and found items | — | 1.20 (built) |
 | [2. Easter eggs](#task-2-easter-eggs) | Shake to wake, face-down lights out, tilt & slide | Task 1's IMU module | 1.20 (built, with Task 1) |
-| [3. Link](#task-3-link-playdates-and-battles) | Two nearby boards meet for playdates and battles | 3c gifts need Task 1's Backpack | 1.22+ |
+| [3. Link](#task-3-link-playdates-and-battles) | Two nearby boards meet for playdates and battles | 3c gifts need Task 1's Backpack | 3a in 1.24 (built); 3b–3e later |
 
 Written 2026-11-04. **Tasks 1 and 2 are built in v1.20** (one branch,
 `feature/step-counting`, one release): host-tested and rendered, not yet checked
@@ -539,7 +539,7 @@ The task is big, so it ships in five parts, each its own PR:
 
 | Part | What | Testable with one board |
 |---|---|---|
-| [3a](#3a-battle-engine-and-practice-battle) | Battle engine, battle screen, practice battle against a simulated opponent | Yes |
+| [3a](#3a-battle-engine-and-practice-battle) | Battle engine, battle screen, practice battle against a simulated opponent (**built in v1.24**) | Yes |
 | [3b](#3b-link-core) | Radio, discovery, invites, friend list, protocol; an on-device bot peer | Yes, with the bot |
 | [3c](#3c-playdate) | Playdate: visit & play, gifts, friendship egg | Yes, with the bot |
 | [3d](#3d-linked-battle) | 3a's battle over the link | Yes, with the bot |
@@ -615,6 +615,44 @@ The task is big, so it ships in five parts, each its own PR:
   `SFX_COUNT` (a missing entry compiles and plays silence today). The audio
   task cannot stop or loop a sound, so there is no battle music loop in v1.
 - `powerCtx().gameOpen`-style 85 ms frames during the battle.
+
+**Built in v1.24** (`battle.h`, the type data in `tools/dex_data.py` /
+`dex.h`, the screen at the end of `TamaPoke.ino`). Decisions the spec left open:
+- **Where the practice battle lives.** The Friends screen comes with 3b, so
+  until then PLAY opens a menu (ball game | battle) and the battle starts from
+  there. That menu is 3b's generic menu (`menuKind` + `menuUntil`), and the
+  swipe-over-the-food-menu quirk is fixed with it. When Friends lands, the
+  battle entry becomes Friends, with "Practice" inside it.
+- **No effect is 0 damage.** The 5 % floor applies to hits that land; an immune
+  target takes nothing ("No effect..."). Two pets immune to each other (Rattata
+  and Gastly) draw at the 15-attack cap. The length guarantee still holds: the
+  pet that faints always takes at least 4 hits.
+- **The opponent's special:** it "taps" `PRACTICE_AI_TAPS` (2) times before each
+  of its attacks, so it charges a special about every third attack, with the
+  same cooldown as yours.
+- **The opponent's form:** a random base of your egg rarity, evolved along its
+  line as far as its level allows (Eevee picks a branch), so a level-40 Fire
+  line is a Charizard, not a Charmander. Never shiny.
+- **"Once an hour"** is counted in RAM (`millis()`), like the grumpy cooldown: a
+  restart allows another reward sooner. Win, lose or draw give the same +3.
+- **Leaving:** USER quits at any point with no reward, and so does switching the
+  screen off with PWR (nothing is drawn while it is off, and the battle only
+  advances as it is drawn).
+- **Ability to battle:** hatched, awake, no ceremony, not evolving. Practice
+  costs no energy or food (those costs are 3d's, for linked battles).
+- **Timing:** VS card 2 s, walk-in 1 s (`INTRO_MS` = 3 s), then attack k at
+  intro end + k × 1.3 s, computed when it starts so a special charged a moment
+  before still counts. The hit lands 350 ms in; the HP bar slides for 400 ms; a
+  KO fades out over 900 ms before the result. 7 attacks take 9.1 s plus the
+  fade, 15 take 19.5 s.
+- **Measured on the engine** (all 151×151 at levels 5, 30, 100, specials on both
+  sides): every battle lasts 7–15 attacks; at level 5 about 3 in 4 reach the
+  cap, at level 100 about a third end at the 7-attack minimum. Among type-neutral
+  pairs where one pet's stat total is at least 1.2× the other's, the stronger
+  wins about 98 %; a type advantage between similar pets wins about 98 %.
+  Specials are the player's way to beat those odds.
+- **Sounds:** the intro jingle is 2.5 s; a hit, critical, special, "no effect"
+  (the deny sound), win, lose or draw (the level-up sound).
 
 ### 3b. Link core
 

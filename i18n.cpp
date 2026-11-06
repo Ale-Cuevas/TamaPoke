@@ -40,6 +40,9 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "META!", "HALLAZGO!", "Mochila llena", "Usar %s?", "Amuleto: huevo shiny", "Vac\241a: sal a pasear!",
     "Est\240 enfadado!", "Qu\202 mareo...",
     "BAYA DORADA", "PROTEINA", "HIERRO", "CARBURANTE", "AMULETO IRIS",
+    // combate (v1.24)
+    "ENTRENAMIENTO", "Es muy eficaz!", "No es muy eficaz...", "No le afecta...", "Golpe cr\241tico!", "Especial!",
+    "Toca para cargar!", "GANASTE!", "PERDISTE...", "EMPATE", "Felicidad +%u", "Premio: una vez por hora",
   },
   // ---------------- EN ----------------
   {
@@ -74,6 +77,9 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "GOAL!", "FOUND!", "Backpack full", "Use %s?", "Charm: shinier egg", "Empty: go for a walk!",
     "Grumpy!", "So dizzy...",
     "GOLDEN BERRY", "PROTEIN", "IRON", "CARBOS", "SHINY CHARM",
+    // combate (v1.24)
+    "PRACTICE", "Super effective!", "Not very effective...", "No effect...", "Critical hit!", "Special!",
+    "Tap to charge!", "YOU WIN!", "YOU LOST...", "DRAW", "Joy +%u", "Reward: once an hour",
   },
   // ---------------- FR ----------------
   {
@@ -108,6 +114,9 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "OBJECTIF!", "TROUV\220!", "Sac plein", "Utiliser %s?", "Charme: oeuf chroma", "Vide: va te balader!",
     "Grognon!", "Tout \202tourdi...",
     "BAIE DOR\220E", "PROT\220INE", "FER", "CARBONE", "CHARME CHROMA",
+    // combate (v1.24)
+    "ENTRA\214NEMENT", "Super efficace!", "Pas tr\212s efficace...", "Aucun effet...", "Coup critique!", "Sp\202cial!",
+    "Tape pour charger!", "GAGN\220!", "PERDU...", "\220GALIT\220", "Bonheur +%u", "Prix: une fois par heure",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -147,6 +156,9 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "ZIEL!", "GEFUNDEN!", "Rucksack voll", "%s nutzen?", "Pin: Ei schillert", "Leer: geh spazieren!",
     "Grummelig!", "Schwindelig...",
     "GOLDBEERE", "PROTEIN", "EISEN", "CARBON", "SCHILLERPIN",
+    // combate (v1.24)
+    "TRAINING", "Sehr effektiv!", "Nicht sehr effektiv...", "Keine Wirkung...", "Volltreffer!", "Spezial!",
+    "Tippen zum Laden!", "GEWONNEN!", "VERLOREN...", "UNENTSCHIEDEN", "Laune +%u", "Belohnung: 1x pro Stunde",
   },
   // ---------------- IT ----------------
   {
@@ -181,6 +193,9 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "OBIETTIVO!", "TROVATO!", "Zaino pieno", "Usare %s?", "Amuleto: uovo shiny", "Vuoto: fai due passi!",
     "Arrabbiato!", "Che capogiro...",
     "BACCA D'ORO", "PROTEINA", "FERRO", "CARBURANTE", "CROMAMULETO",
+    // combate (v1.24)
+    "ALLENAMENTO", "Superefficace!", "Non \212 molto efficace...", "Nessun effetto...", "Brutto colpo!", "Speciale!",
+    "Tocca per caricare!", "HAI VINTO!", "HAI PERSO...", "PAREGGIO", "Felicit\205 +%u", "Premio: una volta l'ora",
   },
   // ---------------- PT ----------------
   {
@@ -215,6 +230,9 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "META!", "ACHOU!", "Mochila cheia", "Usar %s?", "Amuleto: ovo shiny", "Vazia: vai passear!",
     "Zangado!", "Que tontura...",
     "BAGA DOURADA", "PROTEINA", "FERRO", "CARBOS", "AMULETO BRILHANTE",
+    // combate (v1.24)
+    "TREINO", "Super efetivo!", "Pouco efetivo...", "Sem efeito...", "Golpe cr\241tico!", "Especial!",
+    "Toque para carregar!", "VENCEU!", "PERDEU...", "EMPATE", "Alegria +%u", "Pr\210mio: 1 vez por hora",
   },
   // ---------------- JA ----------------
   {
@@ -272,6 +290,9 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "もくひょう！", "みつけた！", "リュックがいっぱい", "%sをつかう？", "おまもり: いろちがい", "からっぽ: さんぽしよう！",
     "ぷんぷん！", "くらくら...",
     "きんのみ", "プロテイン", "アイアン", "カーボス", "ひかるおまもり",
+    // combate (v1.24)
+    "れんしゅう", "こうかは ばつぐんだ！", "こうかは いまひとつ...", "こうかが ない...", "きゅうしょに あたった！", "ひっさつ！",
+    "タッチで ためる！", "かった！", "まけた...", "ひきわけ", "ごきげん +%u", "ごほうびは 1じかんに 1かい",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -311,6 +332,9 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "목표 달성!", "발견!", "배낭이 가득", "%s 사용?", "부적: 이로치 알", "비었어요: 산책하자!",
     "화났어!", "어지러워...",
     "황금열매", "프로테인", "아이언", "카보스", "빛나는부적",
+    // combate (v1.24)
+    "연습", "효과가 굉장했다!", "효과가 별로인 듯...", "효과가 없다...", "급소에 맞았다!", "필살기!",
+    "탭해서 모으기!", "이겼다!", "졌다...", "무승부", "기분 +%u", "보상은 1시간에 1번",
   },
 };
 

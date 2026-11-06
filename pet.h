@@ -81,6 +81,10 @@ enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_COU
 
 enum : uint8_t { EMOTE_NONE = 0, EMOTE_ANGRY, EMOTE_DIZZY, EMOTE_WOBBLE };
 
+// --- combate de practica (Tarea 3a)
+#define PRACTICE_JOY 3                 // premio del combate de practica...
+#define PRACTICE_EVERY_MS 3600000UL    // ...como mucho una vez por hora
+
 // medallas del individuo (bitmask)
 enum : uint16_t {
   MED_LV10 = 1 << 0, MED_LV25 = 1 << 1, MED_LV50 = 1 << 2,
@@ -241,6 +245,15 @@ public:
   // banner de la meta pendiente de mostrar (lo recoge la UI con la pantalla encendida)
   bool takeGoalBanner() { bool g = goalBanner; goalBanner = false; return g; }
 
+  // --- combate de practica (Tarea 3a)
+  // puede combatir: nacido, despierto, sin ceremonia ni evolucion en curso
+  bool canBattle() const { return !isEgg() && !sleeping && ceremony == CER_NONE && !evolving() && !starterPick; }
+  // fin de un combate de practica (gane quien gane): +PRACTICE_JOY de felicidad
+  // como mucho una vez por hora. Devuelve la felicidad dada (0 si no tocaba).
+  // No cuenta en ningun historial de victorias.
+  uint8_t practiceDone();
+  bool practiceRewardReady() const;  // el proximo combate de practica dara premio
+
   // --- trucos del IMU (Tarea 2): sin guardado inmediato
   void wakeGrumpy();     // agitar con el bicho dormido: se despierta de mal humor
   void shaken();         // agitar con el bicho despierto: se marea (o el huevo se tambalea)
@@ -297,6 +310,9 @@ private:
   uint8_t shakeN = 0;
   uint32_t lastDizzyPenalty = 0;
   bool dizzyPenalized = false;
+  // combate de practica
+  uint32_t lastPracticeReward = 0;  // millis del ultimo premio...
+  bool practiceRewarded = false;    // ...si lo hubo
 
   uint32_t today() const { return lastSeenEpoch ? lastSeenEpoch / 86400 : 0; }
   void registerCare(bool saveNow = true);   // primer cuidado del dia: racha + vinculo

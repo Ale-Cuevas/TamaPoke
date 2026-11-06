@@ -26,6 +26,8 @@ Write the result on each line: a tick, or what you saw.
 | 17 | v1.20 8 h battery drain, screen off, against v1.19 | [Steps](DEVICE_TESTS.md#steps) | screen-off drain: pending; a real day on v1.21, light use, lasted ~20 h on battery (23:00 → 19:00, 2026-11-05) |
 | 18 | v1.22 pacing: candy weight lasts, 1000 steps = −1 weight, petting bond once per 15 min, bond ≤ 14 a day | [Pacing](DEVICE_TESTS.md#pacing-v122) | pending |
 | 19 | v1.23 BOOT and the clock pill cycle 4 brightness levels; wake-only on a dim screen; kept after a restart | [Power, sleep, buttons](DEVICE_TESTS.md#power-sleep-buttons) | pending |
+| 20 | v1.24 practice battle: PLAY menu, VS card and jingle, attacks and captions, special (taps, flash, cooldown), result and reward | [Battle](DEVICE_TESTS.md#battle) | pending |
+| 21 | v1.24 battle lengths 10–20 s; big Attack sprites without stutter; heap flat over 20 battles | [Battle](DEVICE_TESTS.md#battle) | pending |
 
 Questions only the board can answer:
 - Where is the USB-C port relative to the screen's top? Bottom edge (buttons on top).

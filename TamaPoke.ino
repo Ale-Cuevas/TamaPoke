@@ -36,10 +36,11 @@
 #include "button.h"
 #include "imu.h"    // pasos y trucos de movimiento (QMI8658); SensorLib queda en imu.cpp
 #include "steps.h"  // STEP_FLUSH_MS
+#include "battle.h" // motor del combate de practica (logica pura)
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.23"
+#define FW_VERSION "1.24"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -102,7 +103,11 @@ int clockH = 12, clockM = 0;  // hora en edicion
 uint32_t bathUntil = 0;
 bool bathPending = false;
 struct { int16_t x, y; uint8_t r, ph; } bubbles[14];
-uint32_t feedMenuUntil = 0;   // selector de comida abierto hasta este millis
+// menu emergente sobre la fila de botones: comida (COMER) o juego/combate (JUGAR)
+enum : uint8_t { MENU_NONE = 0, MENU_FEED, MENU_PLAY };
+uint8_t menuKind = MENU_NONE;
+uint32_t menuUntil = 0;       // se cierra solo a este millis
+#define PLAY_MENU_X (CX - 66)  // menu de JUGAR: pelota | combate, 132 x 64
 
 // minijuego "toques": mantener la pokeball en el aire
 bool gameOpen = false;
@@ -361,6 +366,9 @@ void loop() {
     if (pwrShortPressed()) {
       screenOff = !screenOff;
       if (!screenOff) wakeUI();
+      // apagada no se dibuja, y el combate solo avanza al dibujar: al volver
+      // soltaria de golpe los ataques atrasados. Apagar la pantalla lo abandona.
+      else if (battleOpen()) closeBattle();
     }
   }
 
@@ -450,7 +458,7 @@ void onShake() {
   if (screenOff) return;  // apagada con PWR: se respeta
   if (dimStage > 0) { wakeUI(); return; }
   wakeUI();
-  if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen) return;
+  if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen || battleOpen()) return;
   if (galleryOpen || cardOpen || kbOpen || clockOpen) return;  // el bicho no esta en pantalla
   if (pet.sleeping) pet.wakeGrumpy();
   else pet.shaken();  // tambien el huevo: se tambalea
@@ -461,7 +469,7 @@ void onShake() {
 void onFaceDown(bool down) {
   if (screenOff) return;
   if (!down) { wakeUI(); return; }
-  if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen) return;
+  if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen || battleOpen()) return;
   int h = sceneHour();
   if ((h >= 20 || h < 6) && !pet.isEgg() && !pet.sleeping) pet.sleepDeferred();
   lastInteract = millis() - POWER_DIM2_MS - 1;  // casi apagada, como tras 5 min sin tocar
@@ -473,7 +481,7 @@ PowerCtx powerCtx(uint32_t now) {
   c.idleMs = idleSince(now, lastInteract);
   c.screenOff = screenOff;
   c.sleeping = pet.sleeping;
-  c.gameOpen = gameOpen || sackOpen;
+  c.gameOpen = gameOpen || sackOpen || battleOpen();  // el combate tambien va a 85 ms por frame
   c.usb = usbPresent();
   c.charging = batCharging();
   c.batPct = batPercent();
@@ -674,6 +682,10 @@ void handleSerial() {
   } else if (line.startsWith("IMULOG")) {  // IMULOG <s>: muestras en CSV (cualquier tecla para)
     long secs = line.length() > 6 ? line.substring(7).toInt() : 10;
     imuLog((uint32_t)(secs > 0 ? secs : 10) * 1000UL);
+  } else if (line == "BATTLE" || line.startsWith("BATTLE ")) {  // combate de practica [contra <dex>]
+    startPractice(line.length() > 7 ? (int16_t)line.substring(7).toInt() : 0);
+    if (!battleOpen()) Serial.println("battle: no puede (huevo, dormido, evolucionando o ya en combate)");
+    Serial.println("DONE");
   } else if (line == "SHAKE") {            // como una sacudida de verdad
     onShake();
     Serial.println("DONE");
@@ -749,6 +761,23 @@ void handleTouch() {
     return;
   }
 
+  // combate: cada toque carga el especial al momento (tocar rapido)
+  if (battleOpen()) {
+    if (pressed && !wasPressed) {
+      wakeUI();
+      battleTap(x, y);
+      if (!battleOpen()) {  // ese toque cerro el resultado: el resto del gesto no acciona nada
+        tX0 = tXl = x;
+        tY0 = tYl = y;
+        tStart = millis();
+        holdFired = true;
+        swallowGesture = true;
+      }
+    }
+    wasPressed = pressed;
+    return;
+  }
+
   if (pressed && !wasPressed) {  // empieza el gesto
     tX0 = tXl = x;
     tY0 = tYl = y;
@@ -761,7 +790,7 @@ void handleTouch() {
     tXl = x;
     tYl = y;
     // pulsacion larga sin moverse sobre el bicho -> dialogo de soltar
-    if (!holdFired && !swallowGesture && !galleryOpen && !cardOpen && !kbOpen && !clockOpen && millis() - tStart > 3000 &&
+    if (!holdFired && !swallowGesture && !galleryOpen && !cardOpen && !kbOpen && !clockOpen && !menuKind && millis() - tStart > 3000 &&
         abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && inPetZone(tX0, tY0) &&
         !pet.isEgg() && !confirmUntil && !pet.ceremony) {
       confirmUntil = millis() + 10000;
@@ -785,15 +814,15 @@ void openClock();  // prototipo
 
 void onSwipeV(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (gameOpen || galleryOpen || kbOpen || sackOpen || pet.ceremony) return;
+  if (gameOpen || galleryOpen || kbOpen || sackOpen || battleOpen() || pet.ceremony) return;
   if (clockOpen) { clockOpen = false; return; }
   if (cardOpen) {
     if (dir < 0) { cardOpen = false; itemConfirm = 0; }  // arriba cierra la ficha
     return;
   }
   if (dir > 0) {                    // deslizar abajo: ajustar hora
-    if (!confirmUntil && !feedMenuUntil) openClock();
-  } else if (!pet.isEgg() && !confirmUntil && !feedMenuUntil) {
+    if (!confirmUntil && !menuKind) openClock();
+  } else if (!pet.isEgg() && !confirmUntil && !menuKind) {
     cardOpen = true;                // deslizar arriba: ficha
     cardPage = 0;
   }
@@ -802,7 +831,7 @@ void onSwipeV(int dir) {
 // deslizar: dir +1 = hacia la derecha
 void onSwipe(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (gameOpen || kbOpen || clockOpen) return;
+  if (gameOpen || kbOpen || clockOpen || battleOpen()) return;
   if (cardOpen) {  // dentro de la ficha: cambiar entre las CARD_PAGES paginas
     int p = (int)cardPage + (dir > 0 ? -1 : 1);  // izquierda avanza
     cardPage = p < 0 ? 0 : (p > CARD_PAGES - 1 ? CARD_PAGES - 1 : p);
@@ -810,7 +839,8 @@ void onSwipe(int dir) {
     return;
   }
   if (!galleryOpen) {
-    if (!pet.ceremony && !confirmUntil) {
+    // con un menu abierto no: la galeria se abria encima del de comida
+    if (!pet.ceremony && !confirmUntil && !menuKind) {
       galleryOpen = true;
       galleryPage = 0;
       galleryDetail = 0;
@@ -880,6 +910,10 @@ void onBack() {
     sackOpen = false;
     return;
   }
+  if (battleOpen()) {                 // abandona el combate (sin premio)
+    closeBattle();
+    return;
+  }
   if (galleryOpen) {
     if (galleryDetail) {  // detalle -> rejilla
       galleryDetail = 0;
@@ -898,7 +932,7 @@ void onBack() {
   if (gameOpen) { gameOpen = false; return; }    // abandona sin premio, como tocar la cabecera
   if (choiceKind) { choiceKind = 0; return; }    // ni evoluciona ni rechaza: el boton sigue ahi
   if (confirmUntil) { confirmUntil = 0; return; }  // "soltar?": NO
-  if (feedMenuUntil) { feedMenuUntil = 0; return; }
+  if (menuKind) { menuKind = MENU_NONE; return; }
   if (foundShown) { pet.popFound(); foundShown = false; return; }  // cierra el hallazgo
 }
 
@@ -963,14 +997,22 @@ void onTap(int16_t x, int16_t y) {
     confirmUntil = 0;
     return;
   }
-  if (feedMenuUntil) {       // selector de comida
-    if (timeLeft(feedMenuUntil) && y >= 288 && y <= 352 && x >= 101 && x <= 365) {
+  if (menuKind) {            // menu de comida o de juego: un toque elige o lo cierra
+    uint8_t kind = menuKind;
+    bool live = timeLeft(menuUntil);
+    menuKind = MENU_NONE;
+    if (!live || y < 288 || y > 352) return;
+    if (kind == MENU_FEED && x >= 101 && x <= 365) {
       int item = (x - 101) / 66;
       if (item == 3) pet.feedCandy();
       else pet.feedBerry(item);
       sfxPlay(SFX_EAT);
+    } else if (kind == MENU_PLAY && x >= PLAY_MENU_X && x < PLAY_MENU_X + 132) {
+      sfxPlay(SFX_TAP);
+      if (x < CX) startGame();
+      else if (pet.canBattle()) startPractice(0);
+      else sfxPlay(SFX_DENY);
     }
-    feedMenuUntil = 0;
     return;
   }
   if (foundShown) {          // hallazgo del paseo en pantalla: un toque lo cierra
@@ -1002,9 +1044,9 @@ void onTap(int16_t x, int16_t y) {
       Serial.printf("BTN %d\n", i);
       sfxPlay(SFX_TAP);
       if (i == 0) {
-        if (!pet.sleeping) feedMenuUntil = millis() + 6000;
-      } else if (i == 1) {
-        startGame();
+        if (!pet.sleeping) { menuKind = MENU_FEED; menuUntil = millis() + 6000; }
+      } else if (i == 1) {     // jugar: pelota o combate de practica
+        if (!pet.isEgg() && !pet.sleeping && !pet.ceremony) { menuKind = MENU_PLAY; menuUntil = millis() + 6000; }
       } else if (i == 2) {
         pet.toggleLight();
       } else {
@@ -1288,7 +1330,7 @@ void printT(const char *s) {
 // mientras su "clave" no cambie no se repintan ni se vuelcan por QSPI.
 static bool staticScreen() {
   if (pet.awaitingStarter()) return true;
-  if (galleryOpen || gameOpen || sackOpen) return false;  // la galeria gestiona su propio repintado
+  if (galleryOpen || gameOpen || sackOpen || battleOpen()) return false;  // la galeria gestiona su propio repintado
   if (kbOpen || clockOpen) return true;
   return cardOpen && cardPage != 0;  // la pagina 0 tiene el retrato animado
 }
@@ -1355,6 +1397,7 @@ bool render() {
     renderSack();
     return true;
   }
+  if (battleOpen() && renderBattle()) return true;  // false: se acaba de cerrar, se pinta la casa
   if (kbOpen) {
     renderKeyboard();
     return true;
@@ -1439,11 +1482,16 @@ bool render() {
   // y por debajo de los dialogos, que las aplazan (drawWalkNews mira si hay alguno)
   drawWalkNews();
 
-  // selector de comida
-  if (feedMenuUntil) {
-    if (!timeLeft(feedMenuUntil)) {
-      feedMenuUntil = 0;
-    } else {
+  // menus emergentes: comida (4 opciones) o juego (pelota | combate)
+  if (menuKind && !timeLeft(menuUntil)) menuKind = MENU_NONE;
+  if (menuKind == MENU_PLAY) {
+    gfx->fillRoundRect(PLAY_MENU_X, 288, 132, 64, 14, UI_WHITE);
+    gfx->drawRoundRect(PLAY_MENU_X, 288, 132, 64, 14, inkColor());
+    drawMap(SPR_ICON_PLAY, 16, PLAY_MENU_X + 9, 296, 3, false);
+    drawMap(SPR_ICON_BATTLE, 16, PLAY_MENU_X + 75, 296, 3, false);
+  }
+  if (menuKind == MENU_FEED) {
+    {
       gfx->fillRoundRect(101, 288, 264, 64, 14, UI_WHITE);
       gfx->drawRoundRect(101, 288, 264, 64, 14, inkColor());
       drawMap(SPR_ICON_FOOD, 16, 110, 296, 3, false);
@@ -2059,7 +2107,7 @@ void drawCelebration() {
 // no haya otro dialogo, medalla o animacion encima (FR-1.4 / FR-1.5).
 void drawWalkNews() {
   uint32_t now = millis();
-  bool busy = screenOff || dimStage != DIM_AWAKE || choiceKind || confirmUntil || feedMenuUntil ||
+  bool busy = screenOff || dimStage != DIM_AWAKE || choiceKind || confirmUntil || menuKind ||
               pet.evolving() || bathUntil || pet.showMedal() || pet.showMilestone();
   if (!busy && !timeLeft(goalBannerUntil) && pet.takeGoalBanner()) {
     goalBannerUntil = now + 4500;
@@ -3332,4 +3380,405 @@ void drawMap(const char *const *map, int n, int x, int y, int s, bool silhouette
     forRuns(n, [&](int c) { return charKey(row[c], silhouette); },
             [&](int c0, int len, int k) { gfx->fillRect(x + c0 * s, y + r * s, len * s, s, silhouette ? INK_K : spriteColor((char)k)); });
   }
+}
+
+// ---------- combate de practica (docs/FEATURES.md, Tarea 3a) ----------
+// Un combate automatico contra un rival simulado (FR-3.1..3.5): tarjeta VS con
+// el jingle, entrada al campo y un ataque cada ATTACK_MS. Tocar la pantalla
+// carga el especial (5 toques). El motor puro (battle.h) decide cada ataque en el
+// momento en que empieza; aqui solo se anima y se cuenta. El combate por radio
+// (3d) reutilizara esta pantalla con los ataques que mande el anfitrion.
+
+enum : uint8_t { BT_OFF = 0, BT_INTRO, BT_FIGHT, BT_END };
+#define BT_VS_MS 2000      // tarjeta VS; el resto de INTRO_MS es la entrada al campo
+#define BT_HIT_MS 350      // el golpe llega a mitad del avance del atacante
+#define BT_HPBAR_MS 400    // la barra de vida baja en este tiempo
+#define BT_FAINT_MS 900    // el derrotado se desvanece
+#define BT_END_MS 7000     // el resultado se cierra solo (o con un toque)
+#define BT_HORIZON 150
+#define BT_ME_X 140        // tu bicho: abajo a la izquierda
+#define BT_ME_GROUND 352
+#define BT_FOE_X 318       // el rival: arriba a la derecha
+#define BT_FOE_GROUND 198
+
+PmdMon foePmd;  // sprite del rival: se carga antes de la intro, nunca durante el combate
+struct {
+  uint8_t phase = BT_OFF;
+  uint32_t t0 = 0;       // inicio de la fase en curso
+  Battle eng;
+  SpecialMeter meter;    // el tuyo: lo cargan tus toques
+  SpecialMeter foeMeter; // el del rival simulado: PRACTICE_AI_TAPS por ataque suyo
+  BattleEvent ev;        // ultimo ataque calculado
+  bool haveEv = false;
+  bool evSounded = false;
+  uint32_t evAt = 0;     // instante (programado) en que empezo ese ataque
+  uint16_t hpBefore[2] = { 0, 0 };
+  int16_t foeDex = 1;
+  uint8_t joy = 0;       // premio dado al acabar
+} bt;
+
+bool battleOpen() { return bt.phase != BT_OFF; }
+
+void closeBattle() {
+  bt.phase = BT_OFF;
+  foePmd.unload();
+}
+
+// empieza un combate de practica; forceDex 1-151 elige al rival (comando BATTLE <dex>)
+void startPractice(int16_t forceDex) {
+  if (!pet.canBattle() || battleOpen()) return;
+  uint32_t rng = (uint32_t)random(0x7FFFFFFF) ^ (millis() << 7);
+  PracticeFoe pf = pickPracticeFoe(pet.speciesId, pet.level(), rng);
+  if (forceDex >= 1 && forceDex <= DEX_COUNT) pf.dex = forceDex;
+  uint8_t tr = (uint8_t)((pet.trAtk + pet.trDef + pet.trSpe) / 3);  // tu entrenamiento medio
+  Fighter me = makeFighter(pet.speciesId, pet.level(), pet.geneAtk, pet.geneDef, pet.geneSpe, pet.trAtk,
+                           pet.trDef, pet.trSpe);
+  Fighter foe = makeFighter(pf.dex, pf.level, 100, 100, 100, tr, tr, tr);  // genes medios
+  bt = decltype(bt){};
+  bt.foeDex = pf.dex;
+  bt.eng.begin(me, foe, battleRand(rng));
+  bt.hpBefore[0] = me.maxHp;
+  bt.hpBefore[1] = foe.maxHp;
+  foePmd.unload();
+  foePmd.load(pf.dex, false);  // antes de la intro: leer la SD bloquea el loop
+  menuKind = MENU_NONE;
+  bt.phase = BT_INTRO;
+  bt.t0 = millis();
+  sfxPlay(SFX_BATTLE);
+  wakeUI();
+  Serial.printf("battle: #%d nv.%u contra #%d nv.%u\n", me.dex, me.level, foe.dex, foe.level);
+}
+
+void battleTap(int16_t x, int16_t y) {
+  if (bt.phase == BT_END) { closeBattle(); return; }
+  if (bt.phase != BT_FIGHT || bt.eng.over()) return;  // en la intro los toques no cuentan
+  if (bt.meter.tap()) sfxPlay(SFX_TAP);
+}
+
+// avanza el combate: calcula el siguiente ataque cuando le toca y lo hace sonar
+void battleStep(uint32_t now) {
+  if (bt.phase == BT_INTRO && now - bt.t0 >= INTRO_MS) {
+    bt.phase = BT_FIGHT;
+    bt.t0 += INTRO_MS;
+  }
+  if (bt.phase != BT_FIGHT) return;
+  if (!bt.eng.over()) {
+    uint32_t due = bt.t0 + (uint32_t)bt.eng.attacks * ATTACK_MS;
+    if ((int32_t)(now - due) >= 0) {
+      uint8_t who = bt.eng.nextAttacker();
+      bool special;
+      if (who == 0) {
+        special = bt.meter.useForAttack();
+      } else {
+        for (int i = 0; i < PRACTICE_AI_TAPS; i++) bt.foeMeter.tap();
+        special = bt.foeMeter.useForAttack();
+      }
+      bt.hpBefore[0] = bt.eng.f[0].hp;
+      bt.hpBefore[1] = bt.eng.f[1].hp;
+      bt.ev = bt.eng.step(special);
+      bt.haveEv = true;
+      bt.evSounded = false;
+      bt.evAt = due;  // el programado, no "ahora": un frame lento no desplaza el resto
+    }
+  }
+  if (bt.haveEv && !bt.evSounded && (int32_t)(now - (bt.evAt + BT_HIT_MS)) >= 0) {
+    bt.evSounded = true;
+    sfxPlay(!bt.ev.eff4 ? SFX_DENY : bt.ev.special ? SFX_SPECIAL : bt.ev.crit ? SFX_CRIT : SFX_HIT);
+  }
+  if (bt.eng.over() && bt.haveEv) {
+    bool ko = bt.ev.hp[0] == 0 || bt.ev.hp[1] == 0;
+    uint32_t endAt = bt.evAt + ATTACK_MS + (ko ? BT_FAINT_MS : 0);
+    if ((int32_t)(now - endAt) >= 0) {
+      bt.phase = BT_END;
+      bt.t0 = now;
+      bt.joy = pet.practiceDone();  // gane quien gane; como mucho una vez por hora
+      sfxPlay(bt.eng.result == BR_WIN_A ? SFX_WIN : bt.eng.result == BR_WIN_B ? SFX_LOSE : SFX_LEVEL);
+      Serial.printf("battle: %s en %u ataques, +%u felicidad\n",
+                    bt.eng.result == BR_WIN_A ? "gana" : bt.eng.result == BR_WIN_B ? "pierde" : "empate",
+                    bt.eng.attacks, bt.joy);
+    }
+  }
+}
+
+// vida que ensena la barra: baja durante BT_HPBAR_MS desde que llega el golpe
+uint16_t battleShownHp(uint8_t side, uint32_t now) {
+  if (!bt.haveEv) return bt.eng.f[side].hp;
+  uint32_t dt = now - bt.evAt;
+  uint16_t a = bt.hpBefore[side], b = bt.ev.hp[side];
+  if (dt < BT_HIT_MS) return a;
+  if (dt >= BT_HIT_MS + BT_HPBAR_MS) return b;
+  return (uint16_t)(a + ((int32_t)b - a) * (int32_t)(dt - BT_HIT_MS) / BT_HPBAR_MS);
+}
+
+const char *battleName(uint8_t side) {
+  if (side == 1) return dexName(bt.foeDex);
+  return pet.nick[0] ? pet.nick : dexName(pet.speciesId);
+}
+
+// fondo del campo: cielo por la hora, el suelo del bioma de tu bicho y dos tarimas
+void drawBattleField(int shake) {
+  int hh = sceneHour();
+  bool night = hh < 6 || hh >= 20;
+  uint16_t top, bot;
+  if (night)       { top = C565(0x0c, 0x12, 0x24); bot = C565(0x1e, 0x26, 0x46); }
+  else if (hh < 8) { top = C565(0xd1, 0x6a, 0x86); bot = C565(0xf3, 0xb8, 0x7c); }
+  else if (hh < 18){ top = C565(0x8f, 0xc8, 0xea); bot = C565(0xdc, 0xee, 0xe6); }
+  else             { top = C565(0xc7, 0x5a, 0x4a); bot = C565(0xf0, 0xae, 0x64); }
+  for (int y = 0; y < BT_HORIZON; y += 8) gfx->fillRect(0, y, 466, 8, lerp565(top, bot, y, BT_HORIZON));
+  if (night)
+    for (auto &st : STARS) gfx->fillRect(st[0], st[1] / 2 + 20, 4, 4, UI_WHITE);
+  uint8_t bio = DEX_TBL[pet.speciesId].biome;
+  uint16_t soil = BIOME_SOIL[bio < 6 ? bio : 0];
+  if (night) soil = lerp565(soil, C565(0x16, 0x1c, 0x30), 9, 16);
+  gfx->fillRect(0, BT_HORIZON, 466, 466 - BT_HORIZON, soil);
+  uint16_t pad = lerp565(soil, C565(0x10, 0x18, 0x20), 4, 16);
+  gfx->fillEllipse(BT_FOE_X + shake, BT_FOE_GROUND - 4, 74, 15, pad);
+  gfx->fillEllipse(BT_ME_X + shake, BT_ME_GROUND - 4, 88, 17, pad);
+}
+
+// uno de los dos: su sprite PMD; si no lo hay, la miniatura; si tampoco, "?"
+// maxS: tu bicho x3 y el rival x2 en el campo (los frames de ATTACK son grandes)
+void drawFighter(uint8_t side, uint8_t act, int x, int ground, uint32_t t, bool loop, bool sil, uint8_t maxS) {
+  PmdMon &m = side == 0 ? pmd : foePmd;
+  int16_t dex = side == 0 ? pet.speciesId : bt.foeDex;
+  if (m.loaded) {
+    if (!m.has(act)) act = PMD_IDLE;
+    drawPmdActM(m, act, x, ground, t, loop, sil, maxS);
+    return;
+  }
+  const uint8_t *th = thumbs.get(dex);
+  if (th) {
+    drawThumb(th, x - GAL_CELL / 2, ground - GAL_CELL, 2, sil);
+    return;
+  }
+  gfx->setTextColor(UI_INK);
+  setSize(6);
+  setCur(x - 18, ground - 60);
+  printT("?");
+}
+
+// cuadro de vida: nombre, nivel, barra (y numeros en el tuyo)
+void drawHpBox(uint8_t side, int x, int y, uint16_t hp) {
+  const Fighter &f = bt.eng.f[side];
+  int h = side == 0 ? 70 : 54;
+  gfx->fillRoundRect(x, y, 182, h, 10, UI_WHITE);
+  gfx->drawRoundRect(x, y, 182, h, 10, UI_INK);
+  gfx->setTextColor(side == 0 ? DEX_TBL[pet.speciesId].accent : DEX_TBL[bt.foeDex].accent);
+  setSize(2);
+  setCur(x + 10, y + 8);
+  printT(battleName(side));
+  char lv[10];
+  snprintf(lv, sizeof(lv), T(S_LVL_FMT), (unsigned)f.level);
+  gfx->setTextColor(UI_INK);
+  setCur(x + 10, y + 30);
+  printT(lv);
+  int bx = x + 92, bw = 80, by = y + 32;
+  int fw = f.maxHp ? (int)((uint32_t)(bw - 4) * hp / f.maxHp) : 0;
+  uint32_t pct = f.maxHp ? (uint32_t)hp * 100 / f.maxHp : 0;
+  uint16_t col = pct > 50 ? UI_BAR_OK : pct > 20 ? UI_BAR_WARN : UI_BAR_BAD;
+  gfx->fillRoundRect(bx, by, bw, 12, 4, UI_TRACK);
+  if (fw > 0) gfx->fillRoundRect(bx + 2, by + 2, fw, 8, 3, col);
+  if (side == 0) {
+    char n[16];
+    snprintf(n, sizeof(n), "%u/%u", (unsigned)hp, (unsigned)f.maxHp);
+    setCur(x + 172 - textW(n, 2), y + 50);
+    printT(n);
+  }
+}
+
+// medidor del especial: 5 pastillas; llenas laten; bloqueado tras un especial, en gris
+void drawSpecialMeter(uint32_t now) {
+  bool armed = bt.meter.armed(), locked = bt.meter.locked();
+  for (int i = 0; i < SPECIAL_TAPS; i++) {
+    int x = 248 + i * 24, y = 350;
+    if (locked) {
+      gfx->drawCircle(x, y, 8, UI_TRACK);
+    } else if (i < bt.meter.pips) {
+      uint16_t c = (armed && (now / 160) % 2) ? UI_WHITE : UI_BAR_WARN;
+      gfx->fillCircle(x, y, 8, c);
+      gfx->drawCircle(x, y, 8, UI_INK);
+    } else {
+      gfx->fillCircle(x, y, 8, UI_WHITE);
+      gfx->drawCircle(x, y, 8, UI_INK);
+    }
+  }
+}
+
+// tarjeta VS: el rival arriba, tu bicho abajo, cada mitad del color de su tipo
+void drawVsCard() {
+  uint16_t ink = UI_INK;
+  gfx->fillRect(0, 0, 466, CY - 6, lerp565(DEX_TBL[bt.foeDex].accent, UI_WHITE, 5, 8));
+  gfx->fillRect(0, CY + 6, 466, 466 - CY - 6, lerp565(DEX_TBL[pet.speciesId].accent, UI_WHITE, 5, 8));
+  gfx->fillRect(0, CY - 6, 466, 12, ink);
+  gfx->setTextColor(ink);
+  setSize(2);
+  setCur(centerX(T(S_PRACTICE), 2), 54);
+  printT(T(S_PRACTICE));
+  char lv[10];
+  for (uint8_t side = 0; side < 2; side++) {
+    const char *nm = battleName(side);
+    int y = side ? 100 : 292;
+    setSize(3);
+    uint8_t ts = textW(nm, 3) <= 300 ? 3 : 2;
+    setSize(ts);
+    gfx->setTextColor(ink);
+    setCur(centerX(nm, ts), y);
+    printT(nm);
+    snprintf(lv, sizeof(lv), T(S_LVL_FMT), (unsigned)bt.eng.f[side].level);
+    gfx->setTextColor(ink);
+    setSize(2);
+    setCur(centerX(lv, 2), y + 38);
+    printT(lv);
+  }
+  gfx->fillCircle(CX, CY, 46, UI_WHITE);
+  gfx->drawCircle(CX, CY, 46, ink);
+  gfx->drawCircle(CX, CY, 45, ink);
+  gfx->setTextColor(UI_BAR_BAD);
+  setSize(5);
+  setCur(CX - 29, CY - 18);
+  printT("VS");
+}
+
+// rotulos del ultimo golpe (desde que llega hasta el siguiente)
+void drawBattleCaption(uint32_t now) {
+  const char *l1 = nullptr, *l2 = nullptr;
+  if (!bt.haveEv || now - bt.evAt < BT_HIT_MS) {
+    if (!bt.haveEv && bt.phase == BT_FIGHT) l2 = T(S_TAP_CHARGE);  // pista hasta el primer golpe
+  } else if (!bt.ev.eff4) {
+    l1 = T(S_NO_EFFECT);
+  } else {
+    if (bt.ev.special) l1 = T(S_SPECIAL);
+    else if (bt.ev.crit) l1 = T(S_CRITICAL);
+    if (bt.ev.eff4 >= 8) l2 = T(S_SUPER_EFF);
+    else if (bt.ev.eff4 <= 2) l2 = T(S_NOT_EFF);
+  }
+  setSize(2);
+  if (l1) {
+    gfx->setTextColor(bt.ev.special ? UI_BAR_BAD : UI_INK);
+    setCur(centerX(l1, 2), l2 ? 382 : 392);
+    printT(l1);
+  }
+  if (l2) {
+    gfx->setTextColor(bt.haveEv ? UI_INK : UI_TRACK);
+    setCur(centerX(l2, 2), l1 ? 404 : 392);
+    printT(l2);
+  }
+}
+
+// Dibuja un frame del combate. false = se acaba de cerrar (render pinta la casa).
+bool renderBattle() {
+  uint32_t now = millis();
+  battleStep(now);
+  if (bt.phase == BT_END && now - bt.t0 >= BT_END_MS) {
+    closeBattle();
+    return false;
+  }
+  if (bt.phase == BT_INTRO && now - bt.t0 < BT_VS_MS) {
+    drawVsCard();
+    gfx->flush();
+    return true;
+  }
+  if (bt.phase == BT_END) {
+    drawBattleResult(now);
+    gfx->flush();
+    return true;
+  }
+
+  // que hace cada uno en este frame
+  uint8_t act[2] = { PMD_IDLE, PMD_IDLE };
+  uint32_t at[2] = { now, now };
+  bool loop[2] = { true, true }, sil[2] = { false, false }, hidden[2] = { false, false };
+  int x[2] = { BT_ME_X, BT_FOE_X }, g[2] = { BT_ME_GROUND, BT_FOE_GROUND };
+  int shake = 0;
+  bool flash = false;
+  if (bt.phase == BT_INTRO) {  // entran al campo andando, cada uno desde su lado
+    float p = (float)(now - bt.t0 - BT_VS_MS) / (INTRO_MS - BT_VS_MS);
+    if (p > 1) p = 1;
+    x[0] = (int)(-70 + (BT_ME_X + 70) * p);
+    x[1] = (int)(536 - (536 - BT_FOE_X) * p);
+    act[0] = PMD_WALKR;
+    act[1] = PMD_WALKL;
+  } else if (bt.haveEv) {
+    uint8_t a = bt.ev.attacker, d = 1 - a;
+    uint32_t dt = now - bt.evAt;
+    if (dt < 700) {  // el atacante se lanza hacia el otro y vuelve
+      act[a] = PMD_ATTACK;
+      at[a] = dt;
+      loop[a] = false;
+      float k = sinf((float)PI * (dt < 600 ? dt : 600) / 600.0f);
+      x[a] += (int)(k * (a == 0 ? 34 : -34));
+      g[a] += (int)(k * (a == 0 ? -24 : 24));
+    }
+    bool ko = bt.ev.hp[d] == 0;
+    if (dt >= BT_HIT_MS && dt < BT_HIT_MS + 500 && bt.ev.damage) {  // encaja el golpe
+      act[d] = PMD_HURT;
+      at[d] = dt - BT_HIT_MS;
+      x[d] += (int)(4 * sinf(dt * 0.12f));
+    }
+    if (ko && dt >= BT_HIT_MS + 400) {  // se desvanece y se hunde
+      uint32_t f = dt - BT_HIT_MS - 400;
+      if (f >= BT_FAINT_MS || bt.phase == BT_END) hidden[d] = true;
+      sil[d] = (f / 90) % 2;
+      g[d] += (int)(f * 40 / BT_FAINT_MS);
+      act[d] = PMD_HURT;
+    }
+    if (bt.ev.special && dt >= BT_HIT_MS && dt < BT_HIT_MS + 350) {  // destello y temblor
+      shake = (int)(8 * sinf(dt * 0.15f));
+      flash = dt < BT_HIT_MS + 90;
+    }
+  }
+
+  drawBattleField(shake);
+  // el rival primero (esta mas lejos); en pleno ataque, el atacante encima
+  uint8_t order[2] = { 1, 0 };
+  if (bt.haveEv && bt.phase == BT_FIGHT) {
+    order[0] = 1 - bt.ev.attacker;
+    order[1] = bt.ev.attacker;
+  }
+  for (uint8_t side : order)
+    if (!hidden[side])
+      drawFighter(side, act[side], x[side] + shake, g[side], at[side], loop[side], sil[side], side == 0 ? 3 : 2);
+  drawHpBox(1, 80, 64, battleShownHp(1, now));
+  drawHpBox(0, 222, 258, battleShownHp(0, now));
+  if (bt.phase == BT_FIGHT) {
+    drawSpecialMeter(now);
+    drawBattleCaption(now);
+  }
+  if (flash) gfx->fillCircle(CX, CY, 231, UI_WHITE);
+  gfx->flush();
+  return true;
+}
+
+// Resultado: el ganador posa en el centro (en un empate, los dos), el titulo
+// arriba y el premio abajo. Un toque, la tecla USER o BT_END_MS lo cierran.
+void drawBattleResult(uint32_t now) {
+  drawBattleField(0);
+  uint32_t t = now - bt.t0;
+  if (bt.eng.result == BR_DRAW) {
+    drawFighter(0, PMD_IDLE, CX - 84, 300, t, true, false, 3);
+    drawFighter(1, PMD_IDLE, CX + 84, 300, t, true, false, 3);
+  } else {
+    drawFighter(bt.eng.result == BR_WIN_A ? 0 : 1, PMD_POSE, CX, 306, t, true, false, 4);
+  }
+  const char *l1 = bt.eng.result == BR_WIN_A ? T(S_WIN) : bt.eng.result == BR_WIN_B ? T(S_LOSE) : T(S_DRAW);
+  gfx->fillRoundRect(98, 50, 270, 50, 14, UI_BAR_WARN);
+  gfx->drawRoundRect(98, 50, 270, 50, 14, UI_INK);
+  gfx->setTextColor(UI_INK);
+  setSize(3);
+  uint8_t ts = textW(l1, 3) <= 250 ? 3 : 2;
+  setSize(ts);
+  setCur(centerX(l1, ts), ts == 3 ? 64 : 68);
+  printT(l1);
+  char l2[40];
+  if (bt.joy) snprintf(l2, sizeof(l2), T(S_PRACTICE_JOY_FMT), (unsigned)bt.joy);
+  const char *r = bt.joy ? l2 : T(S_PRACTICE_NONE);
+  gfx->fillRoundRect(83, 330, 300, 64, 14, UI_WHITE);
+  gfx->drawRoundRect(83, 330, 300, 64, 14, UI_INK);
+  gfx->setTextColor(bt.joy ? UI_BAR_OK : UI_INK);
+  setSize(2);
+  setCur(centerX(r, 2), 342);
+  printT(r);
+  gfx->setTextColor(UI_TRACK);
+  setCur(centerX(T(S_BACK), 2), 368);
+  printT(T(S_BACK));
 }

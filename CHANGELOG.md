@@ -8,6 +8,50 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.24] - 2026-11-05
+
+Practice battles, part 3a of the link task in
+[docs/FEATURES.md](docs/FEATURES.md#3a-battle-engine-and-practice-battle): the
+battle engine, its screen, and a battle against a simulated opponent on one
+board. Saves from v1.23 load as they are.
+
+### Added
+
+- **Practice battle**, from the new PLAY menu (ball game | battle) or `BATTLE
+  [<dex>]` over serial. An automatic battle against a line of your egg rarity at
+  your level ±3, with average genes and your average training: a VS card with
+  an intro jingle, the pets walk in, then one attack every 1.3 s with the PMD
+  Attack and Hurt animations, HP bars, and captions (super effective, not very
+  effective, no effect, critical, special). Your pet stands bottom-left, the
+  opponent top-right. The result screen shows the winner posing.
+- **The special attack:** tapping the battle screen fills a 5-pip meter; when
+  full, your next attack has 30 % more power, a flash and a shake, then the
+  meter rests for 2 attacks. Taps during the intro don't count.
+- **Reward:** +3 JOY at most once an hour, win or lose; USER quits with none.
+- `battle.h`, the pure engine (shared with the coming linked battles): card
+  stats with the level capped at 100, Gen 1 damage, every hit 5–25 % of max HP
+  (30 % for a special), 1 in 16 critical, faster first, 15 attacks at most,
+  deterministic for a seed (xorshift32).
+- **Gen 1 types:** the Pokédex gets Flying and the second type of the 62
+  dual-type species (`TYPE2` in `tools/dex_data.py`), plus each line's base form;
+  `dex.h` carries `type1`, `type2` and `base`. Battles use the full 15-type
+  chart, with its Gen 1 quirks.
+- Sounds: the intro jingle and hit, critical, special, win and lose effects. A
+  crossed-swords icon for the menu. The new texts in all 8 languages.
+- Tests: `test/test_battle.cpp` (type spot checks, damage clamps, the special
+  and its cooldown, turn order, determinism, and all 151×151 pairings at levels
+  5, 30 and 100: every battle lasts 7–15 attacks and the clearly stronger pet
+  wins), the type and base fields in `test_dex.cpp` and `test_tools.py`, the
+  practice reward in `test_pet.cpp`. Render scenes for the menu, the VS card,
+  the field, a special, the result and a draw.
+
+### Changed
+
+- The FOOD menu is now one of two pop-up menus (`menuKind`), and neither lets a
+  horizontal swipe open the Pokédex on top of it any more.
+- `audio.cpp`'s effect table is sized by its entries and checked against
+  `SFX_COUNT`: a sound added to the enum and not to the table no longer
+  compiles (it used to play silence).
 ## [1.23] - 2026-11-05
 
 ### Added

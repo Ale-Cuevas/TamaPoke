@@ -14,6 +14,12 @@ enum Sfx : uint8_t {
   SFX_DENY,     // accion no permitida
   SFX_BYE,      // despedida
   SFX_LEVEL,    // sube de nivel
+  SFX_BATTLE,   // jingle de entrada al combate (~2,5 s)
+  SFX_HIT,      // golpe normal
+  SFX_CRIT,     // golpe critico
+  SFX_SPECIAL,  // ataque especial
+  SFX_WIN,      // victoria
+  SFX_LOSE,     // derrota
   SFX_COUNT
 };
 

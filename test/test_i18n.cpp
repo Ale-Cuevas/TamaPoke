@@ -61,6 +61,7 @@ static const ExpectedFmt EXPECTED[] = {
   { S_STEPS_TOTAL_FMT, "%lu" },
   { S_FINDS_FMT,       "%u,%u" },
   { S_USE_FMT,         "%s" },
+  { S_PRACTICE_JOY_FMT, "%u" },
 };
 static const int NUM_EXPECTED = (int)(sizeof(EXPECTED) / sizeof(EXPECTED[0]));
 

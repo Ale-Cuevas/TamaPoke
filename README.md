@@ -1,7 +1,7 @@
 # TamaPoke
 
 ![Board](https://img.shields.io/badge/board-ESP32--S3%20AMOLED%202.16-E7352C?logo=espressif&logoColor=white)
-![Firmware](https://img.shields.io/badge/firmware-v1.23-8A2BE2)
+![Firmware](https://img.shields.io/badge/firmware-v1.24-8A2BE2)
 [![CI](https://github.com/Ale-Cuevas/TamaPoke/actions/workflows/ci.yml/badge.svg)](https://github.com/Ale-Cuevas/TamaPoke/actions/workflows/ci.yml)
 ![Code](https://img.shields.io/badge/code-MIT-blue)
 ![Languages](https://img.shields.io/badge/languages-8-FFCB05)
@@ -44,6 +44,13 @@ captures from the board and rendered on the PC; the on-board checks (step
 accuracy, battery drain, 400 kHz I2C) are listed in
 [docs/DEVICE_TESTS.md](docs/DEVICE_TESTS.md#steps).
 
+**v1.24: practice battles.** PLAY now opens a small menu: the ball game, or a
+**battle** against a simulated opponent of your rarity and level. Battles are
+automatic and use real Gen 1 base stats and types (Flying and dual types
+included); tapping the screen charges a special attack. Built, host-tested
+(every one of the 151×151 pairings at three levels) and rendered on the PC; the
+on-board checks are in [docs/DEVICE_TESTS.md](docs/DEVICE_TESTS.md#battle).
+
 The game itself runs on the 1.75" hardware upstream. Implemented: the 151 +
 shinies animated from microSD, full life cycle (egg by rarity → evolution → farewell/release/runaway, each gated
 behind a decision dialog), bred-Pokédex with gallery, battle stats (genes +
@@ -85,7 +92,8 @@ While **awake**, per minute:
 - 🍎 **Berry** (3 flavors): +25 FOOD. Each species has a **hidden favorite flavor**
   → +35 FOOD, +10 JOY, ♥, bond, and it gets revealed.
 - 🍬 **Candy:** +10 FOOD, +12 JOY, but **+12 weight** (fattening).
-- ⚽ **Play / minigame:** +JOY, −ENE; the minigame trains **SPEED** and burns weight.
+- ⚽ **Play:** a menu with the **ball minigame** (+JOY, −ENE; trains **SPEED** and burns weight)
+  and a **practice battle** (+3 JOY, at most once an hour; see Battles below).
 - 🥊 **Training bag:** trains **STRENGTH** (~4 hits = 1 pt, cap +18/session), tires it.
 - 🫧 **Bath:** clears poops, HYG → 100.
 - 👆 **Pet it:** +5 JOY + bond.
@@ -143,7 +151,32 @@ After any ending, a **new egg** appears.
 ### Battle stats
 ATK / DEF / SPD = real **Gen-1 base** × genes + level + training (STRENGTH ← bag,
 SPEED ← minigame, DEFENSE ← 12 h of unbroken good care; vitamins from walks add
-+3 each). *(Battles: on the roadmap.)*
++3 each). They are what battles use, with the level capped at 100.
+
+### Battles (practice, v1.24)
+
+![The VS card, a special attack landing, and a win](docs/images/battle-216.png)
+
+PLAY → the crossed swords. A battle is **automatic**: the pets take turns
+attacking until one faints, in 10–20 s after a 3 s VS card and jingle.
+- **Your opponent** is simulated: a Pokémon line of the same egg rarity as
+  yours, at your level ±3 (evolved as far as that level allows), with average
+  genes and your average training.
+- **Who wins:** real **Gen 1 base stats** × genes + level + training, and the
+  **Gen 1 type chart** (15 types, dual types multiply, e.g. Electric is ×4 on
+  Gyarados and does nothing to Diglett). The faster pet attacks first each
+  round; 1 hit in 16 is a critical (×1.5).
+- Every hit takes **5–25 %** of the target's max HP, so a battle is never over
+  in fewer than 7 attacks, and after **15 attacks** the pet with more HP left
+  wins (an exact tie is a draw).
+- **Your one input: tap the screen.** 5 taps fill the meter, and your next
+  attack is a **special** (+30 % power, up to 30 %, with a flash and a shake).
+  After a special the meter rests for 2 normal attacks. The opponent charges
+  its own.
+- **Reward:** +3 JOY whether you win or lose, at most once an hour. Practice
+  isn't counted in any win/loss record. The USER key, or switching the screen
+  off with PWR, quits with no reward.
+- Battles between two boards over the air are next (see the roadmap).
 
 ### Steps, finds & the Backpack (v1.20)
 
@@ -334,7 +367,8 @@ If one bottoms out it counts as a *slip-up*.
 **Buttons (bottom arc, icons):**
 - 🍎 **Feed** → food menu: 3 berries (each species has a hidden favourite that
   gives a bonus) and a candy (+happiness but it fattens; weight makes it sluggish).
-- ⚽ **Play** → the pokeball minigame (trains SPEED).
+- ⚽ **Play** → a menu: the pokeball minigame (trains SPEED) or a practice
+  battle (crossed swords).
 - 🌙 **Light** → sleep/wake (recovers energy, dims the screen). While asleep,
   needs decay much slower (rest).
 - 🫧 **Bath** → a foam scene that cleans up the poops.
@@ -471,6 +505,8 @@ beach, forest, volcano, mountain, snow). Sleeping forces night.
 - `board_amoled_216.h` — every pin and I2C address of the board, with sources
 - `rtcbat.h` / `rtcbat.cpp` — PCF85063 RTC + AXP2101 PMU (battery, brightness, PWR button)
 - `imu.h` / `imu.cpp` — QMI8658 accelerometer: configuration and its own chunked FIFO reader
+- `battle.h` — the battle engine: Gen 1 type chart, damage, special meter, the practice opponent
+  (pure code, tested on the PC)
 - `steps.h` / `motion.h` — the software step counter and the shake / face-down / tilt detectors
   (pure code, tested on the PC against captures from the board in `test/data/imu/`)
 - `audio.h` / `audio.cpp` — ES8311 + I2S + Game-Boy-style tone synth (non-blocking task)
@@ -526,7 +562,8 @@ runaway-ready state) · `WIPE` (factory reset → new game) · `BEEP` (audio tes
 `LS` / `PUT` (SD files) · `STEPS <n>` (add n steps through the IMU's path) ·
 `IMU` (FIFO reads, samples/s, acceleration, tilt) · `IMULOG <s>` (stream samples
 as CSV, the `test/data/imu/` format; any key stops it) · `SHAKE` /
-`FACEDOWN` / `FACEDOWN 0` (inject the motion events).
+`FACEDOWN` / `FACEDOWN 0` (inject the motion events) · `BATTLE` / `BATTLE <dex>`
+(a practice battle, against a random or the given species; the result is logged).
 
 To test fast: lower `PET_TICK_MS`, `MINUTES_PER_LEVEL` and `FAREWELL_AGE_MIN` in `pet.h`.
 
@@ -538,10 +575,12 @@ Specified in [docs/FEATURES.md](docs/FEATURES.md), each one its own task:
   walk care and items found on walks, kept in a Backpack.
 - ~~**Easter eggs**~~ — done in v1.20: shake to wake, face-down lights out,
   tilt & slide.
+- ~~**Practice battle**~~ — done in v1.24: the battle engine (Gen 1 types and
+  stats, tap-charged special, PMD Attack/Hurt animations) against a simulated
+  opponent on one board.
 - **Link** — two nearby boards meet over ESP-NOW for playdates (visit & play,
-  gifts, friendship egg) and battles (auto-battle with a tap-charged special
-  attack, ATK/DEF/SPD and Gen 1 types, PMD Attack/Hurt animations). Starts with
-  a practice battle on one board; includes a build for the round 1.75" board.
+  gifts, friendship egg) and battles, on the v1.24 engine; includes a build for
+  the round 1.75" board.
 - **Wild encounters** — later, reusing the battle engine.
 - **Soak test** 24–48 h (instrumentation ready: `HEALTH` command/heartbeat).
 
