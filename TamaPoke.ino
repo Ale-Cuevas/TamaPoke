@@ -40,10 +40,11 @@
 #include "wind.h"   // viento del paisaje: hierba, flores y copas que se mecen (logica pura)
 #include "burnin.h" // contra el quemado del AMOLED: orbita de la imagen y salvapantallas (logica pura)
 #include "fx.h"     // efectos de respuesta: celebraciones en cola, "+N", botones, eclosion (logica pura)
+#include "ballgame.h" // minijuego de la pokeball: velocidad segun la puntuacion y la fisica (logica pura)
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.32"
+#define FW_VERSION "1.34"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -112,14 +113,20 @@ struct { int16_t x, y; uint8_t r, ph; } bubbles[14];
 enum : uint8_t { MENU_NONE = 0, MENU_FEED, MENU_PLAY };
 uint8_t menuKind = MENU_NONE;
 uint32_t menuUntil = 0;       // se cierra solo a este millis
-#define PLAY_MENU_X (CX - 66)  // menu de JUGAR: pelota | combate, 132 x 64
+// menu de JUGAR (v1.34): pelota | combate | saco de entrenamiento, 3 huecos de 66 como los
+// del menu de comida, 198 x 64. Todos los juegos estan aqui; el saco antes salia de la ficha.
+#define PLAY_MENU_SLOT 66
+#define PLAY_MENU_W (3 * PLAY_MENU_SLOT)
+#define PLAY_MENU_X (CX - PLAY_MENU_W / 2)
 
 // minijuego "toques": mantener la pokeball en el aire
 bool gameOpen = false;
 uint32_t gameOverUntil = 0;
-float ballX, ballY, ballVX, ballVY, gamePetX;
+BallState ball;              // la pokeball (ballgame.h)
+float gamePetX;
 uint32_t lastGameStep = 0;  // ultima llamada a stepGame(): fisica por tiempo real, no por frame
 uint8_t gameScore, gameMisses;
+bool gameNoSave = false;    // partida abierta con el comando BALL: no toca el record ni da premio
 float hitX, hitY;             // ultimo golpe (anillo de impacto)
 uint32_t hitTime = 0;
 bool gameNewHi = false;
@@ -791,6 +798,21 @@ void handleSerial() {
     startPractice(line.length() > 7 ? (int16_t)line.substring(7).toInt() : 0);
     if (!battleOpen()) Serial.println("battle: no puede (huevo, dormido, evolucionando o ya en combate)");
     Serial.println("DONE");
+  } else if (line == "BALL" || line.startsWith("BALL ")) {  // BALL <puntos>: el minijuego con esa puntuacion
+    long n = line.length() > 5 ? line.substring(5).toInt() : 0;  // para notar 1x, 1,5x, 2x sin llegar jugando
+    if (n < 0) n = 0;
+    if (n > 255) n = 255;
+    wakeUI();
+    menuKind = MENU_NONE;
+    startGame();
+    if (!gameOpen) {
+      Serial.println("ball: no puede (huevo, dormido o despedida)");
+    } else {
+      gameScore = (uint8_t)n;
+      gameNoSave = true;  // ni record ni premio: el guardado del bicho no cambia
+      Serial.printf("ball: score=%ld speed=%.2f\n", n, ballSpeed((uint16_t)n));
+    }
+    Serial.println("DONE");
   } else if (line == "SHAKE") {            // como una sacudida de verdad
     onShake();
     Serial.println("DONE");
@@ -1077,12 +1099,7 @@ void onTap(int16_t x, int16_t y) {
   if (cardOpen) {
     if (cardPage == 4) { walkTap(x, y); return; }  // paseo: mochila
     if (cardPage == 0 && y < 84) openKeyboard();  // tocar el nombre = renombrar
-    else if (cardPage == 1 && y >= 300 && y <= 340 && x >= 96 && x <= 370) {
-      cardOpen = false;            // boton ENTRENAR FUERZA
-      startSack();
-    } else {
-      cardOpen = false;
-    }
+    else cardOpen = false;
     return;
   }
   if (gameOpen) {
@@ -1121,9 +1138,11 @@ void onTap(int16_t x, int16_t y) {
       else pet.feedBerry(item);
       fxNeeds(ns);  // "+25" sobre la barra de comida
       sfxPlay(SFX_EAT);
-    } else if (kind == MENU_PLAY && x >= PLAY_MENU_X && x < PLAY_MENU_X + 132) {
+    } else if (kind == MENU_PLAY && x >= PLAY_MENU_X && x < PLAY_MENU_X + PLAY_MENU_W) {
       sfxPlay(SFX_TAP);
-      if (x < CX) startGame();
+      int slot = (x - PLAY_MENU_X) / PLAY_MENU_SLOT;  // pelota | combate | saco
+      if (slot == 0) startGame();
+      else if (slot == 2) startSack();
       else if (pet.canBattle()) startPractice(0);
       else {
         sfxPlay(SFX_DENY);
@@ -1924,13 +1943,14 @@ bool render() {
   fxPerfNote(fxUs + (micros() - fxT0));
   drawWalkNews();
 
-  // menus emergentes: comida (4 opciones) o juego (pelota | combate)
+  // menus emergentes: comida (4 opciones) o juego (pelota | combate | saco)
   if (menuKind && !timeLeft(menuUntil)) menuKind = MENU_NONE;
   if (menuKind == MENU_PLAY) {
-    gfx->fillRoundRect(PLAY_MENU_X, 288, 132, 64, 14, UI_WHITE);
-    gfx->drawRoundRect(PLAY_MENU_X, 288, 132, 64, 14, inkColor());
+    gfx->fillRoundRect(PLAY_MENU_X, 288, PLAY_MENU_W, 64, 14, UI_WHITE);
+    gfx->drawRoundRect(PLAY_MENU_X, 288, PLAY_MENU_W, 64, 14, inkColor());
     drawMap(SPR_ICON_PLAY, 16, PLAY_MENU_X + 9, 296, 3, false);
-    drawMap(SPR_ICON_BATTLE, 16, PLAY_MENU_X + 75, 296, 3, false);
+    drawMap(SPR_ICON_BATTLE, 16, PLAY_MENU_X + PLAY_MENU_SLOT + 9, 296, 3, false);
+    drawMap(SPR_ICON_SACK, 16, PLAY_MENU_X + 2 * PLAY_MENU_SLOT + 9, 296, 3, false);
   }
   if (menuKind == MENU_FEED) {
     {
@@ -1989,6 +2009,7 @@ void startGame() {
   gameScore = 0;
   gameMisses = 0;
   gameNewHi = false;
+  gameNoSave = false;
   hitTime = 0;
   gamePetX = 233;
   lastGameStep = millis();
@@ -1996,12 +2017,7 @@ void startGame() {
 }
 
 void respawnBall() {
-  ballX = 150 + random(166);
-  ballY = 96;
-  float sp = 1.6f + gameScore * 0.05f;  // mas viva segun avanzas
-  if (sp > 4.0f) sp = 4.0f;
-  ballVX = random(2) ? sp : -sp;
-  ballVY = 0;
+  ballSpawn(ball, 150 + random(166), random(2) ? 1 : -1);
 }
 
 void gameTap(int16_t x, int16_t y) {
@@ -2010,66 +2026,47 @@ void gameTap(int16_t x, int16_t y) {
     gameOpen = false;
     return;
   }
-  float dx = ballX - x, dy = ballY - y;
+  float dx = ball.x - x, dy = ball.y - y;
   if (dx * dx + dy * dy < 74 * 74) {  // toque a la bola!
     gameScore++;
     sfxPlay(SFX_PLAY);
-    // golpe mas suave: impulso moderado que crece poco a poco con la puntuacion
-    float lift = 6.6f + (gameScore > 16 ? 3.5f : gameScore * 0.22f);
-    ballVY = -lift;
-    ballVX += dx * 0.12f;
-    if (ballVX > 6.5f) ballVX = 6.5f;
-    if (ballVX < -6.5f) ballVX = -6.5f;
-    hitX = ballX;
-    hitY = ballY;
+    ballHit(ball, dx);  // siempre el mismo impulso: lo que sube con los puntos es la velocidad
+    hitX = ball.x;
+    hitY = ball.y;
     hitTime = millis();
   }
 }
 
 void stepGame() {
   uint32_t now = millis();
-  // paso relativo a 85 ms, el periodo de frame con el que se afinaron estas
-  // constantes (ver el planificador de render en loop()): sin esto la fisica
-  // avanzaba "un paso por frame" y el juego iba mas rapido o mas lento segun
-  // lo que tardara en dibujarse el frame anterior, que depende del tamano del
-  // sprite cargado. Con un Charizard la bola caia mas despacio que con un
-  // Diglett, asi que el record no era comparable entre especies.
-  float k = lastGameStep ? (now - lastGameStep) / 85.0f : 1.0f;
-  if (k > 3.0f) k = 3.0f;  // frame anormalmente tardio: no dar un salto enorme
+  // pasos de 85 ms, el periodo de frame con el que se afinaron las constantes (ver el
+  // planificador de render en loop()): sin esto la fisica avanzaba "un paso por frame" y el
+  // juego iba mas rapido o mas lento segun lo que tardara en dibujarse el frame anterior, que
+  // depende del tamano del sprite cargado. Por encima, el factor de velocidad de la
+  // puntuacion (ballgame.h, v1.33): 1x con 1 punto, 2x con 80.
+  float k = lastGameStep ? ballStepK(now - lastGameStep, gameScore) : ballSpeed(gameScore);
   lastGameStep = now;
 
-  float grav = 0.40f + gameScore * 0.013f;  // cae un poco mas rapido cada vez
-  if (grav > 0.80f) grav = 0.80f;
-  ballVY += grav * k;
-  ballX += ballVX * k;
-  ballY += ballVY * k;
-  // rebote en la pared circular
-  float dx = ballX - CX, dy = ballY - CY;
-  float d = sqrtf(dx * dx + dy * dy);
-  if (d > 205) {
-    float nx = dx / d, ny = dy / d;
-    float dot = ballVX * nx + ballVY * ny;
-    if (dot > 0) {
-      ballVX = (ballVX - 2 * dot * nx) * 0.85f;
-      ballVY = (ballVY - 2 * dot * ny) * 0.85f;
-    }
-    ballX = CX + nx * 205;
-    ballY = CY + ny * 205;
-  }
-  if (ballY > 384) {  // al suelo
+  ballStep(ball, k);  // gravedad, movimiento y rebote en la pared circular
+  if (ballOnFloor(ball)) {
     if (++gameMisses >= 3) {
-      gameNewHi = (gameScore > pet.gameHi);
-      FxNeedSnap ns = fxSnap();
-      pet.playResult(gameScore);  // actualiza el record y da felicidad
-      fxNeeds(ns);  // los "+N" salen al volver a la pantalla principal
-      sfxPlay(gameNewHi && gameScore > 0 ? SFX_MEDAL : SFX_LEVEL);
+      if (gameNoSave) {  // partida del comando BALL: ni record ni premio
+        gameNewHi = false;
+        sfxPlay(SFX_LEVEL);
+      } else {
+        gameNewHi = (gameScore > pet.gameHi);
+        FxNeedSnap ns = fxSnap();
+        pet.playResult(gameScore);  // actualiza el record y da felicidad
+        fxNeeds(ns);  // los "+N" salen al volver a la pantalla principal
+        sfxPlay(gameNewHi && gameScore > 0 ? SFX_MEDAL : SFX_LEVEL);
+      }
       gameOverUntil = millis() + 4000;
     } else {
       respawnBall();
     }
   }
-  // el bicho la sigue por abajo
-  float chase = (ballX - gamePetX) * 0.12f;
+  // el bicho la sigue por abajo (a la velocidad del juego: k ya la lleva)
+  float chase = (ball.x - gamePetX) * 0.12f;
   if (chase > 7) chase = 7;
   if (chase < -7) chase = -7;
   gamePetX += chase * k;
@@ -2259,7 +2256,7 @@ void renderGame() {
   }
 
   if (pmd.loaded) {
-    uint8_t act = (ballX > gamePetX + 4) ? PMD_WALKR : (ballX < gamePetX - 4) ? PMD_WALKL : PMD_IDLE;
+    uint8_t act = (ball.x > gamePetX + 4) ? PMD_WALKR : (ball.x < gamePetX - 4) ? PMD_WALKL : PMD_IDLE;
     if (!pmd.has(act)) act = PMD_IDLE;
     drawPmdAct(act, (int)gamePetX, 394, millis(), true, false, 3);
   } else if (mon.loaded) {
@@ -2285,7 +2282,7 @@ void renderGame() {
   }
 
   // la pokeball
-  drawMap(SPR_ICON_PLAY, 16, (int)ballX - 24, (int)ballY - 24, 3, false);
+  drawMap(SPR_ICON_PLAY, 16, (int)ball.x - 24, (int)ball.y - 24, 3, false);
 
   gfx->flush();
 }
@@ -3032,24 +3029,18 @@ void renderCardProfile() {
   printT(T(S_RENAME_HINT));
 }
 
-// pagina 1: combate (4 barras + boton de entrenar)
+// pagina 1: combate (4 barras). El saco de entrenamiento ya no sale de aqui sino del menu de
+// JUGAR (v1.34), con los otros juegos: las barras ocupan el sitio del boton.
 void renderCardStats() {
   gfx->setTextColor(UI_INK);
   setSize(3);
   setCur(centerX(T(S_BATTLE), 3), 48);
   printT(T(S_BATTLE));
 
-  drawCardStat(118, T(S_STAT_ATK), pet.atkStat(), 260, UI_BAR_BAD);
-  drawCardStat(160, T(S_STAT_DEF), pet.defStat(), 260, 0x4C98);
-  drawCardStat(202, T(S_STAT_SPE), pet.speStat(), 260, UI_BAR_WARN);
-  drawCardStat(244, T(S_STAT_WGT), pet.weight, 100, 0xB3C8);
-
-  // boton: saco de entrenamiento de fuerza
-  gfx->fillRoundRect(96, 300, 274, 40, 12, UI_BAR_BAD);
-  gfx->setTextColor(UI_BG_DAY);
-  setSize(2);
-  setCur(centerX(T(S_TRAIN_STR), 2), 311);
-  printT(T(S_TRAIN_STR));
+  drawCardStat(124, T(S_STAT_ATK), pet.atkStat(), 260, UI_BAR_BAD);
+  drawCardStat(180, T(S_STAT_DEF), pet.defStat(), 260, 0x4C98);
+  drawCardStat(236, T(S_STAT_SPE), pet.speStat(), 260, UI_BAR_WARN);
+  drawCardStat(292, T(S_STAT_WGT), pet.weight, 100, 0xB3C8);
 }
 
 // pagina 2: medallas con etiqueta descriptiva

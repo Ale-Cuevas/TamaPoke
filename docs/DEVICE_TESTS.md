@@ -286,3 +286,23 @@ sleep=…`). Banners wait while the pet sleeps, so wake it first. `PERF` prints 
 - [ ] A care slip-up with the screen on: "!" bubble and a soft falling sound (`FX oops`).
 - [ ] `PERF` while a level-up, the floats and the hatch play: `fx` stays under 3000 us.
 
+
+### Games (v1.33)
+([GAMEPLAY_TUNING.md, #1 BALL](GAMEPLAY_TUNING.md#1-ball-the-ball-game-speeds-up-all-the-time).) `BALL <score>`
+over serial opens the ball game at that score and prints `ball: score=<n> speed=<x>`. A game opened that way
+doesn't touch the record or give rewards.
+- [ ] `BALL 1`, `BALL 40`, `BALL 80`: the ball follows the same arcs, faster each time; at 80 it is in the air
+  about half as long as at 1 (`speed=1.00`, `1.49`, `2.00`).
+- [ ] `BALL 159`: 3× (`speed=3.00`); still possible to hit, the ball never jumps through the finger.
+- [ ] A normal game from PLAY: the ball speeds up with every point, with no plateau past ~48 as before.
+- [ ] The pet still follows the ball along the ground at every speed.
+
+### Games menu (v1.34)
+([GAMEPLAY_TUNING.md, #4 GAMES](GAMEPLAY_TUNING.md#4-games-all-games-in-the-play-menu).)
+- [ ] PLAY opens a wider menu with three icons: ball | crossed swords | red bag. Each slot starts its game: the
+  ball game, a practice battle, the training bag (10 s of hits, then the result as before).
+- [ ] While the pet is evolving or can't battle, the swords slot still shakes PLAY with the deny sound; the
+  ball and bag slots still work.
+- [ ] The stat card's Battle page shows only the four bars (ATK, DEF, SPD, WGT), spread over the page, with no
+  button; a tap anywhere on it closes the card.
+- [ ] USER = back still quits the bag (no reward while the time runs).

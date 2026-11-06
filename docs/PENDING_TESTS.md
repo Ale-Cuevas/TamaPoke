@@ -35,6 +35,8 @@ Write the result on each line: a tick, or what you saw.
 | 26 | v1.30 feedback effects: level-up (jingle in the dark, animation on wake), banners one at a time, "+N" floats, hatch, button shake | [Feedback](DEVICE_TESTS.md#feedback-v130) | serial ✓ (2026-11-05, pet asleep): every `FX` overlay draws in at most 1.5 ms (40 us idle, hatch 1.05 ms); banners wait while the pet sleeps (`queue=2 busy=1 sleep=1`). With the pet awake: look, sounds, banner draw time pending |
 | 27 | v1.31 sleep brightness: a sleeping pet keeps the awake brightness (level, 60 dimmed, 40 screensaver); clock gray unchanged; a night's drain | [Power, sleep, buttons](DEVICE_TESTS.md#power-sleep-buttons) | pending |
 | 28 | v1.32 PWR cycle: game → screensaver → off → game, awake and asleep; from the 5-min screensaver and a dimmed screen; wake paths; stays while eating; quits a battle; 4 s power-off | [Power, sleep, buttons](DEVICE_TESTS.md#power-sleep-buttons) | pending |
+| 29 | v1.33 ball game: speed rises with every point (`BALL 1`, `BALL 80`: same arcs, half the time in the air at 80), still playable at 80 and fun on the way | [Games](DEVICE_TESTS.md#games-v133) | pending |
+| 30 | v1.34 games menu: PLAY has ball, battle and training bag; each slot starts its game; the stat card has no training button | [Games menu](DEVICE_TESTS.md#games-menu-v134) | pending |
 
 Questions only the board can answer:
 - Where is the USB-C port relative to the screen's top? Bottom edge (buttons on top).

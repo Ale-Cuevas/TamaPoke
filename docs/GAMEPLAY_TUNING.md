@@ -132,6 +132,19 @@ Make speed one number that scales time for the whole simulation.
 
 The saved high score `gameHi` was set under the old ramps. It stays as it is.
 
+### Built in v1.33
+
+- `ballgame.h` holds more than the plan said: the whole step (`ballStep`: gravity, movement,
+  wall bounce), the tap (`ballHit`) and the spawn (`ballSpawn`), with a `BallState` struct in
+  place of the four `ballX/ballY/ballVX/ballVY` globals. The host test then runs the same
+  physics as the board.
+- The arc is integrated exactly (`y += vy·k + ½·g·k²`), not with the old semi-implicit step.
+  That makes the path independent of the step length, so 2× really is the same arc in half
+  the time (34 frames in the air at 1×, 17 at 2×, 12 at 3×). At 1× this adds about one frame
+  of air time compared with the old score-1 game.
+- `BALL <score>` sets `gameNoSave`: that game ends without `playResult()`, so it never
+  touches the record, joy, weight or SPEED training on the user's real pet.
+
 ---
 
 ## #2 LIT: the screen stays as bright while the pet sleeps
@@ -268,6 +281,17 @@ screen state, and that the PWR screensaver gets the 5-minute one's power rules.
 - Board check by the user: each of the three slots starts its game, and the battle slot still
   refuses while evolving.
 - Docs: README ("STRENGTH ← bag", the card description) and DEVICE_TESTS.
+
+### Built in v1.34
+
+- As planned: `PLAY_MENU_SLOT` / `PLAY_MENU_W` / `PLAY_MENU_X` drive both the drawing and the
+  tap, and the icons sit 9 px into each slot like the food menu's.
+- `ICON_SACK`: a red bag (8 px wide) with a darker lid and seam, a highlight, and a grey chain,
+  the same colours as the bag scene.
+- The Battle page's four bars now sit at y 124 / 180 / 236 / 292 (56 px apart, was 42).
+- `S_TRAIN_STR` is removed from all eight languages, not only six.
+- The bag needs no refusal of its own: the PLAY menu only opens with the pet hatched and awake,
+  and `startSack()` checks the same.
 
 ---
 
