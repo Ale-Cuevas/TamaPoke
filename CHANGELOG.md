@@ -8,6 +8,33 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.33] - 2026-11-06
+
+The ball game speeds up all the time
+([GAMEPLAY_TUNING.md, #1 BALL](docs/GAMEPLAY_TUNING.md#1-ball-the-ball-game-speeds-up-all-the-time)).
+Until now three ramps (the ball's sideways drift, gravity and the tap's lift) grew with the
+score, but they all stopped by score 48, and because gravity and lift grew together the time
+in the air barely changed. Past ~48 points the game stayed the same.
+
+### Changed
+
+- **One speed for the whole game.** The ball always follows the arc it had at score 1, and
+  the whole simulation runs faster as the score rises: 1× at 1 point, 1.49× at 40, **2× at
+  80** (the same arc in half the time), and it keeps rising at the same rate up to 3× at
+  159 points. The pet chasing the ball speeds up with it.
+- The ball's arc is now an exact parabola for any step length, so a slow frame no longer
+  changes its path (a frame that comes very late still counts as at most 3 steps, before
+  the speed factor).
+- The saved high score stays as it was, set under the old ramps.
+
+### Added
+
+- `ballgame.h`: the game's speed, constants and physics as pure logic, with host tests
+  (`test/test_ballgame.cpp`).
+- Serial command `BALL <score>`: opens the ball game at that score, to feel 1×, 1.5× and 2×
+  without playing up to them. A game opened that way doesn't touch the record or give
+  rewards.
+
 ## [1.30] - 2026-11-05
 
 Feedback effects ([NEXT_FEATURES.md, Task FX](docs/NEXT_FEATURES.md#task-fx-feedback-for-what-the-pet-does)):

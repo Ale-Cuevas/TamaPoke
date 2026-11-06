@@ -132,6 +132,19 @@ Make speed one number that scales time for the whole simulation.
 
 The saved high score `gameHi` was set under the old ramps. It stays as it is.
 
+### Built in v1.33
+
+- `ballgame.h` holds more than the plan said: the whole step (`ballStep`: gravity, movement,
+  wall bounce), the tap (`ballHit`) and the spawn (`ballSpawn`), with a `BallState` struct in
+  place of the four `ballX/ballY/ballVX/ballVY` globals. The host test then runs the same
+  physics as the board.
+- The arc is integrated exactly (`y += vy·k + ½·g·k²`), not with the old semi-implicit step.
+  That makes the path independent of the step length, so 2× really is the same arc in half
+  the time (34 frames in the air at 1×, 17 at 2×, 12 at 3×). At 1× this adds about one frame
+  of air time compared with the old score-1 game.
+- `BALL <score>` sets `gameNoSave`: that game ends without `playResult()`, so it never
+  touches the record, joy, weight or SPEED training on the user's real pet.
+
 ---
 
 ## #2 LIT: the screen stays as bright while the pet sleeps

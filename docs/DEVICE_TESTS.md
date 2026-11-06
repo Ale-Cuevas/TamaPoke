@@ -277,3 +277,13 @@ sleep=…`). Banners wait while the pet sleeps, so wake it first. `PERF` prints 
 - [ ] A care slip-up with the screen on: "!" bubble and a soft falling sound (`FX oops`).
 - [ ] `PERF` while a level-up, the floats and the hatch play: `fx` stays under 3000 us.
 
+
+### Games (v1.33)
+([GAMEPLAY_TUNING.md, #1 BALL](GAMEPLAY_TUNING.md#1-ball-the-ball-game-speeds-up-all-the-time).) `BALL <score>`
+over serial opens the ball game at that score and prints `ball: score=<n> speed=<x>`. A game opened that way
+doesn't touch the record or give rewards.
+- [ ] `BALL 1`, `BALL 40`, `BALL 80`: the ball follows the same arcs, faster each time; at 80 it is in the air
+  about half as long as at 1 (`speed=1.00`, `1.49`, `2.00`).
+- [ ] `BALL 159`: 3× (`speed=3.00`); still possible to hit, the ball never jumps through the finger.
+- [ ] A normal game from PLAY: the ball speeds up with every point, with no plateau past ~48 as before.
+- [ ] The pet still follows the ball along the ground at every speed.

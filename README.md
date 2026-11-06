@@ -96,7 +96,8 @@ While **awake**, per minute:
 - 🍎 **Berry** (3 flavors): +25 FOOD. Each species has a **hidden favorite flavor**
   → +35 FOOD, +10 JOY, ♥, bond, and it gets revealed.
 - 🍬 **Candy:** +10 FOOD, +12 JOY, but **+12 weight** (fattening).
-- ⚽ **Play:** a menu with the **ball minigame** (+JOY, −ENE; trains **SPEED** and burns weight)
+- ⚽ **Play:** a menu with the **ball minigame** (+JOY, −ENE; trains **SPEED** and burns weight;
+  the ball keeps speeding up as you score: twice as fast at 80 as at 1, up to 3×)
   and a **practice battle** (+3 JOY, at most once an hour; see Battles below).
 - 🥊 **Training bag:** trains **STRENGTH** (~4 hits = 1 pt, cap +18/session), tires it.
 - 🫧 **Bath:** clears poops, HYG → 100.
@@ -610,7 +611,8 @@ runaway-ready state) · `WIPE` (factory reset → new game) · `BEEP` (audio tes
 as CSV, the `test/data/imu/` format; any key stops it) · `SHAKE` /
 `FACEDOWN` / `FACEDOWN 0` (inject the motion events) · `BATTLE` / `BATTLE <dex>`
 (a practice battle, against a random or the given species; the result is logged) ·
-`FX <effect>` (show a feedback effect without touching the save: `levelup`, `levelup6`,
+`BALL <score>` (open the ball game at that score to feel its speed: 1× at 1, 2× at 80;
+the result doesn't touch the record or the save) · `FX <effect>` (show a feedback effect without touching the save: `levelup`, `levelup6`,
 `medal`, `streak`, `goal`, `goal3`, `stat`, `bond`, `train`, `deny`, `press`, `oops`,
 `hatch`) · `PERF` (scene and effects draw time).
 

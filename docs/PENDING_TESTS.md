@@ -33,6 +33,7 @@ Write the result on each line: a tick, or what you saw.
 | 24 | v1.27 new biomes (`BIOME 6/7/8`): power plant, swamp, ruins by day and night; Pikachu, Ekans, Gastly and friends get them | [Backgrounds](DEVICE_TESTS.md#backgrounds-v126) | draw time ✓; swamp (by day), power plant and ruins (at night) ✓ on the board (user, 2026-11-05) |
 | 25 | v1.28 burn-in: screensaver after 5 min (look, wake paths), orbit every 3 min (no edge garbage, taps land), a battery day | [Power, sleep, buttons](DEVICE_TESTS.md#power-sleep-buttons) | serial ✓ (brightness, wake, face-down, origins); screensaver look and wake ✓, orbit edges clean and taps land while moved ✓ (user, 2026-11-05); v1.29 bigger clock ✓ (user); battery: pending |
 | 26 | v1.30 feedback effects: level-up (jingle in the dark, animation on wake), banners one at a time, "+N" floats, hatch, button shake | [Feedback](DEVICE_TESTS.md#feedback-v130) | serial ✓ (2026-11-05, pet asleep): every `FX` overlay draws in at most 1.5 ms (40 us idle, hatch 1.05 ms); banners wait while the pet sleeps (`queue=2 busy=1 sleep=1`). With the pet awake: look, sounds, banner draw time pending |
+| 29 | v1.33 ball game: speed rises with every point (`BALL 1`, `BALL 80`: same arcs, half the time in the air at 80), still playable at 80 and fun on the way | [Games](DEVICE_TESTS.md#games-v133) | pending |
 
 Questions only the board can answer:
 - Where is the USB-C port relative to the screen's top? Bottom edge (buttons on top).
