@@ -116,6 +116,12 @@ yellow label to `/imu/` on the SD card, USER picks the label, a 1 s USER hold sw
 
 ### Power, sleep, buttons
 - [x] PWR short press turns the screen off and on; holding it 4 s powers the board off and the RTC keeps the time.
+- [ ] v1.32 PWR cycle (`PWR` over serial does the same press): from the game, press once → the screensaver at
+  once (pet and clock drifting on black); twice → off; three times → the game again, as it was left. The same
+  with the pet asleep. From the 5-min screensaver one press turns it off; from a dimmed screen (90 s) one press
+  gives the screensaver. A touch, USER, BOOT or a shake wakes the PWR screensaver (the first touch does nothing
+  else). Feed the pet and press PWR while it eats: the screensaver stays. In a battle one press quits it (no
+  reward). Holding PWR 4 s still powers off.
 - [ ] After 90 s untouched the screen dims, after 5 min it is almost off; a touch wakes it (the waking touch does nothing else). (90 s dim and touch wake ✓; 5 min not tried)
 - [ ] v1.28 screensaver: after 5 min untouched (or `SAVER` over serial) the screen goes black with the pet and the
   clock drifting slowly; the clock reads the right time. A touch (it does nothing else), USER, BOOT and a shake each
@@ -135,6 +141,9 @@ yellow label to `/imu/` on the SD card, USER picks the label, a 1 s USER hold sw
   wakes it too (light sleep).
 - [ ] v1.23 the sun pill on the clock screen (swipe down) cycles the same level; after a restart (re-upload) the
   level is kept. At level 0 (dimmest) the 90 s dim doesn't get brighter.
+- [ ] v1.31 sleep brightness: put the pet to sleep (LIGHT). The screen stays as bright as awake (`BRIGHT`
+  prints `now=` equal to `value=`); after 90 s it dims to 60 and after 5 min (or `SAVER`) the screensaver shows
+  at 40 with the clock in the usual gray. Wake the pet: nothing changes. Next night on battery: note the drain.
 - [ ] Battery percentage close to the bring-up `[pmu]` reading; the charging bolt shows within a few seconds of plugging USB in.
 
 ### Save, time, sound, SD

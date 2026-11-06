@@ -172,6 +172,12 @@ so that's small. Note the next overnight battery reading in `PENDING_TESTS.md`.
 - Add a test: for every stage and brightness level, the result is the same asleep and awake.
 - Over serial: `BRIGHT` prints the current value, so compare it with the pet asleep (LIGHT) and awake.
 
+### Built in v1.31
+
+As planned. `brightnessFor()` ignores `sleeping` (the frame rate and the amplifier still use it),
+`SAVER_BRIGHT_SLEEP` is gone, and the screensaver clock is always `0x8410`. A new host test checks
+that asleep and awake give the same brightness for every stage, level, battery, face-down and off.
+
 ---
 
 ## #3 PWR: game → screensaver → off → game
@@ -221,6 +227,15 @@ A short press moves to the next of three views:
 - Docs: README line 407 changes from "short = screen on/off" to "short = screensaver → off → on".
   Also update the DEVICE_TESTS power section.
 - Board check by the user: press three times from the game, then the same with the pet asleep.
+
+### Built in v1.32
+
+As planned: `PwrView`, `pwrViewOf()`, `pwrNext()` and `POWER_SAVER_IDLE_MS` in `power.h`;
+`pwrPress()` and `saverPinned` in the sketch (`wakeUI()` clears the flag, `updateBrightness()`
+skips its automatic wake while it's set). The screensaver draws right away instead of at its
+next 1 s frame, keeping 85 ms after the previous flush. The `PWR` serial command prints
+`pwr view=… off=… saver=… pinned=… bri=…`. Three host tests cover the cycle, the view of each
+screen state, and that the PWR screensaver gets the 5-minute one's power rules.
 
 ---
 

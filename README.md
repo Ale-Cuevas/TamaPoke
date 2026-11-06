@@ -186,8 +186,8 @@ attacking until one faints, in 10–20 s after a 3 s VS card and jingle.
   After a special the meter rests for 2 normal attacks. The opponent charges
   its own.
 - **Reward:** +3 JOY whether you win or lose, at most once an hour. Practice
-  isn't counted in any win/loss record. The USER key, or switching the screen
-  off with PWR, quits with no reward.
+  isn't counted in any win/loss record. The USER key, or PWR (to the screensaver
+  or off), quits with no reward.
 - Battles between two boards over the air are next (see the roadmap).
 
 ### Steps, finds & the Backpack (v1.20)
@@ -390,8 +390,8 @@ If one bottoms out it counts as a *slip-up*.
   gives a bonus) and a candy (+happiness but it fattens; weight makes it sluggish).
 - ⚽ **Play** → a menu: the pokeball minigame (trains SPEED) or a practice
   battle (crossed swords).
-- 🌙 **Light** → sleep/wake (recovers energy, dims the screen). While asleep,
-  needs decay much slower (rest).
+- 🌙 **Light** → sleep/wake (recovers energy, the scene goes dark). While asleep,
+  needs decay much slower (rest). The screen stays as bright as when it's awake.
 - 🫧 **Bath** → a foam scene that cleans up the poops.
 
 **Touch gestures:**
@@ -404,8 +404,11 @@ If one bottoms out it counts as a *slip-up*.
   **brightness** (the sun pill: 4 levels, tap to cycle).
 - Long press (3 s) on the creature = **release** dialog.
 
-**Physical PWR button:** short = screen on/off · long (4 s) = full power-off
-(the RTC stays alive, so time passes even while it's off).
+**Physical PWR button:** short = the next of three views, game → screensaver → screen off → game (v1.32) ·
+long (4 s) = full power-off (the RTC stays alive, so time passes even while it's off). A screensaver that
+came on by itself after 5 minutes counts as the screensaver, so one press turns the screen off; a dimmed or
+face-down screen counts as the game. A touch, USER, BOOT or a shake still wakes the screensaver, and a touch
+wakes the screen from off. Eating or a heart doesn't wake a screensaver you put on with PWR.
 
 **Physical USER button:** back. It closes whatever is open on top: gallery
 detail → grid → home, stat card, rename keyboard (without saving the name),
@@ -581,8 +584,9 @@ What the firmware does to save power (the policy is in `power.h`, covered by `te
   its usual place, so the header, bars, buttons and horizon never sit on the same pixels for long (the
   CO5300 only takes even positions; taps follow the picture). After 5 minutes untouched the screen shows a
   **screensaver** instead of the dimmed scene: black, with the pet and the clock drifting slowly around the
-  circle (brightness 40, 16 while the pet sleeps; most pixels are off). A touch, USER, BOOT or a shake brings
-  back whatever was open; the first touch only wakes. Face-down skips it (nobody is looking). `SAVER` and
+  circle (brightness 40, asleep or awake; most pixels are off). A touch, USER, BOOT or a shake brings
+  back whatever was open; the first touch only wakes. A short PWR press shows it at once (v1.32). Face-down
+  skips it (nobody is looking). `SAVER` and
   `ORBIT <n>` over serial show them at once.
 - **Static screens are not redrawn.** Keyboard, clock, card pages 2-4 and the starter choice are painted once
   and again only when something on them changes.
@@ -592,6 +596,8 @@ What the firmware does to save power (the policy is in `power.h`, covered by `te
 - **Speaker amplifier only when it can be used.** It is off while the pet sleeps and while the screen is dimmed
   or off; a sound requested meanwhile (e.g. "ready to evolve") switches it on for 4 s, and sounds wait 50 ms
   after a power-up so the start is not cut.
+- **Brightness** is the level you picked (BOOT), 60 when dimmed and 40 on the screensaver, the same whether
+  the pet is awake or asleep (until v1.30 a sleeping pet dropped it to 25 / 10 / 16, too dark to see).
 - **Low battery (< 20 %, not charging):** brightness capped (100, then 60 under 10 %) and frames twice as slow.
 - **Battery reads over I2C** every 10 s instead of 2 s when the screen is off or almost off.
 - **IMU:** accelerometer only (gyro off) at 62.5 Hz. Its FIFO holds about 2 s, so it is read once a second
@@ -612,7 +618,8 @@ as CSV, the `test/data/imu/` format; any key stops it) · `SHAKE` /
 (a practice battle, against a random or the given species; the result is logged) ·
 `FX <effect>` (show a feedback effect without touching the save: `levelup`, `levelup6`,
 `medal`, `streak`, `goal`, `goal3`, `stat`, `bond`, `train`, `deny`, `press`, `oops`,
-`hatch`) · `PERF` (scene and effects draw time).
+`hatch`) · `PERF` (scene and effects draw time) · `PWR` (a short PWR press: prints the new view,
+`on` / `saver` / `off`).
 
 To test fast: lower `PET_TICK_MS`, `MINUTES_PER_LEVEL` and `FAREWELL_AGE_MIN` in `pet.h`.
 

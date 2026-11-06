@@ -8,6 +8,45 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.32] - 2026-11-06
+
+PWR cycle ([GAMEPLAY_TUNING.md, #3 PWR](docs/GAMEPLAY_TUNING.md#3-pwr-game--screensaver--off--game)):
+the screensaver only came after 5 minutes untouched.
+
+### Changed
+
+- **A short PWR press moves to the next of three views:** the game → the screensaver → screen off
+  → the game. Until now it only switched the screen off and on.
+  - The 5-minute screensaver counts as the screensaver, so one press turns the screen off. A
+    dimmed (90 s) or face-down screen counts as the game.
+  - The PWR screensaver is the 5-minute one: brightness 40, one frame a second, light sleep on
+    battery, amplifier off. A touch, USER, BOOT or a shake wakes it, as before.
+  - Eating, a heart, an evolution or a ceremony wakes a dimmed screen by itself, but no longer
+    a screensaver you put on with PWR.
+  - A battle quits (no reward) when PWR goes to the screensaver, as it did when it went off. The
+    ball game and the bag freeze and carry on when woken, as with the screen off.
+  - Holding PWR for 4 s still powers the board off.
+
+### Added
+
+- `PWR` over serial: the same as a short press; prints the new view (`on`, `saver`, `off`).
+
+## [1.31] - 2026-11-06
+
+Sleep brightness ([GAMEPLAY_TUNING.md, #2 LIT](docs/GAMEPLAY_TUNING.md#2-lit-the-screen-stays-as-bright-while-the-pet-sleeps)):
+with the pet asleep the screen was too dark to see.
+
+### Changed
+
+- **The screen is as bright with the pet asleep as awake.** `brightnessFor()` no longer looks at
+  sleep: the level you picked (BOOT), 60 when dimmed after 90 s and 40 on the screensaver after
+  5 min. Until now a sleeping pet dropped them to 25, 10 and 16. `SAVER_BRIGHT_SLEEP` is gone.
+- The screensaver clock keeps its usual gray while the pet sleeps (it was a darker gray).
+- Unchanged: the night scene still draws with the lights off, a sleeping pet left alone still
+  draws at 2 fps, the speaker amplifier stays off, and the low-battery caps still apply. Left
+  untouched overnight the screen still dims and goes to the screensaver; the only lasting cost is
+  the mostly-black screensaver at 40 instead of 16.
+
 ## [1.30] - 2026-11-05
 
 Feedback effects ([NEXT_FEATURES.md, Task FX](docs/NEXT_FEATURES.md#task-fx-feedback-for-what-the-pet-does)):

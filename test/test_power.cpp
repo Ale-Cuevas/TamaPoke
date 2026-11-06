@@ -36,7 +36,7 @@ TEST(power, el_brillo_no_cambia_con_bateria_normal) {
   c = ctx(100000);
   CHECK_EQ((int)brightnessFor(c), 60);        // atenuada
   c.sleeping = true;
-  CHECK_EQ((int)brightnessFor(c), 10);
+  CHECK_EQ((int)brightnessFor(c), 60);        // dormido, igual (v1.31: antes 10)
   c = ctx(400000);
   CHECK_EQ((int)brightnessFor(c), SAVER_BRIGHT);  // salvapantallas (v1.28)
   c.faceDown = true;
@@ -181,7 +181,7 @@ TEST(power, el_nivel_de_brillo_fija_el_brillo_despierto) {
   c.brightLevel = 0;  // el minimo (50)
   CHECK_EQ((int)brightnessFor(c), 50);
   c.sleeping = true;
-  CHECK_EQ((int)brightnessFor(c), 25);
+  CHECK_EQ((int)brightnessFor(c), 50);  // dormido, el mismo (v1.31: antes 25)
   c = ctx(100000);    // atenuada: 60, pero nunca mas que el nivel
   c.brightLevel = 0;
   CHECK_EQ((int)brightnessFor(c), 50);
@@ -212,7 +212,7 @@ TEST(power, el_salvapantallas_sale_a_los_5_minutos_y_no_boca_abajo_ni_apagada) {
   c = ctx(300001);
   CHECK(saverActive(c));
   c.sleeping = true;
-  CHECK_EQ((int)brightnessFor(c), SAVER_BRIGHT_SLEEP);
+  CHECK_EQ((int)brightnessFor(c), SAVER_BRIGHT);  // dormido, el mismo (v1.31: antes 16)
   c.faceDown = true;
   CHECK(!saverActive(c));
   c = ctx(400000);
@@ -223,4 +223,65 @@ TEST(power, el_salvapantallas_sale_a_los_5_minutos_y_no_boca_abajo_ni_apagada) {
   c = ctx(400000);
   CHECK_EQ((int)frameIntervalMs(c), 1000);  // un frame por segundo, como antes
   CHECK(lightSleepAllowed(c));
+}
+
+// v1.31: con el bicho dormido la pantalla se ve igual de bien que despierto, en todos los
+// escalones (activa, atenuada, salvapantallas, boca abajo, apagada) y con cualquier nivel o bateria
+TEST(power, dormido_el_brillo_es_el_mismo_que_despierto) {
+  const uint32_t idles[] = { 0, 70000, 100000, 300001, 400000 };
+  const int bats[] = { 80, 15, 5, -1 };
+  for (uint8_t lv = 0; lv < BRIGHT_LEVELS; lv++)
+    for (uint32_t idle : idles)
+      for (int bat : bats)
+        for (int fd = 0; fd < 2; fd++)
+          for (int off = 0; off < 2; off++) {
+            PowerCtx awake = ctx(idle);
+            awake.brightLevel = lv;
+            awake.batPct = bat;
+            awake.faceDown = fd;
+            awake.screenOff = off;
+            PowerCtx asleep = awake;
+            asleep.sleeping = true;
+            CHECK_EQ((int)brightnessFor(asleep), (int)brightnessFor(awake));
+          }
+}
+
+// v1.32: la pulsacion corta del PWR recorre juego -> salvapantallas -> apagada -> juego
+TEST(power, el_pwr_recorre_juego_salvapantallas_apagada) {
+  CHECK_EQ((int)pwrNext(VIEW_ON), (int)VIEW_SAVER);
+  CHECK_EQ((int)pwrNext(VIEW_SAVER), (int)VIEW_OFF);
+  CHECK_EQ((int)pwrNext(VIEW_OFF), (int)VIEW_ON);
+  PwrView v = VIEW_ON;
+  for (int i = 0; i < 3; i++) v = pwrNext(v);
+  CHECK_EQ((int)v, (int)VIEW_ON);  // tres pulsaciones: de vuelta al juego
+}
+
+TEST(power, la_vista_del_pwr_sale_del_estado_de_la_pantalla) {
+  CHECK_EQ((int)pwrViewOf(ctx(0)), (int)VIEW_ON);
+  CHECK_EQ((int)pwrViewOf(ctx(100000)), (int)VIEW_ON);          // atenuada a los 90 s: sigue siendo el juego
+  CHECK_EQ((int)pwrViewOf(ctx(300001)), (int)VIEW_SAVER);       // el de los 5 min: el PWR la apaga
+  PowerCtx c = ctx(400000);
+  c.faceDown = true;
+  CHECK_EQ((int)pwrViewOf(c), (int)VIEW_ON);                    // boca abajo no es el salvapantallas
+  c = ctx(0);
+  c.screenOff = true;
+  CHECK_EQ((int)pwrViewOf(c), (int)VIEW_OFF);
+  c.idleMs = 400000;
+  CHECK_EQ((int)pwrViewOf(c), (int)VIEW_OFF);                   // apagada manda sobre la inactividad
+}
+
+// el salvapantallas puesto con PWR es el mismo que el de los 5 min: su brillo, su ritmo, el light
+// sleep sin USB y el amplificador apagado, dormido o despierto
+TEST(power, el_salvapantallas_del_pwr_es_el_de_los_cinco_minutos) {
+  for (int sleeping = 0; sleeping < 2; sleeping++) {
+    PowerCtx c = ctx(POWER_SAVER_IDLE_MS);
+    c.sleeping = sleeping;
+    CHECK(saverActive(c));
+    CHECK_EQ((int)pwrViewOf(c), (int)VIEW_SAVER);
+    CHECK_EQ((int)brightnessFor(c), SAVER_BRIGHT);
+    CHECK_EQ((int)frameIntervalMs(c), 1000);
+    CHECK(lightSleepAllowed(c));
+    CHECK(!amplifierWanted(c));
+  }
+  CHECK(!saverActive(ctx(POWER_SAVER_IDLE_MS - 1)));  // un ms antes, aun atenuada
 }
