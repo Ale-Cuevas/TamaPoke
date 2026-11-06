@@ -185,7 +185,13 @@ the background's draw time.
 - [ ] `BIOME 0`: tall grass on the hill, tufts with flowers, front tufts over the pet's feet; it sways smoothly,
   and every 12 s a gust leans it to the right from left to right. At night (or with the pet asleep) it darkens.
 - [ ] `BIOME 2`: the forest's conifer tips sway a little with the same gust.
-- [ ] `PERF` with `BIOME 0` within ~3 ms of the beach (`BIOME 1`). (2026-11-05, v1.26 on the board: beach 14.8 ms,
+- [ ] v1.27 `BIOME 6` (power plant): skyline, chimney smoke staying below the text, two pylons with cables that
+  sway, a spark every ~7 s; at night the windows light up and a few blink.
+- [ ] v1.27 `BIOME 7` (swamp): the pond with ripples, bubbles rising and popping, reeds swaying, the bare tree.
+- [ ] v1.27 `BIOME 8` (ruins): violet sky, broken pillars, a fallen one, wisps floating (6 at night, 3 by day).
+- [x] v1.27 `PERF` for the new biomes within ~3 ms of the beach (14.8 ms): power plant 16.7, swamp 15.5, ruins
+  15.8 ms (2026-11-05, on the board).
+- [ ] v1.26 `PERF` with `BIOME 0` within ~3 ms of the beach (`BIOME 1`). (2026-11-05, v1.26 on the board: beach 14.8 ms,
   meadow 16.7 ms, forest 15.0 ms ✓)
 
 ### Pacing (v1.22)

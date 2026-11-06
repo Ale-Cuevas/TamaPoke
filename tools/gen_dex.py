@@ -18,12 +18,13 @@ def rgb565(hexcol):
 
 
 # bioma de fondo por tipo (la luz la pone la hora real del RTC)
-# 0 PRADERA, 1 PLAYA, 2 BOSQUE, 3 VOLCAN, 4 MONTANA, 5 NIEVE
+# 0 PRADERA, 1 PLAYA, 2 BOSQUE, 3 VOLCAN, 4 MONTANA, 5 NIEVE,
+# 6 CENTRAL (electrica), 7 PANTANO, 8 RUINAS (v1.27: hasta entonces esos tipos iban a la pradera)
 TYPE_BIOME = {
     'agua': 1, 'planta': 2, 'bicho': 2, 'fuego': 3,
     'roca': 4, 'tierra': 4, 'dragon': 1, 'hielo': 5,  # los dragones gen1 (Dratini) viven en el agua
-    'normal': 0, 'electrico': 0, 'lucha': 0, 'veneno': 0,
-    'psiquico': 0, 'fantasma': 0, 'volador': 0,
+    'normal': 0, 'lucha': 0, 'volador': 0,
+    'electrico': 6, 'veneno': 7, 'psiquico': 8, 'fantasma': 8,
 }
 
 # excepciones por dex# (el tipo no basta): fosiles marinos roca/agua -> playa
@@ -66,7 +67,7 @@ def main():
         "  uint8_t rarity;       // sale de huevo si > 0\n"
         "  uint16_t accent;      // color RGB565 del tipo para la UI\n"
         "  uint8_t bHp, bAtk, bDef, bSpe;  // base stats reales de gen 1\n"
-        "  uint8_t biome;        // 0 pradera 1 playa 2 bosque 3 volcan 4 montana 5 nieve\n"
+        "  uint8_t biome;        // 0 pradera 1 playa 2 bosque 3 volcan 4 montana 5 nieve 6 central 7 pantano 8 ruinas\n"
         "  uint8_t type1, type2; // TY_*; type2 = TY_NONE si solo tiene uno (combate)\n"
         "  uint8_t base;         // primera forma de su linea evolutiva\n"
         "};\n\n")

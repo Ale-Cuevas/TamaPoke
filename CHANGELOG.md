@@ -8,6 +8,29 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.27] - 2026-11-05
+
+### Added
+
+- **Three new backgrounds**, for the types that all shared the meadow:
+  - **Power plant** (electric: Pikachu, Magnemite, Voltorb, Jolteon, Zapdos…):
+    a skyline behind the hill with a chimney puffing smoke, two pylons with
+    cables that sway in the wind and a spark every ~7 s; at night the windows
+    light up and a few blink.
+  - **Swamp** (poison: Ekans, Nidoran, Grimer, Koffing…): a murky pond with
+    ripples and bubbles that rise and pop, reeds swaying, a bare tree.
+  - **Ruins** (ghost and psychic: Gastly, Abra, Drowzee, Mewtwo…): broken stone
+    pillars and a fallen one under a violet-tinted sky, with floating wisps
+    (more at night).
+  Normal, fighting and flying stay in the meadow. The minigame, the training bag
+  and the battle field use the new biomes' ground colours. Each draws within
+  2 ms of the beach on the board (`PERF`).
+
+### Changed
+
+- `dex.h` carries biomes 6–8 (`tools/gen_dex.py`'s `TYPE_BIOME`); 34 species
+  moved. A pet keeps its species, so it just wakes up somewhere new.
+
 ## [1.26] - 2026-11-05
 
 ### Added

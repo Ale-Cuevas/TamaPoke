@@ -41,7 +41,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.26"
+#define FW_VERSION "1.27"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -209,7 +209,7 @@ uint32_t briToastUntil = 0;  // aviso del nivel en pantalla
 uint32_t gSceneUs = 0, gSceneMaxUs = 0;
 // BIOME <n> (serie): muestra otro paisaje sin tocar el bicho ni el guardado; -1 = el suyo
 int8_t gBiomeOverride = -1;
-#define BIOME_COUNT 6  // paisajes (dex.h: biome)
+#define BIOME_COUNT 9  // paisajes (dex.h: biome)
 bool swallowGesture = false; // el toque que despierta no acciona nada
 uint32_t holdStart = 0;     // pulsacion larga sobre el bicho
 uint32_t confirmUntil = 0;  // dialogo "soltar?" activo hasta este millis
@@ -1116,7 +1116,11 @@ static const uint16_t BIOME_SOIL[BIOME_COUNT] = {
   C565(0x8a, 0x55, 0x44),  // 3 volcan
   C565(0xa8, 0x90, 0x6a),  // 4 montana
   C565(0xe6, 0xee, 0xf5),  // 5 nieve
+  C565(0xa6, 0xb0, 0x8a),  // 6 central electrica: hierba seca junto a la ciudad
+  C565(0x6e, 0x80, 0x5c),  // 7 pantano: barro verdoso
+  C565(0x9a, 0x92, 0xa8),  // 8 ruinas: losas de piedra lavanda
 };
+static_assert(sizeof(BIOME_SOIL) / sizeof(BIOME_SOIL[0]) == BIOME_COUNT, "un suelo por bioma");
 
 void drawClouds(uint32_t now, uint16_t col) {
   for (int k = 0; k < 2; k++) {
@@ -1230,6 +1234,179 @@ void drawSceneFront(uint8_t biome, uint32_t now, bool night) {
   for (auto &t : meadowFront) drawTuft(t.x, t.y, t.h, now, front, frontL);
 }
 
+// ---------- central electrica (bioma 6, v1.27) ----------
+// Siluetas de edificios en el horizonte, con ventanas que de noche se encienden (y alguna
+// parpadea), y delante dos torres de alta tension con cables que se mecen y, de vez en
+// cuando, una chispa.
+static const int16_t SKYLINE[][3] = {  // x, ancho, alto
+  { 0, 34, 54 }, { 30, 26, 76 }, { 60, 40, 44 }, { 104, 22, 64 }, { 300, 30, 58 },
+  { 334, 24, 84 }, { 362, 38, 48 }, { 404, 28, 70 }, { 436, 30, 52 },
+};
+
+void drawSkyline(uint32_t now, bool night, uint16_t sky) {
+  uint16_t bld = night ? C565(0x22, 0x28, 0x3c) : lerp565(sky, C565(0x40, 0x48, 0x5c), 9, 16);
+  uint16_t win = night ? C565(0xff, 0xd9, 0x5e) : lerp565(bld, C565(0x20, 0x24, 0x30), 6, 16);
+  int k = 0;
+  for (auto &b : SKYLINE) {
+    int x = b[0], w = b[1], h = b[2], y = HORIZON - h;
+    gfx->fillRect(x, y, w, h, bld);
+    for (int wy = y + 6; wy < HORIZON - 16; wy += 10)
+      for (int wx = x + 4; wx + 4 <= x + w - 3; wx += 8, k++) {
+        // de noche no todas: unas apagadas y alguna que se enciende y se apaga
+        uint32_t hsh = (uint32_t)k * 2654435761u;
+        if (night && (hsh >> 29) == 0) continue;
+        if (night && (hsh >> 28) == 3 && ((now / (1800 + (hsh >> 20) % 900)) & 1)) continue;
+        gfx->fillRect(wx, wy, 4, 5, win);
+      }
+  }
+  // chimenea de la central, con humo que sube y se va
+  gfx->fillRect(200, HORIZON - 70, 18, 70, bld);
+  gfx->fillRect(200, HORIZON - 62, 18, 4, night ? C565(0xe8, 0x50, 0x3a) : C565(0xd8, 0xd8, 0xd8));
+  uint16_t smoke = night ? C565(0x50, 0x56, 0x6a) : C565(0xe8, 0xec, 0xf0);
+  for (int p = 0; p < 3; p++) {
+    uint32_t t = (now / 40 + p * 33) % 100;  // 0..99: sube 30 px (sin llegar al texto de arriba) y crece
+    int sx = 209 + (int)t / 5 + windSway(now, 209) * (int)t / 40;
+    gfx->fillCircle(sx, HORIZON - 76 - (int)t * 3 / 10, 3 + (int)t / 20, smoke);
+  }
+}
+
+// cable entre dos postes, colgando en una curva que el viento empuja un poco
+static void drawCable(int x0, int y0, int x1, int y1, int sag, uint32_t now, uint16_t col) {
+  const int N = 8;
+  int px = x0, py = y0;
+  for (int i = 1; i <= N; i++) {
+    int x = x0 + (x1 - x0) * i / N;
+    int lin = y0 + (y1 - y0) * i / N;
+    int u = i * (N - i);  // 0 en los extremos, maximo en medio
+    int y = lin + sag * u * 4 / (N * N) + windSway(now, x) * u / (N * N);
+    gfx->drawLine(px, py, x, y, col);
+    px = x;
+    py = y;
+  }
+}
+
+void drawPylons(uint32_t now, bool night, uint16_t dk) {
+  uint16_t steel = night ? C565(0x50, 0x58, 0x70) : lerp565(dk, C565(0x60, 0x68, 0x78), 8, 16);
+  const int PX[2] = { 128, 344 };
+  const int base = HORIZON + 24, topY = HORIZON - 64;
+  for (int px : PX) {  // torre de celosia: patas, cruces y dos brazos
+    gfx->drawLine(px - 14, base, px - 3, topY, steel);
+    gfx->drawLine(px + 14, base, px + 3, topY, steel);
+    gfx->drawLine(px - 13, base, px - 2, topY, steel);
+    gfx->drawLine(px + 13, base, px + 2, topY, steel);
+    for (int y = topY + 14; y < base - 6; y += 16) {
+      int hw = 3 + (y - topY) * 11 / (base - topY);
+      gfx->drawLine(px - hw, y, px + hw, y + 14, steel);
+      gfx->drawLine(px + hw, y, px - hw, y + 14, steel);
+    }
+    gfx->fillRect(px - 20, topY + 6, 41, 3, steel);
+    gfx->fillRect(px - 14, topY + 20, 29, 3, steel);
+  }
+  uint16_t wire = night ? C565(0x70, 0x78, 0x90) : C565(0x38, 0x3c, 0x48);
+  for (int a = 0; a < 2; a++) {  // dos cables por brazo, de borde a borde
+    int y = topY + 8 + a * 14, hw = a ? 14 : 20;
+    drawCable(-10, y + 10, PX[0] - hw, y, 8, now, wire);
+    drawCable(PX[0] + hw, y, PX[1] - hw, y, 14, now, wire);
+    drawCable(PX[1] + hw, y, 476, y + 10, 8, now, wire);
+  }
+  // chispa: cada ~7 s, 200 ms en la punta de un brazo
+  uint32_t t = now % 7300;
+  if (t < 200) {
+    int sx = (now / 7300) % 2 ? PX[1] + 20 : PX[0] - 20, sy = topY + 6;
+    uint16_t sp = C565(0xff, 0xf0, 0x80);
+    gfx->drawLine(sx, sy, sx - 5, sy + 6, sp);
+    gfx->drawLine(sx - 5, sy + 6, sx + 2, sy + 9, sp);
+    gfx->drawLine(sx + 2, sy + 9, sx - 3, sy + 16, sp);
+    gfx->fillCircle(sx, sy, 3, UI_WHITE);
+  }
+}
+
+// ---------- pantano (bioma 7, v1.27) ----------
+// Una charca turbia con ondas, juncos que se mecen con el viento (wind.h), burbujas que
+// suben y revientan, y un arbol seco a un lado.
+static const int16_t REEDS[][3] = {  // x, base y, alto
+  { 26, 270, 34 }, { 34, 272, 26 }, { 44, 270, 38 }, { 150, 262, 30 }, { 158, 264, 22 },
+  { 300, 266, 34 }, { 309, 268, 26 }, { 404, 270, 40 }, { 414, 272, 30 }, { 424, 270, 24 },
+};
+
+void drawSwamp(uint32_t now, bool night, uint16_t soil, uint16_t dk) {
+  // arbol seco a la izquierda, en silueta
+  uint16_t bark = lerp565(dk, C565(0x30, 0x24, 0x20), 6, 16);
+  gfx->fillRect(78, HORIZON - 40, 6, 56, bark);
+  gfx->drawLine(81, HORIZON - 30, 60, HORIZON - 54, bark);
+  gfx->drawLine(82, HORIZON - 30, 61, HORIZON - 54, bark);
+  gfx->drawLine(81, HORIZON - 20, 104, HORIZON - 46, bark);
+  gfx->drawLine(82, HORIZON - 20, 105, HORIZON - 46, bark);
+  gfx->drawLine(96, HORIZON - 37, 108, HORIZON - 38, bark);
+  // charca
+  uint16_t pond = night ? C565(0x26, 0x22, 0x3a) : C565(0x5e, 0x58, 0x7c);
+  uint16_t shine = night ? C565(0x40, 0x3a, 0x5a) : C565(0x96, 0x8e, 0xb0);
+  gfx->fillRoundRect(60, HORIZON + 14, 346, 34, 16, pond);
+  for (int i = 0; i < 4; i++) {  // ondas que van y vienen
+    int wx = 96 + i * 76 + (int)((now / 90 + i * 17) % 24) - 12;
+    gfx->fillRect(wx, HORIZON + 24 + (i % 2) * 10, 20, 2, shine);
+  }
+  // burbujas: suben desde el fondo de la charca y revientan arriba
+  uint16_t bub = night ? C565(0x9a, 0xd0, 0x6a) : C565(0xb8, 0xe0, 0x7c);
+  for (int b = 0; b < 5; b++) {
+    uint32_t period = 2600 + b * 410;
+    uint32_t t = (now + b * 977) % period;
+    int bx = 110 + b * 62;
+    if (t < period - 300) {
+      int by = HORIZON + 42 - (int)(t * 24 / (period - 300));
+      gfx->drawCircle(bx, by, 2 + b % 2, bub);
+    } else {  // revienta: un anillo que se abre
+      gfx->drawCircle(bx, HORIZON + 18, 4 + (int)(t - (period - 300)) / 60, shine);
+    }
+  }
+  // juncos con su espiga, meciendose
+  uint16_t reed = lerp565(soil, dk, 12, 16), head = night ? C565(0x40, 0x2c, 0x22) : C565(0x7e, 0x55, 0x30);
+  for (auto &r : REEDS) {
+    int lean = windSway(now, r[0]) * r[2] / 20;
+    gfx->fillTriangle(r[0] - 2, r[1], r[0] + 2, r[1], r[0] + lean, r[1] - r[2], reed);
+    gfx->fillRoundRect(r[0] + lean * 3 / 4 - 2, r[1] - r[2] * 3 / 4 - 6, 5, 11, 2, head);
+  }
+}
+
+// ---------- ruinas (bioma 8, v1.27) ----------
+// Columnas rotas de piedra bajo un cielo violeta, una caida en el suelo, y fuegos fatuos
+// que flotan (mas de noche).
+static const int16_t PILLARS[][3] = {  // x, ancho, alto
+  { 40, 26, 92 }, { 104, 24, 58 }, { 338, 26, 104 }, { 408, 24, 46 },
+};
+
+void drawRuins(uint32_t now, bool night, uint16_t soil, uint16_t dk) {
+  uint16_t stone = lerp565(soil, dk, 5, 16), shade = lerp565(soil, dk, 10, 16);
+  uint16_t crack = lerp565(soil, dk, 15, 16);
+  for (auto &p : PILLARS) {
+    int x = p[0], w = p[1], h = p[2], y = HORIZON + 16 - h;
+    gfx->fillRect(x, y, w, h, stone);
+    gfx->fillRect(x + w - 6, y, 6, h, shade);                 // lado en sombra
+    gfx->fillRect(x - 4, HORIZON + 10, w + 8, 8, shade);      // basa
+    for (int f = x + 6; f < x + w - 6; f += 6) gfx->fillRect(f, y + 8, 2, h - 14, shade);  // estrias
+    // parte de arriba rota: dientes de distinta altura
+    gfx->fillTriangle(x, y, x + w / 2, y, x, y - 10, stone);
+    gfx->fillTriangle(x + w / 2, y, x + w, y, x + w, y - 5, shade);
+    gfx->drawLine(x + 8, y + 18, x + 13, y + 34, crack);
+    gfx->drawLine(x + 13, y + 34, x + 10, y + 46, crack);
+  }
+  // columna caida, de lado
+  gfx->fillRoundRect(196, HORIZON + 30, 96, 18, 6, stone);
+  gfx->fillRect(196, HORIZON + 42, 96, 6, shade);
+  gfx->fillRect(286, HORIZON + 28, 10, 22, shade);
+  // fuegos fatuos: flotan, suben y bajan, con un halo
+  int n = night ? 6 : 3;
+  uint16_t core = night ? C565(0xd8, 0xc8, 0xff) : C565(0xf4, 0xee, 0xff);
+  uint16_t halo = night ? C565(0x6a, 0x50, 0xb0) : C565(0xb8, 0xa4, 0xe8);
+  for (int i = 0; i < n; i++) {
+    uint32_t ph = now / 40 + i * 23;
+    int wx = 60 + i * 69 + WIND_SIN[(ph / 3) & 63] * 18 / 127;
+    int wy = HORIZON - 40 - (i % 3) * 22 + WIND_SIN[(ph + i * 9) & 63] * 8 / 127;
+    gfx->fillCircle(wx, wy, 6, halo);
+    gfx->fillCircle(wx, wy, 3, core);
+  }
+}
+
 void drawScene(uint8_t biome, uint32_t now, bool night) {
   int h = sceneHour();
   uint16_t top, bot;
@@ -1237,6 +1414,10 @@ void drawScene(uint8_t biome, uint32_t now, bool night) {
   else if (h < 8)       { top = C565(0xd1, 0x6a, 0x86); bot = C565(0xf3, 0xb8, 0x7c); }  // amanecer
   else if (h < 18)      { top = C565(0x8f, 0xc8, 0xea); bot = C565(0xdc, 0xee, 0xe6); }  // dia
   else                  { top = C565(0xc7, 0x5a, 0x4a); bot = C565(0xf0, 0xae, 0x64); }  // atardecer
+  if (biome == 8) {  // ruinas: el cielo tira a violeta a cualquier hora
+    top = lerp565(top, C565(0x5a, 0x3c, 0x8c), 6, 16);
+    bot = lerp565(bot, C565(0xb8, 0x9c, 0xd8), 6, 16);
+  }
 
   // cielo en bandas
   for (int y = 0; y < HORIZON; y += 8)
@@ -1268,6 +1449,8 @@ void drawScene(uint8_t biome, uint32_t now, bool night) {
     }
   }
 
+  if (biome == 6) drawSkyline(now, night, lerp565(top, bot, 3, 4));  // la ciudad, detras de la loma
+
   // suelo
   gfx->fillRect(0, HORIZON, 466, 466 - HORIZON, soil);
   uint16_t hill = lerp565(soil, night ? C565(0x0c, 0x12, 0x24) : C565(0xff, 0xff, 0xff), 3, 16);
@@ -1298,6 +1481,12 @@ void drawScene(uint8_t biome, uint32_t now, bool night) {
     }
   } else if (biome == 0) {  // pradera: hierba alta que se mece (la fila de delante, en drawSceneFront)
     drawMeadow(now, night, soil, dk);
+  } else if (biome == 6) {
+    drawPylons(now, night, dk);
+  } else if (biome == 7) {
+    drawSwamp(now, night, soil, dk);
+  } else if (biome == 8) {
+    drawRuins(now, night, soil, dk);
   }
 }
 
@@ -1871,7 +2060,7 @@ void drawGameScene() {
   if (night)
     for (auto &st : STARS) gfx->fillRect(st[0], st[1], 4, 4, UI_WHITE);
   uint8_t bio = pet.isEgg() ? 0 : DEX_TBL[pet.speciesId].biome;
-  uint16_t soil = BIOME_SOIL[bio < 6 ? bio : 0];
+  uint16_t soil = BIOME_SOIL[bio < BIOME_COUNT ? bio : 0];
   if (night) soil = lerp565(soil, C565(0x16, 0x1c, 0x30), 9, 16);
   gfx->fillRect(0, hor, 466, 466 - hor, soil);
 }
@@ -3686,7 +3875,7 @@ void drawBattleField(int shake) {
   if (night)
     for (auto &st : STARS) gfx->fillRect(st[0], st[1] / 2 + 20, 4, 4, UI_WHITE);
   uint8_t bio = DEX_TBL[pet.speciesId].biome;
-  uint16_t soil = BIOME_SOIL[bio < 6 ? bio : 0];
+  uint16_t soil = BIOME_SOIL[bio < BIOME_COUNT ? bio : 0];
   if (night) soil = lerp565(soil, C565(0x16, 0x1c, 0x30), 9, 16);
   gfx->fillRect(0, BT_HORIZON, 466, 466 - BT_HORIZON, soil);
   uint16_t pad = lerp565(soil, C565(0x10, 0x18, 0x20), 4, 16);
