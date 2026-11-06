@@ -322,6 +322,8 @@ void Pet::addBond(uint8_t amt) {
 void Pet::checkMedals(bool saveNow) {
   if (isEgg()) return;
   uint16_t before = medals;
+  medals |= pendingMedals;  // las que da un evento, no un estado (MARATON)
+  pendingMedals = 0;
   if (level() >= 10) medals |= MED_LV10;
   if (level() >= 25) medals |= MED_LV25;
   if (level() >= 50) medals |= MED_LV50;
@@ -587,6 +589,7 @@ void Pet::rollStepDay(uint32_t day) {
   stepDay = day;
   stepsToday = 0;
   findsToday = 0;
+  bonusFindsToday = 0;
   stepJoyToday = 0;
   pendingSave = true;
 }
@@ -625,25 +628,54 @@ void Pet::addSteps(uint32_t n, uint32_t day) {
 
     if (!findAt) findAt = nextFindAt();
     uint32_t f = (uint32_t)findRem + n;
-    while (f >= findAt && findsToday < FINDS_PER_DAY) {
+    while (f >= findAt && randomFindsToday() < FINDS_PER_DAY) {
       f -= findAt;
       findItem();
       findAt = nextFindAt();
     }
-    if (findsToday >= FINDS_PER_DAY) f = 0;  // tope del dia: lo que se ande despues no cuenta para el dia siguiente
+    if (randomFindsToday() >= FINDS_PER_DAY) f = 0;  // tope del dia: lo que se ande despues no cuenta para el dia siguiente
     findRem = (uint16_t)f;
   }
 
-  // meta diaria (FR-1.4): una vez al dia; cuenta como dia de cuidado para la racha
-  if (day && stepsToday >= STEP_GOAL && goalDay != day) {
-    goalDay = day;
-    goalBanner = true;
-    if (rewarded) {
-      joy = clamp100(joy + GOAL_JOY);
-      if (findsToday < FINDS_PER_DAY) findItem();  // hallazgo de regalo
+  // metas diarias (FR-1.4, v1.25): 3000, 6000 y 10000, cada una una vez al dia y en orden.
+  // Si unos pasos cruzan varias, saltan todas y el banner muestra la mas alta.
+  if (day) {
+    uint8_t tier = goalTierOn(day);
+    while (tier < STEP_GOAL_TIERS && stepsToday >= STEP_GOALS[tier]) {
+      tier++;
+      goalDay = day;
+      goalTier = tier;
+      goalBanner = tier;
+      goalReward(tier, rewarded);
     }
-    registerCare(false);
   }
+}
+
+// premio de cada meta. El banner y la racha (la primera) se dan siempre; lo demas, con el
+// bicho nacido y despierto, como el resto de premios de caminar. Los regalos no cuentan
+// para el tope de hallazgos al azar, y el vinculo va fuera del tope diario de addBond.
+void Pet::goalReward(uint8_t tier, bool rewarded) {
+  if (rewarded) {
+    if (tier == 1) {
+      joy = clamp100(joy + GOAL_JOY);
+      bonusFindsToday++;
+      findItem();
+    } else if (tier == 2) {
+      joy = clamp100(joy + GOAL2_JOY);
+      bond = clamp100(bond + GOAL2_BOND);
+      bonusFindsToday++;
+      findItem();
+    } else {
+      joy = clamp100(joy + GOAL3_JOY);
+      bond = clamp100(bond + GOAL3_BOND);
+      bonusFindsToday++;
+      findsToday++;
+      giveFound(IT_RARECANDY);
+      pendingMedals |= MED_MARATHON;
+      checkMedals(false);
+    }
+  }
+  if (tier == 1) registerCare(false);  // cuenta como dia de cuidado para la racha
 }
 
 // el bicho encuentra algo por el camino (FR-1.5 / FR-1.6)
@@ -655,14 +687,19 @@ void Pet::findItem() {
   else if (r < ODDS_BERRY + ODDS_VITAMIN) it = IT_PROTEIN + random(3);
   else it = IT_CHARM;
   if (it == IT_CHARM && items[IT_CHARM]) it = IT_GOLDEN;  // solo se lleva un amuleto
+  giveFound(it);
+}
+
+void Pet::giveFound(uint8_t it) {
   uint8_t cap = (it == IT_CHARM) ? 1 : ITEM_MAX;
   bool full = items[it] >= cap;
   if (!full) items[it]++;
-  if (foundN < FOUND_QUEUE) {
-    foundQ[foundN] = it;
-    foundFull[foundN] = full;
-    foundN++;
-  }
+  // cola llena (muchos sin ver con la pantalla apagada): se pierde el aviso mas antiguo, no
+  // el nuevo, que puede ser el Caramelo Raro de la meta de 10000. El objeto ya esta en la mochila.
+  if (foundN == FOUND_QUEUE) popFound();
+  foundQ[foundN] = it;
+  foundFull[foundN] = full;
+  foundN++;
 }
 
 void Pet::popFound() {
@@ -681,11 +718,12 @@ uint8_t Pet::itemCount() const {
 }
 
 bool Pet::canUseItem(uint8_t it) const {
-  if (it >= IT_CHARM || !items[it]) return false;  // el amuleto no se usa a mano
+  if (it >= IT_COUNT || it == IT_CHARM || !items[it]) return false;  // el amuleto no se usa a mano
   if (isEgg() || sleeping || ceremony != CER_NONE) return false;
   if (it == IT_PROTEIN) return trAtk < 100;
   if (it == IT_IRON) return trDef < 100;
   if (it == IT_CARBOS) return trSpe < 100;
+  if (it == IT_RARECANDY) return level() < 999;
   return true;
 }
 
@@ -697,6 +735,12 @@ bool Pet::useItem(uint8_t it) {
     joy = clamp100(joy + GOLDEN_JOY);
     eatUntil = millis() + EAT_ANIM_MS;
     heartUntil = millis() + HEART_MS;
+  } else if (it == IT_RARECANDY) {
+    // +1 nivel: la edad salta al principio del siguiente (el nivel son las horas de edad),
+    // asi que puede abrir la evolucion y las medallas de nivel
+    ageMinutes = (ageMinutes / MINUTES_PER_LEVEL + RARE_CANDY_LEVELS) * MINUTES_PER_LEVEL;
+    heartUntil = millis() + HEART_MS;
+    checkMedals(false);
   } else {
     uint8_t &tr = (it == IT_PROTEIN) ? trAtk : (it == IT_IRON) ? trDef : trSpe;
     tr = clamp100(tr + VITAMIN_TRAIN);
@@ -826,6 +870,8 @@ void Pet::save() {
   prefs.putUChar("fndT", findsToday);
   prefs.putUChar("sjoy", stepJoyToday);
   prefs.putUInt("goalD", goalDay);
+  prefs.putUChar("goalN", goalTier);
+  prefs.putUChar("fndB", bonusFindsToday);
   prefs.putUShort("jRem", joyRem);
   prefs.putUShort("wRem", weightRem);
   prefs.putUShort("bRem", bondRem);
@@ -893,6 +939,11 @@ void Pet::load() {
   findsToday = prefs.getUChar("fndT", 0);
   stepJoyToday = prefs.getUChar("sjoy", 0);
   goalDay = prefs.getUInt("goalD", 0);
+  // v1.25: hasta entonces habia una sola meta; un guardado con goalD la tiene alcanzada
+  goalTier = prefs.getUChar("goalN", goalDay ? 1 : 0);
+  if (goalTier > STEP_GOAL_TIERS) goalTier = STEP_GOAL_TIERS;
+  bonusFindsToday = prefs.getUChar("fndB", 0);
+  if (bonusFindsToday > findsToday) bonusFindsToday = findsToday;
   joyRem = prefs.getUShort("jRem", 0) % STEPS_PER_JOY;
   weightRem = prefs.getUShort("wRem", 0) % STEPS_PER_WEIGHT;
   bondRem = prefs.getUShort("bRem", 0) % STEPS_PER_BOND;

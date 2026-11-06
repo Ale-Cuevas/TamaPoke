@@ -158,13 +158,17 @@ User stories:
   v1.22), bond +1 per 1000 steps (through `addBond()`, so the daily bond cap
   applies: 20 until v1.22, 10 since). Walking costs no energy: an energy drop to 10 or below would count
   as a care mistake.
-- **FR-1.4** Daily goal of 3000 steps. The first time it is reached each day:
-  joy +10 (if hatched and awake), one bonus find, and the day counts as a day
-  of care for the streak (deferred `registerCare()`). A banner and
-  `SFX_MEDAL` play the next time the screen is lit.
+- **FR-1.4** Daily goals of 3000, 6000 and 10000 steps (one goal at 3000
+  until v1.25), each once a day and in order. 3000: joy +10 (if hatched and
+  awake), one bonus find, and the day counts as a day of care for the streak
+  (deferred `registerCare()`). 6000: joy +10, bond +2, a bonus find. 10000: joy
+  +15, bond +3, a Rare Candy (+1 level when used) and the `MED_MARATHON` medal
+  the first time. The goal bond bypasses the daily bond cap, and the goal gifts
+  bypass the find cap (FR-1.5). A banner and `SFX_MEDAL` play the next time the
+  screen is lit, for the highest goal crossed; the 10000 one is larger.
 - **FR-1.5** Found items: after a random 800-1200 *rewarded* steps (FR-1.3
-  conditions), the pet finds an item, at most 5 finds a day (the goal's bonus
-  find included). A popup shows it the next time the screen is lit; a tap
+  conditions), the pet finds an item, at most 5 random finds a day (the goals'
+  gifts come on top since v1.25). A popup shows it the next time the screen is lit; a tap
   dismisses it. Several finds queue up.
 - **FR-1.6** Found items go into a **Backpack** (player-level, at most 9 of
   each item). It is not called "bag": the UI already uses that word for the
@@ -261,13 +265,14 @@ already does. The extra current must be measured; the device test compares an
 | `STEP_MIN_GAP_MS` / `STEP_MAX_GAP_MS` | 280 / 2000 | Fastest step, longest pause inside a streak |
 | `STEP_ENTRY` | 8 | Steps in a row before counting starts (4 in v1.20) |
 | `STEP_FLUSH_MS` | 30000 | How often counted steps go to `Pet::addSteps()` |
-| `STEP_GOAL` | 3000 | Daily goal |
+| `STEP_GOALS` | 3000 / 6000 / 10000 | Daily goals (one, 3000, until v1.25) |
 | `STEPS_PER_JOY` / `STEP_JOY_DAY_CAP` | 100 / 30 | Joy from walking |
 | `STEPS_PER_WEIGHT` | 1000 | Weight burned (250 until v1.22) |
 | `STEPS_PER_BOND` | 1000 | Bond from walking |
-| `GOAL_JOY` | 10 | Goal bonus |
+| `GOAL_JOY` / `GOAL2_JOY` + `GOAL2_BOND` / `GOAL3_JOY` + `GOAL3_BOND` | 10 / 10 + 2 / 15 + 3 | Goal bonuses |
+| `RARE_CANDY_LEVELS` | 1 | Levels from a Rare Candy |
 | `FIND_MIN_STEPS` / `FIND_MAX_STEPS` | 800 / 1200 | Distance between finds |
-| `FINDS_PER_DAY` | 5 | Find cap |
+| `FINDS_PER_DAY` | 5 | Random find cap (goal gifts on top) |
 | `ODDS_BERRY` / `ODDS_VITAMIN` / `ODDS_CHARM` | 55 / 35 / 10 | Item odds (%) |
 | `ITEM_MAX` | 9 | Backpack cap per item |
 | `GOLDEN_FOOD` / `GOLDEN_JOY` | 50 / 15 | Golden Berry |

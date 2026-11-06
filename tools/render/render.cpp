@@ -147,6 +147,9 @@ static void resetUi() {
   pet.stepsToday = pet.stepsTotal = 0;
   pet.findsToday = 0;
   pet.goalDay = 0;
+  pet.goalTier = 0;
+  pet.bonusFindsToday = 0;
+  goalBannerTier = 0;
   memset(pet.items, 0, sizeof(pet.items));
   gStubImuPresent = true;
   gStubTiltSide = 0;
@@ -158,14 +161,18 @@ static void resetUi() {
 }
 
 // steps and Backpack for the WALK page scenes
-static void walker(uint32_t today, uint32_t total, uint8_t finds, std::initializer_list<uint8_t> items) {
+static void walker(uint32_t today, uint32_t total, uint8_t finds, std::initializer_list<uint8_t> items,
+                   uint8_t bonus = 0) {
   pet.stepDay = pet.dayNumber();
   pet.stepsToday = today;
   pet.stepsTotal = total;
   pet.findsToday = finds;
+  pet.bonusFindsToday = bonus;
   int i = 0;
   for (uint8_t n : items) pet.items[i++] = n;
-  if (today >= STEP_GOAL) pet.goalDay = pet.dayNumber();
+  pet.goalTier = 0;
+  while (pet.goalTier < STEP_GOAL_TIERS && today >= STEP_GOALS[pet.goalTier]) pet.goalTier++;
+  if (pet.goalTier) pet.goalDay = pet.dayNumber();
 }
 
 // a hatched pet of the given species, healthy, `hour` o'clock
@@ -252,7 +259,34 @@ static const std::vector<Scene> &scenes() {
     // steps and the Backpack (Task 1)
     { "walk-empty", [] { pokemon(25, 13); cardOpen = true; cardPage = 4; } },
     { "walk-mid", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 0 }); cardOpen = true; cardPage = 4; } },
-    { "walk-goal", [] { pokemon(25, 13); walker(3512, 61200, 4, { 4, 0, 9, 1, 1 }); cardOpen = true; cardPage = 4; } },
+    { "walk-goal", [] { pokemon(25, 13); walker(3512, 61200, 4, { 4, 0, 9, 1, 1 }, 1); cardOpen = true; cardPage = 4; } },
+    // the 6000 and 10000 goals and the Rare Candy (v1.25)
+    { "walk-6000", [] { pokemon(25, 13); walker(7240, 65000, 6, { 4, 0, 9, 1, 1, 0 }, 2); cardOpen = true; cardPage = 4; } },
+    { "walk-10000", [] { pokemon(25, 13); walker(11032, 71500, 8, { 5, 1, 9, 2, 1, 1 }, 3); cardOpen = true; cardPage = 4; } },
+    { "walk-candy-confirm", [] {
+       pokemon(25, 13);
+       walker(11032, 71500, 8, { 5, 1, 9, 2, 1, 1 }, 3);
+       cardOpen = true;
+       cardPage = 4;
+       itemConfirm = IT_RARECANDY + 1;
+       itemConfirmUntil = millis() + 10000;
+     } },
+    { "goal-10000", [] {
+       pokemon(7, 10);
+       pet.lastCareDay = pet.dayNumber();
+       pet.medals = (1 << MED_COUNT) - 1;  // every medal already won: only the goal banner on top
+       pet.addSteps(STEP_GOALS[STEP_GOAL_TIERS - 1], pet.dayNumber());
+       while (pet.hasFound()) pet.popFound();
+     }, 2 },
+    { "found-candy", [] {
+       pokemon(25, 13);
+       pet.lastCareDay = pet.dayNumber();
+       pet.medals = (1 << MED_COUNT) - 1;  // every medal already won: no medal banner on top
+       pet.addSteps(STEP_GOALS[STEP_GOAL_TIERS - 1], pet.dayNumber());
+       pet.takeGoalBanner();
+       while (pet.hasFound() && pet.peekFound() != IT_RARECANDY) pet.popFound();
+     }, 2 },
+    { "card-medals-9", [] { pokemon(25, 13); pet.medals = MED_LV10 | MED_BERRY | MED_MARATHON; cardOpen = true; cardPage = 2; } },
     { "walk-confirm", [] {
        pokemon(25, 13);
        walker(1840, 52310, 2, { 2, 1, 0, 3, 0 });
