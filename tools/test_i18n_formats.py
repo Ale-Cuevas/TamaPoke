@@ -139,7 +139,10 @@ def main():
     i18n_hpp = os.path.join(HERE, '..', 'i18n.h')
 
     str_count = count_enumerators(i18n_hpp, 'StrId', 'STR_COUNT')
-    med_count = 8  # MED_COUNT, #define'd in include/pet.hpp
+    # MED_COUNT is #define'd in pet.h; it was hard-coded here as 8 and went
+    # stale when the Marathon medal (v1.25) made it 9
+    pet_h = open(os.path.join(HERE, '..', 'pet.h'), encoding='utf-8').read()
+    med_count = int(re.search(r'#define\s+MED_COUNT\s+(\d+)', pet_h).group(1))
 
     errors = []
     errors += check_table(
