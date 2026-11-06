@@ -39,6 +39,7 @@ Write the result on each line: a tick, or what you saw.
 | 30 | v1.34 games menu: PLAY has ball, battle and training bag; each slot starts its game; the stat card has no training button | [Games menu](DEVICE_TESTS.md#games-menu-v134) | ✓ (user, 2026-11-06) |
 | 31 | v1.35 level curve: the pet keeps its level after the update (`STATS` before and after), progress card bar and minutes, Rare Candy keeps the bar and does not age the pet | [Levels](DEVICE_TESTS.md#levels-v135) | serial ✓ (2026-11-06): Spearow Lv.10 kept (v1.30 `nv=10` → `grow=196 lv=10 into=16/20 age=584`); grow and age +1 a minute; Lv.11 at grow=200 with the banner once awake; progress card and Rare Candy: pending |
 | 32 | v1.36 step goals give levels: 3000 +1, 6000 +1, 10000 +2 (no Rare Candy), "+N Lv" on the banners, none while asleep | [Levels](DEVICE_TESTS.md#levels-v135) | pending |
+| 33 | v1.37 Box: swipe right / left from pet and egg, store, wake with an egg (the egg waits, same egg back), swap, full box, hibernation across a power-off, the v1.36 pet gets a uid, `NVS` entries empty and full | [Box](DEVICE_TESTS.md#box-v137) | pending |
 
 Questions only the board can answer:
 - Where is the USB-C port relative to the screen's top? Bottom edge (buttons on top).

@@ -51,9 +51,14 @@ included); tapping the screen charges a special attack. Built, host-tested
 (every one of the 151×151 pairings at three levels) and rendered on the PC; the
 on-board checks are in [docs/DEVICE_TESTS.md](docs/DEVICE_TESTS.md#battle).
 
+**v1.37: the Box.** Swipe right for a 6-slot box where pets hibernate while you
+raise another; wake one to swap them back. Host-tested, including a power cut
+after every single flash write of every move, and rendered on the PC; the
+on-board checks are in [docs/DEVICE_TESTS.md](docs/DEVICE_TESTS.md#box-v137).
+
 The game itself runs on the 1.75" hardware upstream. Implemented: the 151 +
 shinies animated from microSD, full life cycle (egg by rarity → evolution → farewell/release/runaway, each gated
-behind a decision dialog), bred-Pokédex with gallery, battle stats (genes +
+behind a decision dialog), bred-Pokédex with gallery, a 6-slot box to hibernate pets, battle stats (genes +
 training), retention hooks (streak / bond / medals / name), biome + real-time
 backgrounds, ball minigame, training bag, animated bath, RTC with offline
 progression, battery (AXP2101) and PWR button, AMOLED burn-in protection (pixel orbit + screensaver),
@@ -162,7 +167,31 @@ While **awake**, per minute:
   act of care cancels it. It **curses the next egg** (forces Common). The sad ending.
 - 👋 **Release** — long-press the creature to let it go on your terms (neutral).
 
-After any ending, a **new egg** appears.
+After any ending, a **new egg** appears (or the egg that was waiting while you woke a pet
+from the Box, see below).
+
+### The Box (v1.37)
+Swipe **right** from the home screen (pet or egg) to open the Box: **6 slots** where pets
+**hibernate** while you raise another. Swipe left, tap the title or press USER to go back.
+- **Store:** tap an empty slot (it shows a "+" when the current pet fits) and confirm. The
+  pet goes in, and an egg takes its place: the egg that was waiting, or a new one. Storing
+  is not an ending, so it doesn't change the next egg's odds. A sleeping pet can be stored
+  and comes back asleep. Not while it's evolving or saying goodbye.
+- **Wake:** tap a stored pet and confirm. With a hatched pet active, the two **swap
+  places** in that slot (so a full box can still swap). With an egg active, the egg **waits
+  as it is** (species, shiny roll, cracks; a small sleeping egg shows next to "Now") and
+  comes back after your next store or ending: storing and waking never re-roll an egg, or
+  spend the Shiny Charm twice.
+- **Hibernation is total:** a stored pet doesn't age, grow, get hungry or slip up, not even
+  while the board is off. Farewell age and evolution levels only count time spent active.
+- Each pet keeps its own **bond**, daily bond cap and **medals**. Streak, steps, finds,
+  goals, the Backpack, records and the Pokédex are yours and stay put; the first care of the
+  day gives its +4 bond once a day, to whoever is active.
+- Slots show the pet dimmed with a "z", its name, level and a star if it's shiny. A slot
+  whose data is damaged shows **"?"** and is never loaded or overwritten.
+- Moving a pet writes to flash at once; a light flying between the pet and its slot covers
+  the ~1 s write. A power cut at any moment never loses a pet: the next boot finishes or
+  undoes the move.
 
 ### Bonds, streaks, medals, Pokédex
 - **Streak** (player-wide, survives across pets): first care each real day; milestones
@@ -413,7 +442,8 @@ If one bottoms out it counts as a *slip-up*.
 
 **Touch gestures:**
 - Tap the creature = pet it (+happiness, bond).
-- Horizontal swipe = open the **Pokédex / gallery**.
+- Swipe left = open the **Pokédex / gallery** · swipe right = open the **Box** (v1.37,
+  see [The Box](#the-box-v137)), from the pet or from the egg.
 - Vertical swipe up = open the **stat card** (5 pages: Profile / Battle / Medals /
   Progress / Walk; swipe between them; tap the name on Profile to rename; on Walk, tap a
   Backpack item to use it; the bag moved to the Play menu in v1.34).
@@ -428,7 +458,7 @@ face-down screen counts as the game. A touch, USER, BOOT or a shake still wakes 
 wakes the screen from off. Eating or a heart doesn't wake a screensaver you put on with PWR.
 
 **Physical USER button:** back. It closes whatever is open on top: gallery
-detail → grid → home, stat card, rename keyboard (without saving the name),
+detail → grid → home, the Box (its store / wake question first), stat card, rename keyboard (without saving the name),
 clock screen (without applying the time), the minigame or the bag (quit, no
 reward), and the feed / release / evolve / farewell dialogs. On a dim or dark
 screen the first press only wakes it.
@@ -636,8 +666,11 @@ as CSV, the `test/data/imu/` format; any key stops it) · `SHAKE` /
 `BALL <score>` (open the ball game at that score to feel its speed: 1× at 1, 2× at 80;
 the result doesn't touch the record or the save) · `FX <effect>` (show a feedback effect without touching the save: `levelup`, `levelup6`,
 `medal`, `streak`, `goal`, `goal3`, `stat`, `bond`, `train`, `deny`, `press`, `oops`,
-`hatch`) · `PERF` (scene and effects draw time) · `PWR` (a short PWR press: prints the new view,
-`on` / `saver` / `off`).
+`hatch`, `box`) · `PERF` (scene and effects draw time) · `PWR` (a short PWR press: prints the new view,
+`on` / `saver` / `off`) · `BOX` (the Box: each slot's uid, species, level and CRC, plus the
+waiting egg) · `STORE <k>` / `WAKE <k>` (store into / wake from slot k = 0–5, like tapping YES
+without the light) · `BOXFILL` (made-up pets in the empty slots, for tests and screenshots) ·
+`BOXCLR <k>` (empty slot k, also a damaged one) · `NVS` (used and free NVS entries).
 
 To test fast: lower `PET_TICK_MS` and `FAREWELL_AGE_MIN` in `pet.h` (levels count game minutes, so they
 speed up with the tick; the per-level costs are in `growth.h`), or jump levels with `LVL <n>` over serial.
@@ -656,7 +689,7 @@ Specified in [docs/FEATURES.md](docs/FEATURES.md), each one its own task:
 - ~~**Feedback effects**~~ — done in v1.30: level-up animation and jingle, one
   celebration at a time, sliding bars with "+N", button, hatch and slip-up effects.
   Specified in [docs/NEXT_FEATURES.md](docs/NEXT_FEATURES.md), with two more tasks:
-  - **Pet box**: hibernate up to 6 pets and raise another;
+  - ~~**Pet box**~~ — done in v1.37: hibernate up to 6 pets and raise another;
   - **OTA**: firmware updates over Wi-Fi.
 - **Link** — two nearby boards meet over ESP-NOW for playdates (visit & play,
   gifts, friendship egg) and battles, on the v1.24 engine; includes a build for

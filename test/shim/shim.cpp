@@ -73,7 +73,25 @@ bool audioEnabled() { return gAudioOn; }
 typedef std::map<std::string, std::vector<uint8_t> > KV;
 static std::map<std::string, KV> gStore;
 
-void mockNvsReset() { gStore.clear(); }
+static long gCutBudget = -1;  // escrituras que aun llegan (-1 = todas)
+static long gWrites = 0;
+static std::map<std::string, KV> gSnap;
+void mockNvsReset() {
+  gStore.clear();
+  gCutBudget = -1;
+  gWrites = 0;
+}
+void mockNvsCutAfter(long n) { gCutBudget = n; }
+long mockNvsWrites() { return gWrites; }
+void mockNvsSnapshot() { gSnap = gStore; }
+void mockNvsRestore() { gStore = gSnap; }
+// una escritura: tras el corte no llega (la placa ya esta apagada)
+static bool writeLands() {
+  if (gCutBudget == 0) return false;
+  if (gCutBudget > 0) gCutBudget--;
+  gWrites++;
+  return true;
+}
 size_t mockNvsKeyCount(const char *ns) {
   std::map<std::string, KV>::iterator it = gStore.find(ns);
   return it == gStore.end() ? 0 : it->second.size();
@@ -87,7 +105,7 @@ bool Preferences::begin(const char *name, bool readOnly) {
 }
 void Preferences::end() { open_ = false; }
 bool Preferences::clear() {
-  if (!open_ || ro_) return false;
+  if (!open_ || ro_ || !writeLands()) return false;
   gStore[ns_].clear();
   return true;
 }
@@ -97,13 +115,13 @@ bool Preferences::isKey(const char *key) {
   return kv.find(key) != kv.end();
 }
 bool Preferences::remove(const char *key) {
-  if (!open_ || ro_) return false;
+  if (!open_ || ro_ || !writeLands()) return false;
   return gStore[ns_].erase(key) > 0;
 }
 
 static size_t rawPut(std::map<std::string, KV> &store, const std::string &ns, bool open,
                      bool ro, const char *k, const void *v, size_t len) {
-  if (!open || ro) return 0;
+  if (!open || ro || !writeLands()) return 0;
   const uint8_t *p = (const uint8_t *)v;
   store[ns][k].assign(p, p + len);
   return len;

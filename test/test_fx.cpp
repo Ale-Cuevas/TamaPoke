@@ -85,6 +85,26 @@ TEST(fx, la_que_ya_se_ve_no_la_corta_otra_de_mas_prioridad) {
   CHECK_EQ((int)q.step(FX_GOAL_MS, false)->kind, (int)FXB_LEVELUP);
 }
 
+// caja (v1.37): al cambiar de bicho se quitan su subida y su medalla; lo del jugador sigue
+TEST(fx, drop_quita_un_tipo_tambien_el_que_se_ve) {
+  FxQueue q;
+  q.push(FXB_MEDAL, 1);
+  q.push(FXB_GOAL, 2);
+  q.push(FXB_LEVELUP, 4, 6);
+  q.push(FXB_MEDAL, 2);
+  q.push(FXB_MILESTONE, 7);
+  CHECK_EQ((int)q.step(0, false)->kind, (int)FXB_LEVELUP);  // la subida, en pantalla
+  q.drop(FXB_LEVELUP);
+  q.drop(FXB_MEDAL);
+  CHECK(!q.active);
+  CHECK_EQ((int)q.n, 2);
+  const FxEvent *e = q.step(10, false);
+  CHECK_EQ((int)e->kind, (int)FXB_MILESTONE);
+  CHECK_EQ((int)q.step(10 + e->dur, false)->kind, (int)FXB_GOAL);
+  q.drop(FXB_MEDAL);  // sin ninguna: nada cambia
+  CHECK(q.active);
+}
+
 TEST(fx, la_meta_de_10000_dura_mas) {
   CHECK_EQ(fxBannerMs(FXB_GOAL, 1), FX_GOAL_MS);
   CHECK_EQ(fxBannerMs(FXB_GOAL, FX_GOAL_TOP_TIER), FX_GOAL_TOP_MS);

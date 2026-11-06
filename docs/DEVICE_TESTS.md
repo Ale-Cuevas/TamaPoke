@@ -330,3 +330,36 @@ real pet don't use `LVL`: it moves the level.
   10000 (+2, no Rare Candy in the Backpack, the Marathon medal the first time).
 - [ ] A goal crossed while the pet sleeps: the banner when it wakes has no "+N Lv", and the level didn't move.
 
+### Box (v1.37)
+([NEXT_FEATURES.md, Task BOX](NEXT_FEATURES.md#task-box-store-a-pet-raise-another).) `BOX` over serial lists
+the slots (`box<k> uid=… spec=… lv=… crc=ok`, `empty` or `damaged`) and the active pet with the waiting egg
+(`eggHeld=`, `eggT=`). `STATS` ends with `box used=… uid=… eggHeld=…`. `NVS` prints the NVS entries. On a board
+with a real pet: `BOXFILL` only fills empty slots with made-up pets and `BOXCLR <k>` empties one again; neither
+touches the active pet. Storing and waking the real pet is the feature itself, so it's safe. `FX box`
+shows the "comes out of a light" effect at home without moving anyone.
+- [ ] Before flashing v1.37, `STATS` on v1.36. After: the same pet and level, `box used=0/6`, and a `uid=` that
+  isn't 0 and stays the same after a restart.
+- [ ] `NVS` with the box empty, then after `BOXFILL` (6 pets): note used / free entries in PENDING_TESTS. Each
+  slot should cost about 4 entries. `BOXCLR 0` … `BOXCLR 5` to empty it again.
+- [ ] Gestures, from the pet and from the egg: swipe right opens the Box, swipe left opens the Pokédex. In the
+  Box, swipe left closes it, swipe right does nothing, the title or USER closes it. The Pokédex pages as before.
+- [ ] Store: tap an empty slot (it has a "+"), "Store <name>?", YES. A light flies from the pet at "Now" into the
+  slot with a falling sparkle sound, the result holds for about a second (the flash write), then home shows the
+  egg coming out of a light. `BOX`: the pet in that slot with `crc=ok`, the egg active.
+- [ ] Wake with the egg active: tap the pet, "Wake <name>?" with no second line, YES. The light flies out to
+  "Now" with a rising sparkle, and home shows the pet coming out of a light (asleep, if it was asleep). `BOX`: the
+  slot empty and `eggHeld=1`; the Box shows a small sleeping egg next to "Now".
+- [ ] Store again: the same egg comes back (same `eggT=` and rarity, same cracks).
+- [ ] Swap: with a pet active, wake another. The dialog adds "<current> goes in the box", two lights cross, and
+  the two swap places in that slot. `STATS` before and after: level, stats, bond, medals and nickname go with
+  each pet; streak, steps, Backpack and the Pokédex count don't change.
+- [ ] A full box (`BOXFILL`): every slot can still be woken (swap); there's no "+" and storing isn't offered.
+- [ ] Hibernation: store a pet, power off (hold PWR 4 s) for 10+ minutes, power on. `BOX`: its `age=` and `grow=`
+  unchanged; the active pet aged.
+- [ ] Power-off right after a move: tap YES and hold PWR straight away. The board only turns off after ~4 s, when
+  the write is done, so this checks a move survives an immediate power-off. A cut in the middle of a write is
+  covered by the host tests (after every write of every move). After power-on, `BOX` and `STATS`: each pet
+  exactly once, the egg either active or `eggHeld=1`.
+- [ ] Taps that can't work: an empty slot with the egg active, or a damaged slot, shakes with the deny sound.
+- [ ] Long names fit inside the slot and the dialogs: a 10-letter species (Charmander), an 11-letter nickname, and
+  French (`Kangourex`, "… va dans la boîte").

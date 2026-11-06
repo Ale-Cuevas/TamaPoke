@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <Preferences.h>
 #include "growth.h"  // ritmo de los niveles (v1.35): cuanto cuesta cada uno
+#include "box.h"     // la caja (v1.37): el registro de un bicho guardado
 
 // 1 tick = 1 minuto de juego. Baja este valor para probar mas rapido
 // (p. ej. 5000UL = las estadisticas caen 12x mas rapido).
@@ -158,6 +159,10 @@ public:
   uint32_t goalDay = 0;      // ultimo dia en que se alcanzo una meta
   uint8_t goalTier = 0;      // metas alcanzadas ese dia (0..STEP_GOAL_TIERS)
   uint8_t items[IT_COUNT] = { 0 };  // mochila; items[IT_CHARM] es 0 o 1
+  // identidad del individuo (v1.37): se sortea al nacer, nunca 0; el huevo tiene 0. Con ella se
+  // sabe, tras un corte de luz a mitad de un movimiento de la caja, quien es quien (y la podra
+  // usar la lista de amigos del Link, docs/FEATURES.md FR-3.11)
+  uint32_t uid = 0;
 
   void begin();                 // carga estado de NVS (o crea el primer huevo)
   void update(uint32_t nowMs);  // llamar en cada loop()
@@ -306,6 +311,32 @@ public:
   uint32_t savedEpoch() { return prefs.getUInt("seen", 0); }
   void flushSave();
 
+  // --- la caja (docs/NEXT_FEATURES.md, Tarea BOX, v1.37): BOX_SLOTS huecos en la NVS (box0..5).
+  // Guardar y despertar escriben en flash al momento (es un toque con la pantalla encendida,
+  // como comer). Ningun orden de corte de luz pierde un bicho: el siguiente arranque termina o
+  // deshace el movimiento (boxBoot).
+  uint8_t boxState(uint8_t k) const { return k < BOX_SLOTS ? boxSt[k] : (uint8_t)BOX_EMPTY; }
+  const PetRecord &boxRecord(uint8_t k) const { return boxRec[k < BOX_SLOTS ? k : 0]; }  // solo si BOX_OK
+  uint8_t boxUsed() const;   // huecos ocupados (danados incluidos)
+  // se puede mover algo: sin despedida, evolucion ni eleccion de inicial
+  bool canBoxMove() const { return ceremony == CER_NONE && !evolving() && !starterPick; }
+  bool canStore(uint8_t k) const { return boxState(k) == BOX_EMPTY && k < BOX_SLOTS && !isEgg() && canBoxMove(); }
+  bool canWake(uint8_t k) const { return boxState(k) == BOX_OK && canBoxMove(); }
+  // guarda al bicho en el hueco k (vacio) y deja en su sitio el huevo guardado, o uno nuevo
+  bool store(uint8_t k);
+  // despierta al del hueco k. Con un bicho nacido, los dos se cambian el sitio; con un huevo,
+  // el huevo se queda tal cual (especie, tirada shiny y grietas) y vuelve tras el proximo
+  // guardado o final
+  bool wake(uint8_t k);
+  bool boxClear(uint8_t k);                // BOXCLR (tambien un hueco danado)
+  bool boxPut(uint8_t k, PetRecord r);     // BOXFILL: un bicho inventado en un hueco vacio (uid nuevo)
+  void boxReload() { for (uint8_t k = 0; k < BOX_SLOTS; k++) readSlot(k); }  // relee la NVS (renderizador)
+  bool eggHeld() const { return eggHeldFlag; }  // hay un huevo esperando (FR-BOX.5)
+  int16_t eggSpecies() const { return eggTarget; }  // la incubadora (serie BOX y pruebas)
+  bool eggIsShiny() const { return eggShiny; }
+  PetRecord toRecord() const;              // el bicho activo como registro sellado (storedEpoch = ahora)
+  void fromRecord(const PetRecord &r);     // pasa a ser el bicho de r (solo lo del individuo)
+
 private:
   Preferences prefs;
   uint32_t lastTick = 0;
@@ -363,6 +394,16 @@ private:
   void startEmote(uint8_t kind) { emoteKind = kind; emoteUntil = millis() + EMOTE_MS; }
   void tick();
   void hatch();
+  // caja (v1.37)
+  PetRecord boxRec[BOX_SLOTS];      // copia en RAM de cada hueco (la UI la dibuja sin leer flash)
+  uint8_t boxSt[BOX_SLOTS] = { 0 };
+  bool eggHeldFlag = false;         // "eggH": el huevo de la incubadora espera a que vuelva su turno
+  void boxBoot();                   // al arrancar: lee la caja y arregla un movimiento cortado
+  void readSlot(uint8_t k);
+  bool writeSlot(uint8_t k, PetRecord r);
+  bool clearSlot(uint8_t k);
+  int8_t slotOf(uint32_t id) const; // hueco (BOX_OK) con ese uid, o -1
+  uint32_t newUid() const;          // al azar, distinto de 0 y de los de la caja
   void registerSpecies(int16_t dex);
   void save();
   void load();

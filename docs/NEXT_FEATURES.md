@@ -23,8 +23,8 @@ in flight, line numbers move every day.
 | Task | What | Needs | Size | Release |
 |---|---|---|---|---|
 | [FX](#task-fx-feedback-for-what-the-pet-does) | Level-up sound and animation; feedback for stats, bond, training, hatching and buttons; one queue so celebrations never overlap | Best after day-1 Task 3 (Rare Candy) and Task 6 (screensaver) | M | **1.30 (built)** |
-| [BOX](#task-box-store-a-pet-raise-another) | Put the pet into hibernation in a 6-slot box, raise a new egg, swap back any time | — (uses FX's overlay for its effect) | M–L | 1.31 |
-| [OTA](#task-ota-firmware-updates-over-wi-fi) | Update the firmware over Wi-Fi from GitHub Releases, with automatic rollback | — (shares the radio rules with the Link, `FEATURES.md` Task 3) | L | 1.32 |
+| [BOX](#task-box-store-a-pet-raise-another) | Put the pet into hibernation in a 6-slot box, raise a new egg, swap back any time | — (uses FX's overlay for its effect) | M–L | **1.37 (built)** |
+| [OTA](#task-ota-firmware-updates-over-wi-fi) | Update the firmware over Wi-Fi from GitHub Releases, with automatic rollback | — (shares the radio rules with the Link, `FEATURES.md` Task 3) | L | 1.38 |
 
 **Suggested order: FX → BOX → OTA.**
 - FX is the smallest, and the other two reuse its queue: BOX for the
@@ -64,6 +64,8 @@ BOX and OTA both add keys to the 20 KB NVS partition (`nvs`, 0x5000).
 That leaves plenty of room, but nobody has measured it. **Whichever of BOX or
 OTA lands first adds an `NVS` serial command.** It prints `nvs_get_stats()`
 (used and free entries), and the numbers go into `PENDING_TESTS.md`.
+*(BOX added it in v1.37, with the entries of the `tamapoke` namespace too;
+`PENDING_TESTS.md` row 33.)*
 
 ---
 
@@ -607,6 +609,58 @@ A host test cuts the power after every single write of every move (FR-BOX.9).
 - ~~A card page, or a screen of its own?~~ **Answered 2026-11-05:** its own
   screen, opened by swiping right; swiping left stays the Pokédex.
 
+### Built in v1.37
+
+Branch `feature/box`, 2026-11-06. The gameplay tuning plan (`GAMEPLAY_TUNING.md`) took
+v1.31–v1.36, so BOX is v1.37 and OTA moves to 1.38. The open questions above keep the
+spec's defaults: 6 slots, `storedEpoch` saved but not shown, no "missed you", no release
+from the box. Where the build differs from the text above, or settles something it left
+open:
+
+- **Power cuts: the slot copy wins, it isn't cleared.** The table's store writes the slot,
+  then the egg with `save()`, ~60 keys. A cut in the middle of those leaves the active keys
+  half pet, half egg with the pet's `uid`, and the rule "a slot holding the active pet's
+  uid is cleared" then loses the pet; the host test caught it. So:
+  - `save()` writes `uid` last (NVS writes in order: a new `uid` means every other key is
+    there) and `eggH` after it;
+  - with no `boxT`, a slot holding the active `uid` means a store that didn't finish: the
+    pet is loaded from that slot (a whole copy), then the slot is cleared;
+  - with `boxT` and the active `uid` equal to its uid, the wake finished: a copy of it still
+    in a slot (a wake from an egg cut before step 4) is cleared, not loaded;
+  - with `boxT`, an active `uid` of 0 and no slot holding it, a wake from an egg was cut
+    before B's `uid` was written: the egg is rebuilt from the incubator (`eggTarget`,
+    `eggShiny`, `eggTaps`; only its minutes are lost), since B's `save()` may have started;
+  - an egg active with `eggH` set is never a real state (the egg only waits while a pet is
+    active), so the boot clears it.
+
+  `test/test_box.cpp` cuts the power after every write of a store, a store with a waiting
+  egg, a swap and a wake from an egg, boots twice, and checks each pet is there exactly once
+  and unchanged, and the egg is the same one. Breaking any of the rules above (the spec's
+  clear, `uid` written first, no egg rebuild) makes those tests fail. A charm can still be
+  lost if the power goes in the middle of rolling a new egg; that's left as it is.
+- **The light plays before the write, in the Box.** On YES the light flies between "Now"
+  and the slot for `BOX_FX_MS` (two lights on different arcs in a swap); the last frame
+  already shows the result (the slot, "Now", the count) and stays on screen through the
+  ~1 s write. Then the Box closes (after a store too) and the active pet or egg comes out of
+  a light at home: a new FX overlay, `FXO_BOX`, that holds the celebrations back while it
+  plays. Two sounds were added, `SFX_STORE` (falling) and `SFX_WAKE` (rising). A tap that
+  can't work shakes its slot with `SFX_DENY`, like a button.
+- **After a move** the FX watches are re-armed (otherwise a woken Lv 40 would "level up"
+  from the Lv 12 it replaced, or a pet replacing an egg would "hatch"), the old pet's
+  pending level-up and medal banners are dropped (`FxQueue::drop()`), and its overlays and
+  bar tweens are reset.
+- **Layout.** Cells are 124×110, not 120: a 10-letter name then fits at text size 2. Names
+  and dialog lines that are still too wide are drawn with letters 1 px (or 2) closer, never
+  at size 1, which is unreadable on this panel. Thumbnails are cropped to their visible part
+  (at most 33×28 of their 40×40) and drawn at 2×, dimmed toward the cell's blue-grey. "Now"
+  shows the active pet's thumbnail (or the egg) and, while an egg waits, a small sleeping egg.
+- **The Box only opens from a free home screen**: not with a dialog, a menu, the bath or an
+  evolution. The Pokédex keeps its old guards.
+- **Serial slots are 0–5**, as the NVS keys `box0`…`box5`. `STATS` gains a `box` line.
+  Pets from `BOXFILL` aren't added to the Pokédex when woken: nobody raised them.
+- **Tests** live in `test/test_box.cpp` (the shim gained a power-cut switch and an NVS
+  snapshot), not in `test_pet.cpp`.
+
 ---
 
 ## Task OTA: firmware updates over Wi-Fi
@@ -638,7 +692,7 @@ the **app-only** `firmware.bin` instead.
 
 ### Goal
 
-A board on v1.32 or later updates itself from GitHub Releases over Wi-Fi:
+A board on v1.38 or later updates itself from GitHub Releases over Wi-Fi:
 - started from the settings (clock) screen;
 - without USB;
 - keeping the pet.

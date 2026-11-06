@@ -71,6 +71,8 @@ enum StrId : uint8_t {
   S_WIN, S_LOSE, S_DRAW, S_PRACTICE_JOY_FMT, S_PRACTICE_NONE,
   // efectos de respuesta (v1.30): pildora de la subida de nivel
   S_LEVEL_UP,
+  // la caja (v1.37): titulo, dialogos de guardar / despertar, el activo y los huecos sin bicho
+  S_BOX_FMT, S_STORE_Q_FMT, S_WAKE_Q_FMT, S_SWAP_NOTE_FMT, S_NOW_FMT, S_BOX_EMPTY, S_BOX_DAMAGED,
   STR_COUNT
 };
 
