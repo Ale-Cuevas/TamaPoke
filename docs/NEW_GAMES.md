@@ -1,4 +1,4 @@
-# Two new games: Dash (tilt, trains SPD) and Waterfall (hold, trains DEF)
+# Two new games: Dash (tilt, sled, trains SPD) and Waterfall (hold, trains DEF)
 
 Asked for on 2026-11-07, on top of v1.41 (main `b2f98b6`). Today PLAY has three games:
 ball (`startGame()`), battle (`startPractice()`) and the training bag (`startSack()`, trains ATK).
@@ -6,7 +6,7 @@ This spec adds two more, each training one stat:
 
 | Code | Game | Input | Trains | Size | Version |
 |------|------|-------|--------|------|---------|
-| **DASH** | The pet runs down a track; tilt the board to dodge obstacles that come faster and faster | IMU tilt (accelerometer) | **SPD** (`trSpe`) | L | given at merge |
+| **DASH** | The pet rides a sled down a slope; tilt the board to dodge obstacles that come faster and faster | IMU tilt (accelerometer) | **SPD** (`trSpe`) | M–L | given at merge |
 | **ZEN** | The pet meditates under a waterfall; hold the screen to keep its focus gauge in the middle band | Touch held / released | **DEF** (`trDef`) | M | given at merge |
 
 v1.42 is taken by OTA (branch `feature/ota`, not merged yet). Give each game its version when it
@@ -95,10 +95,18 @@ screen, and in ZEN the finger stays down without new touch events. So:
 
 ### Goal
 
-The pet runs down a track toward the viewer. It stays in the middle of the screen, and the
-ground scrolls up past it. Tilting the board left or right moves the pet across the track to dodge
-obstacles coming up from the bottom. Obstacles come faster the longer the run lasts, until the
+The pet rides a sled down a slope toward the viewer. It stays in the middle of the screen, and
+the ground scrolls up past it. Tilting the board left or right steers the sled across the track to
+dodge obstacles coming up from the bottom. Obstacles come faster the longer the run lasts, until the
 third hit. It trains SPD.
+
+**Why a sled (decided 2026-11-07).** The SD sprites have no running-toward-the-viewer animation.
+Idle and Sit already face the viewer (sheet row 0), but a pet idling while the ground races past
+looks like it hops in place. In a sled the pet sits still for a reason. The sled hides its legs,
+and steering by leaning fits the tilt control. A downhill slope also explains going faster and
+faster. So DASH needs **no new sprites, no SD repack and no loader change**. The sled is drawn with
+primitives, so it can lean into turns even though sprites can't rotate (`blit.h`). Its hitbox is
+the same for every species, so a big pet isn't harder to steer than a small one.
 
 The board is held in the hand at any angle, from upright to lying face up. Each run starts with a
 short calibration that takes the angle the player is holding as "straight".
@@ -145,26 +153,37 @@ short calibration that takes the angle the player is holding as "straight".
 
 **Camera, track and pet**
 
-- **FR-DASH.5** The pet is drawn at a fixed screen spot: x = `CX`, feet at `DASH_PET_Y`. It is
-  centred left to right. It sits a little above the middle of the screen, so more track is visible
-  ahead. The world moves, the pet doesn't. The pet has a sideways position `px` on a track of
+- **FR-DASH.5** The sled and pet are drawn at a fixed screen spot: x = `CX`, the sled's bottom at
+  `DASH_PET_Y`. It is centred left to right. It sits a little above the middle of the screen, so
+  more track is visible ahead. The world moves, the sled doesn't. The sled has a sideways position
+  `px` on a track of
   ±`DASH_HALF_W`. On screen, an object at track x is drawn at `CX + (x − px)`. Tilting slides the
   track and obstacles the other way.
 - **FR-DASH.6** The track edges are drawn (grass, cliff, or the biome's border). `px` stops at the
   edges with a small bump, but it doesn't count as a hit.
 - **FR-DASH.7** The ground scrolls up at the run speed. It has texture marks (tufts, pebbles,
-  stripes) so the speed shows. From 2× on, add speed lines at the sides.
+  stripes) so the speed shows. The sled leaves two runner tracks behind it (above it on screen),
+  which bend when it steers. From 2× on, add speed lines at the sides.
   - Colours come from the home biome (`homeBiome()`), with a night version like
     `drawGameScene()`.
   - Draw it all with primitives, like the training bag. No new image assets.
-- **FR-DASH.8 Pet sprite running down.** A new PMD action `PMD_WALKD` (id 12). It is the
-  SpriteCollab `Walk` animation, sheet row 0, which faces down.
-  - Add it to `ACTIONS` in `tools/pack_pmd.py` and repack the SD sprites (normal and shiny).
-  - The loader (`sdmon.cpp:43`) must **skip action ids it doesn't know instead of rejecting the whole
-    file**. Otherwise an SD packed with a newer tool breaks older firmware.
-  - If the card has no `PMD_WALKD` (old SD), use `PMD_IDLE` (also row 0, facing down) played at 2×
-    with a 3 px bob.
-  - While steering, lean: draw the sprite 2–4 px toward the turn.
+- **FR-DASH.8 Pet in a sled.** The pet rides a sled drawn with primitives. No new sprites.
+  - **Pet sprite:** `PMD_SIT` if the card has it, else `PMD_IDLE`. Both face the viewer (sheet
+    row 0). `PMD_HURT` on a hit (FR-DASH.11).
+  - **Draw order:** sled back and seat, then the pet, then the sled's front lip over the pet's lower
+    body. The lip covers the feet, so the sprite's resting pose looks like sitting. A tall pet sticks
+    out of the top, which is fine.
+  - **Size:** the sled's width follows the sprite's visible width (`PmdAct` w and `base`, times the
+    draw scale) plus a margin, clamped to `DASH_SLED_W_MIN`–`DASH_SLED_W_MAX`. Only the drawing
+    scales. The hitbox doesn't (FR-DASH.11).
+  - **Shape:** a rounded body, a raised front lip and two runners, seen from the front at a slight
+    angle from above. Colours come from the home biome palette (a red wooden sled on snow, a
+    darker wood on grass or sand…), with a night version.
+  - **Lean:** the sled tilts up to `DASH_SLED_LEAN_DEG` toward the turn, in proportion to the steer
+    value. It's a rotated polygon, which is cheap. The pet sprite can't rotate: it shifts 2–4 px
+    toward the turn and 1–2 px down on the low side.
+  - **Speed feel:** a small bounce every few hundred ms, faster at higher speed, and snow or dust
+    puffs from the runners from 2× on.
 
 **Obstacles**
 
@@ -179,10 +198,12 @@ short calibration that takes the angle the player is holding as "straight".
     most `0.7 × lateral max × time between rows`.
   - The generator is a pure function with a seed (`dashNextRow(rng, prevGapX, speedFactor)`). Host
     tests run 10 000 rows at every speed and check both rules.
-- **FR-DASH.11 Hits.** The pet's hitbox is a circle of `DASH_PET_R` at the feet. Obstacle boxes are
+- **FR-DASH.11 Hits.** The hitbox is the sled's, a fixed `DASH_HIT_W` × `DASH_HIT_H` box at the
+  sled's spot, the same for every species and whatever size the sled is drawn. Obstacle boxes are
   shrunk by `DASH_HIT_SHRINK` to be fair.
   - A hit costs one of 3 hearts and plays `PMD_HURT` and `SFX_DENY`.
-  - The screen shakes for 4 px and the pet blinks, invulnerable, for `DASH_INVULN_MS`.
+  - The sled jolts sideways, the screen shakes for 4 px, and sled and pet blink, invulnerable, for
+    `DASH_INVULN_MS`.
   - The run speed doesn't change.
 - **FR-DASH.12 Score** = rows that went past the pet without a hit. A row hit during the
   invulnerable time still counts as dodged. It is shown big at the top with the record under it,
@@ -230,8 +251,10 @@ short calibration that takes the angle the player is holding as "straight".
 | `DASH_DEAD_DEG` / `DASH_FULL_DEG` | 3° / 22° | steering dead zone / full steer |
 | `DASH_LAT_MAX` | 300 px/s | sideways speed at full steer, 1× |
 | `DASH_HALF_W` | 170 px | half the track width |
-| `DASH_PET_Y` | 200 | feet on screen (CY = 233) |
-| `DASH_PET_R` | 26 px | hitbox |
+| `DASH_PET_Y` | 200 | sled bottom on screen (CY = 233) |
+| `DASH_HIT_W` / `DASH_HIT_H` | 60 / 34 px | sled hitbox, the same for every species |
+| `DASH_SLED_W_MIN` / `_MAX` | 70 / 150 px | drawn sled width, follows the sprite |
+| `DASH_SLED_LEAN_DEG` | 12° | sled tilt at full steer |
 | `DASH_HIT_SHRINK` | 15 % | obstacle box shrink |
 | `DASH_V0` | 160 px/s | starting speed |
 | `DASH_DOUBLE_S` / `DASH_SPEED_MAX` | 40 s / 3× | speed ramp |
@@ -254,9 +277,13 @@ short calibration that takes the angle the player is holding as "straight".
   - calibration: mean, the shaky case, 2 retries then accept.
 - `test_motion.cpp`: the fast roll is pitch-independent. Replay `test/data/imu/` captures. Synthetic
   gravity at 0°, 45° and 90° pitch with the same roll gives the same `rollFast`.
+- Sled size (pure function): clamps at both ends, follows the sprite width in between; the hitbox
+  doesn't change with it.
 - `test_pet.cpp`: `dashResult` gains and cap, stat cap at 100, record, refused while an egg or
   during a ceremony.
-- Render sheet: early run, 3× run with speed lines, a hit (blink), result.
+- Render sheet: early run, 3× run with speed lines, a hit (blink), result. Sleds with a tiny pet
+  (Caterpie), a huge one (Onix) and a flying one (Pidgey), leaning left and right, in a snow
+  habitat and a grass one, by day and by night.
 - Board: the user plays held upright, slanted and flat face up. Each one must steer the same after
   calibration. A run at 1× is easy. At 2× (≈ 40 s) it's hard, but every row can be dodged. Frame
   time stays ≤ 85 ms (serial `scene`).
@@ -400,10 +427,14 @@ They only conflict on the shared parts: the PLAY menu (FR-G.1/2), `powerCtx()` a
 lists (FR-G.4–6), and the new `Pet` record fields. The first branch to merge adds the 5-slot menu
 with the other slot showing nothing yet. The second fills its slot in.
 
-**Suggested order: ZEN first.** It is smaller, touch only, and needs no SD repack. That gets the
-5-slot menu and the power rules in. Then DASH, which also needs the IMU fast path, the `PMD_WALKD`
-repack and a new SD card copy (`tools/send_sd.py` / `tools/sdcard`), and the loader fix
-(FR-DASH.8) going in **before** the new SD files.
+**Either order works.** With the sled, neither game needs SD changes, so both are firmware only.
+ZEN is still the smaller one (touch only), so it's a good first branch for the 5-slot menu and the
+power rules. DASH adds the IMU fast path (FR-DASH.1) on top.
+
+**A separate small fix, not needed for DASH:** the sprite loader (`sdmon.cpp:43`) rejects a whole
+sprite file if it holds an action id it doesn't know. If a future pack adds an action, older
+firmware would lose that pet's sprite. Skipping unknown ids instead keeps future SD packs safe.
+Worth doing on any branch that touches `sdmon.cpp`.
 
 Board safety: the board has the user's real pet. Do the gameplay checks with the no-save serial
 commands. A real run that gives stats is the user's choice, or use the NVS backup and restore
@@ -419,7 +450,7 @@ commands. A real run that gives stats is the user's choice, or use the NVS backu
    is** for now and decide after playing DASH.
 2. **The waterfall washes the pet?** For example, hygiene +10 after a full session (not when
    quitting). It's a nice touch, but it overlaps with bathing. Off by default.
-3. **Lean or roll the pet in DASH:** 2–4 px toward the turn (FR-DASH.8) is the minimum. A slight
-   rotation would need a rotated blit, which `blit.h` doesn't have. Not planned.
+3. **A raft in water habitats?** Same rules, a log raft outline instead of the sled, splashes
+   instead of snow puffs. Later, optional; the sled ships first in every habitat.
 4. **Gauge shape in ZEN:** a vertical bar (FR-ZEN.3), or an arc around the bottom of the round
    screen. The bar is simpler to draw and read. An arc can come later if the bar looks out of place.
