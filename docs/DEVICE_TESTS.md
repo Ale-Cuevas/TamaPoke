@@ -255,6 +255,10 @@ serial starts one; the log prints the matchup and the result.
 - [ ] No stutter in the 85 ms frames when big Attack frames are drawn (Onix, Gyarados, Dragonite: `SPEC 95`, then
   `BATTLE 130`).
 - [ ] `HEALTH` before and after 20 battles: the minimum heap stays flat (the opponent's sprite is freed each time).
+- [ ] v1.38: the meter is five arrows `> > > > >` with a yellow "Tap!" box after them; the box is there from the
+  first attack, goes away when the five are full (they blink) and while the grey outlines rest after a special.
+- [ ] v1.38: keep tapping fast through the last hit: the result stays on screen, without "tap: back", for about
+  2 s; then "tap: back" appears and one tap closes it. USER still closes it at once.
 
 ### Feedback (v1.30)
 ([NEXT_FEATURES.md, Task FX](NEXT_FEATURES.md#task-fx-feedback-for-what-the-pet-does).) `FX <effect>` over
@@ -329,6 +333,21 @@ real pet don't use `LVL`: it moves the level.
   before, `age=` not pushed. The level-up plays, then the goal banner with "+1 Lv". The same at 6000 (+1) and
   10000 (+2, no Rare Candy in the Backpack, the Marathon medal the first time).
 - [ ] A goal crossed while the pet sleeps: the banner when it wakes has no "+N Lv", and the level didn't move.
+
+### Eggs (v1.39)
+(Limited eggs, found by walking.) `EGG` prints the eggs in the Backpack, the steps to the next one and whether
+the home is empty; `EGG <n>` sets the Backpack (tests only: it changes the save).
+- [x] After flashing over v1.37/v1.38: the same pet, `EGG` shows `bag=0 next=0/0 vacant=0` (2026-11-07); after a
+  few steps, `next=` counts down from a number between 8000 and 15000 (`STEPS 15000` on a backed-up save: 13868).
+- [ ] Store the pet with no egg in the Backpack (`STORE <k>` into an empty slot, or by touch): the dialog says
+  "No egg: home stays empty"; home shows "NO EGG", the grey egg, today's steps, the Pokédex and "Swipe right:
+  the Box". A tap only gets the deny sound; swipe up does nothing; the screensaver shows only the clock.
+- [ ] From the empty home, the Box shows "Now: Empty" and no "+"; waking a pet brings it home with no waiting egg
+  (`BOX`: `vacant=0 eggHeld=0`).
+- [ ] A real walk until `next=` reaches 0: the "FOUND! EGG" popup; with a pet at home the egg is in the 7th WALK
+  slot with "Eggs hatch when home is free"; with the home empty it goes straight home.
+- [x] Restart (re-flash or PWR) with the home empty: still empty (2026-11-07, on a backed-up save); `EGG` keeps its
+  `next=`.
 
 ### Box (v1.37)
 ([NEXT_FEATURES.md, Task BOX](NEXT_FEATURES.md#task-box-store-a-pet-raise-another).) `BOX` over serial lists

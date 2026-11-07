@@ -80,11 +80,19 @@ static const uint8_t STEP_GOAL_LEVELS[STEP_GOAL_TIERS] = { 1, 1, 2 };
 #define VITAMIN_TRAIN 3           // vitaminas: +3 de entrenamiento
 #define CHARM_SHINY_MULT 3        // amuleto: el siguiente huevo, x3 de probabilidad shiny
 #define FOUND_QUEUE (FINDS_PER_DAY + STEP_GOAL_TIERS)  // hallazgos que esperan a que se encienda la pantalla: los de un dia entero (8)
+// huevos (v1.39): ya no son gratis. Solo se encuentran caminando, uno cada EGG_MIN..EGG_MAX pasos
+// sorteados (media 11500): quien camina 5000 pasos al dia encuentra ~3 a la semana (35000 / 11500),
+// nunca menos de 2 ni mas de 4-5. Cuentan TODOS los pasos (dormido, con un huevo, con la casa
+// vacia), aparte de los hallazgos y su tope diario. Van a la mochila (IT_EGG, hasta ITEM_MAX) y
+// pasan a casa en cuanto queda libre: una despedida, escapada o liberacion, o guardar al bicho en la
+// caja. Sin ninguno, la casa se queda vacia hasta encontrar uno (o despertar a alguien de la caja).
+#define EGG_MIN_STEPS 8000
+#define EGG_MAX_STEPS 15000
 
 // objetos de la mochila (del jugador). El amuleto no se usa a mano: se lleva.
-// IT_RARECANDY va al final: la mochila se guarda por posicion ("bpack") y un guardado
-// anterior trae solo las 5 primeras.
-enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_RARECANDY, IT_COUNT };
+// IT_RARECANDY y IT_EGG van al final: la mochila se guarda por posicion ("bpack") y un guardado
+// anterior trae solo las 5 (o 6) primeras. El huevo (v1.39) tampoco se usa a mano: va a casa solo.
+enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_RARECANDY, IT_EGG, IT_COUNT };
 
 // --- trucos del IMU (Tarea 2)
 #define GRUMPY_JOY 5                 // despertarlo agitando: -5 felicidad...
@@ -128,7 +136,11 @@ public:
   // minutos de crecimiento (v1.35, growth.h): de ellos sale el nivel. Avanzan con la edad
   // desde que nace, y los saltan el Caramelo Raro y las metas de pasos sin envejecerlo.
   uint32_t growMin = 0;
-  int16_t speciesId = -1;      // numero de Pokedex (1-151), -1 = huevo
+  int16_t speciesId = -1;      // numero de Pokedex (1-151), -1 = huevo (o casa vacia, ver vacant)
+  // casa vacia (v1.39): ni bicho ni huevo, hasta encontrar un huevo caminando o despertar a uno de
+  // la caja. Va con speciesId = -1, asi que isEgg() tambien es true: todo lo que exige un bicho
+  // nacido ya lo descarta. Lo propio del huevo (eclosionar, grietas, tambalearse) mira vacant.
+  bool vacant = false;
   int16_t prevSpeciesId = -1;  // para la animacion de evolucion
   uint8_t careMistakes = 0;   // descuidos: cada uno retrasa la evolucion 1 nivel
   bool sleeping = false;
@@ -186,14 +198,18 @@ public:
   void clean();
   void caress();  // tocar al bicho
   void eggTap();  // tocar el huevo: 3 toques y eclosiona
-  void newEgg();   // empezar de cero con un inicial aleatorio
+  // un huevo en casa: el que esperaba en la incubadora, o uno nuevo (que se sortea ahora). No mira
+  // la mochila: quien libera la casa usa freeHome(). saveNow=false solo marca el guardado (pasos)
+  void newEgg(bool saveNow = true);
   void release();  // soltar (pulsacion larga + confirmar)
   void syncClock(uint32_t nowEpoch);  // aplica el tiempo transcurrido apagado
   void setClock(uint32_t nowEpoch);   // fija la hora sin aplicar progresion
   void startFarewell();  // tambien usable desde la consola serie (BYE)
   void startRunaway();   // tambien usable desde la consola serie (RUN)
 
+  // sin bicho nacido: un huevo O la casa vacia (v1.39; isVacant() distingue)
   bool isEgg() const { return speciesId < 0; }
+  bool isVacant() const { return vacant; }
   uint8_t eggCracks() const { return eggTaps; }
   bool eating() const { return timeLeft(eatUntil) > 0; }
   bool showHeart() const { return timeLeft(heartUntil) > 0; }
@@ -262,6 +278,11 @@ public:
   uint8_t goalTierOn(uint32_t day) const { return day && goalDay == day ? goalTier : 0; }
   bool goalDoneOn(uint32_t day) const { return goalTierOn(day) > 0; }  // la primera (3000)
   uint8_t randomFindsToday() const { return findsToday - bonusFindsToday; }
+  // huevos (v1.39): pasos que faltan para el siguiente (0 = aun sin sortear) y el sorteo
+  uint32_t eggStepsLeft() const { return eggAt > eggRem ? eggAt - eggRem : 0; }
+  uint16_t eggStepsAt() const { return eggAt; }
+  // EGG <n> por serie (pruebas): n huevos en la mochila; con la casa vacia, uno pasa a casa
+  void setBagEggs(uint8_t n);
   // efecto de usar un objeto de la mochila (false = no se pudo: dormido, huevo, no hay)
   bool canUseItem(uint8_t it) const;
   bool useItem(uint8_t it);
@@ -366,6 +387,8 @@ private:
   uint8_t foundQ[FOUND_QUEUE];
   bool foundFull[FOUND_QUEUE];
   uint8_t foundN = 0;
+  uint16_t eggRem = 0;         // pasos hacia el siguiente huevo (v1.39)...
+  uint16_t eggAt = 0;          // ...y a cuantos toca (EGG_MIN..EGG_MAX; 0 = sin sortear)
   uint8_t goalBanner = 0;     // meta del banner pendiente (0 = ninguno)
   uint8_t goalBannerLv = 0;   // niveles ganados con las metas desde el ultimo banner
   // trucos del IMU
@@ -394,6 +417,10 @@ private:
   void startEmote(uint8_t kind) { emoteKind = kind; emoteUntil = millis() + EMOTE_MS; }
   void tick();
   void hatch();
+  void resetHome();                 // lo comun de un huevo nuevo y de la casa vacia
+  void freeHome();                  // la casa queda libre: huevo que esperaba, de la mochila, o vacia
+  void vacate(bool saveNow = true); // la casa, vacia (v1.39)
+  void eggToHome(bool saveNow);     // con la casa vacia: un huevo de la mochila pasa a casa
   // caja (v1.37)
   PetRecord boxRec[BOX_SLOTS];      // copia en RAM de cada hueco (la UI la dibuja sin leer flash)
   uint8_t boxSt[BOX_SLOTS] = { 0 };

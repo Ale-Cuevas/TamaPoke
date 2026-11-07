@@ -39,7 +39,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "PASEO", "%lu PASOS", "TOTAL %lu", "HALLAZGOS %u/%u", "MOCHILA", "Sin sensor de pasos",
     "META!", "HALLAZGO!", "Mochila llena", "Usar %s?", "Amuleto: huevo shiny", "Vac\241a: sal a pasear!",
     "Est\240 enfadado!", "Qu\202 mareo...",
-    "BAYA DORADA", "PROTEINA", "HIERRO", "CARBURANTE", "AMULETO IRIS", "CARAMELO RARO",
+    "BAYA DORADA", "PROTEINA", "HIERRO", "CARBURANTE", "AMULETO IRIS", "CARAMELO RARO", "HUEVO",
     // combate (v1.24)
     "ENTRENAMIENTO", "Es muy eficaz!", "No es muy eficaz...", "No le afecta...", "Golpe cr\241tico!", "Especial!",
     "Toca para cargar!", "GANASTE!", "PERDISTE...", "EMPATE", "Felicidad +%u", "Premio: una vez por hora",
@@ -47,6 +47,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "SUBE DE NIVEL!",
     // la caja (v1.37)
     "CAJA %u/%u", "Guardar a %s?", "Despertar a %s?", "%s va a la caja", "Ahora: %s", "Vac\241o", "Da\244ado",
+    // combate (v1.38)
+    "Toca!",
+    // huevos limitados (v1.39)
+    "SIN HUEVO", "Camina para encontrar uno!", "Desliza a la derecha: caja", "Sin huevo: casa vac\241a", "El huevo nace con la casa libre",
   },
   // ---------------- EN ----------------
   {
@@ -80,7 +84,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "WALK", "%lu STEPS", "TOTAL %lu", "FINDS %u/%u", "BACKPACK", "No step sensor",
     "GOAL!", "FOUND!", "Backpack full", "Use %s?", "Charm: shinier egg", "Empty: go for a walk!",
     "Grumpy!", "So dizzy...",
-    "GOLDEN BERRY", "PROTEIN", "IRON", "CARBOS", "SHINY CHARM", "RARE CANDY",
+    "GOLDEN BERRY", "PROTEIN", "IRON", "CARBOS", "SHINY CHARM", "RARE CANDY", "EGG",
     // combate (v1.24)
     "PRACTICE", "Super effective!", "Not very effective...", "No effect...", "Critical hit!", "Special!",
     "Tap to charge!", "YOU WIN!", "YOU LOST...", "DRAW", "Joy +%u", "Reward: once an hour",
@@ -88,6 +92,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "LEVEL UP!",
     // la caja (v1.37)
     "BOX %u/%u", "Store %s?", "Wake %s?", "%s goes in the box", "Now: %s", "Empty", "Damaged",
+    // combate (v1.38)
+    "Tap!",
+    // huevos limitados (v1.39)
+    "NO EGG", "Walk to find an egg!", "Swipe right: the Box", "No egg: home stays empty", "Eggs hatch when home is free",
   },
   // ---------------- FR ----------------
   {
@@ -121,7 +129,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "BALADE", "%lu PAS", "TOTAL %lu", "TROUV\220S %u/%u", "SAC \205 DOS", "Pas de capteur",
     "OBJECTIF!", "TROUV\220!", "Sac plein", "Utiliser %s?", "Charme: oeuf chroma", "Vide: va te balader!",
     "Grognon!", "Tout \202tourdi...",
-    "BAIE DOR\220E", "PROT\220INE", "FER", "CARBONE", "CHARME CHROMA", "SUPER BONBON",
+    "BAIE DOR\220E", "PROT\220INE", "FER", "CARBONE", "CHARME CHROMA", "SUPER BONBON", "OEUF",
     // combate (v1.24)
     "ENTRA\214NEMENT", "Super efficace!", "Pas tr\212s efficace...", "Aucun effet...", "Coup critique!", "Sp\202cial!",
     "Tape pour charger!", "GAGN\220!", "PERDU...", "\220GALIT\220", "Bonheur +%u", "Prix: une fois par heure",
@@ -129,6 +137,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "NOUVEAU NIVEAU!",
     // la caja (v1.37)
     "BOITE %u/%u", "Ranger %s?", "R\202veiller %s?", "%s va dans la bo\214te", "Actif: %s", "Vide", "Ab\214m\202",
+    // combate (v1.38)
+    "Tape!",
+    // huevos limitados (v1.39)
+    "PAS D'OEUF", "Marche pour en trouver un!", "Glisse \205 droite: bo\214te", "Pas d'oeuf: maison vide", "Oeuf: \202clot si maison libre",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -167,7 +179,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "SPAZIERGANG", "%lu SCHRITTE", "GESAMT %lu", "FUNDE %u/%u", "RUCKSACK", "Kein Sensor",
     "ZIEL!", "GEFUNDEN!", "Rucksack voll", "%s nutzen?", "Pin: Ei schillert", "Leer: geh spazieren!",
     "Grummelig!", "Schwindelig...",
-    "GOLDBEERE", "PROTEIN", "EISEN", "CARBON", "SCHILLERPIN", "SONDERBONBON",
+    "GOLDBEERE", "PROTEIN", "EISEN", "CARBON", "SCHILLERPIN", "SONDERBONBON", "EI",
     // combate (v1.24)
     "TRAINING", "Sehr effektiv!", "Nicht sehr effektiv...", "Keine Wirkung...", "Volltreffer!", "Spezial!",
     "Tippen zum Laden!", "GEWONNEN!", "VERLOREN...", "UNENTSCHIEDEN", "Laune +%u", "Belohnung: 1x pro Stunde",
@@ -175,6 +187,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "AUFGESTIEGEN!",
     // la caja (v1.37)
     "BOX %u/%u", "%s ablegen?", "%s wecken?", "%s kommt in die Box", "Jetzt: %s", "Leer", "Besch\204digt",
+    // combate (v1.38)
+    "Tippen!",
+    // huevos limitados (v1.39)
+    "KEIN EI", "Lauf los und finde eins!", "Nach rechts: die Box", "Kein Ei: Zuhause leer", "Ei schl\201pft bei leerem Zuhause",
   },
   // ---------------- IT ----------------
   {
@@ -208,7 +224,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "PASSEGGIATA", "%lu PASSI", "TOTALE %lu", "TROVATI %u/%u", "ZAINO", "Nessun sensore",
     "OBIETTIVO!", "TROVATO!", "Zaino pieno", "Usare %s?", "Amuleto: uovo shiny", "Vuoto: fai due passi!",
     "Arrabbiato!", "Che capogiro...",
-    "BACCA D'ORO", "PROTEINA", "FERRO", "CARBURANTE", "CROMAMULETO", "CARAMELLA RARA",
+    "BACCA D'ORO", "PROTEINA", "FERRO", "CARBURANTE", "CROMAMULETO", "CARAMELLA RARA", "UOVO",
     // combate (v1.24)
     "ALLENAMENTO", "Superefficace!", "Non \212 molto efficace...", "Nessun effetto...", "Brutto colpo!", "Speciale!",
     "Tocca per caricare!", "HAI VINTO!", "HAI PERSO...", "PAREGGIO", "Felicit\205 +%u", "Premio: una volta l'ora",
@@ -216,6 +232,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "NUOVO LIVELLO!",
     // la caja (v1.37)
     "BOX %u/%u", "Depositare %s?", "Svegliare %s?", "%s va nel box", "Ora: %s", "Vuoto", "Danneggiato",
+    // combate (v1.38)
+    "Tocca!",
+    // huevos limitados (v1.39)
+    "NESSUN UOVO", "Cammina per trovarne uno!", "Scorri a destra: il box", "Niente uovo: casa vuota", "L'uovo nasce a casa libera",
   },
   // ---------------- PT ----------------
   {
@@ -249,7 +269,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "PASSEIO", "%lu PASSOS", "TOTAL %lu", "ACHADOS %u/%u", "MOCHILA", "Sem sensor",
     "META!", "ACHOU!", "Mochila cheia", "Usar %s?", "Amuleto: ovo shiny", "Vazia: vai passear!",
     "Zangado!", "Que tontura...",
-    "BAGA DOURADA", "PROTEINA", "FERRO", "CARBOS", "AMULETO BRILHANTE", "DOCE RARO",
+    "BAGA DOURADA", "PROTEINA", "FERRO", "CARBOS", "AMULETO BRILHANTE", "DOCE RARO", "OVO",
     // combate (v1.24)
     "TREINO", "Super efetivo!", "Pouco efetivo...", "Sem efeito...", "Golpe cr\241tico!", "Especial!",
     "Toque para carregar!", "VENCEU!", "PERDEU...", "EMPATE", "Alegria +%u", "Pr\210mio: 1 vez por hora",
@@ -257,6 +277,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "SUBIU DE NIVEL!",
     // la caja (v1.37)
     "CAIXA %u/%u", "Guardar %s?", "Acordar %s?", "%s vai para a caixa", "Agora: %s", "Vazio", "Danificado",
+    // combate (v1.38)
+    "Toque!",
+    // huevos limitados (v1.39)
+    "SEM OVO", "Caminhe para achar um!", "Deslize p/ direita: caixa", "Sem ovo: casa vazia", "O ovo nasce com a casa livre",
   },
   // ---------------- JA ----------------
   {
@@ -313,7 +337,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "さんぽ", "%lu ほ", "ごうけい %lu", "みつけた %u/%u", "リュック", "センサーなし",
     "もくひょう！", "みつけた！", "リュックがいっぱい", "%sをつかう？", "おまもり: いろちがい", "からっぽ: さんぽしよう！",
     "ぷんぷん！", "くらくら...",
-    "きんのみ", "プロテイン", "アイアン", "カーボス", "ひかるおまもり", "ふしぎなアメ",
+    "きんのみ", "プロテイン", "アイアン", "カーボス", "ひかるおまもり", "ふしぎなアメ", "たまご",
     // combate (v1.24)
     "れんしゅう", "こうかは ばつぐんだ！", "こうかは いまひとつ...", "こうかが ない...", "きゅうしょに あたった！", "ひっさつ！",
     "タッチで ためる！", "かった！", "まけた...", "ひきわけ", "ごきげん +%u", "ごほうびは 1じかんに 1かい",
@@ -321,6 +345,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "レベルアップ！",
     // la caja (v1.37)
     "ボックス %u/%u", "%sを あずける？", "%sを おこす？", "%sは ボックスへ", "いま: %s", "あき", "こわれている",
+    // combate (v1.38)
+    "タッチ",
+    // huevos limitados (v1.39)
+    "たまごなし", "あるいて たまごを さがそう！", "みぎへ スワイプ: ボックス", "たまごなし: いえが からっぽに", "いえが あくと たまごが かえる",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -359,7 +387,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "산책", "%lu 걸음", "누적 %lu", "발견 %u/%u", "배낭", "센서 없음",
     "목표 달성!", "발견!", "배낭이 가득", "%s 사용?", "부적: 이로치 알", "비었어요: 산책하자!",
     "화났어!", "어지러워...",
-    "황금열매", "프로테인", "아이언", "카보스", "빛나는부적", "이상한사탕",
+    "황금열매", "프로테인", "아이언", "카보스", "빛나는부적", "이상한사탕", "알",
     // combate (v1.24)
     "연습", "효과가 굉장했다!", "효과가 별로인 듯...", "효과가 없다...", "급소에 맞았다!", "필살기!",
     "탭해서 모으기!", "이겼다!", "졌다...", "무승부", "기분 +%u", "보상은 1시간에 1번",
@@ -367,6 +395,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "레벨 업!",
     // la caja (v1.37)
     "박스 %u/%u", "%s 맡길까요?", "%s 깨울까요?", "%s는 박스로", "지금: %s", "빈 칸", "손상됨",
+    // combate (v1.38)
+    "탭!",
+    // huevos limitados (v1.39)
+    "알 없음", "걸어서 알을 찾자!", "오른쪽으로 밀기: 박스", "알 없음: 집이 비어요", "집이 비면 알이 부화해요",
   },
 };
 

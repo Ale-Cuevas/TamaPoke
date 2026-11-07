@@ -65,7 +65,7 @@ enum StrId : uint8_t {
   S_GOAL_DONE, S_FOUND, S_BACKPACK_FULL, S_USE_FMT, S_CHARM_HELD, S_BACKPACK_EMPTY,
   S_GRUMPY, S_DIZZY,
   // nombres de los objetos, en el orden de IT_* (pet.h)
-  S_IT_GOLDEN, S_IT_PROTEIN, S_IT_IRON, S_IT_CARBOS, S_IT_CHARM, S_IT_RARECANDY,
+  S_IT_GOLDEN, S_IT_PROTEIN, S_IT_IRON, S_IT_CARBOS, S_IT_CHARM, S_IT_RARECANDY, S_IT_EGG,
   // combate de practica (v1.24): tarjeta VS, rotulos de cada golpe, resultado
   S_PRACTICE, S_SUPER_EFF, S_NOT_EFF, S_NO_EFFECT, S_CRITICAL, S_SPECIAL, S_TAP_CHARGE,
   S_WIN, S_LOSE, S_DRAW, S_PRACTICE_JOY_FMT, S_PRACTICE_NONE,
@@ -73,6 +73,11 @@ enum StrId : uint8_t {
   S_LEVEL_UP,
   // la caja (v1.37): titulo, dialogos de guardar / despertar, el activo y los huecos sin bicho
   S_BOX_FMT, S_STORE_Q_FMT, S_WAKE_Q_FMT, S_SWAP_NOTE_FMT, S_NOW_FMT, S_BOX_EMPTY, S_BOX_DAMAGED,
+  // combate (v1.38): el cartel que pide tocar, al lado de las flechas del especial
+  S_TAP_BOX,
+  // huevos limitados (v1.39): la casa vacia (titulo, mensaje, pista de la caja), la nota de los
+  // dialogos que la dejarian vacia y la pista de la mochila
+  S_NOEGG_HDR, S_NOEGG_MSG, S_NOEGG_BOX, S_NO_EGG_NOTE, S_EGG_HINT,
   STR_COUNT
 };
 

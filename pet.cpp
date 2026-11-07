@@ -16,16 +16,33 @@ void Pet::begin() {
     uid = newUid();
     prefs.putUInt("uid", uid);
   }
+  if (vacant && items[IT_EGG]) eggToHome(true);  // la casa nunca espera con un huevo en la mochila
   lastTick = millis();
 }
 
-void Pet::newEgg() {
+// lo comun de empezar con un huevo y de quedarse con la casa vacia: nadie, a cero
+void Pet::resetHome() {
   ceremony = CER_NONE;
   neglectTicks = 0;
   weight = 0;
   speciesId = -1;
   prevSpeciesId = -1;
   uid = 0;  // un huevo aun no es nadie: el uid se sortea al nacer
+  fullness = 80;
+  joy = 80;
+  energy = 80;
+  hygiene = 100;
+  poops = 0;
+  ageMinutes = 0;
+  growMin = 0;
+  careMistakes = 0;
+  mistakeCooldown = 0;
+  sleeping = false;
+}
+
+void Pet::newEgg(bool saveNow) {
+  resetHome();
+  vacant = false;
   if (eggHeldFlag) {
     // el huevo que espero en la incubadora mientras otro bicho estaba despierto (caja,
     // FR-BOX.5): vuelve tal cual, con su especie, su tirada shiny y sus grietas. Asi guardar y
@@ -42,17 +59,41 @@ void Pet::newEgg() {
     eggShiny = (random(shinyOdds(charm)) == 0);
     eggTaps = 0;
   }
-  fullness = 80;
-  joy = 80;
-  energy = 80;
-  hygiene = 100;
-  poops = 0;
-  ageMinutes = 0;
-  growMin = 0;
-  careMistakes = 0;
-  mistakeCooldown = 0;
-  sleeping = false;
-  save();
+  persist(saveNow);
+}
+
+// La casa queda libre (fin de una crianza o guardar en la caja). Huevos limitados (v1.39): vuelve el
+// que esperaba en la incubadora; si no, sale uno de la mochila (y se sortea ahora, con el amuleto si
+// lo hay); si tampoco, la casa se queda vacia.
+void Pet::freeHome() {
+  if (eggHeldFlag) {
+    newEgg();
+  } else if (items[IT_EGG]) {
+    items[IT_EGG]--;
+    newEgg();
+  } else {
+    vacate();
+  }
+}
+
+void Pet::vacate(bool saveNow) {
+  resetHome();
+  vacant = true;
+  starterPick = false;
+  eggTaps = 0;
+  persist(saveNow);
+}
+
+void Pet::eggToHome(bool saveNow) {
+  if (!vacant || !items[IT_EGG]) return;
+  items[IT_EGG]--;
+  newEgg(saveNow);
+}
+
+void Pet::setBagEggs(uint8_t n) {
+  items[IT_EGG] = n > ITEM_MAX ? ITEM_MAX : n;
+  if (vacant && items[IT_EGG]) eggToHome(true);
+  else save();
 }
 
 // sorteo shiny del huevo, 1 entre N: 1/48 base, mejor con despedida y con
@@ -85,8 +126,8 @@ void Pet::syncClock(uint32_t nowEpoch) {
   lastSeenEpoch = nowEpoch;
   if (nowEpoch == 0) return;
   uint32_t mins = (seen && nowEpoch > seen) ? (nowEpoch - seen) / 60 : 0;
-  if (mins < 2 || ceremony != CER_NONE || starterPick) {
-    save();  // primera vez, sin tiempo que aplicar o aun eligiendo inicial
+  if (mins < 2 || ceremony != CER_NONE || starterPick || vacant) {
+    save();  // primera vez, sin tiempo que aplicar, aun eligiendo inicial o sin nadie en casa
     return;
   }
   if (mins > 14UL * 24 * 60) mins = 14UL * 24 * 60;  // tope: 2 semanas
@@ -125,9 +166,9 @@ void Pet::syncClock(uint32_t nowEpoch) {
 }
 
 void Pet::update(uint32_t nowMs) {
-  // fin de ceremonia: la criatura se va y queda un huevo nuevo
+  // fin de ceremonia: la criatura se va y llega el huevo que esperaba, uno de la mochila o nadie
   if (ceremony != CER_NONE && !timeLeft(ceremonyUntil)) {
-    newEgg();
+    freeHome();
     return;
   }
   while (nowMs - lastTick >= PET_TICK_MS) {
@@ -138,6 +179,7 @@ void Pet::update(uint32_t nowMs) {
 
 void Pet::tick() {
   if (ceremony != CER_NONE) return;  // el tiempo se detiene en la despedida
+  if (vacant) return;                // casa vacia: nadie que envejezca ni que eclosione
   if (starterPick) return;  // la partida no empieza hasta elegir inicial: si el
                             // tiempo corriera aqui, el huevo eclosionaria solo a
                             // los 3 min con la especie sorteada y se perderia la
@@ -603,7 +645,7 @@ void Pet::caress() {
 }
 
 void Pet::eggTap() {
-  if (!isEgg()) return;
+  if (!isEgg() || vacant) return;
   if (++eggTaps >= 3) hatch();
   else save();
 }
@@ -622,6 +664,7 @@ void Pet::rollStepDay(uint32_t day) {
 }
 
 static uint16_t nextFindAt() { return FIND_MIN_STEPS + random(FIND_MAX_STEPS - FIND_MIN_STEPS + 1); }
+static uint16_t nextEggAt() { return EGG_MIN_STEPS + random(EGG_MAX_STEPS - EGG_MIN_STEPS + 1); }
 
 // Pasos contados por el IMU (o el comando STEPS). Se suman siempre a hoy y al
 // total; los premios (FR-1.3) y los hallazgos solo con el bicho nacido y
@@ -663,6 +706,18 @@ void Pet::addSteps(uint32_t n, uint32_t day) {
     if (randomFindsToday() >= FINDS_PER_DAY) f = 0;  // tope del dia: lo que se ande despues no cuenta para el dia siguiente
     findRem = (uint16_t)f;
   }
+
+  // huevos (v1.39): con todos los pasos, este como este el bicho, y sin tope diario. Con la casa
+  // vacia, el huevo va derecho a casa (sin escribir aun: el loop guarda con la pantalla atenuada)
+  if (!eggAt) eggAt = nextEggAt();
+  uint32_t e = (uint32_t)eggRem + n;
+  while (e >= eggAt) {
+    e -= eggAt;
+    eggAt = nextEggAt();
+    giveFound(IT_EGG);  // a la mochila (o "mochila llena") y al aviso de hallazgo
+  }
+  eggRem = (uint16_t)e;
+  if (vacant && items[IT_EGG]) eggToHome(false);
 
   // metas diarias (FR-1.4, v1.25): 3000, 6000 y 10000, cada una una vez al dia y en orden.
   // Si unos pasos cruzan varias, saltan todas y el banner muestra la mas alta.
@@ -747,7 +802,8 @@ uint8_t Pet::itemCount() const {
 }
 
 bool Pet::canUseItem(uint8_t it) const {
-  if (it >= IT_COUNT || it == IT_CHARM || !items[it]) return false;  // el amuleto no se usa a mano
+  // el amuleto y el huevo no se usan a mano: uno se lleva, el otro va a casa cuando queda libre
+  if (it >= IT_COUNT || it == IT_CHARM || it == IT_EGG || !items[it]) return false;
   if (isEgg() || sleeping || ceremony != CER_NONE) return false;
   if (it == IT_PROTEIN) return trAtk < 100;
   if (it == IT_IRON) return trDef < 100;
@@ -802,7 +858,7 @@ void Pet::wakeGrumpy() {
 void Pet::shaken() {
   if (ceremony != CER_NONE) return;
   if (isEgg()) {
-    startEmote(EMOTE_WOBBLE);
+    if (!vacant) startEmote(EMOTE_WOBBLE);
     return;
   }
   if (sleeping) return;  // dormido es wakeGrumpy()
@@ -907,14 +963,21 @@ void Pet::save() {
   prefs.putUShort("bRem", bondRem);
   prefs.putUShort("fRem", findRem);
   prefs.putUShort("fAt", findAt);
-  prefs.putBytes("bpack", items, sizeof(items));
+  prefs.putUShort("eRem", eggRem);  // huevos (v1.39)
+  prefs.putUShort("eAt", eggAt);
   prefs.putUInt("bondD", bondDay);
   prefs.putUChar("bondT", bondToday);
+  prefs.putBool("vac", vacant);
   // caja (v1.37). El uid va el ULTIMO: la NVS escribe en orden, asi que si un corte de luz
   // deja el uid nuevo, todo lo demas del bicho ya esta escrito. boxBoot() se fia de eso para
   // saber si un movimiento llego a cambiar el bicho activo. "eggH" va despues: un corte entre
   // los dos deja un huevo activo con eggH puesto, y boxBoot() lo quita.
+  // La mochila va justo despues del uid (v1.39): guardar en la caja puede sacar un huevo de ella, y
+  // un corte antes del uid devuelve al bicho desde su hueco con la mochila sin tocar. Entre el uid y
+  // la mochila un corte deja el huevo en casa y el de la mochila aun contado: como mucho uno de mas,
+  // nunca uno perdido.
   prefs.putUInt("uid", uid);
+  prefs.putBytes("bpack", items, sizeof(items));
   prefs.putBool("eggH", eggHeldFlag);
 }
 
@@ -987,6 +1050,10 @@ void Pet::load() {
   if (findAt && (findAt < FIND_MIN_STEPS || findAt > FIND_MAX_STEPS)) findAt = 0;
   findRem = prefs.getUShort("fRem", 0);
   if (findAt && findRem >= findAt) findRem = findAt - 1;
+  eggAt = prefs.getUShort("eAt", 0);  // huevos (v1.39): un guardado anterior empieza a contar ahora
+  if (eggAt && (eggAt < EGG_MIN_STEPS || eggAt > EGG_MAX_STEPS)) eggAt = 0;
+  eggRem = prefs.getUShort("eRem", 0);
+  if (eggAt && eggRem >= eggAt) eggRem = eggAt - 1;
   memset(items, 0, sizeof(items));
   prefs.getBytes("bpack", items, sizeof(items));
   for (uint8_t i = 0; i < IT_COUNT; i++) {
@@ -1006,6 +1073,9 @@ void Pet::load() {
   // de boxBoot(); un 0 guardado es un huevo, y boxBoot() lo necesita tal cual
   uid = prefs.getUInt("uid", 0);
   eggHeldFlag = prefs.getBool("eggH", false);
+  // casa vacia (v1.39): solo sin bicho nacido (un corte a mitad de un despertar puede dejar "vac"
+  // a medias; boxBoot decide por "boxT" y "eggH")
+  vacant = prefs.getBool("vac", false) && speciesId < 0 && !uid;
 }
 
 // ---------- la caja (docs/NEXT_FEATURES.md, Tarea BOX, v1.37) ----------
@@ -1063,6 +1133,7 @@ PetRecord Pet::toRecord() const {
 // Pokedex y la incubadora son del jugador y se quedan. Lo que solo vive en RAM (enfriamientos,
 // "mantener forma", animaciones) empieza de cero, como tras un reinicio.
 void Pet::fromRecord(const PetRecord &r) {
+  vacant = false;
   uid = r.uid;
   speciesId = r.speciesId;
   prevSpeciesId = r.speciesId;
@@ -1159,19 +1230,30 @@ uint8_t Pet::boxUsed() const {
 bool Pet::store(uint8_t k) {
   if (!canStore(k)) return false;
   if (!writeSlot(k, toRecord())) return false;  // 1. la copia entera, a su hueco
-  newEgg();  // 2. el huevo que esperaba o uno nuevo; save() deja el uid (0) para el final
+  freeHome();  // 2. el huevo que esperaba, uno de la mochila o nadie; save() deja el uid (0) casi al final
   return true;
 }
 
 bool Pet::wake(uint8_t k) {
   if (!canWake(k)) return false;
   PetRecord b = boxRec[k];
-  // 1. la copia de transferencia: mientras exista, el arranque sabe que hay un despertar a medias
-  if (prefs.putBytes("boxT", &b, sizeof(b)) != sizeof(b)) return false;
-  if (isEgg()) {
-    eggHeldFlag = true;  // 2. el huevo espera en la incubadora, tal cual
+  bool egg = isEgg() && !vacant;
+  // 1. con un huevo, el huevo espera en la incubadora, tal cual. Va ANTES que boxT (v1.39): asi un
+  // despertar cortado sin el uid de B se sabe si venia de un huevo (eggH) o de la casa vacia
+  if (egg) {
+    eggHeldFlag = true;
     prefs.putBool("eggH", true);
-    fromRecord(b);  // 3. B activo (save() escribe su uid lo ultimo)
+  }
+  // 2. la copia de transferencia: mientras exista, el arranque sabe que hay un despertar a medias
+  if (prefs.putBytes("boxT", &b, sizeof(b)) != sizeof(b)) {
+    if (egg) {
+      eggHeldFlag = false;
+      prefs.putBool("eggH", false);
+    }
+    return false;
+  }
+  if (isEgg()) {  // un huevo (que espera) o la casa vacia: B pasa a casa y su hueco queda libre
+    fromRecord(b);  // 3. B activo (save() escribe su uid casi al final)
     save();
     if (!clearSlot(k)) return true;  // 4. su hueco, libre (si falla, boxT se queda y lo hace el arranque)
   } else {
@@ -1214,11 +1296,12 @@ void Pet::boxBoot() {
       fromRecord(t);
       save();
     } else if (!uid) {
-      // despertar con un huevo activo que no llego a guardar a B. El huevo sigue siendo el
-      // activo, pero el save() de B pudo empezar a pisarlo: se rehace desde la incubadora
-      // (especie, tirada shiny y grietas; solo pierde los minutos que llevaba)
-      eggHeldFlag = true;
-      newEgg();
+      // despertar sin bicho nacido activo que no llego a guardar a B (B sigue en su hueco). El
+      // save() de B pudo empezar a pisar la casa. Con un huevo, "eggH" ya estaba escrito (va antes
+      // que boxT): el huevo se rehace desde la incubadora (especie, tirada shiny y grietas; solo
+      // pierde los minutos que llevaba). Sin "eggH" la casa estaba vacia (v1.39), y vuelve a estarlo
+      if (eggHeldFlag) newEgg();
+      else vacate();
     }
     prefs.remove("boxT");
   }
@@ -1230,9 +1313,14 @@ void Pet::boxBoot() {
     save();
     clearSlot((uint8_t)k);
   }
-  // el huevo solo espera mientras hay un bicho nacido despierto (un corte entre el uid y "eggH")
+  // el huevo solo espera mientras hay un bicho nacido despierto (un corte entre el uid y "eggH").
+  // Con la casa vacia no deberia pasar nunca; si pasa, el huevo que esperaba vuelve a casa
   if (isEgg() && eggHeldFlag) {
-    eggHeldFlag = false;
-    prefs.putBool("eggH", false);
+    if (vacant) {
+      newEgg();
+    } else {
+      eggHeldFlag = false;
+      prefs.putBool("eggH", false);
+    }
   }
 }

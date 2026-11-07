@@ -135,6 +135,7 @@ static void resetUi() {
   boxShakeSlot = -1;
   for (uint8_t k = 0; k < BOX_SLOTS; k++) pet.boxClear(k);
   if (pet.eggHeld()) pet.newEgg();
+  pet.vacant = false;  // huevos limitados (v1.39): cada escena empieza con alguien en casa
   galleryDetail = 0;
   galleryPage = 0;
   cardPage = 0;
@@ -265,6 +266,16 @@ static void eggNow() {
   pet.lastSeenEpoch = epochAt(10);
 }
 
+// the empty home (v1.39): no pet and no egg, 3200 steps today, at `hour`
+static void vacantNow(int hour) {
+  eggNow();
+  pet.vacant = true;
+  pet.lastSeenEpoch = epochAt(hour);
+  pet.stepDay = pet.dayNumber();
+  pet.stepsToday = 3200;
+  for (int d : { 1, 4, 7, 16, 19, 25, 54, 129, 133 }) pet.dexReg[(d - 1) >> 3] |= (uint8_t)(1 << ((d - 1) & 7));
+}
+
 // steps the clock 85 ms at a time through the battle logic until `done` (or 60 s)
 static void battleUntil(bool (*done)()) {
   for (int i = 0; i < 700 && !done(); i++) {
@@ -318,7 +329,34 @@ static const std::vector<Scene> &scenes() {
     { "minigame-swamp", [] { pokemon(23, 13); startGame(); gameScore = 3; }, 4 },
     { "feed", [] { pokemon(133, 12); menuKind = MENU_FEED; menuUntil = millis() + 6000; } },
     { "play-menu", [] { pokemon(133, 12); menuKind = MENU_PLAY; menuUntil = millis() + 6000; } },
-    { "release", [] { pokemon(54, 15); confirmUntil = millis() + 10000; } },
+    { "release", [] { pokemon(54, 15); confirmUntil = millis() + 10000; } },  // no egg left: the note (v1.39)
+    { "release-egg", [] { pokemon(54, 15); pet.items[IT_EGG] = 1; confirmUntil = millis() + 10000; } },
+    // limited eggs (v1.39): the empty home, with pets in the box (the hint) and at night without
+    { "home-vacant", [] { vacantNow(10); boxThree(); } },
+    { "home-vacant-night", [] { vacantNow(22); } },
+    { "home-vacant-ja", [] { vacantNow(10); boxThree(); setLang(LANG_JA); applyLangFont(); } },
+    { "home-vacant-de", [] { vacantNow(10); boxThree(); setLang(LANG_DE); applyLangFont(); } },
+    { "release-de", [] { pokemon(54, 15); setLang(LANG_DE); applyLangFont(); confirmUntil = millis() + 10000; } },
+    { "walk-eggs-pt", [] {
+       pokemon(25, 13);
+       walker(6420, 88100, 4, { 3, 1, 0, 2, 1, 1, 2 }, 2);
+       cardOpen = true;
+       cardPage = 4;
+       setLang(LANG_PT);
+       applyLangFont();
+     } },
+    { "saver-vacant", [] { vacantNow(23); dimStage = DIM_OFF; }, 2 },
+    // an egg found while the home is empty: straight home, with the find popup
+    { "found-egg", [] { vacantNow(10); pet.addSteps(EGG_MAX_STEPS, 0); }, 2 },
+    { "box-vacant", [] { vacantNow(10); boxThree(); openBox(); } },
+    { "box-wake-vacant-end", [] { vacantNow(10); boxThree(); openBox(); boxStartMove(4); }, 8 },
+    { "box-store-vacant-end", [] { pokemon(25, 13); boxThree(); openBox(); boxStartMove(2); }, 8 },
+    { "walk-eggs", [] {
+       pokemon(25, 13);
+       walker(6420, 88100, 4, { 3, 1, 0, 2, 1, 1, 2 }, 2);
+       cardOpen = true;
+       cardPage = 4;
+     } },
     { "evolve", [] { pokemon(4, 11); pet.setLevel(18); choiceKind = 1; choiceUntil = millis() + 12000; } },
     { "card-profile", [] { pokemon(25, 13); cardOpen = true; cardPage = 0; } },
     { "card-battle", [] { pokemon(25, 13); cardOpen = true; cardPage = 1; } },
@@ -459,6 +497,14 @@ static const std::vector<Scene> &scenes() {
        openBox();
      } },
     { "box-store-ask", [] { pokemon(25, 13); boxThree(); openBox(); boxAsk = 3; boxAskUntil = millis() + 10000; } },
+    { "box-store-ask-egg", [] {  // an egg in the Backpack takes its place: no note (v1.39)
+       pokemon(25, 13);
+       pet.items[IT_EGG] = 1;
+       boxThree();
+       openBox();
+       boxAsk = 3;
+       boxAskUntil = millis() + 10000;
+     } },
     { "box-wake-ask", [] { pokemon(25, 13); boxThree(); openBox(); boxAsk = 5; boxAskUntil = millis() + 10000; } },
     { "box-wake-ask-fr", [] {
        pokemon(25, 13);
@@ -519,6 +565,53 @@ static const std::vector<Scene> &scenes() {
        startPractice(129);  // Magikarp: a win
        battleUntil([] { return bt.phase == BT_END; });
      }, 4 },
+    // v1.38: "> > > > >" and the "Tap!" box from the first moment of the fight; three charged
+    { "battle-tap", [] {
+       pokemon(25, 13);
+       startPractice(79);
+       battleUntil([] { return bt.phase == BT_FIGHT; });
+     }, 1 },
+    { "battle-charging", [] {
+       pokemon(25, 13);
+       startPractice(79);
+       battleUntil([] { return bt.eng.attacks >= 2 && millis() - bt.evAt >= BT_HIT_MS + 900; });
+       bt.meter.pips = 3;
+     }, 1 },
+    { "battle-armed", [] {
+       pokemon(25, 13);
+       startPractice(79);
+       battleUntil([] { return bt.eng.attacks >= 2 && millis() - bt.evAt >= BT_HIT_MS + 900; });
+       bt.meter.pips = SPECIAL_TAPS;
+     }, 1 },
+    { "battle-locked", [] {  // after a special: grey outlines, no box
+       pokemon(25, 13);
+       startPractice(79);
+       battleUntil([] { return bt.eng.attacks >= 2 && millis() - bt.evAt >= BT_HIT_MS + 900; });
+       bt.meter.cooldown = SPECIAL_COOLDOWN;
+     }, 1 },
+    { "battle-tap-ja", [] {
+       pokemon(4, 19);
+       setLang(LANG_JA);
+       applyLangFont();
+       startPractice(7);
+       battleUntil([] { return bt.phase == BT_FIGHT; });
+       bt.meter.pips = 2;
+     }, 1 },
+    { "battle-tap-ko", [] {
+       pokemon(4, 13);
+       setLang(LANG_KO);
+       applyLangFont();
+       startPractice(7);
+       battleUntil([] { return bt.phase == BT_FIGHT; });
+     }, 1 },
+    // the result ignores taps for BT_END_LOCK_MS: "battle-result" is inside the lock (no "tap: back"),
+    // "battle-result-open" just after it
+    { "battle-result-open", [] {
+       pokemon(25, 13);
+       startPractice(129);
+       battleUntil([] { return bt.phase == BT_END; });
+       gHostMillis += BT_END_LOCK_MS;
+     }, 1 },
     { "battle-draw", [] {
        pokemon(19, 20);
        startPractice(92);  // Rattata vs Gastly: neither can touch the other

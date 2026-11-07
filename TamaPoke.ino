@@ -45,7 +45,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.37"
+#define FW_VERSION "1.39"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -115,7 +115,7 @@ uint8_t cardPage = 0;         // 0 perfil, 1 combate, 2 medallas, 3 progreso, 4 
 uint8_t itemConfirm = 0;      // pagina de paseo: objeto de la mochila a confirmar + 1 (0 = ninguno)
 uint32_t itemConfirmUntil = 0;
 bool foundShown = false;      // el ultimo frame enseno un hallazgo: un toque lo cierra
-static_assert(S_IT_RARECANDY - S_IT_GOLDEN == IT_RARECANDY - IT_GOLDEN, "nombres de objeto en el orden de IT_*");
+static_assert(S_IT_EGG - S_IT_GOLDEN == IT_EGG - IT_GOLDEN && IT_EGG + 1 == IT_COUNT, "nombres de objeto en el orden de IT_*");
 bool clockOpen = false;       // pantalla de ajuste de hora (deslizar abajo)
 int clockH = 12, clockM = 0;  // hora en edicion
 
@@ -830,6 +830,26 @@ void handleSerial() {
       Serial.printf("ball: score=%ld speed=%.2f\n", n, ballSpeed((uint16_t)n));
     }
     Serial.println("DONE");
+  } else if (line == "EGG" || line.startsWith("EGG ")) {  // huevos (v1.39); EGG <n>: n en la mochila (pruebas)
+    if (line.length() > 4) {
+      long n = line.substring(4).toInt();
+      pet.setBagEggs((uint8_t)(n < 0 ? 0 : (n > ITEM_MAX ? ITEM_MAX : n)));
+      monFor = -2;  // con la casa vacia, el huevo que llega se dibuja ya
+      ensureMon();
+      fxArmWatches();
+    }
+    eggReport();
+    Serial.println("DONE");
+  } else if (line.startsWith("TAP ")) {  // TAP <x> <y>: un toque como el de un dedo (pruebas por serie)
+    String a = line.substring(4);
+    a.trim();
+    int sp = a.indexOf(' ');
+    int16_t x = (int16_t)a.substring(0, sp).toInt(), y = sp > 0 ? (int16_t)a.substring(sp + 1).toInt() : 0;
+    wakeUI();
+    if (battleOpen()) battleTap(x, y);  // como handleTouch: el combate se lleva los toques
+    else onTap(x, y);
+    Serial.printf("tap %d %d battle=%d phase=%u\n", x, y, battleOpen() ? 1 : 0, battlePhase());
+    Serial.println("DONE");
   } else if (line == "BOX") {  // la caja (v1.37): cada hueco con uid, especie, nivel y CRC
     boxReport();
     Serial.println("DONE");
@@ -906,6 +926,7 @@ void handleSerial() {
     // la caja (v1.37): quien es el activo y si hay un huevo esperando
     Serial.printf("box used=%u/%u uid=%08lX eggHeld=%d\n", pet.boxUsed(), BOX_SLOTS, (unsigned long)pet.uid,
                   pet.eggHeld() ? 1 : 0);
+    eggReport();  // huevos limitados (v1.39)
     Serial.println("DONE");
   }
 }
@@ -1241,6 +1262,10 @@ void onTap(int16_t x, int16_t y) {
     sfxPlay(SFX_TAP);
     return;
   }
+  if (pet.isVacant()) {  // nada que tocar: el mensaje dice que hay que caminar
+    sfxPlay(SFX_DENY);
+    return;
+  }
   if (pet.isEgg()) {
     pet.eggTap();
     sfxPlay(SFX_TAP);
@@ -1298,6 +1323,7 @@ uint16_t inkColor() { return gNight ? UI_INK_NIGHT : UI_INK; }
 // ---------- escena de fondo: bioma del tipo + hora real del RTC ----------
 
 #define C565(r, g, b) ((uint16_t)((((r) >> 3) << 11) | (((g) >> 2) << 5) | ((b) >> 3)))
+#define BOX_NOTE_INK C565(0x6a, 0x6a, 0x7a)  // segunda linea de un dialogo (caja; "soltar?" sin huevo, v1.39)
 #define HORIZON 232  // linea donde el cielo se encuentra con el suelo
 
 uint16_t lerp565(uint16_t a, uint16_t b, int i, int n) {
@@ -1979,7 +2005,9 @@ bool render() {
   fxFrame(millis());
   uint32_t fxUs = micros() - fxT0;
 
-  if (pet.isEgg()) {
+  if (pet.isVacant()) {
+    drawVacantHome();
+  } else if (pet.isEgg()) {
     drawHeader(T(S_EGG_HDR), inkColor(), eggMsg());
     int dx = 0;
     if (pet.emote() == EMOTE_WOBBLE)  // agitado: se tambalea y se va calmando
@@ -2079,10 +2107,16 @@ bool render() {
       // fuente ya no sabe dibujar.
       char q[48];
       snprintf(q, sizeof(q), T(S_RELEASE_FMT), dexName(pet.speciesId));
+      bool empty = !pet.eggHeld() && !pet.items[IT_EGG];  // v1.39: ningun huevo ocupara su sitio
       gfx->setTextColor(UI_INK);
       setSize(2);
-      setCur(centerX(q, 2), 196);
+      setCur(centerX(q, 2), empty ? 186 : 196);
       printT(q);
+      if (empty) {
+        gfx->setTextColor(BOX_NOTE_INK);
+        printTight(T(S_NO_EGG_NOTE), CX, 216, 262);
+        setSize(2);  // printTight puede dejar el tamano 1: los botones van a 2
+      }
       gfx->fillRoundRect(118, 252, 100, 52, 12, UI_BAR_OK);
       gfx->setTextColor(UI_WHITE);
       setCur(118 + (100 - textW(T(S_YES), 2)) / 2, 270);
@@ -2597,7 +2631,7 @@ void clockTap(int16_t x, int16_t y) {
 
 // iconos de la mochila, en el orden de IT_* (pet.h)
 static const char *const *const ITEM_ICON[IT_COUNT] = {
-  SPR_ICON_GOLDEN, SPR_ICON_PROTEIN, SPR_ICON_IRON, SPR_ICON_CARBOS, SPR_ICON_CHARM, SPR_ICON_RARECANDY,
+  SPR_ICON_GOLDEN, SPR_ICON_PROTEIN, SPR_ICON_IRON, SPR_ICON_CARBOS, SPR_ICON_CHARM, SPR_ICON_RARECANDY, SPR_ICON_EGG,
 };
 
 // llama + numero de racha arriba a la izquierda
@@ -3261,9 +3295,9 @@ void renderCardProgress() {
 #define WALK_RING_Y 140
 #define WALK_RING_R 60   // radio exterior del anillo (el interior, 13 px menos)
 #define WALK_SLOT_Y 262
-#define WALK_SLOT_W 60   // 6 casillas (v1.25, el Caramelo Raro): 64 y 8 rozaban el borde redondo
+#define WALK_SLOT_W 52   // 7 casillas (v1.39, el huevo); con 6 eran 60 (v1.25) y con 5, 64
 #define WALK_SLOT_H 62
-#define WALK_SLOT_GAP 6
+#define WALK_SLOT_GAP 5
 #define WALK_SLOT_X (CX - (IT_COUNT * WALK_SLOT_W + (IT_COUNT - 1) * WALK_SLOT_GAP) / 2)
 
 // pasos de hoy en pantalla: los del bicho mas los que el IMU aun no le ha pasado
@@ -3353,9 +3387,12 @@ void renderCardWalk() {
     setCur(x + (WALK_SLOT_W - textW(c, 2)) / 2, y + 42);
     printT(c);
   }
-  const char *hint = pet.items[IT_CHARM] ? T(S_CHARM_HELD) : (pet.itemCount() == 0 ? T(S_BACKPACK_EMPTY) : nullptr);
+  // una pista: los huevos (v1.39), el amuleto o la mochila vacia
+  const char *hint = pet.items[IT_EGG]     ? T(S_EGG_HINT)
+                     : pet.items[IT_CHARM] ? T(S_CHARM_HELD)
+                     : (pet.itemCount() == 0 ? T(S_BACKPACK_EMPTY) : nullptr);
   if (hint) {
-    gfx->setTextColor(pet.items[IT_CHARM] ? UI_INK : UI_TRACK);
+    gfx->setTextColor(pet.itemCount() ? UI_INK : UI_TRACK);
     setSize(2);
     setCur(centerX(hint, 2), 336);
     printT(hint);
@@ -3411,7 +3448,7 @@ void walkTap(int16_t x, int16_t y) {
       itemConfirmUntil = millis() + 10000;
       sfxPlay(SFX_TAP);
     } else if (pet.items[i]) {
-      sfxPlay(SFX_DENY);  // el amuleto se lleva, no se usa; o dormido, o entrenamiento al maximo
+      sfxPlay(SFX_DENY);  // el amuleto se lleva y el huevo va solo a casa; o dormido, o entrenamiento al maximo
     }
     return;
   }
@@ -3644,7 +3681,6 @@ void galleryTap(int16_t x, int16_t y) {
 #define BOX_NOW_Y 350  // centro de la fila "Ahora: ..."
 #define BOX_SLEEP_BG C565(0xe2, 0xe5, 0xf4)  // fondo de un hueco ocupado: azulado, duermen
 #define BOX_LIGHT C565(0xff, 0xe7, 0x9f)     // halo dorado de la luz
-#define BOX_NOTE_INK C565(0x6a, 0x6a, 0x7a)  // segunda linea del dialogo
 
 int boxCellX(uint8_t k) { return BOX_X + (k % 3) * BOX_CW; }
 int boxCellY(uint8_t k) { return BOX_Y + (k / 3) * BOX_CH; }
@@ -3794,9 +3830,10 @@ void drawBoxSlot(uint8_t k, uint8_t st, const PetRecord *r, bool hide, int dx) {
 
 // fila del activo: su miniatura (o el huevo) y "Ahora: <nombre>"; con un huevo esperando a su turno,
 // el huevo dormido a la derecha. Deja en boxNowCx el centro de la miniatura (de ahi sale la luz).
-void drawBoxNow(const PetRecord *r, bool hide, bool held) {
+// vacant = la casa vacia (v1.39): "Ahora: Vacio", con la silueta del huevo en gris
+void drawBoxNow(const PetRecord *r, bool hide, bool held, bool vacant) {
   char line[48];
-  snprintf(line, sizeof(line), T(S_NOW_FMT), r ? recName(*r) : T(S_EGG_HDR));
+  snprintf(line, sizeof(line), T(S_NOW_FMT), r ? recName(*r) : T(vacant ? S_BOX_EMPTY : S_EGG_HDR));
   setSize(2);
   int tw = textW(line, 2);
   int total = 48 + tw + (held ? 46 : 0);
@@ -3806,6 +3843,8 @@ void drawBoxNow(const PetRecord *r, bool hide, bool held) {
     if (r) {
       const uint8_t *t = thumbs.get(r->speciesId);
       if (t) drawThumbFit(t, boxNowCx, BOX_NOW_Y, 58, 58, false, UI_BG_DAY);
+    } else if (vacant) {
+      drawMapTint(SPR_EGG, SPRITE_H, boxNowCx - 16, BOX_NOW_Y - 16, 1, UI_TRACK);
     } else {
       drawMap(SPR_EGG, SPRITE_H, boxNowCx - 16, BOX_NOW_Y - 16, 1, false);
     }
@@ -3879,6 +3918,8 @@ void drawBoxAsk() {
     if (!pet.isEgg()) snprintf(note, sizeof(note), T(S_SWAP_NOTE_FMT), petName());
   } else {
     snprintf(q, sizeof(q), T(S_STORE_Q_FMT), petName());
+    // v1.39: sin huevo que esperaba ni en la mochila, la casa se queda vacia
+    if (!pet.eggHeld() && !pet.items[IT_EGG]) snprintf(note, sizeof(note), "%s", T(S_NO_EGG_NOTE));
   }
   gfx->fillRoundRect(73, 160, 320, 160, 16, UI_WHITE);
   gfx->drawRoundRect(73, 160, 320, 160, 16, UI_INK);
@@ -3952,12 +3993,18 @@ void renderBox() {
   // la fila del activo, tambien como quedara al final
   const PetRecord *nowRec = hatched ? &act : nullptr;
   bool held = pet.eggHeld();
+  bool vacant = pet.isVacant();
   if (outcome) {
     nowRec = boxMove == BOXMV_STORE ? nullptr : &pet.boxRecord(mk);
-    held = boxMove == BOXMV_WAKE ? true : (boxMove == BOXMV_STORE ? false : held);
+    // despertar: con un huevo, el huevo espera; con la casa vacia, nada. Guardar: el huevo que
+    // esperaba o uno de la mochila; si no hay, la casa queda vacia (v1.39)
+    if (boxMove == BOXMV_WAKE) held = !vacant;
+    else if (boxMove == BOXMV_STORE) held = false;
+    if (boxMove == BOXMV_STORE) vacant = !pet.eggHeld() && !pet.items[IT_EGG];
+    else vacant = false;
   }
   bool hideNow = boxMove && !outcome && boxMove != BOXMV_WAKE && t >= 0.3f;
-  drawBoxNow(nowRec, hideNow, held);
+  drawBoxNow(nowRec, hideNow, held, vacant);
 
   if (boxMove) {
     int sx = boxCellX(mk) + BOX_CW / 2, sy = boxCellY(mk) + 4 + 34;
@@ -4034,7 +4081,7 @@ void boxAfterMove() {
   fxo.clear();
   for (auto &b : fxBar) b.init = false;
   fxArmWatches();
-  fxo.push(FXO_BOX, 0, 0, millis());
+  if (!pet.isVacant()) fxo.push(FXO_BOX, 0, 0, millis());  // casa vacia (v1.39): nadie sale de la luz
   wakeUI();  // la escritura tardo ~1 s: el siguiente cuadro, ya
 }
 
@@ -4081,11 +4128,19 @@ void drawBoxAppear(uint32_t now) {
   }
 }
 
+// huevos limitados (v1.39): los de la mochila, cuantos pasos faltan para el siguiente y si la casa esta vacia
+void eggReport() {
+  Serial.printf("eggs bag=%u next=%lu/%u vacant=%d home=%s\n", pet.items[IT_EGG], (unsigned long)pet.eggStepsLeft(),
+                pet.eggStepsAt(), pet.isVacant() ? 1 : 0,
+                pet.isVacant() ? "empty" : (pet.isEgg() ? "egg" : "pet"));
+}
+
 // comando BOX: la caja por serie (uid, especie, nivel, CRC) y el huevo de la incubadora
 void boxReport() {
-  Serial.printf("active uid=%08lX spec=%d lv=%u egg=%d eggHeld=%d eggT=%d eggShiny=%d box=%u/%u\n",
-                (unsigned long)pet.uid, pet.speciesId, pet.isEgg() ? 0 : pet.level(), pet.isEgg() ? 1 : 0,
-                pet.eggHeld() ? 1 : 0, pet.eggSpecies(), pet.eggIsShiny() ? 1 : 0, pet.boxUsed(), BOX_SLOTS);
+  Serial.printf("active uid=%08lX spec=%d lv=%u egg=%d vacant=%d eggHeld=%d eggT=%d eggShiny=%d box=%u/%u bagEggs=%u\n",
+                (unsigned long)pet.uid, pet.speciesId, pet.isEgg() ? 0 : pet.level(),
+                (pet.isEgg() && !pet.isVacant()) ? 1 : 0, pet.isVacant() ? 1 : 0, pet.eggHeld() ? 1 : 0,
+                pet.eggSpecies(), pet.eggIsShiny() ? 1 : 0, pet.boxUsed(), BOX_SLOTS, pet.items[IT_EGG]);
   for (uint8_t k = 0; k < BOX_SLOTS; k++) {
     uint8_t st = pet.boxState(k);
     if (st == BOX_EMPTY) {
@@ -4805,6 +4860,32 @@ void drawButtons() {
   }
 }
 
+// Casa vacia (v1.39): sin bicho ni huevo hasta encontrar uno caminando. La silueta del huevo donde
+// estaria, los pasos de hoy y la Pokedex; si hay alguien en la caja, como despertarlo.
+void drawVacantHome() {
+  drawHeader(T(S_NOEGG_HDR), inkColor(), T(S_NOEGG_MSG));
+  int s = 5;  // donde y como drawEggSprite(), en gris y quieta
+  uint16_t ghost = gNight ? C565(0x3a, 0x42, 0x5c) : lerp565(UI_TRACK, UI_BG_DAY, 1, 2);
+  drawMapTint(SPR_EGG, SPRITE_H, CX - 16 * s, PET_CY - 16 * s, s, ghost);
+  gfx->fillRect(0, 312, 466, 154, gNight ? UI_BG_NIGHT : UI_BG_DAY);
+  gfx->setTextColor(inkColor());
+  setSize(2);
+  char line[32];
+  snprintf(line, sizeof(line), T(S_STEPS_FMT), (unsigned long)walkStepsToday());
+  setCur(centerX(line, 2), 326);
+  printT(line);
+  snprintf(line, sizeof(line), T(S_POKEDEX_FMT), pet.registeredCount());
+  setCur(centerX(line, 2), 352);
+  printT(line);
+  bool boxed = false;
+  for (uint8_t k = 0; k < BOX_SLOTS; k++) boxed |= pet.boxState(k) == BOX_OK;
+  if (boxed) {
+    gfx->setTextColor(UI_TRACK);
+    setCur(centerX(T(S_NOEGG_BOX), 2), 378);
+    printT(T(S_NOEGG_BOX));
+  }
+}
+
 const char *eggMsg() {
   switch (pet.eggCracks()) {
     case 0: return T(S_EGG_TOUCH);
@@ -4852,6 +4933,10 @@ enum : uint8_t { BT_OFF = 0, BT_INTRO, BT_FIGHT, BT_END };
 #define BT_HPBAR_MS 400    // la barra de vida baja en este tiempo
 #define BT_FAINT_MS 900    // el derrotado se desvanece
 #define BT_END_MS 7000     // el resultado se cierra solo (o con un toque)
+// v1.38: el resultado no atiende toques durante 1,8 s. Se suele llegar al final aporreando la
+// pantalla para cargar el especial, y el siguiente toque cerraba el resultado sin dejarlo ver.
+// La pista "toca: volver" aparece cuando ya se puede tocar.
+#define BT_END_LOCK_MS 1800
 #define BT_HORIZON 150
 #define BT_ME_X 140        // tu bicho: abajo a la izquierda
 #define BT_ME_GROUND 352
@@ -4875,6 +4960,7 @@ struct {
 } bt;
 
 bool battleOpen() { return bt.phase != BT_OFF; }
+uint8_t battlePhase() { return bt.phase; }  // comando TAP: 0 cerrado, 1 intro, 2 combate, 3 resultado
 
 void closeBattle() {
   bt.phase = BT_OFF;
@@ -4907,7 +4993,10 @@ void startPractice(int16_t forceDex) {
 }
 
 void battleTap(int16_t x, int16_t y) {
-  if (bt.phase == BT_END) { closeBattle(); return; }
+  if (bt.phase == BT_END) {
+    if (millis() - bt.t0 >= BT_END_LOCK_MS) closeBattle();  // antes, el toque no hace nada
+    return;
+  }
   if (bt.phase != BT_FIGHT || bt.eng.over()) return;  // en la intro los toques no cuentan
   if (bt.meter.tap()) sfxPlay(SFX_TAP);
 }
@@ -5022,8 +5111,8 @@ void renderScreensaver() {
   int x, y;
   saverPos(now, &x, &y);
   int ground = y - SAVER_PET_GAP;  // los pies del bicho; la hora, debajo (burnin.h)
-  if (pet.awaitingStarter()) {
-    // nada que mostrar aun: solo la hora
+  if (pet.awaitingStarter() || pet.isVacant()) {
+    // nada que mostrar (aun): solo la hora
   } else if (pet.isEgg()) {
     drawMap(SPR_EGG, SPRITE_H, x - 32, ground - 64, 2, false);
   } else if (pmd.loaded) {
@@ -5076,22 +5165,57 @@ void drawHpBox(uint8_t side, int x, int y, uint16_t hp) {
   }
 }
 
-// medidor del especial: 5 pastillas; llenas laten; bloqueado tras un especial, en gris
+// Una flecha ">" sin palo (v1.38): dos brazos de METER_T px de grueso que se juntan en la punta.
+// x = su borde izquierdo, y = su centro. fill = 0 la deja hueca (solo el contorno).
+#define METER_W 14     // ancho de una flecha
+#define METER_H 12     // media altura
+#define METER_T 6      // grueso de cada brazo, en horizontal
+#define METER_PITCH 21
+#define METER_X 236    // la primera flecha; el cartel "Toca!" va detras de la ultima
+#define METER_Y 350
+void drawChevron(int x, int y, bool filled, uint16_t fill, uint16_t edge) {
+  int tip = x + METER_W, notch = x + METER_W - METER_T;
+  if (filled) {
+    gfx->fillTriangle(x, y - METER_H, x + METER_T, y - METER_H, tip, y, fill);  // brazo de arriba
+    gfx->fillTriangle(x, y - METER_H, tip, y, notch, y, fill);
+    gfx->fillTriangle(notch, y, tip, y, x + METER_T, y + METER_H, fill);        // brazo de abajo
+    gfx->fillTriangle(notch, y, x + METER_T, y + METER_H, x, y + METER_H, fill);
+  }
+  gfx->drawLine(x, y - METER_H, x + METER_T, y - METER_H, edge);
+  gfx->drawLine(x + METER_T, y - METER_H, tip, y, edge);
+  gfx->drawLine(tip, y, x + METER_T, y + METER_H, edge);
+  gfx->drawLine(x + METER_T, y + METER_H, x, y + METER_H, edge);
+  gfx->drawLine(x, y + METER_H, notch, y, edge);
+  gfx->drawLine(notch, y, x, y - METER_H, edge);
+}
+
+// medidor del especial (v1.38): "> > > > >" y un cartel "Toca!" mientras los toques cargan.
+// Llenas laten cuando esta listo; bloqueado tras un especial, en gris y sin cartel.
 void drawSpecialMeter(uint32_t now) {
   bool armed = bt.meter.armed(), locked = bt.meter.locked();
   for (int i = 0; i < SPECIAL_TAPS; i++) {
-    int x = 248 + i * 24, y = 350;
+    int x = METER_X + i * METER_PITCH;
     if (locked) {
-      gfx->drawCircle(x, y, 8, UI_TRACK);
+      drawChevron(x, METER_Y, false, 0, UI_TRACK);
     } else if (i < bt.meter.pips) {
       uint16_t c = (armed && (now / 160) % 2) ? UI_WHITE : UI_BAR_WARN;
-      gfx->fillCircle(x, y, 8, c);
-      gfx->drawCircle(x, y, 8, UI_INK);
+      drawChevron(x, METER_Y, true, c, UI_INK);
     } else {
-      gfx->fillCircle(x, y, 8, UI_WHITE);
-      gfx->drawCircle(x, y, 8, UI_INK);
+      drawChevron(x, METER_Y, true, UI_WHITE, UI_INK);
     }
   }
+  // el cartel: solo cuando un toque cuenta (ni lleno, ni bloqueado, ni con el combate decidido)
+  if (locked || bt.meter.pips >= SPECIAL_TAPS || bt.eng.over()) return;
+  const char *tap = T(S_TAP_BOX);
+  setSize(2);
+  // ancho minimo: con la fuente coreana textW() se queda corto (mide la tinta, no el avance)
+  int tw = textW(tap, 2), bw = tw + 16 < 64 ? 64 : tw + 16, bh = 28;
+  int bx = METER_X + (SPECIAL_TAPS - 1) * METER_PITCH + METER_W + 10, by = METER_Y - bh / 2;
+  gfx->fillRoundRect(bx, by, bw, bh, 8, UI_BAR_WARN);
+  gfx->drawRoundRect(bx, by, bw, bh, 8, UI_INK);
+  gfx->setTextColor(UI_INK);
+  setCur(bx + (bw - tw) / 2, by + (bh - 14) / 2);
+  printT(tap);
 }
 
 // tarjeta VS: el rival arriba, tu bicho abajo, cada mitad del color de su tipo
@@ -5268,7 +5392,9 @@ void drawBattleResult(uint32_t now) {
   setSize(2);
   setCur(centerX(r, 2), 342);
   printT(r);
-  gfx->setTextColor(UI_TRACK);
-  setCur(centerX(T(S_BACK), 2), 368);
-  printT(T(S_BACK));
+  if (t >= BT_END_LOCK_MS) {  // ya se puede cerrar con un toque (v1.38)
+    gfx->setTextColor(UI_TRACK);
+    setCur(centerX(T(S_BACK), 2), 368);
+    printT(T(S_BACK));
+  }
 }
