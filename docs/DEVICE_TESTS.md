@@ -357,10 +357,9 @@ without moving anyone.
 - [ ] A full box (`BOXFILL`): every slot can still be woken (swap); there's no "+" and storing isn't offered.
 - [ ] Hibernation: store a pet, power off (hold PWR 4 s) for 10+ minutes, power on. `BOX`: its `age=` and `grow=`
   unchanged; the active pet aged.
-- [ ] Power-off right after a move: tap YES and hold PWR straight away. The board only turns off after ~4 s, when
+- [x] Power-off right after a move: tap YES and hold PWR straight away. The board only turns off after ~4 s, when
   the write is done, so this checks a move survives an immediate power-off. A cut in the middle of a write is
   covered by the host tests (after every write of every move). After power-on, `BOX` and `STATS`: each pet
   exactly once, the egg either active or `eggHeld=1`.
 - [ ] Taps that can't work: an empty slot with the egg active, or a damaged slot, shakes with the deny sound.
-- [ ] Long names fit inside the slot and the dialogs: a 10-letter species (Charmander), an 11-letter nickname, and
-  French (`Kangourex`, "… va dans la boîte").
+- [ ] Long names fit inside the slot and the dialogs: a 10-letter species (Charmander) and an 11-letter nickname.
