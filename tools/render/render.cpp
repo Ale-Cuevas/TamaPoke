@@ -455,6 +455,12 @@ static const std::vector<Scene> &scenes() {
     { "evolve", [] { pokemon(4, 11); pet.setLevel(18); choiceKind = 1; choiceUntil = millis() + 12000; } },
     { "card-profile", [] { pokemon(25, 13); cardOpen = true; cardPage = 0; } },
     { "card-battle", [] { pokemon(25, 13); cardOpen = true; cardPage = 1; } },
+    // v1.50: barra fina de entrenamiento; un Gastly de nivel bajo con la FUE ya entrenada al tope
+    { "card-battle-max", [] { pokemon(92, 6); pet.trAtk = 100; pet.trDef = 10; pet.trSpe = 13; cardOpen = true; cardPage = 1; } },
+    { "card-battle-ja", [] { pokemon(92, 6); pet.trAtk = 100; pet.trDef = 55; setLang(LANG_JA); applyLangFont(); cardOpen = true; cardPage = 1; } },
+    { "card-battle-ko", [] { pokemon(92, 6); pet.trAtk = 100; pet.trDef = 55; setLang(LANG_KO); applyLangFont(); cardOpen = true; cardPage = 1; } },
+    { "card-battle-de", [] { pokemon(92, 6); pet.trAtk = 100; pet.trDef = 55; setLang(LANG_DE); applyLangFont(); cardOpen = true; cardPage = 1; } },
+    { "card-battle-it", [] { pokemon(92, 6); pet.trAtk = 100; pet.trDef = 55; setLang(LANG_IT); applyLangFont(); cardOpen = true; cardPage = 1; } },
     { "card-medals", [] { pokemon(25, 13); cardOpen = true; cardPage = 2; } },
     { "card-progress", [] { pokemon(25, 13); cardOpen = true; cardPage = 3; } },
     { "settings", [] { pokemon(25, 13); openClock(); } },

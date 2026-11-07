@@ -59,6 +59,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Sujetala como vas a jugar", "Quieta un momento...", "INCLINA PARA GIRAR", "ESQUIVADOS: %u", "VELOCIDAD +%u",
     // v1.47: bonificacion de la cascada, entrenamiento al tope
     "EXTRA +%u", "FUERZA MAX", "DEFENSA MAX", "VELOCIDAD MAX",
+    // v1.50: la barra fina de la ficha de combate
+    "barra fina: entreno",
   },
   // ---------------- EN ----------------
   {
@@ -112,6 +114,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Hold it the way you'll play", "Hold still...", "TILT TO STEER", "DODGED: %u", "SPD +%u",
     // v1.47: bonificacion de la cascada, entrenamiento al tope
     "BONUS +%u", "STR MAX", "DEF MAX", "SPD MAX",
+    // v1.50: la barra fina de la ficha de combate
+    "thin bar: training",
   },
   // ---------------- FR ----------------
   {
@@ -165,6 +169,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Tiens-la comme pour jouer", "Ne bouge plus...", "PENCHE POUR TOURNER", "ESQUIVES: %u", "VITESSE +%u",
     // v1.47: bonificacion de la cascada, entrenamiento al tope
     "BONUS +%u", "FORCE MAX", "DEFENSE MAX", "VITESSE MAX",
+    // v1.50: la barra fina de la ficha de combate
+    "barre fine: entra\214nement",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -223,6 +229,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Halte es wie beim Spielen", "Still halten...", "NEIGEN ZUM LENKEN", "AUSGEWICHEN: %u", "INIT +%u",
     // v1.47: bonificacion de la cascada, entrenamiento al tope
     "BONUS +%u", "KRAFT MAX", "VERT MAX", "INIT MAX",
+    // v1.50: la barra fina de la ficha de combate
+    "d\201nner Balken: Training",
   },
   // ---------------- IT ----------------
   {
@@ -276,6 +284,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Tienila come per giocare", "Fermo un attimo...", "INCLINA PER STERZARE", "SCHIVATI: %u", "VELOCITA +%u",
     // v1.47: bonificacion de la cascada, entrenamiento al tope
     "BONUS +%u", "FORZA MAX", "DIFESA MAX", "VELOCITA MAX",
+    // v1.50: la barra fina de la ficha de combate
+    "barra sottile: allenamento",
   },
   // ---------------- PT ----------------
   {
@@ -329,6 +339,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Segure como vai jogar", "Parado um pouco...", "INCLINE PARA VIRAR", "DESVIOS: %u", "VELOCIDADE +%u",
     // v1.47: bonificacion de la cascada, entrenamiento al tope
     "EXTRA +%u", "FOR\200A MAX", "DEFESA MAX", "VELOCIDADE MAX",
+    // v1.50: la barra fina de la ficha de combate
+    "barra fina: treino",
   },
   // ---------------- JA ----------------
   {
@@ -405,6 +417,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "あそぶ ときの もちかたで", "うごかさないで...", "かたむけて よけよう", "よけた: %u", "すばやさ +%u",
     // v1.47: bonificacion de la cascada, entrenamiento al tope
     "ボーナス +%u", "ちから MAX", "ぼうぎょ MAX", "すばやさ MAX",
+    // v1.50: la barra fina de la ficha de combate
+    "ほそい バー: とっくん",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -463,6 +477,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "플레이할 때처럼 잡아요", "잠깐 가만히...", "기울여서 피하기", "피한 수: %u", "속도 +%u",
     // v1.47: bonificacion de la cascada, entrenamiento al tope
     "보너스 +%u", "힘 MAX", "방어 MAX", "속도 MAX",
+    // v1.50: la barra fina de la ficha de combate
+    "얇은 막대: 훈련",
   },
 };
 

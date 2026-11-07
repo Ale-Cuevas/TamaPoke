@@ -8,6 +8,19 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.50] - 2026-11-07
+
+(v1.49 is reserved for the OTA update, still on its own branch.)
+
+### Added
+
+- **Training bars on the stat card.** The Battle page now has a thin bar under ATK, DEF and SPD
+  showing that stat's training (0–100, with the number on the right, or "MAX" at 100), and a
+  "thin bar: training" line under the bars. The big number is the battle stat (species, genes,
+  level and training), which keeps growing with level; the thin bar is only the trained part, the
+  one that stops at 100. A low-level pet can show a modest ATK while its training is already full,
+  which is why the bag said "STR MAX" and looked like a bug.
+
 ## [1.48] - 2026-11-07
 
 Stat rewards of the new games, tuned after a few sessions.
