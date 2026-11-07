@@ -335,17 +335,18 @@ real pet don't use `LVL`: it moves the level.
 the slots (`box<k> uid=… spec=… lv=… crc=ok`, `empty` or `damaged`) and the active pet with the waiting egg
 (`eggHeld=`, `eggT=`). `STATS` ends with `box used=… uid=… eggHeld=…`. `NVS` prints the NVS entries. On a board
 with a real pet: `BOXFILL` only fills empty slots with made-up pets and `BOXCLR <k>` empties one again; neither
-touches the active pet. Storing and waking the real pet is the feature itself, so it's safe. `FX box`
-shows the "comes out of a light" effect at home without moving anyone.
-- [ ] Before flashing v1.37, `STATS` on v1.36. After: the same pet and level, `box used=0/6`, and a `uid=` that
+touches the active pet. Don't evolve a made-up pet there: its new species go in the Pokédex. Storing and waking
+the real pet is the feature itself, so it's safe. `FX box` shows the "comes out of a light" effect at home
+without moving anyone.
+- [x] Before flashing v1.37, `STATS` on v1.36. After: the same pet and level, `box used=0/6`, and a `uid=` that
   isn't 0 and stays the same after a restart.
-- [ ] `NVS` with the box empty, then after `BOXFILL` (6 pets): note used / free entries in PENDING_TESTS. Each
+- [x] `NVS` with the box empty, then after `BOXFILL` (6 pets): note used / free entries in PENDING_TESTS. Each
   slot should cost about 4 entries. `BOXCLR 0` … `BOXCLR 5` to empty it again.
 - [ ] Gestures, from the pet and from the egg: swipe right opens the Box, swipe left opens the Pokédex. In the
   Box, swipe left closes it, swipe right does nothing, the title or USER closes it. The Pokédex pages as before.
 - [ ] Store: tap an empty slot (it has a "+"), "Store <name>?", YES. A light flies from the pet at "Now" into the
-  slot with a falling sparkle sound, the result holds for about a second (the flash write), then home shows the
-  egg coming out of a light. `BOX`: the pet in that slot with `crc=ok`, the egg active.
+  slot with a falling sparkle sound, the result holds briefly while it saves (40–180 ms over serial), then home
+  shows the egg coming out of a light. `BOX`: the pet in that slot with `crc=ok`, the egg active.
 - [ ] Wake with the egg active: tap the pet, "Wake <name>?" with no second line, YES. The light flies out to
   "Now" with a rising sparkle, and home shows the pet coming out of a light (asleep, if it was asleep). `BOX`: the
   slot empty and `eggHeld=1`; the Box shows a small sleeping egg next to "Now".

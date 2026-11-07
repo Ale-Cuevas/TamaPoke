@@ -3634,7 +3634,7 @@ void galleryTap(int16_t x, int16_t y) {
 // Deslizar a la derecha desde casa (a la izquierda sigue la Pokedex). Seis huecos en una rejilla
 // de 3x2: uno vacio pregunta "guardar?" y uno ocupado "despertar?". Al decir SI, una luz vuela
 // entre el bicho activo (la fila de abajo) y el hueco en BOX_FX_MS; el ultimo cuadro ya ensena
-// como queda, y con el en pantalla se escribe en la NVS (~1 s quieta, no parece colgada). Luego se
+// como queda, y con el en pantalla se escribe en la NVS (40-180 ms en la placa, con el sprite). Luego se
 // vuelve a casa, donde el que queda activo sale de una luz (FXO_BOX).
 
 #define BOX_X 47       // rejilla de 3x2 huecos de 124x110 (las esquinas quedan ~8 px dentro del circulo)
@@ -4124,6 +4124,12 @@ void boxFill() {
     r.trDef = (uint8_t)random(30);
     r.trSpe = (uint8_t)random(30);
     r.bond = (uint8_t)random(100);
+    // las medallas que ya tiene por su estado, como un bicho criado de verdad: sin ellas, al
+    // despertarlo checkMedals() se las daria y subiria totalMedals, que es del jugador
+    uint16_t lv = levelFor(r.growMin);
+    r.medals = (lv >= 10 ? MED_LV10 : 0) | (lv >= 25 ? MED_LV25 : 0) | (lv >= 50 ? MED_LV50 : 0) |
+               (DEX_TBL[r.speciesId].evolvesTo == 0 ? MED_FINAL : 0) | (lv >= 5 ? MED_FIT : 0) |  // peso 0, sin descuidos
+               (pet.streak >= 7 ? MED_STREAK7 : 0);
     r.storedEpoch = pet.lastSeenEpoch;
     pet.boxPut(k, r);
   }

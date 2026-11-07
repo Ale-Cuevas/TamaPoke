@@ -641,7 +641,7 @@ open:
 - **The light plays before the write, in the Box.** On YES the light flies between "Now"
   and the slot for `BOX_FX_MS` (two lights on different arcs in a swap); the last frame
   already shows the result (the slot, "Now", the count) and stays on screen through the
-  ~1 s write. Then the Box closes (after a store too) and the active pet or egg comes out of
+  write (40–180 ms on the board, loading the sprite included). Then the Box closes (after a store too) and the active pet or egg comes out of
   a light at home: a new FX overlay, `FXO_BOX`, that holds the celebrations back while it
   plays. Two sounds were added, `SFX_STORE` (falling) and `SFX_WAKE` (rising). A tap that
   can't work shakes its slot with `SFX_DENY`, like a button.
@@ -657,7 +657,10 @@ open:
 - **The Box only opens from a free home screen**: not with a dialog, a menu, the bath or an
   evolution. The Pokédex keeps its old guards.
 - **Serial slots are 0–5**, as the NVS keys `box0`…`box5`. `STATS` gains a `box` line.
-  Pets from `BOXFILL` aren't added to the Pokédex when woken: nobody raised them.
+  Pets from `BOXFILL` aren't added to the Pokédex when woken: nobody raised them. They carry
+  the medals their level and species already earn, so waking one doesn't add to the player's
+  `totalMedals` (on the board the first version did: 13 → 18). Evolving one does register its
+  new species, like any evolution.
 - **Tests** live in `test/test_box.cpp` (the shim gained a power-cut switch and an NVS
   snapshot), not in `test_pet.cpp`.
 

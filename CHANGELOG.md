@@ -33,14 +33,14 @@ store a pet, raise another, and swap back any time.
     the egg active, a damaged slot) shakes the slot with the deny sound.
 - **Effects:** after YES, a light flies between the pet at "Now" and the slot (two cross in a
   swap) in 0.6 s, with a falling or rising sparkle sound. The last frame already shows the result
-  and stays on screen during the ~1 s flash write. Back home, the active pet (or egg) comes out of
+  and stays on screen while the move is saved (40–180 ms on the board, loading the sprite included). Back home, the active pet (or egg) comes out of
   a light. Celebrations of the other pet still waiting (a level-up, a medal) are dropped; the
   streak and goal banners stay.
 - **Each pet has a `uid`**, rolled when it hatches (the Link's friend list can use it later).
 - **Damaged slots** (bad CRC, unknown record version) show "?" and are never loaded or
   overwritten; only `WIPE` or `BOXCLR` clears them.
 - Serial: `BOX` (each slot's uid, species, level, CRC, and the waiting egg), `STORE <k>` /
-  `WAKE <k>` (slot 0–5, like YES without the light), `BOXFILL` (made-up pets in the empty slots),
+  `WAKE <k>` (slot 0–5, like YES without the light), `BOXFILL` (made-up pets in the empty slots, with the medals their level and species already earn),
   `BOXCLR <k>`, `NVS` (used and free NVS entries), `FX box` (the home effect alone). `STATS` ends
   with `box used=… uid=… eggHeld=…`.
 - Strings for the Box in all eight languages.

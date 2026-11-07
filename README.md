@@ -189,8 +189,8 @@ Swipe **right** from the home screen (pet or egg) to open the Box: **6 slots** w
   day gives its +4 bond once a day, to whoever is active.
 - Slots show the pet dimmed with a "z", its name, level and a star if it's shiny. A slot
   whose data is damaged shows **"?"** and is never loaded or overwritten.
-- Moving a pet writes to flash at once; a light flying between the pet and its slot covers
-  the ~1 s write. A power cut at any moment never loses a pet: the next boot finishes or
+- Moving a pet writes to flash at once, right after a light flies between the pet and its
+  slot; the write itself takes a fraction of a second. A power cut at any moment never loses a pet: the next boot finishes or
   undoes the move.
 
 ### Bonds, streaks, medals, Pokédex
