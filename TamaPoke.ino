@@ -47,7 +47,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.48"
+#define FW_VERSION "1.50"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -3360,6 +3360,26 @@ void drawCardStat(int y, const char *label, uint16_t val, uint16_t maxBar, uint1
   if (fw > 2) gfx->fillRoundRect(bx, y + 2, fw, 11, 3, color);
 }
 
+// Barra fina bajo una de combate (v1.50): el entrenamiento de ese stat, 0-100. El numero de
+// arriba es el stat de combate (base x genes + nivel + entrenamiento), que sigue subiendo con
+// el nivel; esta es solo la parte entrenada, la que topa en 100 y hace que el juego diga
+// "<stat> MAX". Sin ella, ese MAX con un stat de combate bajo parecia un fallo.
+void drawCardTrain(int y, uint8_t tr, uint16_t color) {
+  int bx = statBarX();
+  int bw = 310 - bx;
+  int fw = (int)tr * bw / 100;
+  if (fw > bw) fw = bw;
+  gfx->fillRoundRect(bx, y + 24, bw, 6, 2, UI_TRACK);
+  if (fw > 2) gfx->fillRoundRect(bx, y + 24, fw, 6, 2, color);
+  char num[8];
+  if (tr >= 100) snprintf(num, sizeof(num), "MAX");
+  else snprintf(num, sizeof(num), "%u", tr);
+  gfx->setTextColor(tr >= 100 ? color : 0x8410);  // gris medio: UI_TRACK casi no se lee
+  setSize(2);
+  setCur(330, y + 20);
+  printT(num);
+}
+
 // ---------- ajuste de hora en pantalla (deslizar abajo) ----------
 // El usuario pone su hora LOCAL a ojo; el firmware la usa tal cual, asi que
 // no hay que gestionar zona horaria. Preserva el dia (no rompe racha/edad).
@@ -4091,9 +4111,18 @@ void renderCardStats() {
   printT(T(S_BATTLE));
 
   drawCardStat(124, T(S_STAT_ATK), pet.atkStat(), 260, UI_BAR_BAD);
+  drawCardTrain(124, pet.trAtk, UI_BAR_BAD);
   drawCardStat(180, T(S_STAT_DEF), pet.defStat(), 260, 0x4C98);
+  drawCardTrain(180, pet.trDef, 0x4C98);
   drawCardStat(236, T(S_STAT_SPE), pet.speStat(), 260, UI_BAR_WARN);
+  drawCardTrain(236, pet.trSpe, UI_BAR_WARN);
   drawCardStat(292, T(S_STAT_WGT), pet.weight, 100, 0xB3C8);
+
+  // que es la barra fina (v1.50)
+  gfx->setTextColor(UI_TRACK);
+  setSize(2);
+  setCur(centerX(T(S_TRAIN_LEGEND), 2), 338);
+  printT(T(S_TRAIN_LEGEND));
 }
 
 // pagina 2: medallas con etiqueta descriptiva
