@@ -24,7 +24,7 @@ in flight, line numbers move every day.
 |---|---|---|---|---|
 | [FX](#task-fx-feedback-for-what-the-pet-does) | Level-up sound and animation; feedback for stats, bond, training, hatching and buttons; one queue so celebrations never overlap | Best after day-1 Task 3 (Rare Candy) and Task 6 (screensaver) | M | **1.30 (built)** |
 | [BOX](#task-box-store-a-pet-raise-another) | Put the pet into hibernation in a 6-slot box, raise a new egg, swap back any time | — (uses FX's overlay for its effect) | M–L | **1.37 (built)** |
-| [OTA](#task-ota-firmware-updates-over-wi-fi) | Update the firmware over Wi-Fi from GitHub Releases, with automatic rollback | — (shares the radio rules with the Link, `FEATURES.md` Task 3) | L | 1.38 |
+| [OTA](#task-ota-firmware-updates-over-wi-fi) | Update the firmware over Wi-Fi from GitHub Releases, with automatic rollback | — (shares the radio rules with the Link, `FEATURES.md` Task 3) | L | 1.40 |
 
 **Suggested order: FX → BOX → OTA.**
 - FX is the smallest, and the other two reuse its queue: BOX for the
@@ -612,7 +612,8 @@ A host test cuts the power after every single write of every move (FR-BOX.9).
 ### Built in v1.37
 
 Branch `feature/box`, 2026-11-06. The gameplay tuning plan (`GAMEPLAY_TUNING.md`) took
-v1.31–v1.36, so BOX is v1.37 and OTA moves to 1.38. The open questions above keep the
+v1.31–v1.36, so BOX is v1.37 and OTA moves to 1.38 (then to 1.40: v1.38 polished the battles
+and v1.39 made eggs limited, found by walking). The open questions above keep the
 spec's defaults: 6 slots, `storedEpoch` saved but not shown, no "missed you", no release
 from the box. Where the build differs from the text above, or settles something it left
 open:
@@ -695,7 +696,7 @@ the **app-only** `firmware.bin` instead.
 
 ### Goal
 
-A board on v1.38 or later updates itself from GitHub Releases over Wi-Fi:
+A board on v1.40 or later updates itself from GitHub Releases over Wi-Fi:
 - started from the settings (clock) screen;
 - without USB;
 - keeping the pet.

@@ -1209,10 +1209,13 @@ TEST(items, el_amuleto_lo_gasta_el_siguiente_huevo_y_no_el_inicial) {
   Pet p;
   makeWalker(p);
   p.items[IT_CHARM] = 1;
+  p.items[IT_EGG] = 1;  // v1.39: el huevo sale de la mochila
   p.release();
   mockAdvanceMillis(CEREMONY_MS + 1);
   p.update(millis());  // fin de la ceremonia: huevo nuevo
   CHECK(p.isEgg());
+  CHECK(!p.isVacant());
+  CHECK_EQ(p.items[IT_EGG], (uint8_t)0);
   CHECK_EQ(p.items[IT_CHARM], (uint8_t)0);
 
   // x3: 1/16 en vez de 1/48 tras una liberacion, sin racha ni vinculo

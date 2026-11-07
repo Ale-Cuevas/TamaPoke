@@ -526,6 +526,26 @@ static const char* const SPR_ICON_CANDY[16] = {  // 16x16
   "................",
 };
 
+// huevo de la mochila (v1.39): el de la pantalla principal (SPR_EGG) en pequeno
+static const char* const SPR_ICON_EGG[16] = {  // 16x16
+  "................",
+  "......kkkk......",
+  ".....kwyyyk.....",
+  "....kwyyyyyk....",
+  "....kyyyggyk....",
+  "...kyyyyggyYk...",
+  "...kyyyyyyyYk...",
+  "...kyggyyyyYk...",
+  "...kyggyyyyYk...",
+  "...kyyyyyggYk...",
+  "...kyyyyyggYk...",
+  "....kyyyyyYk....",
+  "....kYyyyYYk....",
+  ".....kYYYYk.....",
+  "......kkkk......",
+  "................",
+};
+
 static const char* const SPR_ICON_GOLDEN[16] = {  // 16x16
   "................",
   "................",

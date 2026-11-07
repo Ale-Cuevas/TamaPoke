@@ -51,6 +51,13 @@ included); tapping the screen charges a special attack. Built, host-tested
 (every one of the 151×151 pairings at three levels) and rendered on the PC; the
 on-board checks are in [docs/DEVICE_TESTS.md](docs/DEVICE_TESTS.md#battle).
 
+**v1.39: eggs are found by walking.** A new egg no longer appears for free after
+an ending or a store: you find eggs on walks, about 3 a week at 5000 steps a
+day. With none, the home stays empty until you find one. Host-tested (300
+simulated weeks, and a power cut after every flash write of the new Box moves)
+and rendered on the PC; the on-board checks are in
+[docs/DEVICE_TESTS.md](docs/DEVICE_TESTS.md#eggs-v139).
+
 **v1.37: the Box.** Swipe right for a 6-slot box where pets hibernate while you
 raise another; wake one to swap them back. Host-tested, including a power cut
 after every single flash write of every move, and rendered on the PC; the
@@ -134,6 +141,13 @@ While **awake**, per minute:
 ### Eggs & who you get (spawn odds)
 - **First ever pet:** you pick a starter — **Bulbasaur / Charmander / Squirtle**.
 - Hatch the egg: tap it **3×** (or wait — it hatches on its own).
+- **Eggs are limited (v1.39):** after the starter, you only get eggs by **walking**,
+  one every 8000–15000 steps at random (about **3 a week at 5000 steps a day**, 2 to 4
+  in any week). All steps count, also while the pet sleeps or an egg is at home. An
+  egg goes into the Backpack (up to 9) and comes home as soon as home is free: after
+  an ending, or when you store the pet in the Box. With none, the home stays
+  **empty** ("NO EGG", today's steps, the Pokédex, and a hint when the Box has pets
+  to wake) until you find one; it then goes straight home.
 - Every later egg rolls a **rarity tier** (over the ~79 base forms that come from eggs):
 
 | Tier | Base chance | After a proper goodbye | # species |
@@ -167,14 +181,17 @@ While **awake**, per minute:
   act of care cancels it. It **curses the next egg** (forces Common). The sad ending.
 - 👋 **Release** — long-press the creature to let it go on your terms (neutral).
 
-After any ending, a **new egg** appears (or the egg that was waiting while you woke a pet
-from the Box, see below).
+After any ending, the egg that was waiting while you woke a pet from the Box comes home (see
+below); if none was waiting, an egg from the Backpack; if you have none, the home stays empty
+until you find one on a walk (v1.39). The "Release?" dialog warns "No egg: home stays empty".
 
 ### The Box (v1.37)
 Swipe **right** from the home screen (pet or egg) to open the Box: **6 slots** where pets
 **hibernate** while you raise another. Swipe left, tap the title or press USER to go back.
 - **Store:** tap an empty slot (it shows a "+" when the current pet fits) and confirm. The
-  pet goes in, and an egg takes its place: the egg that was waiting, or a new one. Storing
+  pet goes in, and an egg takes its place: the egg that was waiting, or one from the
+  Backpack (v1.39). With neither, the dialog says "No egg: home stays empty" and the home
+  stays empty ("Now: Empty"); wake any stored pet to fill it again. Storing
   is not an ending, so it doesn't change the next egg's odds. A sleeping pet can be stored
   and comes back asleep. Not while it's evolving or saying goodbye.
 - **Wake:** tap a stored pet and confirm. With a hatched pet active, the two **swap
@@ -271,6 +288,7 @@ waving it around doesn't farm anything.
   | Protein / Iron / Carbos | 35 % (1/3 each) | +3 ATK / DEF / SPD training (cap 100) |
   | Shiny Charm | 10 % | Held, not used: the **next egg** gets ×3 shiny odds (never better than 1/8). One at a time; a second one becomes a Golden Berry. |
   | Rare Candy | the 10000 goal, v1.25–v1.35 (it now gives +2 levels directly) | **+1 level**, keeping how full the level bar was, without ageing the pet (it can make the pet ready to evolve). Candies already in the Backpack still work. |
+  | Egg | every 8000–15000 steps (v1.39), apart from the finds above and their daily cap | Not used by hand: it comes home by itself when home is free (an ending, or the pet stored in the Box). |
 
 - The **Backpack** holds up to 9 of each item. Open it on the stat card's 5th
   page, **WALK** (swipe up, then left four times): today's steps with a ring
@@ -543,7 +561,8 @@ always pays off.
 
 ## Life cycle, eggs by rarity, languages
 
-The life cycle lasts **3 days** of play. Three endings (all leave a new egg):
+The life cycle lasts **3 days** of play. Three endings (each brings home the next egg, if
+you have one: eggs are found on walks since v1.39):
 **farewell** (final form + 3 days), **release** (long press), **runaway** (all 4
 bars at zero for 1 h). Each bred species is recorded in the **bred Pokédex**
 (normal and shiny separately).
@@ -672,7 +691,9 @@ the result doesn't touch the record or the save) · `FX <effect>` (show a feedba
 `on` / `saver` / `off`) · `BOX` (the Box: each slot's uid, species, level and CRC, plus the
 waiting egg) · `STORE <k>` / `WAKE <k>` (store into / wake from slot k = 0–5, like tapping YES
 without the light) · `BOXFILL` (made-up pets in the empty slots, for tests and screenshots) ·
-`BOXCLR <k>` (empty slot k, also a damaged one) · `NVS` (used and free NVS entries).
+`BOXCLR <k>` (empty slot k, also a damaged one) · `NVS` (used and free NVS entries) ·
+`EGG` (eggs in the Backpack, steps to the next one, empty home or not) · `EGG <n>` (set the
+Backpack to n eggs, for tests; with an empty home one comes home).
 
 To test fast: lower `PET_TICK_MS` and `FAREWELL_AGE_MIN` in `pet.h` (levels count game minutes, so they
 speed up with the tick; the per-level costs are in `growth.h`), or jump levels with `LVL <n>` over serial.

@@ -8,6 +8,48 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.39] - 2026-11-07
+
+Limited eggs: you find them by walking.
+
+### Changed
+
+- **Eggs are no longer free.** After the starter, an egg only comes from walking: one every
+  8000–15000 steps, rolled at random each time. At 5000 steps a day that's about **3 a week** (300
+  simulated weeks: 3.04 on average, never fewer than 2 or more than 4 in a week). Every step
+  counts, with the pet asleep, an egg at home or the home empty, and apart from the daily cap of
+  finds. A found egg shows the usual "FOUND!" popup and goes into the Backpack (up to 9; a 10th is
+  lost, "Backpack full").
+- **An ending or a store no longer rolls a new egg.** When home becomes free, the egg that was
+  waiting comes back (as in v1.37); else one comes out of the Backpack and is rolled then (the
+  Shiny Charm is spent on it); else **the home stays empty**.
+- The Store and Release dialogs say "No egg: home stays empty" when that will happen.
+
+### Added
+
+- **The empty home:** "NO EGG / Walk to find an egg!", a grey egg where the egg would be, today's
+  steps and the Pokédex, and "Swipe right: the Box" when the Box has someone to wake. Nothing ages
+  or hatches; a tap gets the deny sound; the screensaver shows only the clock. Waking a pet from the
+  Box fills it; so does finding an egg, which goes straight home. In the Box, "Now: Empty".
+- **Eggs in the Backpack:** a 7th slot on the WALK page (slots 52 px wide, were 60), the hint
+  "Eggs hatch when home is free", and a 16×16 egg icon for the popup.
+- Serial: `EGG` (eggs in the Backpack, steps to the next, empty home), `EGG <n>` (set the Backpack
+  to n eggs, for tests); `STATS` and `BOX` print the same.
+- Strings in all eight languages.
+
+### Saves and power cuts
+
+- New keys: `vac` (empty home, written just before `uid`), `eRem` / `eAt` (steps toward the next
+  egg); the Backpack gets a 7th byte. A v1.38 save keeps its pet or egg and starts counting toward
+  an egg with the first step.
+- `bpack` is now written right **after** `uid`: a store that takes an egg from the Backpack and is cut
+  before `uid` comes back from its slot copy with the Backpack untouched. A cut exactly between
+  `uid` and `bpack` leaves the egg home and one egg still in the Backpack: one too many, never one
+  lost (host test).
+- Waking from an egg now writes `eggH` before `boxT`, so a wake cut before the woken pet's `uid`
+  tells an egg (rebuilt from the incubator, as before) from an empty home (stays empty). Waking into
+  an empty home and storing into one are covered by the cut-after-every-write tests.
+
 ## [1.38] - 2026-11-06
 
 Battle polish, from playing the practice battles.

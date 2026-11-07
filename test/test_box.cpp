@@ -24,13 +24,15 @@ static void hatchNow(Pet &p) {
   p.eggTap();
 }
 
-// bicho recien nacido de la especie pedida, con la NVS limpia
+// bicho recien nacido de la especie pedida, con la NVS limpia. Con la mochila llena de huevos
+// (v1.39): cada guardar en la caja deja uno en casa, como hacia antes de limitarlos
 static void freshPet(Pet &p, int16_t dex) {
   mockNvsReset();
   mockSetMillis(0);
   p.begin();
   if (p.awaitingStarter()) p.chooseStarter(dex);
-  hatchNow(p);
+  p.items[IT_EGG] = ITEM_MAX;
+  hatchNow(p);  // hatch() guarda: la mochila tambien
 }
 
 // valores reconocibles en todo lo del individuo, y guardados (rename guarda el estado entero)
@@ -679,8 +681,70 @@ TEST(box, corte_de_luz_en_cada_escritura_de_despertar_con_un_huevo) {
   cutEveryWrite([](Pet &x) { x.wake(1); }, pets, [&](Pet &q, long n) {
     std::string at = "corte " + std::to_string(n) + ": ";
     CHECK_MSG(q.isEgg() || q.uid == b.uid, at + "el activo no es ni el huevo ni B");
+    CHECK_MSG(!q.isVacant(), at + "el huevo se perdio: la casa quedo vacia (v1.39)");
     CHECK_MSG(q.isEgg() || q.eggHeld(), at + "B despierto pero el huevo no espera");
     CHECK_MSG(q.eggSpecies() == eggT && q.eggIsShiny() == eggS, at + "el huevo cambio");
     CHECK_MSG(q.eggCracks() == 2, at + "el huevo perdio sus grietas");
+  });
+}
+
+// ---------------------------------------------------------------- cortes de luz con huevos limitados (v1.39)
+TEST(box, corte_de_luz_en_cada_escritura_de_guardar_dejando_la_casa_vacia) {
+  Pet p;
+  freshPet(p, 1);
+  dress(p, 1);
+  CHECK(p.store(1));  // B en el 1 (mira)
+  hatchNow(p);
+  p.items[IT_EGG] = 0;  // sin huevos: guardar deja la casa vacia
+  dress(p, 2);          // A activo (dress guarda, mochila incluida)
+  uint32_t a = p.uid;
+  std::vector<PetRecord> pets = { p.toRecord(), p.boxRecord(1) };
+  cutEveryWrite([](Pet &x) { x.store(3); }, pets, [&](Pet &q, long n) {
+    std::string at = "corte " + std::to_string(n) + ": ";
+    CHECK_MSG(q.uid == a || q.isVacant(), at + "ni A en casa ni la casa vacia");
+    CHECK_MSG(!(q.isEgg() && !q.isVacant()), at + "aparecio un huevo");
+    CHECK_MSG(q.items[IT_EGG] == 0, at + "aparecio un huevo en la mochila");
+  });
+}
+
+TEST(box, corte_de_luz_en_cada_escritura_de_guardar_con_un_huevo_de_la_mochila) {
+  Pet p;
+  freshPet(p, 4);
+  p.items[IT_EGG] = 2;
+  dress(p, 3);  // A activo, dos huevos en la mochila
+  uint32_t a = p.uid;
+  std::vector<PetRecord> pets = { p.toRecord() };
+  int extra = 0;
+  cutEveryWrite([](Pet &x) { x.store(0); }, pets, [&](Pet &q, long n) {
+    std::string at = "corte " + std::to_string(n) + ": ";
+    CHECK_MSG(!q.isVacant(), at + "la casa vacia con huevos en la mochila");
+    if (q.uid == a) {  // no llego a guardarse: la mochila, intacta
+      CHECK_MSG(q.items[IT_EGG] == 2, at + "A en casa y la mochila cambio");
+      return;
+    }
+    CHECK_MSG(q.isEgg(), at + "ni A ni un huevo en casa");
+    int eggs = q.items[IT_EGG] + 1;  // los de la mochila y el de casa
+    CHECK_MSG(eggs == 2 || eggs == 3, at + "huevos: " + std::to_string(eggs));
+    extra += (eggs == 3);
+  });
+  CHECK_EQ(extra, 1);  // solo el corte entre el uid y la mochila: uno de mas, nunca uno perdido
+}
+
+TEST(box, corte_de_luz_en_cada_escritura_de_despertar_con_la_casa_vacia) {
+  Pet p;
+  freshPet(p, 7);
+  p.items[IT_EGG] = 0;
+  dress(p, 4);
+  PetRecord b = p.toRecord();
+  CHECK(p.store(1));
+  CHECK(p.isVacant());
+  std::vector<PetRecord> pets = { b };
+  cutEveryWrite([](Pet &x) { x.wake(1); }, pets, [&](Pet &q, long n) {
+    std::string at = "corte " + std::to_string(n) + ": ";
+    bool before = q.isVacant() && q.boxState(1) == BOX_OK && q.boxRecord(1).uid == b.uid;
+    bool after = q.uid == b.uid && !q.isVacant() && q.boxState(1) == BOX_EMPTY;
+    CHECK_MSG(before || after, at + "ni antes ni despues del despertar");
+    CHECK_MSG(!(q.isEgg() && !q.isVacant()), at + "aparecio un huevo");
+    CHECK_MSG(!q.eggHeld(), at + "un huevo espera sin haberlo");
   });
 }
