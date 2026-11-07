@@ -270,3 +270,15 @@ TEST(fx, el_azar_de_los_efectos_es_repetible) {
   CHECK_EQ(fxHash(7), fxHash(7));
   CHECK(fxHash(7) != fxHash(8));
 }
+
+// v1.42: el aviso de actualizacion sale una vez y detras de las demas celebraciones
+TEST(fx, aviso_de_actualizacion_el_ultimo) {
+  FxQueue q;
+  CHECK(q.push(FXB_UPDATED, 0));
+  CHECK(q.push(FXB_UPDATED, 0));  // repetido: se descarta
+  q.push(FXB_GOAL, 1);
+  q.push(FXB_LEVELUP, 4, 5);
+  CHECK_EQ((int)q.n, 3);
+  CHECK_EQ((int)q.q[2].kind, (int)FXB_UPDATED);
+  CHECK_EQ(fxBannerMs(FXB_UPDATED, 0), FX_UPDATED_MS);
+}

@@ -53,6 +53,14 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "SIN HUEVO", "Camina para encontrar uno!", "Desliza a la derecha: caja", "Sin huevo: casa vac\241a", "El huevo nace con la casa libre",
     // huevos al acabar una crianza (v1.40/v1.41)
     "Abrir un huevo (%u)", "Llegar\240 un huevo nuevo", "Tus huevos esperan!", "REGALO!",
+    // actualizaciones por Wi-Fi (v1.42)
+    "Actualizar", "ACTUALIZAR", "Comprobando...", "Est\240 al d\241a", "v%s disponible", "Instalar",
+    "Pide sprites nuevos: c\240rgalos con el instalador web", "Ahora no: espera a que acabe", "No la apagues",
+    "tecla USER: cancelar", "Reiniciando...", "Wi-Fi: %s", "Olvidar", "Actualizado a v%s",
+    "Sin Wi-Fi: config\243ralo con el instalador web", "No se encuentra la red Wi-Fi", "Contrase\244a de Wi-Fi incorrecta",
+    "Sin conexi\242n a internet", "Error de certificado", "Error del servidor", "Sin respuesta: prueba otra vez",
+    "Descarga da\244ada (suma)", "Error al escribir la flash", "Bater\241a bajo %u%%: enchufa el USB", "No queda memoria",
+    "La actualizaci\242n es de otra placa", "Se cort\242 la conexi\242n",
   },
   // ---------------- EN ----------------
   {
@@ -100,6 +108,14 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "NO EGG", "Walk to find an egg!", "Swipe right: the Box", "No egg: home stays empty", "Eggs hatch when home is free",
     // huevos al acabar una crianza (v1.40/v1.41)
     "Hatch an egg (%u)", "A new egg will come", "Your eggs are waiting!", "GIFT!",
+    // actualizaciones por Wi-Fi (v1.42)
+    "Update", "UPDATE", "Checking...", "Up to date", "v%s available", "Install",
+    "Needs new sprites: load them with the web installer", "Not now: wait until it's over", "Don't turn it off",
+    "USER key: cancel", "Restarting...", "Wi-Fi: %s", "Forget", "Updated to v%s",
+    "No Wi-Fi: set it up with the web installer", "Wi-Fi network not found", "Wrong Wi-Fi password",
+    "No internet connection", "Certificate error", "Server error", "No answer: try again",
+    "Download damaged (checksum)", "Flash write error", "Battery under %u%%: plug in USB", "Not enough memory",
+    "This update is for another board", "Connection lost",
   },
   // ---------------- FR ----------------
   {
@@ -147,6 +163,14 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "PAS D'OEUF", "Marche pour en trouver un!", "Glisse \205 droite: bo\214te", "Pas d'oeuf: maison vide", "Oeuf: \202clot si maison libre",
     // huevos al acabar una crianza (v1.40/v1.41)
     "Faire \202clore (%u)", "Un oeuf va arriver", "Tes oeufs attendent!", "CADEAU!",
+    // actualizaciones por Wi-Fi (v1.42)
+    "Mise \205 jour", "MISE A JOUR", "V\202rification...", "D\202j\205 \205 jour", "v%s disponible", "Installer",
+    "Sprites neufs requis: charge-les avec l'installateur web", "Pas maintenant: attends la fin", "Ne l'\202teins pas",
+    "touche USER: annuler", "Red\202marrage...", "Wi-Fi: %s", "Oublier", "Mis \205 jour en v%s",
+    "Pas de Wi-Fi: configure-le avec l'installateur web", "R\202seau Wi-Fi introuvable", "Mauvais mot de passe Wi-Fi",
+    "Pas de connexion internet", "Erreur de certificat", "Erreur du serveur", "Pas de r\202ponse: r\202essaie",
+    "T\202l\202chargement ab\214m\202 (somme)", "Erreur d'\202criture flash", "Batterie sous %u%%: branche l'USB",
+    "M\202moire insuffisante", "Mise \205 jour pour une autre carte", "Connexion perdue",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -199,6 +223,14 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "KEIN EI", "Lauf los und finde eins!", "Nach rechts: die Box", "Kein Ei: Zuhause leer", "Ei schl\201pft bei leerem Zuhause",
     // huevos al acabar una crianza (v1.40/v1.41)
     "Ei ausbr\201ten (%u)", "Ein neues Ei kommt", "Deine Eier warten!", "GESCHENK!",
+    // actualizaciones por Wi-Fi (v1.42)
+    "Update", "UPDATE", "Pr\201fe...", "Aktuell", "v%s verf\201gbar", "Installieren",
+    "Braucht neue Sprites: mit dem Web-Installer laden", "Jetzt nicht: warte bis zum Ende", "Nicht ausschalten",
+    "USER-Taste: abbrechen", "Neustart...", "WLAN: %s", "Vergessen", "Aktualisiert auf v%s",
+    "Kein WLAN: mit dem Web-Installer einrichten", "WLAN nicht gefunden", "Falsches WLAN-Passwort",
+    "Keine Internetverbindung", "Zertifikatsfehler", "Serverfehler", "Keine Antwort: nochmal versuchen",
+    "Download besch\204digt (Pr\201fsumme)", "Fehler beim Flash-Schreiben", "Akku unter %u%%: USB anschlie\341en",
+    "Nicht genug Speicher", "Update f\201r ein anderes Board", "Verbindung verloren",
   },
   // ---------------- IT ----------------
   {
@@ -246,6 +278,14 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "NESSUN UOVO", "Cammina per trovarne uno!", "Scorri a destra: il box", "Niente uovo: casa vuota", "L'uovo nasce a casa libera",
     // huevos al acabar una crianza (v1.40/v1.41)
     "Schiudi uovo (%u)", "Arriva un uovo nuovo", "Le uova ti aspettano!", "REGALO!",
+    // actualizaciones por Wi-Fi (v1.42)
+    "Aggiorna", "AGGIORNA", "Controllo...", "Aggiornato", "v%s disponibile", "Installa",
+    "Servono sprite nuovi: caricali con l'installer web", "Non ora: aspetta la fine", "Non spegnerlo",
+    "tasto USER: annulla", "Riavvio...", "Wi-Fi: %s", "Dimentica", "Aggiornato a v%s",
+    "Niente Wi-Fi: impostalo con l'installer web", "Rete Wi-Fi non trovata", "Password Wi-Fi errata",
+    "Nessuna connessione internet", "Errore di certificato", "Errore del server", "Nessuna risposta: riprova",
+    "Download danneggiato (checksum)", "Errore di scrittura flash", "Batteria sotto %u%%: collega l'USB",
+    "Memoria insufficiente", "Aggiornamento per un'altra scheda", "Connessione persa",
   },
   // ---------------- PT ----------------
   {
@@ -293,6 +333,14 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "SEM OVO", "Caminhe para achar um!", "Deslize p/ direita: caixa", "Sem ovo: casa vazia", "O ovo nasce com a casa livre",
     // huevos al acabar una crianza (v1.40/v1.41)
     "Chocar um ovo (%u)", "Vem um ovo novo", "Seus ovos esperam!", "PRESENTE!",
+    // actualizaciones por Wi-Fi (v1.42)
+    "Atualizar", "ATUALIZAR", "Verificando...", "Est\240 atualizado", "v%s dispon\241vel", "Instalar",
+    "Precisa de sprites novos: use o instalador web", "Agora nao: espere terminar", "Nao desligue",
+    "tecla USER: cancelar", "Reiniciando...", "Wi-Fi: %s", "Esquecer", "Atualizado para v%s",
+    "Sem Wi-Fi: configure com o instalador web", "Rede Wi-Fi nao encontrada", "Senha do Wi-Fi errada",
+    "Sem conexao com a internet", "Erro de certificado", "Erro do servidor", "Sem resposta: tente de novo",
+    "Download corrompido (checksum)", "Erro ao gravar a flash", "Bateria abaixo de %u%%: ligue o USB",
+    "Mem\242ria insuficiente", "Atualizacao para outra placa", "Conexao perdida",
   },
   // ---------------- JA ----------------
   {
@@ -363,6 +411,14 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "たまごなし", "あるいて たまごを さがそう！", "みぎへ スワイプ: ボックス", "たまごなし: いえが からっぽに", "いえが あくと たまごが かえる",
     // huevos al acabar una crianza (v1.40/v1.41)
     "たまごを かえす (%u)", "あたらしい たまごが くるよ", "たまごが まってるよ！", "プレゼント！",
+    // actualizaciones por Wi-Fi (v1.42)
+    "アップデート", "アップデート", "かくにんちゅう...", "さいしんです", "v%s が あります", "インストール",
+    "あたらしい スプライトが ひつよう: ウェブインストーラーで いれてね", "いまは できないよ: おわるまで まってね", "でんげんを きらないでね",
+    "USERキー: キャンセル", "さいきどうちゅう...", "Wi-Fi: %s", "わすれる", "v%s に アップデートしたよ",
+    "Wi-Fiが ないよ: ウェブインストーラーで せっていしてね", "Wi-Fiが みつからない", "Wi-Fiの パスワードが ちがう",
+    "インターネットに つながらない", "しょうめいしょ エラー", "サーバー エラー", "へんじが ない: もういちど ためしてね",
+    "ダウンロードが こわれている", "フラッシュの かきこみ エラー", "でんち %u%%みまん: USBに つないでね",
+    "メモリが たりない", "べつの ボード むけの アップデート", "せつぞくが きれた",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -415,6 +471,14 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "알 없음", "걸어서 알을 찾자!", "오른쪽으로 밀기: 박스", "알 없음: 집이 비어요", "집이 비면 알이 부화해요",
     // huevos al acabar una crianza (v1.40/v1.41)
     "알 부화하기 (%u)", "새 알이 와요", "알이 기다려요!", "선물!",
+    // actualizaciones por Wi-Fi (v1.42)
+    "업데이트", "업데이트", "확인 중...", "최신 버전이에요", "v%s 있어요", "설치",
+    "새 스프라이트 필요: 웹 설치 프로그램으로 넣어요", "지금은 안 돼요: 끝날 때까지 기다려요", "전원을 끄지 마세요",
+    "USER 키: 취소", "다시 시작 중...", "Wi-Fi: %s", "잊기", "v%s(으)로 업데이트했어요",
+    "Wi-Fi 없음: 웹 설치 프로그램으로 설정해요", "Wi-Fi를 찾을 수 없어요", "Wi-Fi 비밀번호가 틀려요",
+    "인터넷에 연결할 수 없어요", "인증서 오류", "서버 오류", "응답 없음: 다시 해 봐요",
+    "다운로드가 손상됐어요", "플래시 쓰기 오류", "배터리 %u%% 미만: USB를 연결해요",
+    "메모리가 부족해요", "다른 보드용 업데이트예요", "연결이 끊겼어요",
   },
 };
 

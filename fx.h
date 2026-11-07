@@ -17,7 +17,8 @@
 // funcionando cuando millis() da la vuelta a los ~49,7 dias.
 
 // ---- celebraciones, en orden de prioridad (menor = antes)
-enum : uint8_t { FXB_LEVELUP = 0, FXB_MEDAL, FXB_MILESTONE, FXB_GOAL, FXB_KINDS };
+// FXB_UPDATED (v1.42): "Actualizado a vX" una vez tras una actualizacion por Wi-Fi, la ultima
+enum : uint8_t { FXB_LEVELUP = 0, FXB_MEDAL, FXB_MILESTONE, FXB_GOAL, FXB_UPDATED, FXB_KINDS };
 
 #define FX_LEVELUP_MS 2400UL    // animacion de subida de nivel...
 #define FX_GAINS_MS 1500UL      // ...y despues la linea de estadisticas ganadas
@@ -26,6 +27,7 @@ enum : uint8_t { FXB_LEVELUP = 0, FXB_MEDAL, FXB_MILESTONE, FXB_GOAL, FXB_KINDS 
 #define FX_GOAL_MS 4500UL
 #define FX_GOAL_TOP_MS 6000UL   // la meta de 10000 pasos, mas larga (tier 3)
 #define FX_GOAL_TOP_TIER 3
+#define FX_UPDATED_MS 4000UL
 #define FX_BANNER_IN_MS 200UL   // los banners entran deslizandose desde arriba
 #define FX_QUEUE 8
 
@@ -43,6 +45,7 @@ inline uint32_t fxBannerMs(uint8_t kind, uint16_t a) {
     case FXB_LEVELUP: return FX_LEVELUP_MS + FX_GAINS_MS;
     case FXB_MEDAL: return FX_MEDAL_MS;
     case FXB_MILESTONE: return FX_MILESTONE_MS;
+    case FXB_UPDATED: return FX_UPDATED_MS;
     default: return a >= FX_GOAL_TOP_TIER ? FX_GOAL_TOP_MS : FX_GOAL_MS;
   }
 }

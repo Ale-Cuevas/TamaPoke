@@ -42,10 +42,14 @@
 #include "burnin.h" // contra el quemado del AMOLED: orbita de la imagen y salvapantallas (logica pura)
 #include "fx.h"     // efectos de respuesta: celebraciones en cola, "+N", botones, eclosion (logica pura)
 #include "ballgame.h" // minijuego de la pokeball: velocidad segun la puntuacion y la fisica (logica pura)
+#include "ota.h"    // actualizaciones por Wi-Fi (v1.42); WiFi.h y HTTPS quedan en ota.cpp
+#include "improv.h" // Improv por serie: el instalador web configura el Wi-Fi (logica pura)
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.41"
+#define FW_VERSION "1.42"
+// La version tambien va en el binario tras OTA_TAG: OTA STATE la busca en la otra ranura.
+static const char FW_TAG[] = OTA_TAG FW_VERSION;
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -118,6 +122,21 @@ bool foundShown = false;      // el ultimo frame enseno un hallazgo: un toque lo
 static_assert(S_IT_EGG - S_IT_GOLDEN == IT_EGG - IT_GOLDEN && IT_EGG + 1 == IT_COUNT, "nombres de objeto en el orden de IT_*");
 bool clockOpen = false;       // pantalla de ajuste de hora (deslizar abajo)
 int clockH = 12, clockM = 0;  // hora en edicion
+// pantalla de actualizar (v1.42, docs/NEXT_FEATURES.md OTA): se abre desde la pildora del reloj y
+// va encima de el (clockOpen sigue a true), asi que hereda sus bloqueos de gestos y sacudidas
+bool otaOpen = false;
+uint32_t otaRestartAt = 0;    // imagen nueva lista: reinicia a este millis (tras "Reiniciando...")
+uint32_t otaShakeUntil = 0;   // boton que no se puede usar: tiembla (como los de fx.h)
+uint8_t otaShakeBtn = 0;      // 1 = pildora del reloj, 2 = Instalar
+uint32_t homeSeenAt = 0;      // primer frame de la pantalla principal (para dar por buena una imagen nueva)
+bool gBootHealthy = false;    // ya se dio por buena (otaMarkValid) y se anoto la version
+bool gTouchOk = false;        // el tactil arranco (sin el, una imagen nueva no se da por buena)
+#define OTA_VERIFY_MS 30000UL // tiempo en marcha con la pantalla principal vista (FR-OTA.13)
+bool openOta(bool force);     // (mas abajo, con la pantalla de actualizar)
+void closeOta();
+bool otaBusy();
+uint8_t otaTryInstall();
+void otaTick(uint32_t now);
 
 // escena de bano: espuma sobre el bicho y limpieza al reventar
 uint32_t bathUntil = 0;
@@ -274,6 +293,7 @@ void setup() {
   // y nadie lo vacia) -> con timeout 0 los mensajes se descartan
   Serial.setTxTimeoutMs(0);
   Serial.printf("TamaPoke fw v%s\n", FW_VERSION);
+  otaBoot(FW_TAG);  // una imagen recien llegada por OTA queda a prueba (perro guardian del loop)
   loadLang();  // idioma guardado (ES por defecto)
   Wire.begin(BOARD_I2C_SDA, BOARD_I2C_SCL);
   // CST9220 (tactil), AXP2101 (PMU), PCF85063 (RTC) y ES8311 comparten este bus I2C.
@@ -313,6 +333,7 @@ void setup() {
     if (!touchOk) delay(150);
   }
   if (!touchOk) Serial.println("CST9220 no detectado");
+  gTouchOk = touchOk;
   // begin() deja el chip en modo comando (lee la identidad y no sale);
   // hace falta un reset por hardware para que vuelva a reportar toques
   touch.reset();
@@ -359,6 +380,19 @@ void setup() {
   // subio sin verse se anuncian (una sola vez, "Nv.12 > Nv.18") en la primera vuelta del loop
   fxArmWatches();
   pet.syncClock(e);
+  {  // "Actualizado a vX" una vez (FR-OTA.10): la version guardada no es esta. Se guarda la nueva
+     // cuando la imagen se da por buena (otaTick); si vuelve atras antes, la vieja no lo ensena
+    char prev[12] = "";
+    Preferences p;
+    if (p.begin("tamapoke", true)) {
+      if (p.isKey("fwv")) p.getString("fwv", prev, sizeof(prev));
+      p.end();
+    }
+    if (prev[0] && strcmp(prev, FW_VERSION) != 0) fxq.push(FXB_UPDATED, 0);
+  }
+#ifdef OTA_TEST_CRASH
+  Serial.println("OTA_TEST_CRASH: panico en 5 s");
+#endif
 
   audioBegin();  // ES8311 + I2S + amplificador (suena un jingle de arranque)
 
@@ -387,6 +421,12 @@ void ensureMon() {
 
 void loop() {
   uint32_t now = millis();
+#ifdef OTA_TEST_CRASH  // imagen de prueba (DEVICE_TESTS "OTA"): se cae; el cargador vuelve a la anterior
+  if (now > 5000) abort();
+#endif
+#ifdef OTA_TEST_HANG   // imagen de prueba: se cuelga; el perro guardian del loop reinicia y vuelve atras
+  if (now > 5000) for (;;) {}
+#endif
   pet.update(now);
 
   // el amplificador sigue al estado de sueno (la llamada sale sola si no cambia).
@@ -412,8 +452,9 @@ void loop() {
   if (backKey.update(digitalRead(BOARD_BTN_USER) == BOARD_BTN_PRESSED_LEVEL, millis())) onBack();
   static KeyDebounce bootKey;  // tecla BOOT = brillo
   if (bootKey.update(digitalRead(BOARD_BTN_BOOT) == BOARD_BTN_PRESSED_LEVEL, millis())) onBootKey();
-  if (briSaveAt && !timeLeft(briSaveAt)) saveBright();
+  if (briSaveAt && !timeLeft(briSaveAt) && !otaRadioOn()) saveBright();  // con el radio, despues
   handleSerial();
+  otaTick(now);  // actualizar por Wi-Fi: un paso de la descarga, reinicio, dar por buena la imagen
   ensureMon();
   imuTick(now);  // pasos, sacudidas, boca abajo
 
@@ -421,7 +462,7 @@ void loop() {
   static uint32_t lastPwr = 0;
   if (now - lastPwr > 250) {
     lastPwr = now;
-    if (pwrShortPressed()) pwrPress();
+    if (pwrShortPressed() && !otaBusy()) pwrPress();  // descargando: ni salvapantallas ni apagada
   }
 
   updateBrightness(now);
@@ -430,6 +471,7 @@ void loop() {
   // bateria al limite seguro (sin USB): se guarda la partida y se apaga el PMU antes de que la
   // celda baje mas; el RTC conserva la hora
   if (batShouldShutdown() && !usbPresent()) {
+    otaClose();  // corta la descarga (la imagen a medias se descarta) y apaga el radio
     pet.flushSave();
     panel->setBrightness(0);
     batPowerOff();
@@ -440,7 +482,8 @@ void loop() {
   // y aqui no hay animacion que se corte ni dedo esperando respuesta. Con 90s
   // de inactividad la pantalla ya atenua, asi que se vuelca enseguida; el uso
   // activo persiste igual por los guardados de cada accion (comer/jugar/...).
-  if (pet.savePending() && (screenOff || dimStage >= 1 || pet.sleeping)) {
+  // Con el radio encendido (pantalla de actualizar) nunca: FR-OTA.7, se guardo al abrirla.
+  if (pet.savePending() && (screenOff || dimStage >= 1 || pet.sleeping) && !otaRadioOn()) {
     pet.flushSave();
   }
 
@@ -621,6 +664,7 @@ void updateBrightness(uint32_t now) {
 // 200 ms: despierta por el temporizador o por un toque (el INT del tactil baja). Con USB no, para
 // no perder el puerto serie de la tarjeta SD: se mira sin cache, por si se acaba de enchufar.
 void idleWait(PowerCtx c) {
+  if (otaRadioOn()) { delay(1); return; }  // el Wi-Fi no sobrevive a un light sleep: ni se intenta
   // no se duerme justo tras dibujar (el volcado DMA del frame sigue en marcha) ni con un aviso sonando
   if (lightSleepAllowed(c) && millis() - lastRender >= 100 && !audioBusy()) {
     c.usb = usbPresentNow();
@@ -657,15 +701,92 @@ void idleWait(PowerCtx c) {
 
 // ---------- consola serie (provision de SD + depuracion) ----------
 
+// Los bytes pasan por SerialFramer (improv.h, v1.42): una linea que empieza por "IMPROV" es un
+// paquete del instalador web (Improv Wi-Fi); todo lo demas son ordenes de texto hasta '\n', como
+// antes con readStringUntil (una linea sin fin cuenta tras 1 s quieta). Se lee de byte en byte y
+// se para al acabar la linea: los datos binarios que siguen a "PUT" los lee sdmon.cpp tal cual.
+SerialFramer serialIn;
+void serialCommand(String line);
+void improvHandle();
+
 void handleSerial() {
-  if (!Serial.available()) return;
+  uint32_t now = millis();
+  if (!Serial.available()) {
+    if (serialIn.idleLine(now)) serialCommand(String(serialIn.line));
+    return;
+  }
   if (imuLogging()) {  // IMULOG en marcha: cualquier tecla lo para
     imuLog(0);
     while (Serial.available()) Serial.read();
+    serialIn.reset();
     Serial.println("DONE");
     return;
   }
-  String line = Serial.readStringUntil('\n');
+  while (Serial.available()) {
+    uint8_t r = serialIn.feed((uint8_t)Serial.read(), now);
+    if (r == SF_LINE) { serialCommand(String(serialIn.line)); return; }
+    if (r == SF_IMPROV) { improvHandle(); return; }
+  }
+}
+
+// ---- Improv Wi-Fi por serie (FR-OTA.1): tras flashear, "Connect to Wi-Fi" del instalador web
+void improvSend(uint8_t type, const uint8_t *d, uint8_t n) {
+  uint8_t out[16];
+  size_t k = improvPacket(type, d, n, out, sizeof(out));
+  if (k) Serial.write(out, k);
+}
+void improvState(uint8_t st) { improvSend(IMPROV_T_STATE, &st, 1); }
+void improvError(uint8_t e) { improvSend(IMPROV_T_ERROR, &e, 1); }
+void improvResultOf(uint8_t cmd, const char *const *strs, uint8_t n) {
+  uint8_t out[260];
+  size_t k = improvResult(cmd, strs, n, out, sizeof(out));
+  if (k) Serial.write(out, k);
+}
+
+void improvHandle() {
+  if (serialIn.type() != IMPROV_T_RPC) return;  // el resto (estado, errores) solo lo manda la placa
+  ImprovRpc r;
+  if (!improvParseRpc(serialIn.data(), serialIn.dataLen(), r)) {
+    improvError(IMPROV_E_INVALID);
+    return;
+  }
+  switch (r.cmd) {
+    case IMPROV_C_STATE:
+      if (otaHasWifi()) {
+        improvState(IMPROV_S_PROVISIONED);
+        improvResultOf(IMPROV_C_STATE, nullptr, 0);  // sin pagina a la que mandar al jugador
+      } else {
+        improvState(IMPROV_S_READY);
+      }
+      break;
+    case IMPROV_C_INFO: {
+      const char *info[4] = { "TamaPoke", FW_VERSION, "ESP32-S3", pet.nick[0] ? pet.nick : "TamaPoke" };
+      improvResultOf(IMPROV_C_INFO, info, 4);
+      break;
+    }
+    case IMPROV_C_WIFI: {
+      if (otaOpen) closeOta();  // un solo usuario del radio
+      improvState(IMPROV_S_PROVISIONING);
+      pet.flushSave();          // antes de encender el radio (FR-OTA.7)
+      uint8_t e = otaTestWifi(r.ssid, r.pass, 15000);
+      Serial.printf("IMPROV: red \"%s\" -> %s\n", r.ssid, e == OTAE_NONE ? "ok" : "error");
+      if (e == OTAE_NONE && otaSaveWifi(r.ssid, r.pass)) {
+        improvState(IMPROV_S_PROVISIONED);
+        improvResultOf(IMPROV_C_WIFI, nullptr, 0);
+      } else {
+        improvError(IMPROV_E_CONNECT);
+        improvState(IMPROV_S_READY);
+      }
+      break;
+    }
+    default:
+      improvError(IMPROV_E_UNKNOWN);  // tambien la busqueda de redes: el instalador pide el nombre
+      break;
+  }
+  memset(&r, 0, sizeof(r));  // la contrasena no se queda en la pila
+}
+
+void serialCommand(String line) {
   line.trim();
   if (line.length() == 0) return;
   if (sdSerialCommand(line)) return;
@@ -793,7 +914,7 @@ void handleSerial() {
   } else if (line.startsWith("FX")) {  // FX <efecto>: lanza un efecto de respuesta para verlo en la placa
     String k = line.length() > 3 ? line.substring(3) : String("");
     k.trim();
-    if (!fxDebug(k)) Serial.println("FX levelup|levelup6|medal|streak|goal|goal3|stat|bond|train|deny|press|oops|hatch|box");
+    if (!fxDebug(k)) Serial.println("FX levelup|levelup6|medal|streak|goal|goal3|updated|stat|bond|train|deny|press|oops|hatch|box");
     Serial.println("DONE");
   } else if (line.startsWith("BRIGHT")) {  // BRIGHT: nivel y brillo; BRIGHT <n>: lo fija (como BOOT)
     if (line.length() > 7) {
@@ -808,10 +929,56 @@ void handleSerial() {
     Serial.printf("bri=%u/%u value=%u now=%u\n", gBright, BRIGHT_LEVELS - 1, brightLevelValue(gBright),
                   brightnessFor(powerCtx(millis())));
     Serial.println("DONE");
+  } else if (line == "WIFI") {  // red guardada (v1.42)
+    Serial.printf("wifi=%s radio=%d\n", otaHasWifi() ? otaSsid() : "-", otaRadioOn() ? 1 : 0);
+    Serial.println("DONE");
+  } else if (line == "WIFI FORGET") {
+    if (otaOpen) closeOta();
+    otaForgetWifi();
+    Serial.println("wifi=-");
+    Serial.println("DONE");
+  } else if (line.startsWith("WIFI ")) {  // WIFI <red> <clave>, o WIFI "red con espacios" <clave>
+    String rest = line.substring(5), ssid, pass;
+    rest.trim();
+    if (rest.startsWith("\"")) {
+      int q = rest.indexOf('"', 1);
+      ssid = q > 0 ? rest.substring(1, q) : rest.substring(1);
+      pass = q > 0 ? rest.substring(q + 1) : String("");
+    } else {
+      int sp = rest.indexOf(' ');
+      ssid = sp > 0 ? rest.substring(0, sp) : rest;
+      pass = sp > 0 ? rest.substring(sp + 1) : String("");
+    }
+    pass.trim();
+    if (otaOpen) closeOta();
+    pet.flushSave();
+    uint8_t e = otaTestWifi(ssid.c_str(), pass.c_str(), 15000);
+    if (e == OTAE_NONE && otaSaveWifi(ssid.c_str(), pass.c_str())) Serial.printf("wifi=%s ok\n", ssid.c_str());
+    else Serial.printf("wifi error %u (no guardada)\n", e);
+    Serial.println("DONE");
+  } else if (line == "OTA" || line == "OTA STATE") {  // ranura, estado, version de la otra (v1.42)
+    otaPrintState();
+    Serial.println("DONE");
+  } else if (line == "OTA CHECK" || line == "OTA FORCE") {  // como la pildora del reloj (FORCE: sin mirar version)
+    if (!openOta(line == "OTA FORCE")) Serial.println("OTA: ahora no (imagen a prueba o algo abierto)");
+    Serial.println("DONE");
+  } else if (line == "OTA INSTALL") {  // como el boton Instalar
+    uint8_t b = otaTryInstall();
+    Serial.printf("install=%s\n", b == OTAB_OK ? "ok" : b == OTAB_BATTERY ? "battery" : "busy");
+    Serial.println("DONE");
+  } else if (line == "OTA CANCEL") {
+    otaCancel();
+    Serial.println("DONE");
+  } else if (line.startsWith("OTA URL")) {  // OTA URL <url>: otro manifiesto hasta reiniciar (vacio: el de siempre)
+    String u = line.substring(7);
+    u.trim();
+    otaSetUrl(u.c_str());
+    Serial.printf("url=%s\n", otaUrl());
+    Serial.println("DONE");
   } else if (line == "HEALTH") {
-    Serial.printf("up=%lus heap=%u min=%u sd=%d mon=%d\n",
+    Serial.printf("up=%lus heap=%u min=%u sd=%d mon=%d otaheap=%lu\n",
                   (unsigned long)(millis() / 1000), ESP.getFreeHeap(),
-                  ESP.getMinFreeHeap(), sdReady, pmd.loaded || mon.loaded);
+                  ESP.getMinFreeHeap(), sdReady, pmd.loaded || mon.loaded, (unsigned long)otaMinHeap());
     Serial.println("DONE");
   } else if (line.startsWith("STEPS ")) {  // pasos inyectados por el mismo camino que el IMU
     long n = line.substring(6).toInt();
@@ -1050,6 +1217,10 @@ void openClock();  // prototipo
 void onSwipeV(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
   if (gameOpen || galleryOpen || boxOpen || kbOpen || sackOpen || battleOpen() || pet.ceremony) return;
+  if (clockOpen && otaOpen) {  // deslizar vuelve al reloj; nunca corta una descarga
+    if (!otaBusy()) closeOta();
+    return;
+  }
   if (clockOpen) { clockOpen = false; return; }
   if (cardOpen) {
     if (dir < 0) { cardOpen = false; itemConfirm = 0; }  // arriba cierra la ficha
@@ -1174,6 +1345,7 @@ void onBack() {
     return;
   }
   if (kbOpen) { kbOpen = false; return; }        // descarta el nombre y vuelve a la ficha
+  if (clockOpen && otaOpen) { otaBack(); return; }  // corta la descarga, o vuelve al reloj
   if (clockOpen) { clockOpen = false; return; }  // sin aplicar la hora, como al deslizar
   if (pet.ceremony) return;                      // durante la despedida no hay vuelta atras
   if (cardOpen && itemConfirm) { itemConfirm = 0; return; }  // "usar objeto?": NO
@@ -1211,7 +1383,8 @@ void onTap(int16_t x, int16_t y) {
     return;
   }
   if (clockOpen) {
-    clockTap(x, y);
+    if (otaOpen) otaTap(x, y);
+    else clockTap(x, y);
     return;
   }
   if (pet.ceremony) return;  // durante la despedida no hay botones
@@ -1906,7 +2079,7 @@ uint32_t walkStepsToday();
 static uint32_t mixKey(uint32_t h, uint32_t v) { return (h ^ v) * 16777619u; }
 static uint32_t screenKey() {
   uint32_t h = 2166136261u;
-  h = mixKey(h, pet.awaitingStarter() ? 1 : boxOpen ? 20 : kbOpen ? 2 : clockOpen ? 3 : 4 + cardPage);
+  h = mixKey(h, pet.awaitingStarter() ? 1 : boxOpen ? 20 : kbOpen ? 2 : clockOpen ? (otaOpen ? 21 : 3) : 4 + cardPage);
   h = mixKey(h, sdEpoch);
   h = mixKey(h, gBright);                      // el aviso de brillo va encima de todo
   h = mixKey(h, timeLeft(briToastUntil) > 0);  // y al irse tiene que repintarse
@@ -1924,10 +2097,20 @@ static uint32_t screenKey() {
   } else if (kbOpen) {
     h = mixKey(h, nameLen);
     for (int i = 0; i < nameLen; i++) h = mixKey(h, (uint8_t)nameBuf[i]);
+  } else if (clockOpen && otaOpen) {
+    // la fase y lo que ensena cada una; los puntos de "comprobando" laten cada 300 ms
+    uint8_t ph = otaPhase();
+    for (uint32_t v : { (uint32_t)ph, (uint32_t)otaErr(), (uint32_t)otaPercent(), (uint32_t)otaVerdict(),
+                        (uint32_t)otaInstallBlock(false), (uint32_t)otaHasWifi(), (uint32_t)gLang,
+                        (uint32_t)(ph == OTP_CONNECT || ph == OTP_FETCH ? millis() / 300 : 0),
+                        (uint32_t)(timeLeft(otaShakeUntil) ? millis() / 30 + 1 : 0) })
+      h = mixKey(h, v);
+    for (const char *c = otaSsid(); *c; c++) h = mixKey(h, (uint8_t)*c);
   } else if (clockOpen) {
     h = mixKey(h, clockH * 60 + clockM);
     h = mixKey(h, audioEnabled());
     h = mixKey(h, gLang);
+    h = mixKey(h, timeLeft(otaShakeUntil) ? millis() / 30 + 1 : 0);  // la pildora que tiembla
   } else if (cardOpen) {
     // growMin: el nivel y su barra (v1.35); un Caramelo Raro o una meta lo saltan sin tocar la edad
     for (uint32_t v : { (uint32_t)pet.speciesId, (uint32_t)pet.shiny, (uint32_t)pet.ageMinutes, pet.growMin, (uint32_t)pet.streak,
@@ -1994,13 +2177,15 @@ bool render() {
     return true;
   }
   if (clockOpen) {
-    renderClock();
+    if (otaOpen) renderOta();  // actualizar (v1.42), encima del reloj
+    else renderClock();
     return true;
   }
   if (cardOpen) {
     renderCard();
     return true;
   }
+  if (!homeSeenAt) homeSeenAt = millis() | 1;  // la imagen arranca bien hasta aqui (otaTick)
   int h = sceneHour();
   gNight = pet.sleeping || h < 6 || h >= 20;
   // drawScene cubre los 466x466 completos: sin fillScreen(NEGRO) previo para
@@ -2553,6 +2738,28 @@ void drawBrightToast() {
   drawBrightDots(x + 78, y + h / 2, 8, 32, UI_BAR_WARN, 0x8410);
 }
 
+// boton OK del reloj y pildora de actualizar debajo (v1.42: el OK bajo de 48 a 44 de alto para
+// hacerle sitio)
+#define CLOCK_OK_Y 336
+#define CLOCK_OK_H 44
+#define OTA_PILL_W 160
+#define OTA_PILL_H 26
+#define OTA_PILL_X (CX - OTA_PILL_W / 2)
+#define OTA_PILL_Y 408
+
+// vaiven de un boton que no se puede usar (como los de abajo, fx.h): 3 vaivenes que se calman
+int otaShakeDx() {
+  uint32_t left = timeLeft(otaShakeUntil);
+  if (!left) return 0;
+  float t = 1.0f - (float)left / (float)FX_DENY_MS;
+  return (int)(4.0f * (1.0f - t) * sinf(t * 6.0f * (float)PI));
+}
+void otaDeny(uint8_t btn) {
+  otaShakeBtn = btn;
+  otaShakeUntil = millis() + FX_DENY_MS;
+  sfxPlay(SFX_DENY);
+}
+
 void renderClock() {
   gfx->fillScreen(RGB565_BLACK);
   gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
@@ -2604,22 +2811,31 @@ void renderClock() {
   setCur(LANG_PILL_X + (LANG_PILL_W - textW(lp, 2)) / 2, LANG_PILL_Y + 8);
   printT(lp);
 
-  gfx->fillRoundRect(133, 340, 200, 48, 14, UI_BAR_OK);
+  gfx->fillRoundRect(133, CLOCK_OK_Y, 200, CLOCK_OK_H, 14, UI_BAR_OK);
   gfx->setTextColor(UI_BG_DAY);
   setSize(3);
-  setCur(CX - 18, 352);
+  setCur(CX - 18, CLOCK_OK_Y + 11);
   printT("OK");
 
   gfx->setTextColor(UI_TRACK);
   setSize(2);
-  setCur(centerX(T(S_CLOCK_CANCEL), 2), 410);
+  setCur(centerX(T(S_CLOCK_CANCEL), 2), 388);
   printT(T(S_CLOCK_CANCEL));
+
+  // actualizar por Wi-Fi (v1.42): abre la pantalla de actualizar. Tiembla si no se puede (imagen
+  // recien actualizada que aun no se ha dado por buena)
+  int ox = otaShakeBtn == 1 ? otaShakeDx() : 0;
+  gfx->fillRoundRect(OTA_PILL_X + ox, OTA_PILL_Y, OTA_PILL_W, OTA_PILL_H, 8, UI_WHITE);
+  gfx->drawRoundRect(OTA_PILL_X + ox, OTA_PILL_Y, OTA_PILL_W, OTA_PILL_H, 8, UI_INK);
+  gfx->setTextColor(UI_INK);
+  printTight(T(S_OTA_PILL), CX + ox, OTA_PILL_Y + 5, OTA_PILL_W - 12);
 
   // version del firmware (discreta, abajo del todo)
   char ver[20];
   snprintf(ver, sizeof(ver), "TamaPoke v%s", FW_VERSION);
+  gfx->setTextColor(UI_TRACK);
   setSize(1);
-  setCur(centerX(ver, 1), 436);
+  setCur(centerX(ver, 1), 440);
   printT(ver);
   gfx->flush();
 }
@@ -2650,7 +2866,282 @@ void clockTap(int16_t x, int16_t y) {
       return;
     }
   }
-  if (y >= 340 && y <= 388 && x >= 133 && x <= 333) { applyClock(); return; }
+  if (y >= CLOCK_OK_Y && y <= CLOCK_OK_Y + CLOCK_OK_H && x >= 133 && x <= 333) { applyClock(); return; }
+  if (y >= OTA_PILL_Y - 4 && y <= OTA_PILL_Y + OTA_PILL_H + 6 && x >= OTA_PILL_X && x < OTA_PILL_X + OTA_PILL_W) {
+    if (openOta(false)) sfxPlay(SFX_TAP);
+    else otaDeny(1);
+    return;
+  }
+}
+
+// ---------- actualizar por Wi-Fi (v1.42, docs/NEXT_FEATURES.md OTA) ----------
+// La pantalla va encima del reloj. ota.cpp lleva el radio y la descarga; aqui solo se dibuja,
+// se atiende el dedo y la tecla USER, y se cuida que la placa no se duerma ni guarde a medias.
+
+// la descarga o la comprobacion estan en marcha: ni atenuar, ni PWR, ni deslizar
+bool otaBusy() {
+  uint8_t ph = otaPhase();
+  return ph == OTP_CONNECT || ph == OTP_FETCH || ph == OTP_DOWNLOAD || ph == OTP_DONE;
+}
+
+// por que no se puede instalar ahora (FR-OTA.6): OTAB_OK si se puede
+uint8_t otaInstallBlock(bool fresh) {  // fresh: USB leido ahora, sin cache
+  return otaCanInstall(fresh ? usbPresentNow() : usbPresent(), batPercent(), pet.ceremony || pet.evolving(),
+                       gameOpen || sackOpen || battleOpen());
+}
+
+// Se abre desde el reloj (o con OTA CHECK). No con una imagen recien llegada que aun no se ha
+// dado por buena (el perro guardian del loop esta puesto y comprobar bloquea unos segundos), ni
+// con otra pantalla encima.
+bool openOta(bool force) {
+  if (otaPendingVerify() || pet.awaitingStarter() || pet.ceremony || pet.evolving()) return false;
+  if (galleryOpen || boxOpen || gameOpen || sackOpen || battleOpen() || kbOpen || cardOpen) return false;
+  if (!clockOpen) openClock();
+  otaOpen = true;
+  otaShakeUntil = 0;
+  pet.flushSave();  // FR-OTA.7: lo pendiente se guarda antes de encender el radio
+  otaCheck(force);
+  return true;
+}
+
+void closeOta() {
+  otaClose();  // radio apagado; una descarga a medias se descarta
+  otaOpen = false;
+  otaRestartAt = 0;
+  audioMute(false);
+}
+
+// boton Instalar (o OTA INSTALL): devuelve OTAB_OK o por que no
+uint8_t otaTryInstall() {
+  if (otaPhase() != OTP_AVAILABLE) return OTAB_BUSY;
+  uint8_t b = otaInstallBlock(true);
+  if (b != OTAB_OK) {
+    otaDeny(2);
+    return b;
+  }
+  sfxPlay(SFX_TAP);
+  otaInstall();
+  return OTAB_OK;
+}
+
+// tecla USER: corta la descarga (FR-OTA.8) y vuelve a "hay version nueva"; si no, al reloj
+void otaBack() {
+  uint8_t ph = otaPhase();
+  if (ph == OTP_DONE) return;  // ya cambio: reinicia solo
+  if (ph == OTP_DOWNLOAD) {
+    otaCancel();
+    return;
+  }
+  closeOta();
+}
+
+#define OTA_BTN_Y 290
+#define OTA_BTN_H 44
+#define OTA_FORGET_Y 398
+#define OTA_FORGET_W 120
+
+void otaTap(int16_t x, int16_t y) {
+  uint8_t ph = otaPhase();
+  bool onBtn = y >= OTA_BTN_Y && y <= OTA_BTN_Y + OTA_BTN_H && x >= 133 && x <= 333;
+  if (ph == OTP_AVAILABLE && onBtn) { otaTryInstall(); return; }
+  if ((ph == OTP_ERROR || ph == OTP_UPTODATE) && onBtn) { sfxPlay(SFX_TAP); closeOta(); return; }
+  if ((ph == OTP_UPTODATE || ph == OTP_AVAILABLE || ph == OTP_ERROR) && otaHasWifi() && y >= OTA_FORGET_Y - 4 &&
+      y <= OTA_FORGET_Y + OTA_PILL_H + 6 && x >= CX - OTA_FORGET_W / 2 && x <= CX + OTA_FORGET_W / 2) {
+    sfxPlay(SFX_TAP);
+    otaClose();         // el radio se apaga antes de escribir en flash
+    otaForgetWifi();
+    otaCheck(false);    // y la pantalla lo dice: "Sin Wi-Fi: configuralo con el instalador web"
+  }
+}
+
+// Texto centrado en varias lineas: corta por espacios (en CJK, donde no quepa). Devuelve
+// cuantas lineas uso.
+int drawWrapped(const char *s, int y, uint8_t size, int maxW, int maxLines, int lineH) {
+  setSize(size);
+  char buf[128];
+  int lines = 0;
+  const char *p = s;
+  while (*p && lines < maxLines) {
+    while (*p == ' ') p++;
+    int bl = 0, fitSpace = -1;
+    const char *q = p;
+    while (*q) {
+      int cl = 1;
+      if (gCjkFont) {  // un caracter UTF-8 entero
+        uint8_t c = (uint8_t)*q;
+        cl = c >= 0xF0 ? 4 : c >= 0xE0 ? 3 : c >= 0xC0 ? 2 : 1;
+      }
+      if (bl + cl >= (int)sizeof(buf)) break;
+      memcpy(buf + bl, q, cl);
+      buf[bl + cl] = 0;
+      if (bl && textW(buf, size) > maxW) break;
+      bl += cl;
+      q += cl;
+      if (*q == ' ' || !*q) fitSpace = bl;
+    }
+    int take = (!*q || fitSpace <= 0) ? bl : fitSpace;
+    if (take <= 0) break;
+    memcpy(buf, p, take);
+    buf[take] = 0;
+    setCur(centerX(buf, size), y + lines * lineH);
+    printT(buf);
+    p += take;
+    lines++;
+  }
+  return lines;
+}
+
+void drawOtaButton(const char *label, uint16_t fill, uint16_t ink, int ox) {
+  gfx->fillRoundRect(133 + ox, OTA_BTN_Y, 200, OTA_BTN_H, 14, fill);
+  gfx->setTextColor(ink);
+  setSize(3);
+  setCur(centerX(label, 3) + ox, OTA_BTN_Y + 11);
+  printT(label);
+}
+
+void renderOta() {
+  uint32_t now = millis();
+  gfx->fillScreen(RGB565_BLACK);
+  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  gfx->setTextColor(UI_INK);
+  setSize(3);
+  setCur(centerX(T(S_OTA_TITLE), 3), 44);
+  printT(T(S_OTA_TITLE));
+  char ver[24];
+  snprintf(ver, sizeof(ver), "TamaPoke v%s", FW_VERSION);
+  gfx->setTextColor(UI_TRACK);
+  setSize(2);
+  setCur(centerX(ver, 2), 84);
+  printT(ver);
+
+  uint8_t ph = otaPhase();
+  const OtaManifest &m = otaInfo();
+  char buf[64];
+  switch (ph) {
+    case OTP_UPTODATE:
+      gfx->fillCircle(CX, 172, 34, UI_BAR_OK);
+      for (int d = -2; d <= 2; d++) {  // una marca de "hecho", gruesa
+        gfx->drawLine(CX - 16, 172 + d, CX - 4, 184 + d, UI_WHITE);
+        gfx->drawLine(CX - 4, 184 + d, CX + 18, 160 + d, UI_WHITE);
+      }
+      gfx->setTextColor(UI_INK);
+      drawWrapped(T(S_OTA_UPTODATE), 226, 3, 360, 2, 30);
+      drawOtaButton("OK", UI_BAR_OK, UI_BG_DAY, 0);
+      break;
+    case OTP_AVAILABLE: {
+      gfx->setTextColor(UI_INK);
+      snprintf(buf, sizeof(buf), T(S_OTA_AVAIL_FMT), m.version);
+      drawWrapped(buf, 124, 3, 380, 1, 30);
+      snprintf(buf, sizeof(buf), "%lu.%lu MB", (unsigned long)(m.size / 1000000UL),
+               (unsigned long)(m.size / 100000UL % 10));
+      gfx->setTextColor(UI_TRACK);
+      setSize(2);
+      setCur(centerX(buf, 2), 160);
+      printT(buf);
+      gfx->setTextColor(UI_INK);
+      if (m.notes[0]) drawWrapped(m.notes, 188, 2, 340, 2, 20);
+      if (otaVerdict() == OTAV_SPRITES) {
+        gfx->setTextColor(UI_BAR_BAD);
+        drawWrapped(T(S_OTA_SPRITES), 236, 2, 360, 2, 20);
+      }
+      uint8_t b = otaInstallBlock(false);
+      int ox = otaShakeBtn == 2 ? otaShakeDx() : 0;
+      drawOtaButton(T(S_OTA_INSTALL), b == OTAB_OK ? UI_BAR_OK : UI_TRACK, UI_BG_DAY, ox);
+      if (b != OTAB_OK) {  // el motivo, debajo del boton gris
+        if (b == OTAB_BATTERY) snprintf(buf, sizeof(buf), T(S_OTA_E_BATTERY), (unsigned)OTA_MIN_BAT);
+        else snprintf(buf, sizeof(buf), "%s", T(S_OTA_BUSY));
+        gfx->setTextColor(UI_BAR_BAD);
+        printTight(buf, CX, OTA_BTN_Y + OTA_BTN_H + 8, 340);
+      }
+      break;
+    }
+    case OTP_DOWNLOAD:
+    case OTP_DONE: {
+      uint8_t pct = otaPercent();
+      gfx->setTextColor(UI_INK);
+      snprintf(buf, sizeof(buf), "%u%%", (unsigned)pct);
+      setSize(5);
+      setCur(centerX(buf, 5), 128);
+      printT(buf);
+      gfx->fillRoundRect(83, 200, 300, 24, 12, UI_TRACK);
+      int w = 300 * pct / 100;
+      if (w >= 24) gfx->fillRoundRect(83, 200, w, 24, 12, UI_BAR_OK);
+      gfx->drawRoundRect(83, 200, 300, 24, 12, UI_INK);
+      if (ph == OTP_DONE) {
+        drawWrapped(T(S_OTA_RESTART), 250, 3, 360, 1, 30);
+      } else {
+        drawWrapped(T(S_OTA_DONTOFF), 246, 3, 380, 2, 30);
+        gfx->setTextColor(UI_TRACK);
+        printTight(T(S_OTA_CANCEL_HINT), CX, 318, 320);
+      }
+      break;
+    }
+    case OTP_ERROR: {
+      gfx->fillCircle(CX, 158, 30, UI_BAR_BAD);
+      gfx->fillRoundRect(CX - 4, 140, 8, 24, 3, UI_WHITE);
+      gfx->fillCircle(CX, 174, 5, UI_WHITE);
+      uint8_t e = otaErr();
+      if (e == OTAE_BATTERY) snprintf(buf, sizeof(buf), T(S_OTA_E_BATTERY), (unsigned)OTA_MIN_BAT);
+      else snprintf(buf, sizeof(buf), "%s", e >= 1 && e < OTAE_COUNT ? T((StrId)(S_OTA_E_NOWIFI + e - 1)) : "?");
+      gfx->setTextColor(UI_INK);
+      drawWrapped(buf, 204, 2, 340, 3, 22);
+      drawOtaButton("OK", UI_BAR_OK, UI_BG_DAY, 0);
+      break;
+    }
+    default: {  // conectando y leyendo el manifiesto: tres puntos que laten
+      gfx->setTextColor(UI_INK);
+      drawWrapped(T(S_OTA_CHECKING), 170, 3, 380, 1, 30);
+      uint8_t on = (now / 300) % 3;
+      for (int i = 0; i < 3; i++) gfx->fillCircle(CX - 30 + i * 30, 236, i == on ? 9 : 6, i == on ? UI_BAR_OK : UI_TRACK);
+      break;
+    }
+  }
+  // pie: la red guardada y "Olvidar" (no mientras trabaja)
+  if (!otaBusy() && otaHasWifi()) {
+    snprintf(buf, sizeof(buf), T(S_OTA_WIFI_FMT), otaSsid());
+    gfx->setTextColor(UI_TRACK);
+    printTight(buf, CX, 370, 300);
+    gfx->fillRoundRect(CX - OTA_FORGET_W / 2, OTA_FORGET_Y, OTA_FORGET_W, OTA_PILL_H, 8, UI_WHITE);
+    gfx->drawRoundRect(CX - OTA_FORGET_W / 2, OTA_FORGET_Y, OTA_FORGET_W, OTA_PILL_H, 8, UI_INK);
+    gfx->setTextColor(UI_INK);
+    printTight(T(S_OTA_FORGET), CX, OTA_FORGET_Y + 5, OTA_FORGET_W - 12);
+  }
+  gfx->flush();
+}
+
+// Cada pasada del loop(): un paso de ota.cpp y lo que la pantalla necesita alrededor.
+void otaTick(uint32_t now) {
+  otaPoll(now);
+  uint8_t ph = otaPhase();
+  audioMute(ph == OTP_DOWNLOAD || ph == OTP_DONE);  // FR-OTA.8: sin sonidos mientras descarga
+  if (!otaOpen && ph != OTP_IDLE) otaClose();       // nadie mira: radio apagado
+  if (otaOpen && otaBusy()) lastInteract = now;     // trabajando: la pantalla no se atenua
+  // a oscuras sin nada en marcha: se cierra, para que el radio no se quede encendido en un bolsillo
+  if (otaOpen && !otaBusy() && (screenOff || dimStage >= DIM_LOW)) closeOta();
+  if (ph == OTP_DONE) {  // FR-OTA.10: "Reiniciando..." un momento, se guarda y arranca la nueva
+    if (!otaRestartAt) {
+      otaRestartAt = now + 1500;
+    } else if (!timeLeft(otaRestartAt)) {
+      pet.flushSave();  // el radio ya esta apagado
+      Serial.println("OTA: reiniciando");
+      delay(200);
+      ESP.restart();
+    }
+  }
+  // FR-OTA.13: una imagen recien llegada se da por buena tras 30 s con la pantalla principal vista
+  // y el tactil funcionando; hasta entonces, cualquier reinicio vuelve a la anterior. Se anota la
+  // version (para el aviso "Actualizado a vX" de la proxima) tambien tras un flasheo por USB.
+  if (!gBootHealthy && homeSeenAt && gTouchOk && now - homeSeenAt >= OTA_VERIFY_MS && !otaRadioOn()) {
+    gBootHealthy = true;
+    otaMarkValid();
+    char prev[12] = "";
+    Preferences p;
+    if (p.begin("tamapoke", false)) {
+      if (p.isKey("fwv")) p.getString("fwv", prev, sizeof(prev));
+      if (strcmp(prev, FW_VERSION) != 0) p.putString("fwv", FW_VERSION);
+      p.end();
+    }
+  }
 }
 
 // iconos de la mochila, en el orden de IT_* (pet.h)
@@ -2786,6 +3277,7 @@ bool fxDebug(const String &k) {
   else if (k == "streak") fxq.push(FXB_MILESTONE, 7);
   else if (k == "goal") fxq.push(FXB_GOAL, 1, STEP_GOAL_LEVELS[0]);
   else if (k == "goal3") fxq.push(FXB_GOAL, STEP_GOAL_TIERS, STEP_GOAL_LEVELS[STEP_GOAL_TIERS - 1]);
+  else if (k == "updated") fxq.push(FXB_UPDATED, 0);
   else if (k == "stat") {
     fxo.push(FXO_STAT, 0, 25, now);
     fxo.push(FXO_STAT, 1, 10, now);
@@ -2960,6 +3452,10 @@ void drawFxBanner(uint32_t now) {
   if (ev.kind == FXB_MEDAL) {
     l1 = T(S_MEDAL_BANNER);
     l2 = medalName(ev.a);
+  } else if (ev.kind == FXB_UPDATED) {  // tras una actualizacion por Wi-Fi (v1.42)
+    snprintf(buf, sizeof(buf), T(S_OTA_UPDATED_FMT), FW_VERSION);
+    l1 = "TamaPoke";
+    l2 = buf;
   } else {
     snprintf(buf, sizeof(buf), T(S_STREAK_DAYS_FMT), (unsigned)ev.a);
     l1 = T(S_GREAT);

@@ -68,6 +68,10 @@ static const ExpectedFmt EXPECTED[] = {
   { S_WAKE_Q_FMT,      "%s" },
   { S_SWAP_NOTE_FMT,   "%s" },
   { S_NOW_FMT,         "%s" },
+  { S_OTA_AVAIL_FMT,   "%s" },
+  { S_OTA_WIFI_FMT,    "%s" },
+  { S_OTA_UPDATED_FMT, "%s" },
+  { S_OTA_E_BATTERY,   "%u" },
 };
 static const int NUM_EXPECTED = (int)(sizeof(EXPECTED) / sizeof(EXPECTED[0]));
 

@@ -28,6 +28,10 @@ SDMMCFS SD_MMC;
 extern bool gStubImuPresent;  // stubs.cpp: el IMU de mentira
 extern int8_t gStubTiltSide;
 extern bool gStubTiltSlide;
+extern int gStubBatPct;       // la bateria de mentira (la pantalla de actualizar la mira)
+extern uint8_t gStubOtaPhase, gStubOtaErr, gStubOtaVerdict, gStubOtaPct;  // ota.cpp de mentira (v1.42)
+extern OtaManifest gStubOtaMan;
+extern const char *gStubOtaSsid;
 
 // ---- PNG -------------------------------------------------------------------
 
@@ -169,6 +173,19 @@ static void resetUi() {
   gStubImuPresent = true;
   gStubTiltSide = 0;
   gStubTiltSlide = false;
+  // actualizar por Wi-Fi (v1.42): cerrada, con una red guardada y una version nueva a mano
+  otaOpen = false;
+  otaShakeUntil = 0;
+  gStubBatPct = 80;
+  gStubOtaPhase = OTP_IDLE;
+  gStubOtaErr = OTAE_NONE;
+  gStubOtaVerdict = OTAV_NEWER;
+  gStubOtaPct = 0;
+  gStubOtaSsid = "CasaWiFi";
+  gStubOtaMan = OtaManifest{};
+  strcpy(gStubOtaMan.version, "1.43");
+  gStubOtaMan.size = 1468000;
+  strcpy(gStubOtaMan.notes, "Faster battles and a fix for the Box");
   gBright = BRIGHT_DEFAULT;
   gFaceDown = false;
   dimStage = DIM_AWAKE;
@@ -375,6 +392,18 @@ static const std::vector<Scene> &scenes() {
     { "card-progress", [] { pokemon(25, 13); cardOpen = true; cardPage = 3; } },
     { "settings", [] { pokemon(25, 13); openClock(); } },
     { "settings-bright-max", [] { pokemon(25, 13); openClock(); gBright = BRIGHT_LEVELS - 1; } },
+    // actualizar por Wi-Fi (v1.42): cada fase de la pantalla, encima del reloj
+    { "ota-checking", [] { pokemon(25, 13); openOta(false); } },
+    { "ota-uptodate", [] { pokemon(25, 13); openOta(false); gStubOtaPhase = OTP_UPTODATE; } },
+    { "ota-available", [] { pokemon(25, 13); openOta(false); gStubOtaPhase = OTP_AVAILABLE; } },
+    { "ota-sprites", [] { pokemon(25, 13); openOta(false); gStubOtaPhase = OTP_AVAILABLE; gStubOtaVerdict = OTAV_SPRITES; } },
+    { "ota-battery", [] { pokemon(25, 13); openOta(false); gStubOtaPhase = OTP_AVAILABLE; gStubBatPct = 31; } },
+    { "ota-progress", [] { pokemon(25, 13); openOta(false); gStubOtaPhase = OTP_DOWNLOAD; gStubOtaPct = 42; } },
+    { "ota-restart", [] { pokemon(25, 13); openOta(false); gStubOtaPhase = OTP_DONE; gStubOtaPct = 100; } },
+    { "ota-error", [] { pokemon(25, 13); openOta(false); gStubOtaPhase = OTP_ERROR; gStubOtaErr = OTAE_PASSWORD; } },
+    { "ota-nowifi", [] { pokemon(25, 13); gStubOtaSsid = ""; openOta(false); } },
+    { "ota-error-de", [] { pokemon(25, 13); setLang(LANG_DE); applyLangFont(); openOta(false); gStubOtaPhase = OTP_ERROR; gStubOtaErr = OTAE_NOINTERNET; } },
+    { "ota-available-ja", [] { pokemon(25, 13); setLang(LANG_JA); applyLangFont(); openOta(false); gStubOtaPhase = OTP_AVAILABLE; gStubOtaVerdict = OTAV_SPRITES; } },
     // brightness toast after a BOOT press (v1.23)
     { "bright-toast", [] { pokemon(25, 13); gBright = 0; cycleBright(); } },
     { "keyboard", [] { pokemon(25, 13); openKeyboard(); } },
@@ -461,6 +490,7 @@ static const std::vector<Scene> &scenes() {
     { "medal-slide", [] { pokemon(25, 13); fxq.push(FXB_MEDAL, 0); }, 1 },
     { "medal-confetti", [] { pokemon(25, 13); fxq.push(FXB_MEDAL, 0); }, 6 },
     { "streak-banner", [] { pokemon(25, 13); fxq.push(FXB_MILESTONE, 7); }, 4 },
+    { "updated-banner", [] { pokemon(25, 13); fxq.push(FXB_UPDATED, 0); }, 4 },
     // (needs set by hand, not feedBerry(): its eating timer would leak into the next scenes,
     // which restart the host clock)
     { "stat-float", [] {

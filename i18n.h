@@ -81,6 +81,12 @@ enum StrId : uint8_t {
   // huevos al acabar una crianza (v1.40/v1.41): el boton "abrir un huevo (N)" de la casa vacia, la
   // nota del regalo, el mensaje de la casa vacia con huevos y el titulo del aviso de un regalo
   S_HATCH_FMT, S_GIFT_EGG_NOTE, S_NOEGG_HAVE, S_GIFT,
+  // actualizaciones por Wi-Fi (v1.42): la pildora del reloj y el titulo, las fases de la pantalla,
+  // la red, el aviso tras actualizar y un mensaje por error, en el orden de OTAE_* (ota_policy.h)
+  S_OTA_PILL, S_OTA_TITLE, S_OTA_CHECKING, S_OTA_UPTODATE, S_OTA_AVAIL_FMT, S_OTA_INSTALL, S_OTA_SPRITES,
+  S_OTA_BUSY, S_OTA_DONTOFF, S_OTA_CANCEL_HINT, S_OTA_RESTART, S_OTA_WIFI_FMT, S_OTA_FORGET, S_OTA_UPDATED_FMT,
+  S_OTA_E_NOWIFI, S_OTA_E_NOTFOUND, S_OTA_E_PASSWORD, S_OTA_E_NOINTERNET, S_OTA_E_CERT, S_OTA_E_SERVER,
+  S_OTA_E_TIMEOUT, S_OTA_E_CHECKSUM, S_OTA_E_WRITE, S_OTA_E_BATTERY, S_OTA_E_MEMORY, S_OTA_E_BOARD, S_OTA_E_LOST,
   STR_COUNT
 };
 

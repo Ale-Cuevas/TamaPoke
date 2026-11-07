@@ -217,8 +217,11 @@ void audioBegin() {
 
 bool audioBusy() { return gAmpHold && (int32_t)(gAmpHoldUntil - millis()) > 0; }
 
+static bool gMuted = false;  // descarga OTA en marcha (v1.42); no se guarda
+void audioMute(bool muted) { gMuted = muted; }
+
 void sfxPlay(uint8_t id) {
-  if (gReady && gOn && gQ) {
+  if (gReady && gOn && gQ && !gMuted) {
     if (gIdle) {  // un aviso en reposo (p. ej. "listo para evolucionar") tiene que oirse
       gAmpHoldUntil = millis() + 4000;
       gAmpHold = true;
