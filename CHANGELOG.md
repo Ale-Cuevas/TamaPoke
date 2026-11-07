@@ -8,6 +8,26 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.45] - 2026-11-07
+
+Both new games are easier, after the first plays on the board.
+
+### Changed
+
+- **Sled run:**
+  - It starts 15 % slower (136 px/s instead of 160). The ramp is the same: 2× at 40 s, 3× at 80 s.
+  - Obstacles are 20 % narrower (40–112 px instead of 50–140).
+  - Easier to see: the slope is lighter, every obstacle has a dark outline, and the colours were
+    picked for contrast against each habitat. The dark green bush that hid on grass is now magenta;
+    it's a dark fir on snow and red lava on the volcano. Rocks are darker, and ice blocks a deeper
+    blue.
+- **Waterfall:**
+  - The gauge moves 15 % slower: hold, fall, top speed and the surges' push.
+  - The green band starts 30 % wider (31 % of the gauge instead of 24 %).
+  - A session lasts **60 s** instead of 30, and the band narrows slowly over the whole minute: it
+    reaches its narrowest (12 %) at the 60 s mark. Surges speed up over the minute too. Defence
+    is still 1 point per 2 s in the band, up to +15 per session.
+
 ## [1.44] - 2026-11-07
 
 A new game in PLAY: ride a sled down a slope and tilt the board to dodge, to train SPEED.
