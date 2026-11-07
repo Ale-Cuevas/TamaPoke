@@ -320,11 +320,11 @@ the gauge, band, next surge, focus and the frame's draw time.
 - [ ] Intro: "Keep the bar in the green!" / "HOLD TO FOCUS" for 1.5 s, and the hint stays until the first touch.
 - [ ] Holding anywhere below the top raises the gauge, letting go lowers it, and it keeps moving a moment after
   either; a quick tap between two frames still nudges it.
-- [ ] The band narrows slowly over the 60 s (v1.45); surges come from 5 s on, each one after a white wave runs down the water,
+- [ ] The band narrows slowly (by the end of the 30 s it's only halfway to its narrowest, v1.46); surges come from 5 s on, each one after a white wave runs down the water,
   and they push the gauge down harder at the end.
 - [ ] Pet: calm with the aura in the band, splashed below, "!" above. A blue pet (Squirtle line) stands out on
   the darker water behind it.
-- [ ] The screen doesn't dim during a session even with the finger held still for 60 s.
+- [ ] The screen doesn't dim during a session even with the finger held still for 30 s.
 - [ ] Result: focus, "DEF +N", record or "NEW RECORD!", "Squeaky clean!"; after it the home shows the "+N"
   on the hygiene bar, and `STATS` shows `tr=…/<def>/…` and `rec … zen=`.
 - [ ] Quitting (tap the top, USER, PWR) gives nothing and keeps the record.

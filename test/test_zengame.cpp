@@ -60,14 +60,16 @@ TEST(zengame, la_velocidad_tiene_tope) {
   }
 }
 
-TEST(zengame, la_franja_se_estrecha_de_31_a_12_en_60s) {
+TEST(zengame, la_franja_se_estrecha_despacio_y_a_los_30s_va_por_la_mitad) {
   CHECK(near(2 * zenBandHalf(0), ZEN_BAND_START));
-  CHECK(near(2 * zenBandHalf(ZEN_SESSION_MS / 2), (ZEN_BAND_START + ZEN_BAND_END) / 2));
-  CHECK(near(2 * zenBandHalf(ZEN_SESSION_MS), ZEN_BAND_END));
-  CHECK(near(2 * zenBandHalf(ZEN_SESSION_MS + 5000), ZEN_BAND_END));
+  CHECK(near(2 * zenBandHalf(ZEN_SESSION_MS), (ZEN_BAND_START + ZEN_BAND_END) / 2));  // fin de sesion: 21,6
+  CHECK(near(2 * zenBandHalf(ZEN_RAMP_MS), ZEN_BAND_END));
+  CHECK(near(2 * zenBandHalf(ZEN_RAMP_MS + 5000), ZEN_BAND_END));
   CHECK(zenInBand(65, 0) && !zenInBand(66, 0));  // 34,4-65,6 al empezar
-  CHECK_EQ(ZEN_SESSION_MS, 60000u);
-  CHECK(zenInBand(55, ZEN_SESSION_MS) && !zenInBand(57, ZEN_SESSION_MS));
+  CHECK_EQ(ZEN_SESSION_MS, 30000u);
+  CHECK_EQ(ZEN_RAMP_MS, 60000u);
+  CHECK(zenInBand(60, ZEN_SESSION_MS) && !zenInBand(61, ZEN_SESSION_MS));  // 39,2-60,8 al acabar
+  CHECK(zenInBand(55, ZEN_RAMP_MS) && !zenInBand(57, ZEN_RAMP_MS));
   CHECK_EQ(zenZone(30, 0), -1);
   CHECK_EQ(zenZone(50, 0), 0);
   CHECK_EQ(zenZone(70, 0), 1);
@@ -102,7 +104,7 @@ TEST(zengame, los_golpes_empiezan_a_los_5s_y_cada_vez_mas_seguidos) {
   }
   // la separacion base baja con el tiempo: al final, en media, mas seguidos que al principio
   uint32_t rng = 7, early = 0, late = 0;
-  for (int i = 0; i < 200; i++) early += zenSurgeGap(0, rng), late += zenSurgeGap(ZEN_SESSION_MS, rng);
+  for (int i = 0; i < 200; i++) early += zenSurgeGap(0, rng), late += zenSurgeGap(ZEN_RAMP_MS, rng);
   CHECK(late < early * 6 / 10);
   CHECK(zenSurgeKick(ZEN_SESSION_MS) > zenSurgeKick(0));
 }
@@ -154,7 +156,7 @@ TEST(zengame, un_frame_tardio_cuenta_como_mucho_250ms) {
   CHECK_EQ(z.t, ZEN_LATE_MAX_MS);
 }
 
-TEST(zengame, la_sesion_dura_60s_y_no_pasa_de_ahi) {
+TEST(zengame, la_sesion_dura_30s_y_no_pasa_de_ahi) {
   ZenState z = calm();
   for (int i = 0; i < 4000; i++) zenAdvance(z, z.c < 50, 20);
   CHECK(zenDone(z));
@@ -183,8 +185,10 @@ TEST(zengame, se_puede_ganar_pero_no_es_trivial) {
     good += scripted(s * 7919, 200, 0.4f);  // reacciona en 200 ms y se anticipa
     naive += scripted(s * 7919, 200, 0.0f); // reacciona en 200 ms sin anticiparse
   }
-  CHECK(good / 30 > 0.6f);
-  CHECK(naive / 30 < 0.6f);
+  // v1.45/v1.46, mas facil a peticion del usuario: el que se anticipa la clava (~100 %), el que solo
+  // reacciona se queda en ~60 % (era ~33 % con la v1.43)
+  CHECK(good / 30 > 0.9f);
+  CHECK(naive / 30 < 0.75f);
 }
 
 TEST(zengame, ganancia_de_def_1_cada_2s_tope_15) {

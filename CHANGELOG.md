@@ -8,6 +8,15 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.46] - 2026-11-07
+
+### Changed
+
+- **Waterfall: back to 30 s sessions.** The band keeps v1.45's slow narrowing (the pace that would
+  reach the narrowest band at 60 s), so a session ends with the band only halfway there: from
+  34–66 at the start to about 39–61 at 30 s. The surges also speed up at that slower pace. The
+  rest of v1.45 stays: a slower gauge and a wider band at the start.
+
 ## [1.45] - 2026-11-07
 
 Both new games are easier, after the first plays on the board.

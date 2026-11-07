@@ -398,7 +398,7 @@ static const std::vector<Scene> &scenes() {
     { "zen-high", [] { zenPlaying(7, 13, 86); } },
     { "zen-warn", [] { zenPlaying(7, 13, 50); zen.nextSurge = zen.t + 200; } },
     { "zen-warn-early", [] { zenPlaying(25, 13, 50); zen.nextSurge = zen.t + 380; } },
-    { "zen-late-night", [] { zenPlaying(143, 22, 49); zen.t = 55000; } },
+    { "zen-late-night", [] { zenPlaying(143, 22, 49); zen.t = 27000; } },
     { "zen-result", [] { zenPlaying(7, 13, 50); zen.t = ZEN_SESSION_MS; zen.inBandMs = 23400; zenGainShown = 11;
                          zenNewHi = true; zenOverUntil = millis() + 4000; } },
     { "zen-result-best", [] { zenPlaying(7, 13, 50); zen.t = ZEN_SESSION_MS; zen.inBandMs = 9100; zenGainShown = 4;
