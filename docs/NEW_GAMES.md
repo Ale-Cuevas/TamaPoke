@@ -475,6 +475,11 @@ gives **bonus DEF**: 1 per 1.5 s (`ZEN_BONUS_TENTHS_PER_POINT`), up to `ZEN_BONU
 normal part's 15 (`zenTotalGain()`; `Pet::zenResult(focus, drift)`). A full training stat now shows
 "STR/DEF/SPD MAX" instead of "+0".
 
+**v1.48, rewards:** `DASH_PER_POINT` 4 → **6** (50 rows ≈ +8 SPD; the user had seen +4 because speed
+training hit its 100 cap). ZEN: `ZEN_TENTHS_PER_POINT` 20 → **35** with `ZEN_GAIN_MAX` 15 → **8**;
+`ZEN_BONUS_TENTHS_PER_POINT` 15 → **40** with `ZEN_BONUS_MAX` 10 → **3**. A session with ~28 s + ~12 s in
+the band gives 8 + 3 (it gave 14 + 8).
+
 ## Order and parallel work
 
 The two games don't depend on each other. Each runs on its own branch off `main`, after or beside

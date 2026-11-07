@@ -43,7 +43,7 @@
 #define DASH_SPAWN_AHEAD 340.0f   // las filas nacen asi de lejos (por debajo del borde de la pantalla)
 #define DASH_INVULN_MS 1200u      // tras un golpe
 #define DASH_LIVES 3
-#define DASH_PER_POINT 4          // VEL: 1 punto cada 4 filas esquivadas...
+#define DASH_PER_POINT 6          // VEL: 1 punto cada 6 filas esquivadas (v1.48: eran 4; 50 filas = 8)...
 #define DASH_GAIN_MAX 18          // ...con el tope del saco
 #define DASH_WEIGHT_DIV 8         // peso: -filas/8
 #define DASH_SLED_W_MIN 70        // ancho dibujado del trineo: sigue al sprite entre estos topes

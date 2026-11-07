@@ -225,22 +225,24 @@ TEST(zengame, la_concentracion_con_la_franja_moviendose_se_cuenta_aparte) {
   CHECK_EQ(zenDriftTenths(z), 150);
 }
 
-TEST(zengame, bonificacion_1_cada_1_5s_tope_10_y_el_total) {
+TEST(zengame, bonificacion_1_cada_4s_tope_3_y_el_total) {
   CHECK_EQ(zenBonus(0), 0);
-  CHECK_EQ(zenBonus(15), 1);
-  CHECK_EQ(zenBonus(150), 10);
-  CHECK_EQ(zenBonus(400), 10);
-  CHECK_EQ(zenTotalGain(450, 150), 25);  // sesion perfecta: 15 + 10
-  CHECK_EQ(zenTotalGain(200, 60), 7 + 4);
-  CHECK_EQ(zenTotalGain(100, 0), 5);
-  CHECK_EQ(zenTotalGain(50, 90), 3);     // drift mayor que el total: se recorta
+  CHECK_EQ(zenBonus(39), 0);
+  CHECK_EQ(zenBonus(40), 1);
+  CHECK_EQ(zenBonus(120), 3);
+  CHECK_EQ(zenBonus(400), 3);
+  CHECK_EQ(zenTotalGain(450, 150), 11);  // sesion perfecta: 8 + 3
+  CHECK_EQ(zenTotalGain(400, 120), 8 + 3);  // la del usuario (v1.48): ~28 s + ~12 s en la franja
+  CHECK_EQ(zenTotalGain(200, 60), 4 + 1);
+  CHECK_EQ(zenTotalGain(100, 0), 2);
+  CHECK_EQ(zenTotalGain(50, 90), 1);     // drift mayor que el total: se recorta
 }
 
-TEST(zengame, ganancia_de_def_1_cada_2s_tope_15) {
+TEST(zengame, ganancia_de_def_1_cada_3_5s_tope_8) {
   CHECK_EQ(zenGain(0), 0);
-  CHECK_EQ(zenGain(19), 0);
-  CHECK_EQ(zenGain(20), 1);
-  CHECK_EQ(zenGain(150), 7);
-  CHECK_EQ(zenGain(300), 15);
-  CHECK_EQ(zenGain(1000), 15);
+  CHECK_EQ(zenGain(34), 0);
+  CHECK_EQ(zenGain(35), 1);
+  CHECK_EQ(zenGain(150), 4);
+  CHECK_EQ(zenGain(280), 8);
+  CHECK_EQ(zenGain(1000), 8);
 }

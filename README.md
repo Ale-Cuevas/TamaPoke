@@ -141,12 +141,12 @@ While **awake**, per minute:
 - 🥊 **Training bag** (third slot of the Play menu): trains **STRENGTH** (~4 hits = 1 pt, cap
   +18/session), tires it.
 - 🛷 **Sled run** (fourth slot, v1.44): tilt the board to steer the sled around obstacles that come
-  faster and faster (2× at 40 s, 3× at 80 s); three hits end it. Trains **SPEED** (1 pt per 4 rows
-  dodged, cap +18/run), burns a little weight. Needs the IMU.
+  faster and faster (2× at 40 s, 3× at 80 s); three hits end it. Trains **SPEED** (1 pt per 6 rows
+  dodged, so ~8 for 50 rows; cap +18/run), burns a little weight. Needs the IMU.
 - 🌊 **Waterfall** (fifth slot, v1.43): hold the screen to raise the focus gauge, let go to lower
-  it; keep it in the green band for 45 s. Trains **DEFENSE** (1 pt per 2 s in the band, cap
-  +15) and washes the pet (+10 HYG); no weight burn. From 30 s the band drifts slowly up and
-  down: time in it then gives **bonus DEF** (1 pt per 1.5 s, up to +10, so +25 for a perfect
+  it; keep it in the green band for 45 s. Trains **DEFENSE** (1 pt per 3.5 s in the band, cap
+  +8) and washes the pet (+10 HYG); no weight burn. From 30 s the band drifts slowly up and
+  down: time in it then gives **bonus DEF** (1 pt per 4 s, up to +3, so +11 for a perfect
   session).
 - 🫧 **Bath:** clears poops, HYG → 100.
 - 👆 **Pet it:** +5 JOY + bond.

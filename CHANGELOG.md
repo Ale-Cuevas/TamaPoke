@@ -8,6 +8,19 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.48] - 2026-11-07
+
+Stat rewards of the new games, tuned after a few sessions.
+
+### Changed
+
+- **Sled run: 1 SPD per 6 rows dodged** (was 4), so a long run of 50 rows gives about +8; the cap
+  stays +18. (The "+4" seen after a 50-row run in v1.47 was the training cap: speed training was
+  at 96 and stops at 100. Next time it shows "SPD MAX".)
+- **Waterfall gives much less DEF:** the normal part gives 1 point per 3.5 s in the band (was 2 s),
+  up to +8 (was +15), and the moving band's bonus 1 point per 4 s (was 1.5 s), up to +3 (was +10).
+  A very good 45 s session now gives about 8 + 3 instead of 14 + 8.
+
 ## [1.47] - 2026-11-07
 
 ### Changed

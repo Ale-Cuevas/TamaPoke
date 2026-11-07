@@ -469,14 +469,14 @@ TEST(train, cascada_da_def_lava_y_guarda_record) {
   p.energy = 80;
   p.fullness = 80;
   p.weight = 40;
-  CHECK_EQ(p.zenResult(150), (uint8_t)7);  // 15 s en la franja: 1 punto cada 2 s
-  CHECK_EQ(p.trDef, (uint8_t)17);
+  CHECK_EQ(p.zenResult(150), (uint8_t)4);  // 15 s en la franja: 1 punto cada 3,5 s
+  CHECK_EQ(p.trDef, (uint8_t)14);
   CHECK_EQ(p.hygiene, (uint8_t)(50 + ZEN_WASH));
   CHECK_EQ(p.energy, (uint8_t)72);
   CHECK_EQ(p.fullness, (uint8_t)77);
   CHECK_EQ(p.weight, (uint8_t)40);  // sentado no quema peso
   CHECK_EQ(p.zenHi, (uint16_t)150);
-  CHECK_MSG(p.zenResult(300) == ZEN_GAIN_MAX, "sesion perfecta: tope de 15");
+  CHECK_MSG(p.zenResult(300) == ZEN_GAIN_MAX, "30 s perfectos: tope de 8");
   CHECK_EQ(p.zenHi, (uint16_t)300);
   p.zenResult(100);
   CHECK_EQ(p.zenHi, (uint16_t)300);  // un peor resultado no baja el record
@@ -486,8 +486,8 @@ TEST(train, la_cascada_suma_la_bonificacion_de_la_franja_en_movimiento) {
   Pet p;
   makePet(p, 4);
   p.trDef = 10;
-  CHECK_EQ(p.zenResult(450, 150), (uint8_t)25);  // 30 s normales (15) + 15 s moviendose (10)
-  CHECK_EQ(p.trDef, (uint8_t)35);
+  CHECK_EQ(p.zenResult(450, 150), (uint8_t)11);  // 30 s normales (8) + 15 s moviendose (3)
+  CHECK_EQ(p.trDef, (uint8_t)21);
   CHECK_EQ(p.zenHi, (uint16_t)450);
 }
 
@@ -530,8 +530,8 @@ TEST(train, carrera_da_vel_cansa_quema_peso_y_guarda_record) {
   p.fullness = 80;
   p.weight = 40;
   p.joy = 10;
-  CHECK_EQ(p.dashResult(41), (uint8_t)10);  // 1 punto cada 4 filas
-  CHECK_EQ(p.trSpe, (uint8_t)20);
+  CHECK_EQ(p.dashResult(41), (uint8_t)6);  // 1 punto cada 6 filas
+  CHECK_EQ(p.trSpe, (uint8_t)16);
   CHECK_EQ(p.energy, (uint8_t)68);
   CHECK_EQ(p.fullness, (uint8_t)75);
   CHECK_EQ(p.weight, (uint8_t)35);  // 40 - 41/8

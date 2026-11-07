@@ -176,12 +176,12 @@ TEST(dashgame, un_frame_tardio_cuenta_como_mucho_250ms) {
   CHECK_EQ(d.t, DASH_LATE_MAX_MS);
 }
 
-TEST(dashgame, ganancia_de_vel_1_cada_4_tope_18) {
+TEST(dashgame, ganancia_de_vel_1_cada_6_tope_18) {
   CHECK_EQ(dashGain(0), 0);
-  CHECK_EQ(dashGain(3), 0);
-  CHECK_EQ(dashGain(4), 1);
-  CHECK_EQ(dashGain(41), 10);
-  CHECK_EQ(dashGain(72), 18);
+  CHECK_EQ(dashGain(5), 0);
+  CHECK_EQ(dashGain(6), 1);
+  CHECK_EQ(dashGain(50), 8);  // "una carrera larga" (v1.48)
+  CHECK_EQ(dashGain(108), 18);
   CHECK_EQ(dashGain(500), 18);
 }
 
