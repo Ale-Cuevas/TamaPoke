@@ -840,6 +840,16 @@ void handleSerial() {
     }
     eggReport();
     Serial.println("DONE");
+  } else if (line.startsWith("TAP ")) {  // TAP <x> <y>: un toque como el de un dedo (pruebas por serie)
+    String a = line.substring(4);
+    a.trim();
+    int sp = a.indexOf(' ');
+    int16_t x = (int16_t)a.substring(0, sp).toInt(), y = sp > 0 ? (int16_t)a.substring(sp + 1).toInt() : 0;
+    wakeUI();
+    if (battleOpen()) battleTap(x, y);  // como handleTouch: el combate se lleva los toques
+    else onTap(x, y);
+    Serial.printf("tap %d %d battle=%d phase=%u\n", x, y, battleOpen() ? 1 : 0, battlePhase());
+    Serial.println("DONE");
   } else if (line == "BOX") {  // la caja (v1.37): cada hueco con uid, especie, nivel y CRC
     boxReport();
     Serial.println("DONE");
@@ -4950,6 +4960,7 @@ struct {
 } bt;
 
 bool battleOpen() { return bt.phase != BT_OFF; }
+uint8_t battlePhase() { return bt.phase; }  // comando TAP: 0 cerrado, 1 intro, 2 combate, 3 resultado
 
 void closeBattle() {
   bt.phase = BT_OFF;

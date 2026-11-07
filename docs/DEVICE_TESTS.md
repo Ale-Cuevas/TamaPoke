@@ -337,8 +337,8 @@ real pet don't use `LVL`: it moves the level.
 ### Eggs (v1.39)
 (Limited eggs, found by walking.) `EGG` prints the eggs in the Backpack, the steps to the next one and whether
 the home is empty; `EGG <n>` sets the Backpack (tests only: it changes the save).
-- [ ] After flashing over v1.38: the same pet, `EGG` shows `bag=0 next=0/0 vacant=0`; after a few steps,
-  `next=` counts down from a number between 8000 and 15000.
+- [x] After flashing over v1.37/v1.38: the same pet, `EGG` shows `bag=0 next=0/0 vacant=0` (2026-11-07); after a
+  few steps, `next=` counts down from a number between 8000 and 15000 (`STEPS 15000` on a backed-up save: 13868).
 - [ ] Store the pet with no egg in the Backpack (`STORE <k>` into an empty slot, or by touch): the dialog says
   "No egg: home stays empty"; home shows "NO EGG", the grey egg, today's steps, the Pokédex and "Swipe right:
   the Box". A tap only gets the deny sound; swipe up does nothing; the screensaver shows only the clock.
@@ -346,7 +346,8 @@ the home is empty; `EGG <n>` sets the Backpack (tests only: it changes the save)
   (`BOX`: `vacant=0 eggHeld=0`).
 - [ ] A real walk until `next=` reaches 0: the "FOUND! EGG" popup; with a pet at home the egg is in the 7th WALK
   slot with "Eggs hatch when home is free"; with the home empty it goes straight home.
-- [ ] Restart (re-flash or PWR) with the home empty: still empty; `EGG` keeps its `next=`.
+- [x] Restart (re-flash or PWR) with the home empty: still empty (2026-11-07, on a backed-up save); `EGG` keeps its
+  `next=`.
 
 ### Box (v1.37)
 ([NEXT_FEATURES.md, Task BOX](NEXT_FEATURES.md#task-box-store-a-pet-raise-another).) `BOX` over serial lists

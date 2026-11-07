@@ -34,7 +34,8 @@ Limited eggs: you find them by walking.
 - **Eggs in the Backpack:** a 7th slot on the WALK page (slots 52 px wide, were 60), the hint
   "Eggs hatch when home is free", and a 16×16 egg icon for the popup.
 - Serial: `EGG` (eggs in the Backpack, steps to the next, empty home), `EGG <n>` (set the Backpack
-  to n eggs, for tests); `STATS` and `BOX` print the same.
+  to n eggs, for tests); `STATS` and `BOX` print the same. `TAP <x> <y>`: a tap through the same
+  path as a finger (used to check the v1.38 result lock on the board).
 - Strings in all eight languages.
 
 ### Saves and power cuts

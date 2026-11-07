@@ -693,7 +693,8 @@ waiting egg) · `STORE <k>` / `WAKE <k>` (store into / wake from slot k = 0–5,
 without the light) · `BOXFILL` (made-up pets in the empty slots, for tests and screenshots) ·
 `BOXCLR <k>` (empty slot k, also a damaged one) · `NVS` (used and free NVS entries) ·
 `EGG` (eggs in the Backpack, steps to the next one, empty home or not) · `EGG <n>` (set the
-Backpack to n eggs, for tests; with an empty home one comes home).
+Backpack to n eggs, for tests; with an empty home one comes home) · `TAP <x> <y>` (a tap at
+canvas coordinates, through the same path as a finger; prints the battle phase).
 
 To test fast: lower `PET_TICK_MS` and `FAREWELL_AGE_MIN` in `pet.h` (levels count game minutes, so they
 speed up with the tick; the per-level costs are in `growth.h`), or jump levels with `LVL <n>` over serial.
