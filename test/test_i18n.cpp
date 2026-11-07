@@ -58,6 +58,7 @@ static const ExpectedFmt EXPECTED[] = {
   { S_FAREWELL_BTN,    "%s" },
   { S_RUNAWAY_BTN,     "%s" },
   { S_STEPS_FMT,       "%lu" },
+  { S_HATCH_FMT,       "%u" },
   { S_STEPS_TOTAL_FMT, "%lu" },
   { S_FINDS_FMT,       "%u,%u" },
   { S_USE_FMT,         "%s" },

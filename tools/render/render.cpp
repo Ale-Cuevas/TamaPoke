@@ -329,7 +329,9 @@ static const std::vector<Scene> &scenes() {
     { "minigame-swamp", [] { pokemon(23, 13); startGame(); gameScore = 3; }, 4 },
     { "feed", [] { pokemon(133, 12); menuKind = MENU_FEED; menuUntil = millis() + 6000; } },
     { "play-menu", [] { pokemon(133, 12); menuKind = MENU_PLAY; menuUntil = millis() + 6000; } },
-    { "release", [] { pokemon(54, 15); confirmUntil = millis() + 10000; } },  // no egg left: the note (v1.39)
+    // no egg and nobody in the Box: a gift egg will come (v1.40); with pets in the Box, the home stays empty
+    { "release", [] { pokemon(54, 15); confirmUntil = millis() + 10000; } },
+    { "release-boxed", [] { pokemon(54, 15); boxThree(); confirmUntil = millis() + 10000; } },
     { "release-egg", [] { pokemon(54, 15); pet.items[IT_EGG] = 1; confirmUntil = millis() + 10000; } },
     // limited eggs (v1.39): the empty home, with pets in the box (the hint) and at night without
     { "home-vacant", [] { vacantNow(10); boxThree(); } },
@@ -337,6 +339,30 @@ static const std::vector<Scene> &scenes() {
     { "home-vacant-ja", [] { vacantNow(10); boxThree(); setLang(LANG_JA); applyLangFont(); } },
     { "home-vacant-de", [] { vacantNow(10); boxThree(); setLang(LANG_DE); applyLangFont(); } },
     { "release-de", [] { pokemon(54, 15); setLang(LANG_DE); applyLangFont(); confirmUntil = millis() + 10000; } },
+    // release with eggs (v1.40): the second dialog, hatch one or leave the home empty
+    { "release-choice", [] { pokemon(54, 15); pet.items[IT_EGG] = 2; choiceKind = 3; choiceUntil = millis() + 12000; } },
+    { "release-choice-ja", [] {
+       pokemon(54, 15); pet.items[IT_EGG] = 2; choiceKind = 3; choiceUntil = millis() + 12000;
+       setLang(LANG_JA); applyLangFont();
+     } },
+    { "release-choice-de", [] {
+       pokemon(54, 15); pet.items[IT_EGG] = 2; choiceKind = 3; choiceUntil = millis() + 12000;
+       setLang(LANG_DE); applyLangFont();
+     } },
+    // an egg waiting and a full Backpack: "Leave home empty" greyed out
+    { "release-choice-full", [] {
+       pokemon(54, 15); pet.items[IT_EGG] = 1; pet.store(5); pet.wake(5); pet.items[IT_EGG] = ITEM_MAX;
+       choiceKind = 3; choiceUntil = millis() + 12000;
+     } },
+    // the empty home with eggs in the Backpack: the "Hatch an egg (N)" button
+    { "home-vacant-eggs", [] { vacantNow(10); boxThree(); pet.items[IT_EGG] = 3; } },
+    { "home-vacant-eggs-ja", [] { vacantNow(10); boxThree(); pet.items[IT_EGG] = 3; setLang(LANG_JA); applyLangFont(); } },
+    { "home-vacant-eggs-es", [] { vacantNow(10); boxThree(); pet.items[IT_EGG] = 3; setLang(LANG_ES); applyLangFont(); } },
+    // a farewell's egg: "GIFT!" over the egg that came home
+    { "farewell-gift", [] {
+       pokemon(54, 15); boxThree(); pet.startFarewell();
+       gHostMillis += CEREMONY_MS + 1; pet.update(millis());
+     }, 2 },
     { "walk-eggs-pt", [] {
        pokemon(25, 13);
        walker(6420, 88100, 4, { 3, 1, 0, 2, 1, 1, 2 }, 2);

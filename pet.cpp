@@ -16,7 +16,8 @@ void Pet::begin() {
     uid = newUid();
     prefs.putUInt("uid", uid);
   }
-  if (vacant && items[IT_EGG]) eggToHome(true);  // la casa nunca espera con un huevo en la mochila
+  // v1.40: la casa vacia con huevos en la mochila es un estado normal ("Dejar casa vacia" al soltar):
+  // ya no se saca uno al arrancar. La casa vacia lo ofrece con su boton.
   lastTick = millis();
 }
 
@@ -40,7 +41,7 @@ void Pet::resetHome() {
   sleeping = false;
 }
 
-void Pet::newEgg(bool saveNow) {
+void Pet::newEgg(bool saveNow, bool charmOk) {
   resetHome();
   vacant = false;
   if (eggHeldFlag) {
@@ -54,7 +55,7 @@ void Pet::newEgg(bool saveNow) {
     starterPick = (registeredCount() == 0);  // primera partida: el jugador elige inicial
     // amuleto shiny de la mochila: lo gasta este huevo. No el inicial, ni
     // pickEggSpecies(), que tambien usa la simulacion de tiradas (comando EGGS).
-    bool charm = items[IT_CHARM] && !starterPick;
+    bool charm = charmOk && items[IT_CHARM] && !starterPick;
     if (charm) items[IT_CHARM] = 0;
     eggShiny = (random(shinyOdds(charm)) == 0);
     eggTaps = 0;
@@ -65,15 +66,46 @@ void Pet::newEgg(bool saveNow) {
 // La casa queda libre (fin de una crianza o guardar en la caja). Huevos limitados (v1.39): vuelve el
 // que esperaba en la incubadora; si no, sale uno de la mochila (y se sortea ahora, con el amuleto si
 // lo hay); si tampoco, la casa se queda vacia.
-void Pet::freeHome() {
+// v1.40: sin huevos y sin nadie en la caja llega un huevo de regalo (tirada normal, sin amuleto):
+// nunca se acaba sin bicho, sin huevo y sin nadie a quien despertar. HOME_EMPTY ("Dejar casa vacia"
+// al soltar) deja los huevos donde estan; el que esperaba pasa a la mochila (su especie y su tirada
+// shiny se pierden: se sortea de nuevo al salir). save() escribe la mochila antes que "eggH", asi
+// que un corte entre los dos deja un huevo de mas, nunca uno de menos.
+void Pet::freeHome(uint8_t mode) {
+  if (mode == HOME_EMPTY && (eggHeldFlag || items[IT_EGG])) {
+    if (eggHeldFlag && items[IT_EGG] < ITEM_MAX) {
+      items[IT_EGG]++;
+      eggHeldFlag = false;
+    }
+    if (!eggHeldFlag) {
+      vacate();
+      return;
+    }
+    // mochila llena: el que esperaba no cabe y vuelve a casa (la UI no ofrece esa opcion)
+  }
   if (eggHeldFlag) {
     newEgg();
   } else if (items[IT_EGG]) {
     items[IT_EGG]--;
     newEgg();
+  } else if (!boxHasPets()) {
+    queueFound(IT_EGG, false, true);  // "REGALO!" con el huevo, ya en casa
+    newEgg(true, false);
   } else {
     vacate();
   }
+}
+
+bool Pet::boxHasPets() const {
+  for (uint8_t k = 0; k < BOX_SLOTS; k++)
+    if (boxSt[k] == BOX_OK) return true;
+  return false;
+}
+
+bool Pet::hatchFromBag() {
+  if (!vacant || !items[IT_EGG] || ceremony != CER_NONE) return false;
+  eggToHome(true);
+  return true;
 }
 
 void Pet::vacate(bool saveNow) {
@@ -92,8 +124,7 @@ void Pet::eggToHome(bool saveNow) {
 
 void Pet::setBagEggs(uint8_t n) {
   items[IT_EGG] = n > ITEM_MAX ? ITEM_MAX : n;
-  if (vacant && items[IT_EGG]) eggToHome(true);
-  else save();
+  save();  // v1.40: con la casa vacia se quedan en la mochila (el boton de la casa los abre)
 }
 
 // sorteo shiny del huevo, 1 entre N: 1/48 base, mejor con despedida y con
@@ -168,7 +199,17 @@ void Pet::syncClock(uint32_t nowEpoch) {
 void Pet::update(uint32_t nowMs) {
   // fin de ceremonia: la criatura se va y llega el huevo que esperaba, uno de la mochila o nadie
   if (ceremony != CER_NONE && !timeLeft(ceremonyUntil)) {
-    freeHome();
+    // v1.40: la despedida (el final bueno) deja un huevo de premio. Se da aqui y no al empezar: la
+    // ceremonia no se guarda, y un corte durante ella devuelve al bicho con su boton de despedida.
+    // Con la mochila llena y sin huevo esperando, cabe igual: freeHome() lo saca ahora mismo.
+    if (ceremony == CER_FAREWELL) {
+      bool full = items[IT_EGG] >= ITEM_MAX && eggHeldFlag;
+      if (!full) items[IT_EGG]++;
+      queueFound(IT_EGG, full, true);
+    }
+    uint8_t mode = endHome;
+    endHome = HOME_AUTO;
+    freeHome(mode);
     return;
   }
   while (nowMs - lastTick >= PET_TICK_MS) {
@@ -451,6 +492,7 @@ bool Pet::canRunawayNow() const {
 
 void Pet::startFarewell() {
   if (isEgg() || ceremony != CER_NONE) return;
+  endHome = HOME_AUTO;
   lastEnd = CER_FAREWELL;
   ceremony = CER_FAREWELL;
   ceremonyUntil = millis() + CEREMONY_MS;
@@ -461,6 +503,7 @@ void Pet::startFarewell() {
 
 void Pet::startRunaway() {
   if (isEgg() || ceremony != CER_NONE) return;
+  endHome = HOME_AUTO;
   lastEnd = CER_RUNAWAY;
   ceremony = CER_RUNAWAY;
   ceremonyUntil = millis() + CEREMONY_MS;
@@ -468,8 +511,9 @@ void Pet::startRunaway() {
   save();
 }
 
-void Pet::release() {
+void Pet::release(uint8_t home) {
   if (isEgg() || ceremony != CER_NONE) return;
+  endHome = home;
   lastEnd = CER_RELEASE;
   ceremony = CER_RELEASE;
   ceremonyUntil = millis() + CEREMONY_MS;
@@ -708,16 +752,21 @@ void Pet::addSteps(uint32_t n, uint32_t day) {
   }
 
   // huevos (v1.39): con todos los pasos, este como este el bicho, y sin tope diario. Con la casa
-  // vacia, el huevo va derecho a casa (sin escribir aun: el loop guarda con la pantalla atenuada)
+  // vacia, el huevo encontrado va derecho a casa (sin escribir aun: el loop guarda con la pantalla
+  // atenuada). v1.40: solo el encontrado; los de la mochila esperan al boton de la casa vacia.
   if (!eggAt) eggAt = nextEggAt();
   uint32_t e = (uint32_t)eggRem + n;
   while (e >= eggAt) {
     e -= eggAt;
     eggAt = nextEggAt();
-    giveFound(IT_EGG);  // a la mochila (o "mochila llena") y al aviso de hallazgo
+    if (vacant) {
+      queueFound(IT_EGG, false, false);
+      newEgg(false);
+    } else {
+      giveFound(IT_EGG);  // a la mochila (o "mochila llena") y al aviso de hallazgo
+    }
   }
   eggRem = (uint16_t)e;
-  if (vacant && items[IT_EGG]) eggToHome(false);
 
   // metas diarias (FR-1.4, v1.25): 3000, 6000 y 10000, cada una una vez al dia y en orden.
   // Si unos pasos cruzan varias, saltan todas y el banner muestra la mas alta.
@@ -774,15 +823,20 @@ void Pet::findItem() {
   giveFound(it);
 }
 
-void Pet::giveFound(uint8_t it) {
+void Pet::giveFound(uint8_t it, bool gift) {
   uint8_t cap = (it == IT_CHARM) ? 1 : ITEM_MAX;
   bool full = items[it] >= cap;
   if (!full) items[it]++;
+  queueFound(it, full, gift);
+}
+
+void Pet::queueFound(uint8_t it, bool full, bool gift) {
   // cola llena (muchos sin ver con la pantalla apagada): se pierde el aviso mas antiguo, no
   // el nuevo, que puede ser el regalo de una meta. El objeto ya esta en la mochila.
   if (foundN == FOUND_QUEUE) popFound();
   foundQ[foundN] = it;
   foundFull[foundN] = full;
+  foundGift[foundN] = gift;
   foundN++;
 }
 
@@ -791,6 +845,7 @@ void Pet::popFound() {
   for (uint8_t i = 1; i < foundN; i++) {
     foundQ[i - 1] = foundQ[i];
     foundFull[i - 1] = foundFull[i];
+    foundGift[i - 1] = foundGift[i];
   }
   foundN--;
 }

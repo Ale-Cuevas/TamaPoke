@@ -51,6 +51,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Toca!",
     // huevos limitados (v1.39)
     "SIN HUEVO", "Camina para encontrar uno!", "Desliza a la derecha: caja", "Sin huevo: casa vac\241a", "El huevo nace con la casa libre",
+    // soltar con huevos (v1.40)
+    "Usar un huevo?", "Abrir un huevo (%u)", "Dejar casa vac\241a", "Llegar\240 un huevo nuevo", "Tus huevos esperan!", "REGALO!",
   },
   // ---------------- EN ----------------
   {
@@ -96,6 +98,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Tap!",
     // huevos limitados (v1.39)
     "NO EGG", "Walk to find an egg!", "Swipe right: the Box", "No egg: home stays empty", "Eggs hatch when home is free",
+    // soltar con huevos (v1.40)
+    "Use an egg?", "Hatch an egg (%u)", "Leave home empty", "A new egg will come", "Your eggs are waiting!", "GIFT!",
   },
   // ---------------- FR ----------------
   {
@@ -141,6 +145,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Tape!",
     // huevos limitados (v1.39)
     "PAS D'OEUF", "Marche pour en trouver un!", "Glisse \205 droite: bo\214te", "Pas d'oeuf: maison vide", "Oeuf: \202clot si maison libre",
+    // soltar con huevos (v1.40)
+    "Utiliser un oeuf?", "Faire \202clore (%u)", "Laisser vide", "Un oeuf va arriver", "Tes oeufs attendent!", "CADEAU!",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -191,6 +197,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Tippen!",
     // huevos limitados (v1.39)
     "KEIN EI", "Lauf los und finde eins!", "Nach rechts: die Box", "Kein Ei: Zuhause leer", "Ei schl\201pft bei leerem Zuhause",
+    // soltar con huevos (v1.40)
+    "Ein Ei nehmen?", "Ei ausbr\201ten (%u)", "Zuhause leer lassen", "Ein neues Ei kommt", "Deine Eier warten!", "GESCHENK!",
   },
   // ---------------- IT ----------------
   {
@@ -236,6 +244,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Tocca!",
     // huevos limitados (v1.39)
     "NESSUN UOVO", "Cammina per trovarne uno!", "Scorri a destra: il box", "Niente uovo: casa vuota", "L'uovo nasce a casa libera",
+    // soltar con huevos (v1.40)
+    "Usare un uovo?", "Schiudi uovo (%u)", "Lascia casa vuota", "Arriva un uovo nuovo", "Le uova ti aspettano!", "REGALO!",
   },
   // ---------------- PT ----------------
   {
@@ -281,6 +291,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Toque!",
     // huevos limitados (v1.39)
     "SEM OVO", "Caminhe para achar um!", "Deslize p/ direita: caixa", "Sem ovo: casa vazia", "O ovo nasce com a casa livre",
+    // soltar con huevos (v1.40)
+    "Usar um ovo?", "Chocar um ovo (%u)", "Deixar casa vazia", "Vem um ovo novo", "Seus ovos esperam!", "PRESENTE!",
   },
   // ---------------- JA ----------------
   {
@@ -349,6 +361,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "タッチ",
     // huevos limitados (v1.39)
     "たまごなし", "あるいて たまごを さがそう！", "みぎへ スワイプ: ボックス", "たまごなし: いえが からっぽに", "いえが あくと たまごが かえる",
+    // soltar con huevos (v1.40)
+    "たまごを つかう？", "たまごを かえす (%u)", "いえを からっぽに", "あたらしい たまごが くるよ", "たまごが まってるよ！", "プレゼント！",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -399,6 +413,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "탭!",
     // huevos limitados (v1.39)
     "알 없음", "걸어서 알을 찾자!", "오른쪽으로 밀기: 박스", "알 없음: 집이 비어요", "집이 비면 알이 부화해요",
+    // soltar con huevos (v1.40)
+    "알을 쓸까요?", "알 부화하기 (%u)", "집을 비워 두기", "새 알이 와요", "알이 기다려요!", "선물!",
   },
 };
 

@@ -349,6 +349,22 @@ the home is empty; `EGG <n>` sets the Backpack (tests only: it changes the save)
 - [x] Restart (re-flash or PWR) with the home empty: still empty (2026-11-07, on a backed-up save); `EGG` keeps its
   `next=`.
 
+### Release and gift eggs (v1.40)
+`EGG` prints `held=` (the egg waiting from the Box), `owned=` (all your eggs) and `boxPets=`. Back the save up first
+(`esptool.py read_flash 0x9000 0x5000 nvs.bin`, then `write_flash 0x9000 nvs.bin` after); `RELEASE EGG` / `RELEASE EMPTY` answer the dialog over serial.
+- [ ] With eggs (`EGG 2`): long-press, YES → "Use an egg?" with "Hatch an egg (2)" and "Leave home empty". Tap outside,
+  USER, or wait 12 s: the pet stays.
+- [ ] "Hatch an egg": after the goodbye an egg is home, `EGG` shows `bag=1`.
+- [ ] "Leave home empty": the home shows "Your eggs are waiting!" and "Hatch an egg (N)"; a restart keeps it empty;
+  the button brings an egg home (bag −1).
+- [ ] With an egg waiting from the Box (store a pet over an egg, wake it): the WALK egg slot counts it; "Leave home
+  empty" → `held=0`, `bag` +1. With `EGG 9` as well, "Leave home empty" is greyed out and a tap on it does nothing.
+- [ ] No eggs, Box with someone: the Release dialog says "No egg: home stays empty"; after the goodbye, the empty home.
+- [ ] No eggs, Box empty (`BOXCLR` each slot on a backed-up save): the dialog says "A new egg will come"; after the
+  goodbye, "GIFT! EGG" and an egg at home. The Shiny Charm, if held, is still in the Backpack.
+- [ ] Farewell (`BYE`) with no eggs and pets in the Box: "GIFT! EGG" and an egg at home; with an egg waiting, that
+  egg comes home and `bag=1`.
+
 ### Box (v1.37)
 ([NEXT_FEATURES.md, Task BOX](NEXT_FEATURES.md#task-box-store-a-pet-raise-another).) `BOX` over serial lists
 the slots (`box<k> uid=… spec=… lv=… crc=ok`, `empty` or `damaged`) and the active pet with the waiting egg

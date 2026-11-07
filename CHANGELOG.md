@@ -8,6 +8,52 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.40] - 2026-11-07
+
+Releasing a pet no longer brings an egg you didn't know you had, and you can't end up with nothing.
+
+### Fixed
+
+- **An egg came home after a release "from nowhere".** It was the egg that waits in the
+  incubator when you wake a pet from the Box (v1.37). v1.39 limited eggs, but that waiting egg
+  stayed invisible. Now it counts as one of your eggs: the WALK page's egg slot includes it, and
+  so does the new release question.
+
+### Changed
+
+- **Releasing asks about the egg.** After "Release X? YES", if you have any egg (the waiting one
+  or the Backpack), a second dialog asks "Use an egg?": **Hatch an egg (N)** (the waiting one
+  first, then one from the Backpack) or **Leave home empty** (the eggs stay; the waiting egg
+  moves into the Backpack, and its hidden species is rolled again when it comes out). With a
+  full Backpack and an egg waiting, "Leave home empty" is greyed out. With no answer within 12 s,
+  or USER, nothing is released.
+- **A gift egg instead of nothing.** When a pet leaves (release, farewell or runaway) and you have
+  no egg and nobody in the Box to wake, a new egg comes home with a "GIFT!" popup. It's a normal
+  roll: the Shiny Charm is kept. The "Release?" dialog says "A new egg will come" then, and still
+  "No egg: home stays empty" when the Box has someone. A store never gives one (the stored pet
+  is in the Box).
+- **The farewell leaves an egg.** The good ending puts an egg in the Backpack ("GIFT!"), so a
+  farewell is always followed by an egg: the waiting one if there was one (the gift then stays in
+  the Backpack), else the gift itself. With a full Backpack it still comes home; only with an egg
+  waiting *and* a full Backpack is it lost ("Backpack full"). It's given when the goodbye ends,
+  not when it starts: a power cut during the goodbye brings the pet back, without an egg.
+- **The empty home can hold eggs.** After "Leave home empty" it shows "Your eggs are waiting!" and
+  a **Hatch an egg (N)** button. A restart and `EGG <n>` no longer pull an egg home by
+  themselves. An egg found on a walk still goes straight home.
+
+### Added
+
+- Serial: `RELEASE`, `RELEASE EGG`, `RELEASE EMPTY` (release with no dialogs). `EGG` also prints
+  `held=` (the waiting egg), `owned=` (all your eggs) and `boxPets=`.
+- Strings in all eight languages. Render scenes: `release-boxed`, `release-choice` (+ `-ja`,
+  `-de`, `-full`), `home-vacant-eggs` (+ `-ja`, `-es`), `farewell-gift`.
+
+### Saves and power cuts
+
+- No new keys. The release choice lives with the goodbye, which isn't saved.
+- "Leave home empty" with an egg waiting writes the Backpack before `eggH`: a cut between the two
+  leaves one egg too many, never one lost (host test: a cut after every write).
+
 ## [1.39] - 2026-11-07
 
 Limited eggs: you find them by walking.
