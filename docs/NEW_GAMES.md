@@ -464,6 +464,10 @@ The user's feedback on 2026-11-07: steering felt right, but both games were too 
     60 s mark, as asked; the surges ramp over the minute too.
   - Reward unchanged: 1 DEF per 2 s in the band, cap 15, so 30 s of focus out of 60 maxes it.
 
+**v1.46:** the user kept the waterfall at **30 s** sessions. `ZEN_RAMP_MS` = 60 000 keeps the slow pace for
+the band and the surges (`zenProgress()` runs on it), so at the end of a session the band is only halfway
+narrowed: 31.2 → 21.6 (about 39–61).
+
 ## Order and parallel work
 
 The two games don't depend on each other. Each runs on its own branch off `main`, after or beside

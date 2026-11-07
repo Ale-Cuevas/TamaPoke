@@ -10,8 +10,9 @@
 // hacia abajo. Logica pura, con tests en test/test_zengame.cpp: el sketch solo dibuja y lee el
 // dedo.
 
-#define ZEN_SESSION_MS 60000u     // lo que dura la sesion (sin la intro); v1.45: 30 s, ahora la
-                                  // franja se estrecha despacio y llega a lo mas dificil a los 60 s
+#define ZEN_SESSION_MS 30000u     // lo que dura la sesion (sin la intro); 60 s en la v1.45, otra vez 30
+#define ZEN_RAMP_MS 60000u        // la dificultad (franja, golpes) sube al ritmo de 60 s (v1.46): en una
+                                  // sesion de 30 s la franja solo llega a la mitad de su estrechamiento
 #define ZEN_INTRO_MS 1500u        // "Manten la barra en el verde"
 #define ZEN_STEP_MS 10u           // paso fijo de la fisica
 #define ZEN_LATE_MAX_MS 250u      // un frame tardio cuenta como mucho esto
@@ -24,7 +25,7 @@
 #define ZEN_BAND_END 12.0f        // ...y al acabar (44-56)
 #define ZEN_SURGE_FROM_MS 5000u   // primer golpe de agua
 #define ZEN_SURGE_GAP_MAX 6000u   // separacion entre golpes al principio...
-#define ZEN_SURGE_GAP_MIN 3000u   // ...y a los 60 s (+-25 % al azar)
+#define ZEN_SURGE_GAP_MIN 3000u   // ...y a los 60 s de rampa (+-25 % al azar)
 #define ZEN_SURGE_KICK_START 21.25f  // %/s que quita un golpe al principio... (era 25)
 #define ZEN_SURGE_KICK_END 34.0f     // ...y al final (era 40)
 #define ZEN_SURGE_WARN_MS 400u    // la cascada se hincha antes de cada golpe
@@ -50,9 +51,9 @@ inline uint32_t zenRand(uint32_t &s) {  // xorshift32
   return s;
 }
 
-inline float zenProgress(uint32_t t) { return t >= ZEN_SESSION_MS ? 1.0f : (float)t / ZEN_SESSION_MS; }
+inline float zenProgress(uint32_t t) { return t >= ZEN_RAMP_MS ? 1.0f : (float)t / ZEN_RAMP_MS; }
 
-// media anchura de la franja (centrada en 50) a los t ms de juego: se estrecha durante toda la sesion
+// media anchura de la franja (centrada en 50) a los t ms de juego: se estrecha despacio (ZEN_RAMP_MS)
 inline float zenBandHalf(uint32_t t) {
   return 0.5f * (ZEN_BAND_START + (ZEN_BAND_END - ZEN_BAND_START) * zenProgress(t));
 }
