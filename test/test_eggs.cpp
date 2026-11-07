@@ -1,8 +1,9 @@
 // Huevos limitados (v1.39): solo se encuentran caminando (uno cada EGG_MIN..EGG_MAX pasos, ~3 a la
 // semana con 5000 pasos al dia), van a la mochila y pasan a casa cuando queda libre; sin ninguno, la
 // casa se queda vacia. Los cortes de luz de la caja con la casa vacia estan en test_box.cpp.
-// v1.40: soltar con huevos pregunta (HOME_EGG / HOME_EMPTY), la despedida deja un huevo de premio y
-// sin huevos ni nadie en la caja llega uno de regalo.
+// v1.40/v1.41: un final (soltar, despedida, escapada) deja siempre la casa vacia, con el boton de abrir
+// un huevo si hay; la despedida deja un huevo de premio y, sin huevos ni nadie en la caja, llega uno de
+// regalo (a la mochila).
 #include "framework.h"
 #include "shim/Arduino.h"
 #include "shim/Preferences.h"
@@ -28,8 +29,8 @@ static void born(Pet &p, int16_t dex = 4) {
 }
 
 // la despedida entera (liberar + los 10 s de la ceremonia)
-static void releaseAndWait(Pet &p, uint8_t home = HOME_AUTO) {
-  p.release(home);
+static void releaseAndWait(Pet &p) {
+  p.release();
   mockAdvanceMillis(CEREMONY_MS + 1);
   p.update(millis());
 }
@@ -204,19 +205,25 @@ TEST(eggs, un_final_sin_huevos_deja_la_casa_vacia) {
   CHECK_EQ(q.ageMinutes, (uint32_t)0);
 }
 
-TEST(eggs, un_final_con_huevos_saca_uno_de_la_mochila) {
+// v1.41: con huevos, un final tampoco trae ninguno: la casa vacia tiene el boton para abrirlo
+TEST(eggs, un_final_con_huevos_deja_la_casa_vacia_y_los_huevos) {
   Pet p;
   born(p);
-  p.items[IT_EGG] = 2;
+  p.items[IT_EGG] = 2;  // sin nadie en la caja: aun asi no hay regalo, hay huevos
   releaseAndWait(p);
-  CHECK(p.isEgg());
-  CHECK(!p.isVacant());
-  CHECK_EQ(p.items[IT_EGG], (uint8_t)1);
-  hatchIt(p);
-  CHECK(!p.isEgg());
+  CHECK(p.isVacant());
+  CHECK_EQ(p.items[IT_EGG], (uint8_t)2);
+  CHECK(!p.hasFound());
+  minutes(p, 5);  // ni el tiempo ni un arranque sacan uno
   Pet q;
   q.begin();
+  CHECK(q.isVacant());
+  CHECK_EQ(q.items[IT_EGG], (uint8_t)2);
+  CHECK(q.hatchFromBag());
+  CHECK(q.isEgg() && !q.isVacant());
   CHECK_EQ(q.items[IT_EGG], (uint8_t)1);
+  hatchIt(q);
+  CHECK(!q.isEgg());
 }
 
 TEST(eggs, con_la_casa_vacia_el_huevo_encontrado_va_a_casa_sin_escribir) {
@@ -352,26 +359,24 @@ TEST(eggs, un_guardado_anterior_conserva_su_bicho_y_empieza_a_contar) {
   CHECK(q.eggStepsAt() >= EGG_MIN_STEPS && q.eggStepsAt() <= EGG_MAX_STEPS);
 }
 
-// ---------------------------------------------------------------- v1.40: soltar, despedida, regalo
-TEST(eggs, soltar_sin_huevos_ni_caja_trae_un_huevo_de_regalo_sin_amuleto) {
+// ---------------------------------------------------------------- v1.40/v1.41: finales y regalos
+TEST(eggs, soltar_sin_huevos_ni_caja_da_un_huevo_de_regalo_a_la_mochila) {
   Pet p;
   born(p);
-  p.items[IT_CHARM] = 1;
   CHECK(p.releaseGivesEgg());
   releaseAndWait(p);
-  CHECK(p.isEgg());
-  CHECK(!p.isVacant());
-  CHECK_EQ(p.items[IT_EGG], (uint8_t)0);
-  CHECK_EQ(p.items[IT_CHARM], (uint8_t)1);  // tirada normal: el amuleto se queda
+  CHECK(p.isVacant());
+  CHECK_EQ(p.items[IT_EGG], (uint8_t)1);
   CHECK(firstNoticeIsGiftEgg(p));
-  hatchIt(p);
-  CHECK(!p.isEgg());
-  Pet q;  // guardado
+  Pet q;  // guardado: el boton de la casa lo abre
   q.begin();
-  CHECK(!q.isEgg() && !q.isVacant());
+  CHECK(q.isVacant());
+  CHECK_EQ(q.items[IT_EGG], (uint8_t)1);
+  CHECK(q.hatchFromBag());
+  CHECK(q.isEgg() && !q.isVacant());
 }
 
-TEST(eggs, soltar_sin_huevos_con_alguien_en_la_caja_deja_la_casa_vacia) {
+TEST(eggs, soltar_sin_huevos_con_alguien_en_la_caja_no_da_regalo) {
   Pet p;
   born(p);
   boxSomeone(p);
@@ -379,6 +384,7 @@ TEST(eggs, soltar_sin_huevos_con_alguien_en_la_caja_deja_la_casa_vacia) {
   CHECK_EQ(p.eggsOwned(), (uint8_t)0);
   releaseAndWait(p);
   CHECK(p.isVacant());
+  CHECK_EQ(p.items[IT_EGG], (uint8_t)0);
   CHECK(!p.hasFound());
 }
 
@@ -398,59 +404,16 @@ TEST(eggs, un_hueco_danado_no_cuenta_como_alguien_en_la_caja) {
   CHECK(p.releaseGivesEgg());
 }
 
-TEST(eggs, soltar_eligiendo_huevo_usa_el_de_la_mochila) {
-  Pet p;
-  born(p);
-  boxSomeone(p);
-  p.items[IT_EGG] = 2;
-  CHECK_EQ(p.eggsOwned(), (uint8_t)2);
-  releaseAndWait(p, HOME_EGG);
-  CHECK(p.isEgg() && !p.isVacant());
-  CHECK_EQ(p.items[IT_EGG], (uint8_t)1);
-  CHECK(!p.hasFound());  // ni regalo ni hallazgo: es tuyo
-}
-
-TEST(eggs, soltar_eligiendo_huevo_usa_antes_el_que_esperaba) {
+TEST(eggs, un_final_lleva_el_huevo_que_esperaba_a_la_mochila) {
   Pet p;
   born(p, 1);
   holdAnEgg(p);
-  int16_t eggT = p.eggSpecies();
-  p.items[IT_EGG] = 2;
-  CHECK_EQ(p.eggsOwned(), (uint8_t)3);
-  releaseAndWait(p, HOME_EGG);
-  CHECK(p.isEgg() && !p.isVacant());
-  CHECK_EQ(p.eggSpecies(), eggT);
-  CHECK(!p.eggHeld());
-  CHECK_EQ(p.items[IT_EGG], (uint8_t)2);
-}
-
-TEST(eggs, soltar_dejando_la_casa_vacia_guarda_los_huevos) {
-  Pet p;
-  born(p);
-  p.items[IT_EGG] = 2;  // sin nadie en la caja: aun asi no hay regalo, hay huevos
-  releaseAndWait(p, HOME_EMPTY);
-  CHECK(p.isVacant());
-  CHECK_EQ(p.items[IT_EGG], (uint8_t)2);
-  CHECK(!p.hasFound());
-  minutes(p, 5);  // ni el tiempo ni un arranque sacan uno
-  Pet q;
-  q.begin();
-  CHECK(q.isVacant());
-  CHECK_EQ(q.items[IT_EGG], (uint8_t)2);
-  CHECK(q.hatchFromBag());
-  CHECK(q.isEgg() && !q.isVacant());
-  CHECK_EQ(q.items[IT_EGG], (uint8_t)1);
-}
-
-TEST(eggs, dejar_la_casa_vacia_lleva_el_huevo_que_esperaba_a_la_mochila) {
-  Pet p;
-  born(p, 1);
-  holdAnEgg(p);
-  CHECK(p.canLeaveEmpty());
-  releaseAndWait(p, HOME_EMPTY);
+  CHECK_EQ(p.eggsOwned(), (uint8_t)1);
+  releaseAndWait(p);
   CHECK(p.isVacant());
   CHECK(!p.eggHeld());
   CHECK_EQ(p.items[IT_EGG], (uint8_t)1);
+  CHECK(!p.hasFound());  // es tuyo: ni regalo ni hallazgo
   Pet q;
   q.begin();
   CHECK(q.isVacant());
@@ -464,10 +427,10 @@ TEST(eggs, con_la_mochila_llena_el_que_esperaba_no_cabe_y_vuelve_a_casa) {
   holdAnEgg(p);
   int16_t eggT = p.eggSpecies();
   p.items[IT_EGG] = ITEM_MAX;
-  CHECK(!p.canLeaveEmpty());
-  releaseAndWait(p, HOME_EMPTY);  // la UI no lo ofrece; si llega, ningun huevo se pierde
+  releaseAndWait(p);
   CHECK(p.isEgg() && !p.isVacant());
   CHECK_EQ(p.eggSpecies(), eggT);
+  CHECK(!p.eggHeld());
   CHECK_EQ(p.items[IT_EGG], (uint8_t)ITEM_MAX);
 }
 
@@ -475,7 +438,7 @@ TEST(eggs, la_casa_vacia_con_huevos_tambien_recibe_el_encontrado) {
   Pet p;
   born(p);
   p.items[IT_EGG] = ITEM_MAX;  // con la mochila llena tampoco se pierde: va derecho a casa
-  releaseAndWait(p, HOME_EMPTY);
+  releaseAndWait(p);
   CHECK(p.isVacant());
   p.addSteps(EGG_MAX_STEPS, DAY);
   CHECK(p.isEgg() && !p.isVacant());
@@ -485,52 +448,51 @@ TEST(eggs, la_casa_vacia_con_huevos_tambien_recibe_el_encontrado) {
   CHECK(!full);
 }
 
-TEST(eggs, la_despedida_deja_un_huevo_de_premio) {
+TEST(eggs, la_despedida_deja_un_huevo_de_premio_en_la_mochila) {
   Pet p;
   born(p);
-  boxSomeone(p);  // sin el premio, la casa se quedaria vacia
+  boxSomeone(p);  // sin el premio no habria nada: con alguien en la caja no hay regalo
   farewellAndWait(p);
-  CHECK(p.isEgg() && !p.isVacant());
-  CHECK_EQ(p.items[IT_EGG], (uint8_t)0);
+  CHECK(p.isVacant());
+  CHECK_EQ(p.items[IT_EGG], (uint8_t)1);
   CHECK(firstNoticeIsGiftEgg(p));
   p.popFound();
-  CHECK(!p.hasFound());  // uno solo: no hay ademas un regalo por no tener huevos
+  CHECK(!p.hasFound());
+
+  Pet r;  // sin huevos ni caja: el premio basta, no llega ademas el regalo
+  born(r);
+  farewellAndWait(r);
+  CHECK(r.isVacant());
+  CHECK_EQ(r.items[IT_EGG], (uint8_t)1);
+  CHECK(firstNoticeIsGiftEgg(r));
+  r.popFound();
+  CHECK(!r.hasFound());
 }
 
-TEST(eggs, la_despedida_con_un_huevo_esperando_deja_el_premio_en_la_mochila) {
+TEST(eggs, la_despedida_con_un_huevo_esperando_deja_los_dos_en_la_mochila) {
   Pet p;
   born(p, 1);
   holdAnEgg(p);
-  int16_t eggT = p.eggSpecies();
   farewellAndWait(p);
-  CHECK_EQ(p.eggSpecies(), eggT);
+  CHECK(p.isVacant());
   CHECK(!p.eggHeld());
-  CHECK_EQ(p.items[IT_EGG], (uint8_t)1);
+  CHECK_EQ(p.items[IT_EGG], (uint8_t)2);
   Pet q;
   q.begin();
-  CHECK_EQ(q.items[IT_EGG], (uint8_t)1);
+  CHECK_EQ(q.items[IT_EGG], (uint8_t)2);
 }
 
-TEST(eggs, la_despedida_con_la_mochila_llena) {
+TEST(eggs, la_despedida_con_la_mochila_llena_pierde_el_premio_y_lo_dice) {
   Pet p;
   born(p);
-  p.items[IT_EGG] = ITEM_MAX;  // sin huevo esperando: el premio sale ahora mismo, la mochila igual
+  p.items[IT_EGG] = ITEM_MAX;
   farewellAndWait(p);
-  CHECK(p.isEgg() && !p.isVacant());
+  CHECK(p.isVacant());
   CHECK_EQ(p.items[IT_EGG], (uint8_t)ITEM_MAX);
-  bool full = true;
-  p.peekFound(&full);
-  CHECK(!full);
-
-  Pet r;  // con uno esperando y la mochila llena, el premio no cabe y lo dice
-  born(r, 1);
-  holdAnEgg(r);
-  r.items[IT_EGG] = ITEM_MAX;
-  farewellAndWait(r);
-  CHECK(!r.eggHeld());
-  CHECK_EQ(r.items[IT_EGG], (uint8_t)ITEM_MAX);
-  CHECK_EQ(r.peekFound(&full), (uint8_t)IT_EGG);
+  bool full = false, gift = false;
+  CHECK_EQ(p.peekFound(&full, &gift), (uint8_t)IT_EGG);
   CHECK(full);
+  CHECK(gift);
 }
 
 TEST(eggs, un_corte_durante_la_despedida_no_da_el_premio) {
@@ -545,17 +507,18 @@ TEST(eggs, un_corte_durante_la_despedida_no_da_el_premio) {
   CHECK_EQ(q.items[IT_EGG], (uint8_t)0);
 }
 
-TEST(eggs, la_huida_sin_huevos_ni_caja_tambien_trae_el_regalo) {
+TEST(eggs, la_huida_sin_huevos_ni_caja_tambien_da_el_regalo) {
   Pet p;
   born(p);
   p.dbgRunawayReady();
   p.startRunaway();
   mockAdvanceMillis(CEREMONY_MS + 1);
   p.update(millis());
-  CHECK(p.isEgg() && !p.isVacant());
+  CHECK(p.isVacant());
+  CHECK_EQ(p.items[IT_EGG], (uint8_t)1);
   CHECK(firstNoticeIsGiftEgg(p));
 
-  Pet r;  // con alguien en la caja, vacia
+  Pet r;  // con alguien en la caja, nada
   born(r);
   boxSomeone(r);
   r.dbgRunawayReady();
@@ -563,19 +526,27 @@ TEST(eggs, la_huida_sin_huevos_ni_caja_tambien_trae_el_regalo) {
   mockAdvanceMillis(CEREMONY_MS + 1);
   r.update(millis());
   CHECK(r.isVacant());
+  CHECK_EQ(r.items[IT_EGG], (uint8_t)0);
 }
 
-TEST(eggs, guardar_sin_huevos_nunca_trae_regalo) {
+TEST(eggs, guardar_sigue_trayendo_un_huevo_y_nunca_regalo) {
   Pet p;
   born(p);
-  CHECK(p.store(0));  // la caja tiene al guardado: alguien a quien despertar
+  CHECK(p.store(0));  // sin huevos: vacia (la caja tiene al guardado: alguien a quien despertar)
   CHECK(p.isVacant());
   CHECK(!p.hasFound());
+
+  Pet r;  // con huevos: uno a casa, como en la v1.39
+  born(r);
+  r.items[IT_EGG] = 2;
+  CHECK(r.store(0));
+  CHECK(r.isEgg() && !r.isVacant());
+  CHECK_EQ(r.items[IT_EGG], (uint8_t)1);
 }
 
-// "Dejar casa vacia" con el huevo que esperaba: un corte tras cualquier escritura nunca pierde el
-// huevo (en casa, en la mochila o esperando); como mucho deja uno de mas
-TEST(eggs, dejar_la_casa_vacia_con_un_corte_tras_cada_escritura) {
+// un final con el huevo que esperaba: un corte tras cualquier escritura nunca pierde el huevo (en
+// casa, en la mochila o esperando); como mucho deja uno de mas
+TEST(eggs, un_final_con_un_huevo_esperando_y_un_corte_tras_cada_escritura) {
   Pet base;
   born(base, 1);
   holdAnEgg(base);
@@ -586,7 +557,7 @@ TEST(eggs, dejar_la_casa_vacia_con_un_corte_tras_cada_escritura) {
     Pet p;
     p.begin();
     long w0 = mockNvsWrites();
-    releaseAndWait(p, HOME_EMPTY);
+    releaseAndWait(p);
     total = mockNvsWrites() - w0;
   }
   CHECK(total > 3);
@@ -596,7 +567,7 @@ TEST(eggs, dejar_la_casa_vacia_con_un_corte_tras_cada_escritura) {
       Pet p;
       p.begin();
       mockNvsCutAfter(n);
-      releaseAndWait(p, HOME_EMPTY);
+      releaseAndWait(p);
       mockNvsCutAfter(-1);
     }
     Pet q;

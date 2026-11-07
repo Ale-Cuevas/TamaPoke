@@ -45,7 +45,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.40"
+#define FW_VERSION "1.41"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -260,7 +260,7 @@ uint32_t gFxUs = 0, gFxMaxUs = 0; // PERF: lo que tardan los efectos en dibujars
 bool swallowGesture = false; // el toque que despierta no acciona nada
 uint32_t holdStart = 0;     // pulsacion larga sobre el bicho
 uint32_t confirmUntil = 0;  // dialogo "soltar?" activo hasta este millis
-uint8_t choiceKind = 0;     // dialogo de decision: 0 ninguno, 1 evolucion, 2 despedida, 3 huevo al soltar (v1.40)
+uint8_t choiceKind = 0;     // dialogo de decision: 0 ninguno, 1 evolucion, 2 despedida
 uint32_t choiceUntil = 0;   // se cierra solo a este millis
 int16_t tX0, tY0, tXl, tYl; // gesto en curso (inicio y ultima posicion)
 uint32_t tStart = 0;
@@ -736,9 +736,8 @@ void handleSerial() {
   } else if (line == "BYE") {
     pet.startFarewell();
     Serial.println("DONE");
-  } else if (line == "RELEASE" || line == "RELEASE EGG" || line == "RELEASE EMPTY") {
-    // soltar sin dialogos (v1.40): RELEASE = sin elegir (como sin huevos), EGG / EMPTY = lo del dialogo
-    pet.release(line.endsWith("EGG") ? HOME_EGG : (line.endsWith("EMPTY") ? HOME_EMPTY : HOME_AUTO));
+  } else if (line == "RELEASE") {  // soltar sin el dialogo (v1.40)
+    pet.release();
     Serial.println("DONE");
   } else if (line == "RUN") {
     pet.startRunaway();
@@ -1235,30 +1234,13 @@ void onTap(int16_t x, int16_t y) {
     } else if (choiceKind == 2) {          // despedida
       if (b1) pet.startFarewell();
       else if (b2) pet.declineFarewell();
-    } else if (choiceKind == 3) {          // soltar con huevos (v1.40): abrir uno o dejar la casa vacia
-      if (b1) {
-        pet.release(HOME_EGG);
-      } else if (b2) {
-        if (!pet.canLeaveEmpty()) {        // el que esperaba no cabe en la mochila: sigue el dialogo
-          sfxPlay(SFX_DENY);
-          return;
-        }
-        pet.release(HOME_EMPTY);
-      }
     }
     choiceKind = 0;
     return;
   }
   if (confirmUntil) {        // dialogo "soltar?": SI / NO
     if (timeLeft(confirmUntil) && x >= 118 && x <= 218 && y >= 252 && y <= 304) {
-      // v1.40: con huevos, aun no se suelta: pregunta si abrir uno. Sin huevos, la nota del dialogo
-      // ya dijo si la casa se queda vacia o llega un huevo de regalo.
-      if (pet.eggsOwned()) {
-        choiceKind = 3;
-        choiceUntil = millis() + 12000;
-      } else {
-        pet.release();
-      }
+      pet.release();
     }
     confirmUntil = 0;
     return;
@@ -2147,7 +2129,7 @@ bool render() {
       char q[48];
       snprintf(q, sizeof(q), T(S_RELEASE_FMT), dexName(pet.speciesId));
       // sin huevos (v1.39), la nota dice que pasara: casa vacia o, sin nadie en la caja, un huevo de
-      // regalo (v1.40). Con huevos no hay nota: el SI pregunta despues si abrir uno.
+      // regalo a la mochila (v1.40). Con huevos no hay nota: la casa vacia tiene su boton.
       bool empty = !pet.eggsOwned();
       gfx->setTextColor(UI_INK);
       setSize(2);
@@ -4346,16 +4328,9 @@ void drawCeremony() {
 void drawChoiceDialog() {
   const char *q, *o1, *o2;
   uint16_t c1, c2, t1, t2;
-  char hatch[40];  // "Abrir un huevo (N)": UTF-8 en japones y coreano
   if (choiceKind == 1) {  // evolucion
     q = T(S_EVO_Q); o1 = T(S_EVO_TAP); o2 = T(S_EVO_KEEP);
     c1 = UI_BAR_BAD; t1 = UI_WHITE; c2 = UI_TRACK; t2 = UI_INK;
-  } else if (choiceKind == 3) {  // soltar con huevos (v1.40); "dejar vacia" apagado si no cabe
-    snprintf(hatch, sizeof(hatch), T(S_HATCH_FMT), (unsigned)pet.eggsOwned());
-    q = T(S_HATCH_Q); o1 = hatch; o2 = T(S_LEAVE_EMPTY);
-    c1 = UI_BAR_OK; t1 = UI_WHITE;
-    bool can = pet.canLeaveEmpty();
-    c2 = can ? UI_TRACK : UI_WHITE; t2 = can ? UI_INK : UI_TRACK;
   } else {                // despedida
     q = T(S_FAR_Q); o1 = T(S_FAR_GO); o2 = T(S_FAR_STAY);
     c1 = UI_BAR_WARN; t1 = UI_INK; c2 = UI_BAR_OK; t2 = UI_WHITE;
@@ -4371,7 +4346,6 @@ void drawChoiceDialog() {
   setCur(centerX(o1, 2), 224);
   printT(o1);
   gfx->fillRoundRect(93, 268, 280, 52, 12, c2);     // boton mantener/quedaros
-  if (c2 == UI_WHITE) gfx->drawRoundRect(93, 268, 280, 52, 12, UI_TRACK);  // apagado: solo el borde
   gfx->setTextColor(t2);
   setCur(centerX(o2, 2), 286);
   printT(o2);

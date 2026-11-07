@@ -45,11 +45,6 @@ static inline uint32_t timeLeft(uint32_t deadline) {
 
 // ceremonias de fin de ciclo
 enum : uint8_t { CER_NONE = 0, CER_FAREWELL, CER_RUNAWAY, CER_RELEASE };
-// que pasa con la casa al acabar una crianza (v1.40). AUTO: el huevo que esperaba, uno de la
-// mochila, o (sin ninguno y con la caja sin bichos) un huevo de regalo; si no, vacia. EGG: lo que
-// se eligio al soltar con huevos ("Abrir un huevo"). EMPTY: "Dejar casa vacia": los huevos se quedan
-// y el que esperaba pasa a la mochila. Ni EGG ni EMPTY se dan sin huevos: el dialogo no sale.
-enum : uint8_t { HOME_AUTO = 0, HOME_EGG, HOME_EMPTY };
 
 enum PetMood : uint8_t { MOOD_HAPPY, MOOD_SAD, MOOD_EATING, MOOD_SLEEPING };
 
@@ -205,10 +200,8 @@ public:
   void eggTap();  // tocar el huevo: 3 toques y eclosiona
   // un huevo en casa: el que esperaba en la incubadora, o uno nuevo (que se sortea ahora). No mira
   // la mochila: quien libera la casa usa freeHome(). saveNow=false solo marca el guardado (pasos)
-  // charm=false: el huevo de regalo (v1.40) no gasta el amuleto, es una tirada normal
-  void newEgg(bool saveNow = true, bool charm = true);
-  // soltar (pulsacion larga + confirmar). home: lo elegido en el dialogo del huevo (v1.40)
-  void release(uint8_t home = HOME_AUTO);
+  void newEgg(bool saveNow = true);
+  void release();  // soltar (pulsacion larga + confirmar)
   void syncClock(uint32_t nowEpoch);  // aplica el tiempo transcurrido apagado
   void setClock(uint32_t nowEpoch);   // fija la hora sin aplicar progresion
   void startFarewell();  // tambien usable desde la consola serie (BYE)
@@ -220,9 +213,7 @@ public:
   // huevos limitados (v1.40): los tuyos son los de la mochila mas el que espera en la incubadora
   uint8_t eggsOwned() const { return items[IT_EGG] + (eggHeldFlag ? 1 : 0); }
   bool boxHasPets() const;  // algun hueco con un bicho que se pueda despertar
-  // "Dejar casa vacia" lleva el huevo que esperaba a la mochila: no cabe con la mochila llena
-  bool canLeaveEmpty() const { return !eggHeldFlag || items[IT_EGG] < ITEM_MAX; }
-  // al soltar sin huevos: false = la casa se queda vacia, true = llega un huevo de regalo
+  // al soltar sin huevos: false = solo la casa vacia, true = ademas un huevo de regalo a la mochila
   bool releaseGivesEgg() const { return !eggsOwned() && !boxHasPets(); }
   bool hatchFromBag();  // casa vacia: el boton "Abrir un huevo" (uno de la mochila a casa)
   uint8_t eggCracks() const { return eggTaps; }
@@ -406,7 +397,6 @@ private:
   bool foundFull[FOUND_QUEUE];
   bool foundGift[FOUND_QUEUE];
   uint8_t foundN = 0;
-  uint8_t endHome = HOME_AUTO;  // lo elegido al soltar; vive con la ceremonia (que no se guarda)
   uint16_t eggRem = 0;         // pasos hacia el siguiente huevo (v1.39)...
   uint16_t eggAt = 0;          // ...y a cuantos toca (EGG_MIN..EGG_MAX; 0 = sin sortear)
   uint8_t goalBanner = 0;     // meta del banner pendiente (0 = ninguno)
@@ -439,7 +429,8 @@ private:
   void tick();
   void hatch();
   void resetHome();                 // lo comun de un huevo nuevo y de la casa vacia
-  void freeHome(uint8_t mode = HOME_AUTO);  // la casa queda libre (ver HOME_*)
+  void freeHome();                  // guardar en la caja: huevo que esperaba, de la mochila, o vacia
+  void endLife(uint8_t cer);        // fin de una crianza (v1.41): la casa, vacia; los huevos, a la mochila
   void vacate(bool saveNow = true); // la casa, vacia (v1.39)
   void eggToHome(bool saveNow);     // con la casa vacia: un huevo de la mochila pasa a casa
   // caja (v1.37)

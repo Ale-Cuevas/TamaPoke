@@ -78,10 +78,9 @@ enum StrId : uint8_t {
   // huevos limitados (v1.39): la casa vacia (titulo, mensaje, pista de la caja), la nota de los
   // dialogos que la dejarian vacia y la pista de la mochila
   S_NOEGG_HDR, S_NOEGG_MSG, S_NOEGG_BOX, S_NO_EGG_NOTE, S_EGG_HINT,
-  // soltar con huevos (v1.40): la pregunta, "abrir un huevo (N)" (tambien el boton de la casa
-  // vacia), dejarla vacia, la nota del regalo, el mensaje de la casa vacia con huevos y el titulo
-  // del aviso de un regalo
-  S_HATCH_Q, S_HATCH_FMT, S_LEAVE_EMPTY, S_GIFT_EGG_NOTE, S_NOEGG_HAVE, S_GIFT,
+  // huevos al acabar una crianza (v1.40/v1.41): el boton "abrir un huevo (N)" de la casa vacia, la
+  // nota del regalo, el mensaje de la casa vacia con huevos y el titulo del aviso de un regalo
+  S_HATCH_FMT, S_GIFT_EGG_NOTE, S_NOEGG_HAVE, S_GIFT,
   STR_COUNT
 };
 
