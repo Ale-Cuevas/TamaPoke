@@ -49,6 +49,7 @@ Write the result on each line: a tick, or what you saw.
 | 40 | v1.45 easier games: sled 15 % slower at the start, obstacles 20 % narrower and easy to see in every habitat (outlines, no dark green bush); waterfall gauge 15 % slower, band 30 % wider at the start, 60 s session with the band narrowing slowly to the 60 s mark | [Sled run](DEVICE_TESTS.md#sled-run-v144), [Waterfall](DEVICE_TESTS.md#waterfall-v143) | pending |
 | 41 | v1.46 waterfall back to 30 s: the band narrows slowly and ends about 39–61 | [Waterfall](DEVICE_TESTS.md#waterfall-v143) | pending |
 | 42 | v1.47 waterfall 45 s: the band drifts from 30 s, "BONUS +N" live and on the result, bonus DEF added; "STR MAX" / "DEF MAX" / "SPD MAX" instead of "+0" when the training is full | [Waterfall](DEVICE_TESTS.md#waterfall-v143) | pending |
+| 43 | v1.48 rewards: a 50-row sled run gives about SPD +8 (or "SPD MAX" when speed training is full), a very good waterfall session about DEF +8 with "BONUS +3" | [Sled run](DEVICE_TESTS.md#sled-run-v144), [Waterfall](DEVICE_TESTS.md#waterfall-v143) | pending |
 
 Questions only the board can answer:
 - Where is the USB-C port relative to the screen's top? Bottom edge (buttons on top).

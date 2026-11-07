@@ -34,10 +34,10 @@
 #define ZEN_SURGE_KICK_START 21.25f  // %/s que quita un golpe al principio... (era 25)
 #define ZEN_SURGE_KICK_END 34.0f     // ...y al final (era 40)
 #define ZEN_SURGE_WARN_MS 400u    // la cascada se hincha antes de cada golpe
-#define ZEN_TENTHS_PER_POINT 20   // DEF: 1 punto cada 2 s dentro de la franja
-#define ZEN_GAIN_MAX 15           // tope de la parte normal (los primeros 30 s)
-#define ZEN_BONUS_TENTHS_PER_POINT 15  // bonificacion: 1 DEF cada 1,5 s en la franja mientras se mueve...
-#define ZEN_BONUS_MAX 10          // ...hasta 10 (los 15 s enteros)
+#define ZEN_TENTHS_PER_POINT 35   // DEF: 1 punto cada 3,5 s dentro de la franja (v1.48: eran 2 s)
+#define ZEN_GAIN_MAX 8            // tope de la parte normal, los primeros 30 s (v1.48: era 15)
+#define ZEN_BONUS_TENTHS_PER_POINT 40  // bonificacion: 1 DEF cada 4 s en la franja mientras se mueve...
+#define ZEN_BONUS_MAX 3           // ...hasta 3 (v1.48: 1,5 s y 10; daba demasiado)
 #define ZEN_WASH 10               // limpieza tras una sesion completa (la cascada lava)
 
 struct ZenState {
