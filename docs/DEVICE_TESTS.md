@@ -355,7 +355,7 @@ the home is empty; `EGG <n>` sets the Backpack (tests only: it changes the save)
 shows the farewell button.
 - [x] v1.40 by touch (user, 2026-11-07): the release question and the farewell gift worked; the user found the
   question redundant with the empty home's button, so v1.41 dropped it.
-- [ ] With eggs (`EGG 2`): long-press, YES → no second question; after the goodbye the home is empty with "Your eggs
+- [x] (user, 2026-11-07) With eggs (`EGG 2`): long-press, YES → no second question; after the goodbye the home is empty with "Your eggs
   are waiting!" and "Hatch an egg (2)"; the button brings one home (bag −1). A restart before tapping keeps it empty.
 - [ ] Farewell with eggs or pets in the Box: "GIFT! EGG" over the empty home, the button counts the reward egg.
 - [ ] With an egg waiting from the Box (store a pet over an egg, wake it): the WALK egg slot counts it; after an ending
