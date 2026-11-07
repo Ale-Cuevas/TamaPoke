@@ -28,14 +28,14 @@
 #define DASH_HIT_W 60.0f          // caja de choque del trineo: la misma para todas las especies
 #define DASH_HIT_H 34.0f
 #define DASH_HIT_SHRINK 0.15f     // los obstaculos chocan un 15 % mas pequenos de lo que se ven
-#define DASH_V0 160.0f            // px/s al empezar
+#define DASH_V0 136.0f            // px/s al empezar (v1.45: 160 era algo dificil, -15 %)
 #define DASH_DOUBLE_S 40.0f       // a los 40 s, el doble de rapido
 #define DASH_SPEED_MAX 3.0f       // tope (a los 80 s)
 #define DASH_ROW_GAP_START 260.0f // separacion entre filas a 1x...
 #define DASH_ROW_GAP_END 170.0f   // ...y a 3x
 #define DASH_GAP_MIN 110.0f       // hueco libre minimo en cada fila
-#define DASH_OBS_W_MIN 50.0f      // ancho de un obstaculo
-#define DASH_OBS_W_MAX 140.0f
+#define DASH_OBS_W_MIN 40.0f      // ancho de un obstaculo (v1.45: 50-140, un 20 % mas estrechos)
+#define DASH_OBS_W_MAX 112.0f
 #define DASH_OBS_H 36.0f          // alto (en el sentido de la marcha)
 #define DASH_DOUBLE_P0 0.15f      // probabilidad de fila con 2 obstaculos a 1x...
 #define DASH_DOUBLE_P1 0.60f      // ...y a 3x

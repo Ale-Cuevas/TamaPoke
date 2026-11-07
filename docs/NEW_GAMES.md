@@ -446,6 +446,24 @@ trains DEF, the stat for standing firm.
 
 ---
 
+## Tuned in v1.45 (after the first plays)
+
+The user's feedback on 2026-11-07: steering felt right, but both games were too hard.
+
+- **DASH:**
+  - `DASH_V0` 160 → **136** (15 % slower; the 2× at 40 s ramp is unchanged).
+  - `DASH_OBS_W_MIN/MAX` 50/140 → **40/112** (20 % narrower).
+  - Visibility: the slope is lighter (`lerp(soil, white, 7/16)`), and every obstacle has a 2 px dark
+    outline. The colours were chosen against each habitat's slope (≥ 3:1 by luminance, 6–13:1 with
+    the outline): the bush is magenta (a fir on snow, red lava on the volcano), rocks are darker
+    slate, ice blocks deeper blue. The dark green bush was hard to see on grass.
+- **ZEN:**
+  - `ZEN_PUSH`, `ZEN_PULL`, `ZEN_VMAX` and the surge kicks are × 0.85 (187, 153, 51, 21.25 → 34).
+  - `ZEN_BAND_START` 24 → **31.2** (+30 %).
+  - `ZEN_SESSION_MS` 30 000 → **60 000**: the band narrows slowly and reaches `ZEN_BAND_END` at the
+    60 s mark, as asked; the surges ramp over the minute too.
+  - Reward unchanged: 1 DEF per 2 s in the band, cap 15, so 30 s of focus out of 60 maxes it.
+
 ## Order and parallel work
 
 The two games don't depend on each other. Each runs on its own branch off `main`, after or beside

@@ -60,12 +60,13 @@ TEST(zengame, la_velocidad_tiene_tope) {
   }
 }
 
-TEST(zengame, la_franja_se_estrecha_de_24_a_12) {
+TEST(zengame, la_franja_se_estrecha_de_31_a_12_en_60s) {
   CHECK(near(2 * zenBandHalf(0), ZEN_BAND_START));
   CHECK(near(2 * zenBandHalf(ZEN_SESSION_MS / 2), (ZEN_BAND_START + ZEN_BAND_END) / 2));
   CHECK(near(2 * zenBandHalf(ZEN_SESSION_MS), ZEN_BAND_END));
   CHECK(near(2 * zenBandHalf(ZEN_SESSION_MS + 5000), ZEN_BAND_END));
-  CHECK(zenInBand(61, 0) && !zenInBand(63, 0));
+  CHECK(zenInBand(65, 0) && !zenInBand(66, 0));  // 34,4-65,6 al empezar
+  CHECK_EQ(ZEN_SESSION_MS, 60000u);
   CHECK(zenInBand(55, ZEN_SESSION_MS) && !zenInBand(57, ZEN_SESSION_MS));
   CHECK_EQ(zenZone(30, 0), -1);
   CHECK_EQ(zenZone(50, 0), 0);
@@ -153,9 +154,9 @@ TEST(zengame, un_frame_tardio_cuenta_como_mucho_250ms) {
   CHECK_EQ(z.t, ZEN_LATE_MAX_MS);
 }
 
-TEST(zengame, la_sesion_dura_30s_y_no_pasa_de_ahi) {
+TEST(zengame, la_sesion_dura_60s_y_no_pasa_de_ahi) {
   ZenState z = calm();
-  for (int i = 0; i < 2000; i++) zenAdvance(z, z.c < 50, 20);
+  for (int i = 0; i < 4000; i++) zenAdvance(z, z.c < 50, 20);
   CHECK(zenDone(z));
   CHECK_EQ(z.t, ZEN_SESSION_MS);
   CHECK(z.inBandMs <= ZEN_SESSION_MS);

@@ -134,12 +134,12 @@ TEST(dashgame, la_fila_que_choca_no_cuenta_la_de_la_invulnerabilidad_si) {
   for (int i = 0; i < 2; i++) {
     DashRow &r = d.rows[i];
     r.live = true;
-    r.y = 60 + i * 120;
+    r.y = 60 + i * 90;  // la segunda pasa entera dentro de los 1,2 s de invulnerabilidad
     r.n = 1;
     r.o[0] = { -DASH_HALF_W, DASH_HALF_W, 0 };
   }
   d.nextRowY = 100000;  // sin mas filas
-  for (int i = 0; i < 100; i++) dashAdvance(d, 0, 20);  // 2 s a 160 px/s: pasan las dos
+  for (int i = 0; i < 100; i++) dashAdvance(d, 0, 20);  // 2 s a DASH_V0: pasan las dos
   CHECK_EQ(d.hits, (uint8_t)1);
   CHECK_EQ(d.dodged, (uint16_t)1);
 }

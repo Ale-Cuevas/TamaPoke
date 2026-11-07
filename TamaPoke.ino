@@ -47,7 +47,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.44"
+#define FW_VERSION "1.45"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -934,7 +934,7 @@ void handleSerial() {
   } else if (line == "ZEN" || line.startsWith("ZEN ")) {  // ZEN [s]: la cascada sin premio, desde el segundo s
     long sec = line.length() > 4 ? line.substring(4).toInt() : 0;
     if (sec < 0) sec = 0;
-    if (sec > 29) sec = 29;
+    if (sec > (long)(ZEN_SESSION_MS / 1000) - 1) sec = ZEN_SESSION_MS / 1000 - 1;
     wakeUI();
     menuKind = MENU_NONE;
     startZen();
@@ -2911,15 +2911,17 @@ static DashPal dashPalette(bool night) {
   if (bio >= BIOME_COUNT) bio = 0;
   uint16_t soil = BIOME_SOIL[bio];
   DashPal p;
-  p.track = lerp565(soil, UI_WHITE, 3, 16);
+  p.track = lerp565(soil, UI_WHITE, 7, 16);  // clara (v1.45): los obstaculos oscuros resaltan
   p.outside = lerp565(soil, C565(0x20, 0x30, 0x20), 5, 16);
   p.edge = lerp565(soil, C565(0x10, 0x10, 0x10), 8, 16);
   p.mark = lerp565(soil, C565(0x20, 0x20, 0x20), 4, 16);
-  p.rock = bio == 5 ? C565(0xa8, 0xdc, 0xf6) : bio == 3 ? C565(0x3a, 0x30, 0x34) : bio == 8 ? C565(0x7a, 0x70, 0x90)
-                                                                                  : C565(0x88, 0x8c, 0x98);
-  p.log = C565(0x8e, 0x5c, 0x34);
-  p.bush = bio == 5 ? C565(0xf4, 0xf8, 0xfc) : bio == 3 ? C565(0xb0, 0x3a, 0x2a) : bio == 1 ? C565(0x5f, 0xae, 0x5c)
-                                                                                  : C565(0x3c, 0x8a, 0x4c);
+  // v1.45: oscuros y saturados sobre la pista clara (contraste >= 3:1 en todos los biomas, y el
+  // contorno oscuro de drawDashObstacle llega a 6-13:1). El matorral verde oscuro casi no se veia
+  // sobre la hierba: ahora es magenta (abeto en la nieve, lava roja en el volcan).
+  p.rock = bio == 5 ? C565(0x4c, 0x8c, 0xd0) : bio == 3 ? C565(0x34, 0x2a, 0x2e) : bio == 8 ? C565(0x4a, 0x40, 0x5c)
+                                                                                  : C565(0x56, 0x5a, 0x68);
+  p.log = C565(0x7a, 0x4a, 0x26);
+  p.bush = bio == 5 ? C565(0x2a, 0x62, 0x40) : bio == 3 ? C565(0x9a, 0x1c, 0x12) : C565(0x9c, 0x2c, 0x7c);
   p.sled = bio == 5 ? C565(0xc8, 0x3a, 0x30) : C565(0x9a, 0x5a, 0x2c);
   p.sledDk = lerp565(p.sled, C565(0x10, 0x10, 0x10), 6, 16);
   p.runner = C565(0x48, 0x4c, 0x58);
@@ -2991,16 +2993,22 @@ void drawSled(int cx, int by, int w, float leanDeg, const DashPal &p, bool back)
 
 void drawDashObstacle(int x0, int x1, int y, uint8_t kind, const DashPal &p) {
   int w = x1 - x0, h = (int)DASH_OBS_H;
+  // todos llevan un contorno oscuro de 2 px (v1.45), para verse sobre cualquier pista
   if (kind == 0) {  // roca (o bloque de hielo, o piedra de las ruinas)
+    gfx->fillRoundRect(x0 - 2, y - 2, w + 4, h + 4, 14, UI_INK);
     gfx->fillRoundRect(x0, y, w, h, 12, p.rock);
     gfx->fillRoundRect(x0 + 6, y + 4, w / 2, 8, 4, lerp565(p.rock, UI_WHITE, 6, 16));
-    gfx->drawRoundRect(x0, y, w, h, 12, lerp565(p.rock, C565(0, 0, 0), 7, 16));
   } else if (kind == 1) {  // tronco atravesado
+    gfx->fillRoundRect(x0 - 2, y + 4, w + 4, h - 8, 12, UI_INK);
     gfx->fillRoundRect(x0, y + 6, w, h - 12, 10, p.log);
     gfx->fillRect(x0 + 8, y + 12, w - 16, 3, lerp565(p.log, C565(0, 0, 0), 5, 16));
     gfx->fillCircle(x1 - 10, y + h / 2, (h - 12) / 2 - 2, lerp565(p.log, UI_WHITE, 5, 16));
   } else {  // matorral (o monticulo de nieve, o roca de lava)
     int n = w / 26 + 1;
+    for (int i = 0; i < n; i++) {
+      int cx = x0 + 13 + i * (w - 26) / (n > 1 ? n - 1 : 1);
+      gfx->fillCircle(cx, y + h / 2 + 2, 17, UI_INK);
+    }
     for (int i = 0; i < n; i++) {
       int cx = x0 + 13 + i * (w - 26) / (n > 1 ? n - 1 : 1);
       gfx->fillCircle(cx, y + h / 2 + 2, 15, p.bush);
