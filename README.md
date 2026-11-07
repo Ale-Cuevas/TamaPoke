@@ -56,6 +56,11 @@ the home empty with a **Hatch an egg (N)** button; no egg comes home by itself. 
 leaves an egg in the Backpack, and with no egg and nobody in the Box a gift egg goes there
 (v1.40). The egg waiting from the Box counts as one of yours.
 
+**v1.43: the waterfall.** A new game in PLAY trains DEFENSE: the pet meditates under a
+waterfall, you hold the screen to raise its focus and let go to lower it, and keep the gauge in
+the green band for 30 s while the band narrows and surges of water push it down. A full session
+also washes the pet.
+
 **v1.39: eggs are found by walking.** A new egg no longer appears for free after
 an ending or a store: you find eggs on walks, about 3 a week at 5000 steps a
 day. With none, the home stays empty until you find one. Host-tested (300
@@ -127,9 +132,13 @@ While **awake**, per minute:
 - 🍬 **Candy:** +10 FOOD, +12 JOY, but **+12 weight** (fattening).
 - ⚽ **Play:** a menu with all the games: the **ball minigame** (+JOY, −ENE; trains **SPEED** and
   burns weight; the ball keeps speeding up as you score: twice as fast at 80 as at 1, up to 3×),
-  a **practice battle** (+3 JOY, at most once an hour; see Battles below) and the training bag.
+  a **practice battle** (+3 JOY, at most once an hour; see Battles below), the training bag and the
+  waterfall.
 - 🥊 **Training bag** (third slot of the Play menu): trains **STRENGTH** (~4 hits = 1 pt, cap
   +18/session), tires it.
+- 🌊 **Waterfall** (fifth slot, v1.43): hold the screen to raise the focus gauge, let go to lower
+  it; keep it in the green band for 30 s. Trains **DEFENSE** (1 pt per 2 s in the band, cap
+  +15/session) and washes the pet (+10 HYG); no weight burn.
 - 🫧 **Bath:** clears poops, HYG → 100.
 - 👆 **Pet it:** +5 JOY + bond.
 - 🌙 **Sleep:** rest — ENE **+6/min**, needs drain ~**4× slower** with floors
@@ -234,7 +243,7 @@ Swipe **right** from the home screen (pet or egg) to open the Box: **6 slots** w
 
 ### Battle stats
 ATK / DEF / SPD = real **Gen-1 base** × genes + level + training (STRENGTH ← bag,
-SPEED ← minigame, DEFENSE ← 12 h of unbroken good care; vitamins from walks add
+SPEED ← minigame, DEFENSE ← waterfall and 12 h of unbroken good care; vitamins from walks add
 +3 each). They are what battles use, with the level capped at 100.
 
 ### Battles (practice, v1.24)

@@ -311,6 +311,25 @@ doesn't touch the record or give rewards.
   button; a tap anywhere on it closes the card.
 - [ ] USER = back still quits the bag (no reward while the time runs).
 
+### Waterfall (v1.43)
+([NEW_GAMES.md, Task ZEN](NEW_GAMES.md#task-zen-meditate-under-the-waterfall).) `ZEN [s]` opens a session with no
+reward (from second s if given), `HOLD 1` / `HOLD 0` fake the finger, `HOLD OFF` gives it back, `ZEN?` prints
+the gauge, band, next surge, focus and the frame's draw time.
+- [ ] PLAY shows five slots; the last one (a waterfall over a pool) starts the waterfall. The fourth is empty
+  until the next game.
+- [ ] Intro: "Keep the bar in the green!" / "HOLD TO FOCUS" for 1.5 s, and the hint stays until the first touch.
+- [ ] Holding anywhere below the top raises the gauge, letting go lowers it, and it keeps moving a moment after
+  either; a quick tap between two frames still nudges it.
+- [ ] The band narrows over the 30 s; surges come from 5 s on, each one after a white wave runs down the water,
+  and they push the gauge down harder at the end.
+- [ ] Pet: calm with the aura in the band, splashed below, "!" above. A blue pet (Squirtle line) stands out on
+  the darker water behind it.
+- [ ] The screen doesn't dim during a session even with the finger held still for 30 s.
+- [ ] Result: focus, "DEF +N", record or "NEW RECORD!", "Squeaky clean!"; after it the home shows the "+N"
+  on the hygiene bar, and `STATS` shows `tr=…/<def>/…` and `rec … zen=`.
+- [ ] Quitting (tap the top, USER, PWR) gives nothing and keeps the record.
+- [ ] Learnable: the first session is hard, the third clearly better; the last 10 s are hard but possible.
+
 ### Levels (v1.35)
 ([GAMEPLAY_TUNING.md, #5 CURVE](GAMEPLAY_TUNING.md#5-curve-the-level-pace-follows-how-hard-the-pet-is-to-raise).)
 `STATS` prints `grow=… lv=… into=…/… age=…`: the growth minutes, the level, the minutes done of the current

@@ -81,6 +81,8 @@ enum StrId : uint8_t {
   // huevos al acabar una crianza (v1.40/v1.41): el boton "abrir un huevo (N)" de la casa vacia, la
   // nota del regalo, el mensaje de la casa vacia con huevos y el titulo del aviso de un regalo
   S_HATCH_FMT, S_GIFT_EGG_NOTE, S_NOEGG_HAVE, S_GIFT,
+  // la cascada (v1.43): intro, pista, concentracion en vivo, record, resultado y el lavado
+  S_ZEN_INTRO, S_ZEN_HOLD, S_FOCUS_FMT, S_ZEN_BEST_FMT, S_DEF_GAIN_FMT, S_CLEAN,
   STR_COUNT
 };
 

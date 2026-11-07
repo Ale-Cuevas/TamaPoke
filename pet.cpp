@@ -1,6 +1,7 @@
 #include "pet.h"
 #include "dex.h"
 #include "audio.h"
+#include "zengame.h"
 
 void Pet::begin() {
   prefs.begin("tamapoke", false);
@@ -640,6 +641,27 @@ uint8_t Pet::trainStrength(uint16_t hits) {
   return gain;
 }
 
+// cascada (ZEN, docs/NEW_GAMES.md FR-ZEN.12): solo se llama al acabar la sesion entera (abandonar
+// no da nada). La concentracion entrena la defensa y el agua lava al bicho. Sentado no quema
+// peso. Devuelve los puntos de DEF que de verdad entraron.
+uint8_t Pet::zenResult(uint16_t focusTenths) {
+  if (ceremony != CER_NONE || isEgg()) return 0;
+  uint8_t antes = trDef;
+  uint16_t v = (uint16_t)trDef + zenGain(focusTenths);
+  trDef = v > 100 ? 100 : (uint8_t)v;
+  uint8_t gain = trDef - antes;
+  energy = dropTo(energy, 8, 5);
+  fullness = dropTo(fullness, 3, 5);
+  joy = clamp100(joy + 6);
+  hygiene = clamp100(hygiene + ZEN_WASH);  // la cascada lava (decidido 2026-11-07)
+  if (focusTenths >= 200) heartUntil = millis() + HEART_MS;
+  if (focusTenths > zenHi) zenHi = focusTenths;
+  addBond(2);
+  registerCare();
+  save();
+  return gain;
+}
+
 void Pet::play() {
   if (ceremony != CER_NONE) return;
   if (isEgg() || sleeping) return;
@@ -996,6 +1018,7 @@ void Pet::save() {
   prefs.putUShort("mstone", lastMilestone);
   prefs.putUShort("ghi", gameHi);
   prefs.putUShort("shi", strHi);
+  prefs.putUShort("zhi", zenHi);
   prefs.putString("nick", nick);
   // pasos y mochila (v1.20)
   prefs.putUInt("stpT", stepsToday);
@@ -1078,6 +1101,7 @@ void Pet::load() {
   lastMilestone = prefs.getUShort("mstone", 0);
   gameHi = prefs.getUShort("ghi", 0);
   strHi = prefs.getUShort("shi", 0);
+  zenHi = prefs.getUShort("zhi", 0);
   prefs.getString("nick", nick, sizeof(nick));
   // pasos y mochila (v1.20): un guardado anterior no trae las claves y quedan a 0
   stepsToday = prefs.getUInt("stpT", 0);

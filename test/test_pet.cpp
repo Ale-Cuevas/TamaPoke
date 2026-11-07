@@ -2,6 +2,7 @@
 #include "framework.h"
 #include "shim/Arduino.h"
 #include "../pet.h"
+#include "../zengame.h"
 #include "../dex.h"
 #include "../audio.h"
 #include <string.h>
@@ -457,6 +458,58 @@ TEST(train, el_saco_cansa_y_quema_peso) {
   p.energy = 3;  // el suelo protege de dejarlo a cero
   p.trainStrength(30);
   CHECK_EQ(p.energy, (uint8_t)3);
+}
+
+TEST(train, cascada_da_def_lava_y_guarda_record) {
+  Pet p;
+  makePet(p, 4);
+  p.trDef = 10;
+  p.hygiene = 50;
+  p.energy = 80;
+  p.fullness = 80;
+  p.weight = 40;
+  CHECK_EQ(p.zenResult(150), (uint8_t)7);  // 15 s en la franja: 1 punto cada 2 s
+  CHECK_EQ(p.trDef, (uint8_t)17);
+  CHECK_EQ(p.hygiene, (uint8_t)(50 + ZEN_WASH));
+  CHECK_EQ(p.energy, (uint8_t)72);
+  CHECK_EQ(p.fullness, (uint8_t)77);
+  CHECK_EQ(p.weight, (uint8_t)40);  // sentado no quema peso
+  CHECK_EQ(p.zenHi, (uint16_t)150);
+  CHECK_MSG(p.zenResult(300) == ZEN_GAIN_MAX, "sesion perfecta: tope de 15");
+  CHECK_EQ(p.zenHi, (uint16_t)300);
+  p.zenResult(100);
+  CHECK_EQ(p.zenHi, (uint16_t)300);  // un peor resultado no baja el record
+}
+
+TEST(train, la_cascada_anuncia_lo_que_de_verdad_sube_y_topa) {
+  Pet p;
+  makePet(p, 4);
+  p.trDef = 97;
+  p.hygiene = 95;
+  CHECK_EQ(p.zenResult(300), (uint8_t)3);
+  CHECK_EQ(p.trDef, (uint8_t)100);
+  CHECK_EQ(p.hygiene, (uint8_t)100);
+  CHECK_EQ(p.zenResult(300), (uint8_t)0);
+}
+
+TEST(train, la_cascada_no_vale_con_huevo) {
+  mockNvsReset();
+  Pet p;
+  p.begin();
+  CHECK(p.isEgg());
+  CHECK_EQ(p.zenResult(300), (uint8_t)0);
+  CHECK_EQ(p.zenHi, (uint16_t)0);
+}
+
+TEST(train, el_record_de_la_cascada_sobrevive_a_un_reinicio) {
+  mockNvsReset();
+  Pet p;
+  makePet(p, 4);
+  p.zenResult(123);
+  p.flushSave();
+  Pet q;
+  q.begin();
+  CHECK_EQ(q.zenHi, (uint16_t)123);
 }
 
 TEST(play, minijuego_entrena_velocidad_y_guarda_record) {
