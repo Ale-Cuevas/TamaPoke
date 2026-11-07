@@ -363,6 +363,10 @@ trains DEF, the stat for standing firm.
   - DEF: `gain = min(focusTenths / ZEN_TENTHS_PER_POINT, ZEN_GAIN_MAX)` into `trDef` (capped at
     100), and returns what went in.
   - Energy `dropTo(energy, 8, 5)`, fullness `dropTo(fullness, 3, 5)`, joy `+6`.
+  - **The waterfall washes the pet:** hygiene `+ZEN_WASH` (capped at 100), only after a full
+    session. Quitting early (header tap, PWR) gives nothing, like every game. It shows as "+10" on
+    the hygiene bar through `fxSnap`/`fxNeeds`, and the result screen says "Clean!" under the DEF
+    line. Decided 2026-11-07.
   - Heart if focus ≥ 20 s.
   - `addBond(2)`, `registerCare()`, `save()`.
   - Record `zenHi`.
@@ -389,6 +393,7 @@ trains DEF, the stat for standing firm.
 | `ZEN_SURGE_KICK` | 25 → 40 %/s | |
 | `ZEN_SURGE_WARN_MS` | 400 | the swell before a surge |
 | `ZEN_TENTHS_PER_POINT` / `ZEN_GAIN_MAX` | 20 / 15 | DEF: 1 point per 2 s in the band, 15 for a perfect session |
+| `ZEN_WASH` | 10 | hygiene after a full session; a bath stays the real clean |
 
 ### Acceptance
 
@@ -402,7 +407,8 @@ trains DEF, the stat for standing firm.
   - fixed-step physics gives the same result at 30 ms and 85 ms frames;
   - a scripted "bang-bang" player (hold below 50, release above) scores > 60 % at the start values.
     That shows the game can be won, not that it is trivial.
-- `test_pet.cpp`: `zenResult` gains and cap, stat cap at 100, record, refused while an egg or
+- `test_pet.cpp`: `zenResult` gains and cap, stat cap at 100, hygiene +`ZEN_WASH` capped at 100,
+  record, refused while an egg or
   during a ceremony.
 - Render sheet: intro, mid-session in the band (glow), below the band (spray), a surge warning,
   result.
@@ -442,15 +448,17 @@ commands. A real run that gives stats is the user's choice, or use the NVS backu
 
 ---
 
+## Decided (user, 2026-11-07)
+
+1. **The ball game keeps training SPD.** `playResult()` (`pet.cpp:606`) doesn't change. Ball and
+   DASH both train SPD.
+2. **The waterfall washes the pet:** hygiene +`ZEN_WASH` after a full session (FR-ZEN.12).
+3. **No habitat-specific vehicles for now.** The same sled in every habitat, recoloured from its
+   palette (FR-DASH.8). The user will think about a way to include all the habitats. Until then,
+   keep the sled drawing in one function (`drawSled(x, y, w, leanDeg, palette)`), so a per-habitat
+   vehicle can replace it later without touching the rules or the fixed hitbox.
+
 ## Open questions
 
-1. **Does the ball game keep training SPD?** Today `playResult()` gives `trSpe += score / 5` with no
-   cap per session (`pet.cpp:606`). With DASH, each stat could have its own game: bag = ATK,
-   waterfall = DEF, dash = SPD, and ball = joy and weight only. The proposal is to **leave ball as it
-   is** for now and decide after playing DASH.
-2. **The waterfall washes the pet?** For example, hygiene +10 after a full session (not when
-   quitting). It's a nice touch, but it overlaps with bathing. Off by default.
-3. **A raft in water habitats?** Same rules, a log raft outline instead of the sled, splashes
-   instead of snow puffs. Later, optional; the sled ships first in every habitat.
-4. **Gauge shape in ZEN:** a vertical bar (FR-ZEN.3), or an arc around the bottom of the round
+1. **Gauge shape in ZEN:** a vertical bar (FR-ZEN.3), or an arc around the bottom of the round
    screen. The bar is simpler to draw and read. An arc can come later if the bar looks out of place.
