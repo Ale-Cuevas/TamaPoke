@@ -461,6 +461,7 @@ static const std::vector<Scene> &scenes() {
     { "card-battle-ko", [] { pokemon(92, 6); pet.trAtk = 100; pet.trDef = 55; setLang(LANG_KO); applyLangFont(); cardOpen = true; cardPage = 1; } },
     { "card-battle-de", [] { pokemon(92, 6); pet.trAtk = 100; pet.trDef = 55; setLang(LANG_DE); applyLangFont(); cardOpen = true; cardPage = 1; } },
     { "card-battle-it", [] { pokemon(92, 6); pet.trAtk = 100; pet.trDef = 55; setLang(LANG_IT); applyLangFont(); cardOpen = true; cardPage = 1; } },
+    { "card-battle-es", [] { pokemon(92, 6); pet.trAtk = 100; pet.trDef = 55; setLang(LANG_ES); applyLangFont(); cardOpen = true; cardPage = 1; } },
     { "card-medals", [] { pokemon(25, 13); cardOpen = true; cardPage = 2; } },
     { "card-progress", [] { pokemon(25, 13); cardOpen = true; cardPage = 3; } },
     { "settings", [] { pokemon(25, 13); openClock(); } },
