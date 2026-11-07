@@ -224,6 +224,56 @@ TEST(motion, tumbada_boca_arriba_tambien_mide_la_inclinacion) {
   CHECK_EQ(t.side, (int8_t)TILT_RIGHT);
 }
 
+// la inclinacion rapida de la carrera (FR-DASH.1): el mismo angulo lateral con la placa de pie,
+// a 45 grados o tumbada boca arriba (no depende del cabeceo), y sigue al giro en ~0,2 s
+static float rollAt(float rollDeg, float pitchDeg, uint32_t ms) {
+  FastRoll f;
+  float r = rollDeg / 57.29578f, p = pitchDeg / 57.29578f;
+  for (const ImuSample &m : synth(ms, [=](float, float &x, float &y, float &z) {
+         x = -sinf(r);               // lado derecho abajo: X < 0 en la 2.16
+         y = cosf(r) * cosf(p);      // de pie (p = 0) la gravedad va por Y...
+         z = cosf(r) * sinf(p);      // ...tumbada (p = 90) por Z
+       }))
+    f.feed(m.t, m.x, m.y, m.z, -1);
+  return f.deg;
+}
+
+TEST(motion, la_inclinacion_rapida_no_depende_del_cabeceo) {
+  for (float roll : { -25.0f, -8.0f, 0.0f, 12.0f, 30.0f })
+    for (float pitch : { 0.0f, 45.0f, 90.0f }) {
+      float d = rollAt(roll, pitch, 1000);
+      CHECK_RANGE(d, roll - 0.5f, roll + 0.5f);
+    }
+}
+
+TEST(motion, la_inclinacion_rapida_sigue_al_giro_enseguida) {
+  FastRoll f;
+  TiltEstimator slow;
+  auto feedAngle = [&](float deg, uint32_t t0, uint32_t ms) {
+    float r = deg / 57.29578f;
+    for (const ImuSample &m : synth(ms, [=](float, float &x, float &y, float &z) {
+           x = -sinf(r); y = 0.02f; z = cosf(r);  // tumbada boca arriba
+         }, t0)) {
+      f.feed(m.t, m.x, m.y, m.z, -1);
+      slow.feed(m.t, m.x, m.y, m.z, -1);
+    }
+  };
+  feedAngle(0, 0, 1000);
+  feedAngle(20, 1016, 200);  // gira a 20 grados: 200 ms despues
+  CHECK(f.deg > 18.0f);      // la rapida ya casi esta (3 constantes de tiempo)
+  CHECK(slow.deg < f.deg - 5.0f);  // la del paseo va muy por detras
+}
+
+TEST(motion, la_tuberia_alimenta_la_inclinacion_rapida) {
+  ImuPipeline p;
+  float r = 15 / 57.29578f;
+  for (const ImuSample &m : synth(1000, [=](float, float &x, float &y, float &z) {
+         x = -sinf(r) * (float)-BOARD_IMU_X_RIGHT_DOWN_SIGN; y = cosf(r); z = 0.02f;
+       }))
+    p.feed(m.t, m.x, m.y, m.z);
+  CHECK_RANGE(p.roll.deg, 14.5f, 15.5f);
+}
+
 TEST(motion, quieta_no_se_inclina) {
   for (const char *n : { "flat-up-1", "upright-1", "face-down-1" }) {
     TiltEstimator t;

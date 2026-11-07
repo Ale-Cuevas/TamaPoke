@@ -194,13 +194,20 @@ static void readNow(uint32_t now) {
   }
 }
 
+static bool fastMode = false;
+
+void imuSetFast(bool on) { fastMode = on; }
+float imuRollFast() { return flow.roll.deg; }
+
 void imuPoll(uint32_t now, bool lit) {
   if (!present) return;
+  // la carrera inclina la placa a un lado y a otro: eso no son pasos (FR-DASH.4)
+  if (fastMode) flow.steps.pause(now + 1000);
   if (logUntil && (int32_t)(now - logUntil) >= 0) {
     logUntil = 0;
     Serial.println("[imulog] end");
   }
-  uint32_t every = (lit || logUntil) ? FIFO_READ_LIT_MS : FIFO_READ_DARK_MS;
+  uint32_t every = fastMode ? FIFO_READ_FAST_MS : (lit || logUntil) ? FIFO_READ_LIT_MS : FIFO_READ_DARK_MS;
   if (now - lastRead < every) return;
   lastRead = now;
   readNow(now);
@@ -233,6 +240,7 @@ void imuReport() {
                 (unsigned long)nReads, (unsigned long)nSamples, rateHz, (unsigned long)nErrors,
                 (unsigned long)nOverflows, (unsigned long)lastReadUs, (unsigned long)flow.stepsPending(),
                 (unsigned long)flow.steps.total);
+  Serial.printf("roll=%+.1fdeg fast=%d\n", flow.roll.deg, fastMode ? 1 : 0);
   Serial.printf("a=%+.2f,%+.2f,%+.2f g tilt=%+.1fdeg side=%d slide=%d facedown=%d shakes=%lu streak=%u\n", lastX,
                 lastY, lastZ, flow.tilt.deg, flow.tilt.side, flow.tilt.slide ? 1 : 0, flow.faceDown.down ? 1 : 0,
                 (unsigned long)flow.shake.count, flow.steps.streakLen());

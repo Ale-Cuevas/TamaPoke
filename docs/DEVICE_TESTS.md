@@ -330,6 +330,25 @@ the gauge, band, next surge, focus and the frame's draw time.
 - [ ] Quitting (tap the top, USER, PWR) gives nothing and keeps the record.
 - [ ] Learnable: the first session is hard, the third clearly better; the last 10 s are hard but possible.
 
+### Sled run (v1.44)
+([NEW_GAMES.md, Task DASH](NEW_GAMES.md#task-dash-tilt-to-dodge).) `DASH [s]` opens a run with no reward (with s:
+no calibration, the speed of second s), `STEER <deg>` fixes the tilt relative to the calibration, `STEER OFF`
+gives the board back, `DASH?` prints speed, position, steer, roll, baseline, score and the frame's draw time.
+- [ ] PLAY's fourth slot (a red sled with speed lines) starts the run; the waterfall stays fifth.
+- [ ] Calibration: 3-2-1 with "Hold it the way you'll play". Shaking the board shows "Hold still..." and counts
+  again, at most twice; then it starts anyway.
+- [ ] Steering feels the same held upright, slanted back and lying face up (each after its own calibration);
+  right side down goes right. Small wobbles (under 3°) don't move the sled.
+- [ ] 1× is easy, ~40 s (2×) is hard but every row can be dodged; past 80 s it stays at 3×.
+- [ ] Obstacles and slope take the habitat's colours (try a snow or volcano pet if one is around); the sled
+  leans into turns, runner tracks bend, speed lines and puffs from 2×.
+- [ ] A hit: the sled jolts, the pet flinches and blinks for 1.2 s, a heart goes grey; the third ends the run.
+- [ ] Result: rows dodged, "SPD +N", record or "NEW RECORD!"; after it `STATS` shows the new `tr=…/…/<spd>` and
+  `rec … dash=`.
+- [ ] The screen doesn't dim during a long run; walking steps don't grow during a run (`STATS` steps before and
+  after a minute of play); `IMU` shows `fast=1` during the run and `fast=0` after.
+- [ ] Quitting (tap the top, USER, PWR) gives nothing.
+
 ### Levels (v1.35)
 ([GAMEPLAY_TUNING.md, #5 CURVE](GAMEPLAY_TUNING.md#5-curve-the-level-pace-follows-how-hard-the-pet-is-to-raise).)
 `STATS` prints `grow=… lv=… into=…/… age=…`: the growth minutes, the level, the minutes done of the current

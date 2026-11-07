@@ -213,6 +213,44 @@ private:
   uint32_t pendSince = 0;
 };
 
+// Inclinacion lateral rapida para la carrera (DASH, docs/NEW_GAMES.md FR-DASH.1): el mismo
+// asin(gx / |g|) que TiltEstimator, pero con un filtro de ROLL_FAST_TAU_MS en vez de 250 ms y sin
+// esperas ni umbrales. Como solo usa la X de la gravedad, no depende del cabeceo: mide igual con
+// la placa de pie, inclinada hacia atras o tumbada boca arriba; solo cambia el cero, y eso lo
+// pone la calibracion del juego.
+#define ROLL_FAST_TAU_MS 60.0f
+
+struct FastRoll {
+  float deg = 0;  // + = lado derecho abajo
+
+  void reset() { *this = FastRoll(); }
+
+  void feed(uint32_t t, float x, float y, float z, int8_t xRightDownSign = BOARD_IMU_X_RIGHT_DOWN_SIGN) {
+    float v[3] = { x, y, z };
+    if (!started) {
+      started = true;
+      for (int i = 0; i < 3; i++) g[i] = v[i];
+      lastT = t;
+    }
+    float dt = (float)(int32_t)(t - lastT);
+    if (dt < 1.0f) dt = 1.0f;
+    lastT = t;
+    float k = 1.0f - expf(-dt / ROLL_FAST_TAU_MS);
+    for (int i = 0; i < 3; i++) g[i] += k * (v[i] - g[i]);
+    float mag = sqrtf(g[0] * g[0] + g[1] * g[1] + g[2] * g[2]);
+    if (mag < 0.3f) return;  // caida libre o lectura rota
+    float s = g[0] * (float)xRightDownSign / mag;
+    if (s > 1.0f) s = 1.0f;
+    if (s < -1.0f) s = -1.0f;
+    deg = asinf(s) * 57.29578f;
+  }
+
+private:
+  bool started = false;
+  uint32_t lastT = 0;
+  float g[3] = { 0, 0, 0 };
+};
+
 // Reparte cada muestra entre los detectores, en el orden del prototipo: la
 // sacudida primero, para que pause el contador de pasos en la misma muestra.
 // Los eventos se acumulan hasta que el juego los recoge (take*).
@@ -221,6 +259,7 @@ struct ImuPipeline {
   ShakeDetector shake;
   FaceDownDetector faceDown;
   TiltEstimator tilt;
+  FastRoll roll;  // la carrera (v1.44)
   uint32_t samples = 0;
 
   void reset() { *this = ImuPipeline(); }
@@ -235,6 +274,7 @@ struct ImuPipeline {
     int8_t fd = faceDown.feed(t, x, y, z);
     if (fd) faceEvent = fd;  // el ultimo manda: entrar y salir en el mismo lote = salir
     tilt.feed(t, x, y, z);
+    roll.feed(t, x, y, z);
   }
 
   // pasos contados desde la ultima llamada

@@ -126,8 +126,10 @@ static void resetUi() {
   gHostRandom = 12345;
   beh = decltype(beh){};
   walkLast = 0;
-  galleryOpen = cardOpen = kbOpen = clockOpen = gameOpen = sackOpen = zenOpen = false;
+  galleryOpen = cardOpen = kbOpen = clockOpen = gameOpen = sackOpen = zenOpen = dashOpen = false;
   zenSerialHold = -1;
+  dashSerialSteerOn = false;
+  dashTrailN = 0;
   // la caja (v1.37): cerrada, vacia y sin huevo esperando (newEgg() lo devuelve a su sitio)
   boxOpen = false;
   boxAsk = 0;
@@ -238,6 +240,34 @@ static void pokemon(int16_t dex, int hour, bool shiny = false) {
 }
 
 // the waterfall mid-session: 12 s in, the gauge at c, 9.4 s of focus, a 23.4 s record
+// the sled run: calibrated, `t0` ms in (its speed), then `ms` of a player who heads for each gap,
+// with the runner tracks filled as dashTick() does; `steer` is the lean shown in the frame
+static void dashPlaying(int16_t dex, int hour, uint32_t t0, uint32_t ms, float steer = 0) {
+  pokemon(dex, hour);
+  startDash();
+  dashCalibrating = false;
+  dashRunStart = millis() - 5000;  // past the "tilt to steer" hint
+  dash.t = t0;
+  pet.dashHi = 57;
+  for (uint32_t e = 0; e < ms; e += 20) {
+    const DashRow *next = nullptr;
+    for (const DashRow &r : dash.rows)
+      if (r.live && !r.counted && (!next || r.y < next->y)) next = &r;
+    float st = 0;
+    if (next) {
+      float dx = next->gapX - dash.px;
+      st = dx > 3 ? 0.8f : (dx < -3 ? -0.8f : 0);
+    }
+    dashAdvance(dash, st, 20);
+    while (dashTrailN == 0 || dash.dist - dashTrailY[(dashTrailN - 1) % DASH_TRAIL] >= DASH_TRAIL_STEP) {
+      dashTrailX[dashTrailN % DASH_TRAIL] = dash.px;
+      dashTrailY[dashTrailN % DASH_TRAIL] = dash.dist;
+      dashTrailN++;
+    }
+  }
+  dash.steer = steer;
+}
+
 static void zenPlaying(int16_t dex, int hour, float c) {
   pokemon(dex, hour);
   startZen();
@@ -343,6 +373,24 @@ static const std::vector<Scene> &scenes() {
     { "minigame-swamp", [] { pokemon(23, 13); startGame(); gameScore = 3; }, 4 },
     { "feed", [] { pokemon(133, 12); menuKind = MENU_FEED; menuUntil = millis() + 6000; } },
     { "play-menu", [] { pokemon(133, 12); menuKind = MENU_PLAY; menuUntil = millis() + 6000; } },
+    // the sled run (v1.44): calibration (and "hold still"), running, fast, a hit, leaning, tiny / huge /
+    // flying pets, the snow and volcano habitats, night, the result, Japanese, and the menu without an IMU
+    { "dash-cal", [] { pokemon(123, 13); startDash(); } },
+    { "dash-cal-still", [] { pokemon(123, 13); startDash(); dashShaky = true; } },
+    { "dash-run", [] { dashPlaying(123, 13, 0, 6000); } },
+    { "dash-run-lean", [] { dashPlaying(25, 13, 0, 7000, -1); } },
+    { "dash-fast", [] { dashPlaying(25, 13, 50000, 4000, 0.6f); } },
+    { "dash-hit", [] { dashPlaying(25, 13, 10000, 3000); dash.hits = 1; dash.lastHitT = dash.t - 100; dash.invulnUntil = dash.t + 1000; } },
+    { "dash-tiny", [] { dashPlaying(10, 13, 0, 5000, 0.5f); } },
+    { "dash-huge", [] { dashPlaying(95, 13, 0, 5000, -0.5f); } },
+    { "dash-flying", [] { dashPlaying(16, 13, 0, 5000); } },
+    { "dash-snow", [] { dashPlaying(124, 13, 20000, 5000, 1); } },
+    { "dash-volcano", [] { dashPlaying(126, 13, 20000, 5000); } },
+    { "dash-night", [] { dashPlaying(123, 22, 30000, 5000, -1); } },
+    { "dash-result", [] { dashPlaying(123, 13, 0, 6000); dash.dodged = 61; dashNewHi = true; dashGainShown = 15; dash.hits = 3;
+                          dashOverUntil = millis() + 4000; } },
+    { "dash-ja", [] { dashPlaying(123, 13, 0, 6000); dashRunStart = millis(); setLang(LANG_JA); applyLangFont(); } },
+    { "play-menu-no-imu", [] { pokemon(133, 12); gStubImuPresent = false; menuKind = MENU_PLAY; menuUntil = millis() + 6000; } },
     // the waterfall (v1.43): intro, in the band, below (spray), above, a surge on its way, the result
     { "zen-intro", [] { pokemon(7, 13); startZen(); } },
     { "zen-band", [] { zenPlaying(7, 13, 52); } },

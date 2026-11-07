@@ -8,6 +8,39 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.44] - 2026-11-07
+
+A new game in PLAY: ride a sled down a slope and tilt the board to dodge, to train SPEED.
+
+### Added
+
+- **Sled run** (fourth slot of the PLAY menu, `docs/NEW_GAMES.md` Task DASH). The pet rides a sled
+  in the middle of the screen while the slope scrolls up past it; **tilt the board** left or right
+  to steer around rows of rocks, logs and bushes coloured like your pet's habitat. Three hits and
+  the run ends.
+  - Each run starts with a 3-2-1 countdown that takes the way you hold the board as "straight":
+    upright, slanted or lying face up all work the same. If your hand shakes it says "Hold still"
+    and counts again (twice at most).
+  - The slope speeds up the whole run: twice as fast at 40 s, three times at 80 s, and the rows come
+    closer together and more often two at a time. Every row always leaves a gap you can reach.
+  - The sled leans into turns and leaves runner tracks; from 2× there are speed lines and snow or
+    dust from the runners. A hit jolts the sled and the pet blinks for 1.2 s.
+  - Score: rows dodged (record kept). The run gives **SPD +1 per 4 rows** (up to +18, like the bag),
+    burns a little weight and tires the pet. Quitting early (the top of the screen, USER, PWR) gives
+    nothing.
+  - Without an IMU the slot is grey and refuses, like the battle slot.
+  - While the run lasts the IMU is read every 40 ms with a faster tilt filter, the step counter is
+    paused (tilting isn't walking), and the screen doesn't dim.
+- The pet sits in a sled drawn from shapes, so no new sprites or SD card update are needed.
+- Serial: `DASH [s]` (a run with no reward; with s it skips the calibration and starts at that
+  second's speed), `DASH?` (state and frame time), `STEER <deg>` / `STEER OFF` (fixed tilt);
+  `IMU` prints the fast roll; `STATS` adds `dash=` to the records.
+
+### Fixed
+
+- Serial `TAP` now reaches the training bag, the waterfall and the sled run the way a finger does,
+  and a game started over serial can't open on top of another one.
+
 ## [1.43] - 2026-11-07
 
 A new game in PLAY: meditate under a waterfall to train DEFENSE. (1.42 is the Wi-Fi update, still

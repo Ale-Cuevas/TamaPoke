@@ -46,6 +46,8 @@ bool imuFaceDown() { return false; }
 int8_t imuTiltSide() { return gStubTiltSide; }
 bool imuTiltSlide() { return gStubTiltSlide; }
 float imuTiltDeg() { return gStubTiltSide * (gStubTiltSlide ? 50.0f : 30.0f); }
+float imuRollFast() { return 0; }
+void imuSetFast(bool) {}
 void imuLog(uint32_t) {}
 bool imuLogging() { return false; }
 void imuReport() {}

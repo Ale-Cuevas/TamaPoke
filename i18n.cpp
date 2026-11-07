@@ -55,6 +55,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Abrir un huevo (%u)", "Llegar\240 un huevo nuevo", "Tus huevos esperan!", "REGALO!",
     // la cascada (v1.43)
     "Manten la barra en el verde!", "MANTEN PULSADO", "FOCO %u.%us", "RECORD %u.%us", "DEFENSA +%u", "Limpito!",
+    // la carrera en trineo (v1.44)
+    "Sujetala como vas a jugar", "Quieta un momento...", "INCLINA PARA GIRAR", "ESQUIVADOS: %u", "VELOCIDAD +%u",
   },
   // ---------------- EN ----------------
   {
@@ -104,6 +106,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Hatch an egg (%u)", "A new egg will come", "Your eggs are waiting!", "GIFT!",
     // la cascada (v1.43)
     "Keep the bar in the green!", "HOLD TO FOCUS", "FOCUS %u.%us", "BEST %u.%us", "DEF +%u", "Squeaky clean!",
+    // la carrera en trineo (v1.44)
+    "Hold it the way you'll play", "Hold still...", "TILT TO STEER", "DODGED: %u", "SPD +%u",
   },
   // ---------------- FR ----------------
   {
@@ -153,6 +157,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Faire \202clore (%u)", "Un oeuf va arriver", "Tes oeufs attendent!", "CADEAU!",
     // la cascada (v1.43)
     "Garde la barre dans le vert!", "MAINTIENS APPUYE", "FOCUS %u.%us", "RECORD %u.%us", "DEFENSE +%u", "Tout propre!",
+    // la carrera en trineo (v1.44)
+    "Tiens-la comme pour jouer", "Ne bouge plus...", "PENCHE POUR TOURNER", "ESQUIVES: %u", "VITESSE +%u",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -207,6 +213,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Ei ausbr\201ten (%u)", "Ein neues Ei kommt", "Deine Eier warten!", "GESCHENK!",
     // la cascada (v1.43)
     "Halte den Balken im Gr\201nen!", "GEDR\232CKT HALTEN", "FOKUS %u.%us", "REKORD %u.%us", "VERT +%u", "Blitzsauber!",
+    // la carrera en trineo (v1.44)
+    "Halte es wie beim Spielen", "Still halten...", "NEIGEN ZUM LENKEN", "AUSGEWICHEN: %u", "INIT +%u",
   },
   // ---------------- IT ----------------
   {
@@ -256,6 +264,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Schiudi uovo (%u)", "Arriva un uovo nuovo", "Le uova ti aspettano!", "REGALO!",
     // la cascada (v1.43)
     "Tieni la barra nel verde!", "TIENI PREMUTO", "FOCUS %u.%us", "RECORD %u.%us", "DIFESA +%u", "Pulitissimo!",
+    // la carrera en trineo (v1.44)
+    "Tienila come per giocare", "Fermo un attimo...", "INCLINA PER STERZARE", "SCHIVATI: %u", "VELOCITA +%u",
   },
   // ---------------- PT ----------------
   {
@@ -305,6 +315,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Chocar um ovo (%u)", "Vem um ovo novo", "Seus ovos esperam!", "PRESENTE!",
     // la cascada (v1.43)
     "Mantenha a barra no verde!", "SEGURE O TOQUE", "FOCO %u.%us", "RECORDE %u.%us", "DEFESA +%u", "Limpinho!",
+    // la carrera en trineo (v1.44)
+    "Segure como vai jogar", "Parado um pouco...", "INCLINE PARA VIRAR", "DESVIOS: %u", "VELOCIDADE +%u",
   },
   // ---------------- JA ----------------
   {
@@ -377,6 +389,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "たまごを かえす (%u)", "あたらしい たまごが くるよ", "たまごが まってるよ！", "プレゼント！",
     // la cascada (v1.43)
     "ゲージを みどりに たもとう！", "ながおしで しゅうちゅう", "しゅうちゅう %u.%uびょう", "きろく %u.%uびょう", "ぼうぎょ +%u", "ぴかぴか！",
+    // la carrera en trineo (v1.44)
+    "あそぶ ときの もちかたで", "うごかさないで...", "かたむけて よけよう", "よけた: %u", "すばやさ +%u",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -431,6 +445,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "알 부화하기 (%u)", "새 알이 와요", "알이 기다려요!", "선물!",
     // la cascada (v1.43)
     "게이지를 초록색에 유지!", "길게 눌러 집중", "집중 %u.%u초", "최고 %u.%u초", "방어 +%u", "깨끗해졌다!",
+    // la carrera en trineo (v1.44)
+    "플레이할 때처럼 잡아요", "잠깐 가만히...", "기울여서 피하기", "피한 수: %u", "속도 +%u",
   },
 };
 
