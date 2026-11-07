@@ -45,7 +45,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.39"
+#define FW_VERSION "1.40"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -210,6 +210,11 @@ static const int16_t STARTER_DEX[3] = { 1, 4, 7 };
 #define FAR_BTN_H 58
 #define FAR_BTN_X (CX - FAR_BTN_W / 2)
 #define FAR_BTN_Y 176
+// boton "Abrir un huevo (N)" de la casa vacia con huevos en la mochila (v1.40), bajo el huevo gris
+#define VAC_BTN_W 260
+#define VAC_BTN_H 46
+#define VAC_BTN_X (CX - VAC_BTN_W / 2)
+#define VAC_BTN_Y 318
 // el CST9220 avisa por el pin INT cuando hay datos tactiles; lo usamos para no
 // leer el bus I2C mientras el chip esta dormido (esa lectura se colgaba ~1s)
 volatile bool gTouchIrq = false;
@@ -255,7 +260,7 @@ uint32_t gFxUs = 0, gFxMaxUs = 0; // PERF: lo que tardan los efectos en dibujars
 bool swallowGesture = false; // el toque que despierta no acciona nada
 uint32_t holdStart = 0;     // pulsacion larga sobre el bicho
 uint32_t confirmUntil = 0;  // dialogo "soltar?" activo hasta este millis
-uint8_t choiceKind = 0;     // dialogo de decision: 0 ninguno, 1 evolucion, 2 despedida
+uint8_t choiceKind = 0;     // dialogo de decision: 0 ninguno, 1 evolucion, 2 despedida, 3 huevo al soltar (v1.40)
 uint32_t choiceUntil = 0;   // se cierra solo a este millis
 int16_t tX0, tY0, tXl, tYl; // gesto en curso (inicio y ultima posicion)
 uint32_t tStart = 0;
@@ -724,6 +729,10 @@ void handleSerial() {
   } else if (line == "BYE") {
     pet.startFarewell();
     Serial.println("DONE");
+  } else if (line == "RELEASE" || line == "RELEASE EGG" || line == "RELEASE EMPTY") {
+    // soltar sin dialogos (v1.40): RELEASE = sin elegir (como sin huevos), EGG / EMPTY = lo del dialogo
+    pet.release(line.endsWith("EGG") ? HOME_EGG : (line.endsWith("EMPTY") ? HOME_EMPTY : HOME_AUTO));
+    Serial.println("DONE");
   } else if (line == "RUN") {
     pet.startRunaway();
     Serial.println("DONE");
@@ -834,7 +843,6 @@ void handleSerial() {
     if (line.length() > 4) {
       long n = line.substring(4).toInt();
       pet.setBagEggs((uint8_t)(n < 0 ? 0 : (n > ITEM_MAX ? ITEM_MAX : n)));
-      monFor = -2;  // con la casa vacia, el huevo que llega se dibuja ya
       ensureMon();
       fxArmWatches();
     }
@@ -1220,13 +1228,30 @@ void onTap(int16_t x, int16_t y) {
     } else if (choiceKind == 2) {          // despedida
       if (b1) pet.startFarewell();
       else if (b2) pet.declineFarewell();
+    } else if (choiceKind == 3) {          // soltar con huevos (v1.40): abrir uno o dejar la casa vacia
+      if (b1) {
+        pet.release(HOME_EGG);
+      } else if (b2) {
+        if (!pet.canLeaveEmpty()) {        // el que esperaba no cabe en la mochila: sigue el dialogo
+          sfxPlay(SFX_DENY);
+          return;
+        }
+        pet.release(HOME_EMPTY);
+      }
     }
     choiceKind = 0;
     return;
   }
   if (confirmUntil) {        // dialogo "soltar?": SI / NO
     if (timeLeft(confirmUntil) && x >= 118 && x <= 218 && y >= 252 && y <= 304) {
-      pet.release();
+      // v1.40: con huevos, aun no se suelta: pregunta si abrir uno. Sin huevos, la nota del dialogo
+      // ya dijo si la casa se queda vacia o llega un huevo de regalo.
+      if (pet.eggsOwned()) {
+        choiceKind = 3;
+        choiceUntil = millis() + 12000;
+      } else {
+        pet.release();
+      }
     }
     confirmUntil = 0;
     return;
@@ -1262,8 +1287,15 @@ void onTap(int16_t x, int16_t y) {
     sfxPlay(SFX_TAP);
     return;
   }
-  if (pet.isVacant()) {  // nada que tocar: el mensaje dice que hay que caminar
-    sfxPlay(SFX_DENY);
+  if (pet.isVacant()) {  // solo el boton de abrir un huevo, si hay en la mochila (v1.40)
+    if (pet.items[IT_EGG] && x >= VAC_BTN_X && x <= VAC_BTN_X + VAC_BTN_W && y >= VAC_BTN_Y &&
+        y <= VAC_BTN_Y + VAC_BTN_H && pet.hatchFromBag()) {
+      sfxPlay(SFX_TAP);
+      monFor = -2;  // el huevo que llega se dibuja ya
+      ensureMon();
+      return;
+    }
+    sfxPlay(SFX_DENY);  // nada mas que tocar: el mensaje dice que hay que caminar
     return;
   }
   if (pet.isEgg()) {
@@ -2107,14 +2139,17 @@ bool render() {
       // fuente ya no sabe dibujar.
       char q[48];
       snprintf(q, sizeof(q), T(S_RELEASE_FMT), dexName(pet.speciesId));
-      bool empty = !pet.eggHeld() && !pet.items[IT_EGG];  // v1.39: ningun huevo ocupara su sitio
+      // sin huevos (v1.39), la nota dice que pasara: casa vacia o, sin nadie en la caja, un huevo de
+      // regalo (v1.40). Con huevos no hay nota: el SI pregunta despues si abrir uno.
+      bool empty = !pet.eggsOwned();
       gfx->setTextColor(UI_INK);
       setSize(2);
       setCur(centerX(q, 2), empty ? 186 : 196);
       printT(q);
       if (empty) {
-        gfx->setTextColor(BOX_NOTE_INK);
-        printTight(T(S_NO_EGG_NOTE), CX, 216, 262);
+        bool gift = pet.releaseGivesEgg();
+        gfx->setTextColor(gift ? UI_INK : BOX_NOTE_INK);
+        printTight(T(gift ? S_GIFT_EGG_NOTE : S_NO_EGG_NOTE), CX, 216, 262);
         setSize(2);  // printTight puede dejar el tamano 1: los botones van a 2
       }
       gfx->fillRoundRect(118, 252, 100, 52, 12, UI_BAR_OK);
@@ -3085,8 +3120,9 @@ void drawWalkNews() {
               pet.evolving() || bathUntil || fxq.busy();
   static bool wasShown = false;
   if (busy || !pet.hasFound()) { wasShown = false; return; }
-  bool full = false;
-  uint8_t it = pet.peekFound(&full);
+  bool full = false, gift = false;
+  uint8_t it = pet.peekFound(&full, &gift);
+  const char *title = T(gift ? S_GIFT : S_FOUND);  // v1.40: el huevo de la despedida o el de regalo
   if (!wasShown) sfxPlay(SFX_MEDAL);  // suena una vez por hallazgo
   wasShown = true;
   foundShown = true;
@@ -3095,8 +3131,8 @@ void drawWalkNews() {
   gfx->drawRoundRect(73, by, 320, bh, 16, UI_INK);
   gfx->setTextColor(UI_INK);
   setSize(3);
-  setCur(centerX(T(S_FOUND), 3), by + 14);
-  printT(T(S_FOUND));
+  setCur(centerX(title, 3), by + 14);
+  printT(title);
   drawMap(ITEM_ICON[it], 16, CX - 24, by + 44, 3, false);
   const char *nm = T((StrId)(S_IT_GOLDEN + it));
   setSize(2);
@@ -3373,7 +3409,8 @@ void renderCardWalk() {
   // mochila: una casilla por objeto, con su cuenta; el amuleto, enmarcado si se lleva
   for (int i = 0; i < IT_COUNT; i++) {
     int x = WALK_SLOT_X + i * (WALK_SLOT_W + WALK_SLOT_GAP), y = WALK_SLOT_Y;
-    uint8_t n = pet.items[i];
+    // los huevos (v1.40): tambien el que espera en la incubadora, el mismo N que pregunta al soltar
+    uint8_t n = (i == IT_EGG) ? pet.eggsOwned() : pet.items[i];
     bool held = (i == IT_CHARM) && n;
     gfx->fillRoundRect(x, y, WALK_SLOT_W, WALK_SLOT_H, 10, n ? UI_WHITE : UI_BG_DAY);
     gfx->drawRoundRect(x, y, WALK_SLOT_W, WALK_SLOT_H, 10, held ? UI_BAR_WARN : (n ? UI_INK : UI_TRACK));
@@ -3388,7 +3425,7 @@ void renderCardWalk() {
     printT(c);
   }
   // una pista: los huevos (v1.39), el amuleto o la mochila vacia
-  const char *hint = pet.items[IT_EGG]     ? T(S_EGG_HINT)
+  const char *hint = pet.eggsOwned()       ? T(S_EGG_HINT)
                      : pet.items[IT_CHARM] ? T(S_CHARM_HELD)
                      : (pet.itemCount() == 0 ? T(S_BACKPACK_EMPTY) : nullptr);
   if (hint) {
@@ -4130,9 +4167,10 @@ void drawBoxAppear(uint32_t now) {
 
 // huevos limitados (v1.39): los de la mochila, cuantos pasos faltan para el siguiente y si la casa esta vacia
 void eggReport() {
-  Serial.printf("eggs bag=%u next=%lu/%u vacant=%d home=%s\n", pet.items[IT_EGG], (unsigned long)pet.eggStepsLeft(),
-                pet.eggStepsAt(), pet.isVacant() ? 1 : 0,
-                pet.isVacant() ? "empty" : (pet.isEgg() ? "egg" : "pet"));
+  Serial.printf("eggs bag=%u held=%d owned=%u next=%lu/%u vacant=%d home=%s boxPets=%d\n", pet.items[IT_EGG],
+                pet.eggHeld() ? 1 : 0, pet.eggsOwned(), (unsigned long)pet.eggStepsLeft(), pet.eggStepsAt(),
+                pet.isVacant() ? 1 : 0, pet.isVacant() ? "empty" : (pet.isEgg() ? "egg" : "pet"),
+                pet.boxHasPets() ? 1 : 0);
 }
 
 // comando BOX: la caja por serie (uid, especie, nivel, CRC) y el huevo de la incubadora
@@ -4301,9 +4339,16 @@ void drawCeremony() {
 void drawChoiceDialog() {
   const char *q, *o1, *o2;
   uint16_t c1, c2, t1, t2;
+  char hatch[40];  // "Abrir un huevo (N)": UTF-8 en japones y coreano
   if (choiceKind == 1) {  // evolucion
     q = T(S_EVO_Q); o1 = T(S_EVO_TAP); o2 = T(S_EVO_KEEP);
     c1 = UI_BAR_BAD; t1 = UI_WHITE; c2 = UI_TRACK; t2 = UI_INK;
+  } else if (choiceKind == 3) {  // soltar con huevos (v1.40); "dejar vacia" apagado si no cabe
+    snprintf(hatch, sizeof(hatch), T(S_HATCH_FMT), (unsigned)pet.eggsOwned());
+    q = T(S_HATCH_Q); o1 = hatch; o2 = T(S_LEAVE_EMPTY);
+    c1 = UI_BAR_OK; t1 = UI_WHITE;
+    bool can = pet.canLeaveEmpty();
+    c2 = can ? UI_TRACK : UI_WHITE; t2 = can ? UI_INK : UI_TRACK;
   } else {                // despedida
     q = T(S_FAR_Q); o1 = T(S_FAR_GO); o2 = T(S_FAR_STAY);
     c1 = UI_BAR_WARN; t1 = UI_INK; c2 = UI_BAR_OK; t2 = UI_WHITE;
@@ -4319,6 +4364,7 @@ void drawChoiceDialog() {
   setCur(centerX(o1, 2), 224);
   printT(o1);
   gfx->fillRoundRect(93, 268, 280, 52, 12, c2);     // boton mantener/quedaros
+  if (c2 == UI_WHITE) gfx->drawRoundRect(93, 268, 280, 52, 12, UI_TRACK);  // apagado: solo el borde
   gfx->setTextColor(t2);
   setCur(centerX(o2, 2), 286);
   printT(o2);
@@ -4862,21 +4908,33 @@ void drawButtons() {
 
 // Casa vacia (v1.39): sin bicho ni huevo hasta encontrar uno caminando. La silueta del huevo donde
 // estaria, los pasos de hoy y la Pokedex; si hay alguien en la caja, como despertarlo.
+// v1.40: con huevos en la mochila ("Dejar casa vacia" al soltar), el boton "Abrir un huevo (N)" ocupa
+// el sitio de los pasos y la Pokedex.
 void drawVacantHome() {
-  drawHeader(T(S_NOEGG_HDR), inkColor(), T(S_NOEGG_MSG));
+  uint8_t eggs = pet.items[IT_EGG];
+  drawHeader(T(S_NOEGG_HDR), inkColor(), T(eggs ? S_NOEGG_HAVE : S_NOEGG_MSG));
   int s = 5;  // donde y como drawEggSprite(), en gris y quieta
   uint16_t ghost = gNight ? C565(0x3a, 0x42, 0x5c) : lerp565(UI_TRACK, UI_BG_DAY, 1, 2);
   drawMapTint(SPR_EGG, SPRITE_H, CX - 16 * s, PET_CY - 16 * s, s, ghost);
   gfx->fillRect(0, 312, 466, 154, gNight ? UI_BG_NIGHT : UI_BG_DAY);
   gfx->setTextColor(inkColor());
   setSize(2);
-  char line[32];
-  snprintf(line, sizeof(line), T(S_STEPS_FMT), (unsigned long)walkStepsToday());
-  setCur(centerX(line, 2), 326);
-  printT(line);
-  snprintf(line, sizeof(line), T(S_POKEDEX_FMT), pet.registeredCount());
-  setCur(centerX(line, 2), 352);
-  printT(line);
+  char line[40];
+  if (eggs) {
+    gfx->fillRoundRect(VAC_BTN_X, VAC_BTN_Y, VAC_BTN_W, VAC_BTN_H, 12, UI_BAR_OK);
+    gfx->drawRoundRect(VAC_BTN_X, VAC_BTN_Y, VAC_BTN_W, VAC_BTN_H, 12, inkColor());
+    snprintf(line, sizeof(line), T(S_HATCH_FMT), (unsigned)eggs);
+    gfx->setTextColor(UI_WHITE);
+    setCur(centerX(line, 2), VAC_BTN_Y + 15);
+    printT(line);
+  } else {
+    snprintf(line, sizeof(line), T(S_STEPS_FMT), (unsigned long)walkStepsToday());
+    setCur(centerX(line, 2), 326);
+    printT(line);
+    snprintf(line, sizeof(line), T(S_POKEDEX_FMT), pet.registeredCount());
+    setCur(centerX(line, 2), 352);
+    printT(line);
+  }
   bool boxed = false;
   for (uint8_t k = 0; k < BOX_SLOTS; k++) boxed |= pet.boxState(k) == BOX_OK;
   if (boxed) {
