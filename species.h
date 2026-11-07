@@ -717,6 +717,25 @@ static const char* const SPR_ICON_SACK[16] = {  // 16x16
   ".....kkkkkk.....",
 };
 
+static const char* const SPR_ICON_ZEN[16] = {  // 16x16: cascada sobre la poza (v1.43)
+  "SSSSSbbbbbbSSSSS",
+  "SsSSSbwbbBbSSsSS",
+  "SSSsSbwbbBbSsSSS",
+  "SSSSSbbbwBbSSSSS",
+  ".SSsSbbbwBbSsSS.",
+  ".SSSSbwbbBbSSSS.",
+  "..SSSbwbbBbSSS..",
+  "..SsSbbbwBbSsS..",
+  "...SSbbbwBbSS...",
+  "...SSbwbbBbSS...",
+  "....SbwbbBbS....",
+  "....wbbbwBbw....",
+  "..wwwwbbbbwwww..",
+  ".wbbwbbwbbwbbww.",
+  "NNNNNNNNNNNNNNNN",
+  ".NNNNNNNNNNNNNN.",
+};
+
 static const char* const SPR_EGG[32] = {  // 32x32
   "................................",
   "................................",

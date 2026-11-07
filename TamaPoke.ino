@@ -42,10 +42,11 @@
 #include "burnin.h" // contra el quemado del AMOLED: orbita de la imagen y salvapantallas (logica pura)
 #include "fx.h"     // efectos de respuesta: celebraciones en cola, "+N", botones, eclosion (logica pura)
 #include "ballgame.h" // minijuego de la pokeball: velocidad segun la puntuacion y la fisica (logica pura)
+#include "zengame.h"  // cascada (v1.43): la barra de concentracion, la franja y los golpes de agua (logica pura)
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.41"
+#define FW_VERSION "1.43"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -127,10 +128,12 @@ struct { int16_t x, y; uint8_t r, ph; } bubbles[14];
 enum : uint8_t { MENU_NONE = 0, MENU_FEED, MENU_PLAY };
 uint8_t menuKind = MENU_NONE;
 uint32_t menuUntil = 0;       // se cierra solo a este millis
-// menu de JUGAR (v1.34): pelota | combate | saco de entrenamiento, 3 huecos de 66 como los
-// del menu de comida, 198 x 64. Todos los juegos estan aqui; el saco antes salia de la ficha.
+// menu de JUGAR: pelota | combate | saco de entrenamiento (v1.34) | carrera | cascada (v1.43),
+// 5 huecos de 66 como los del menu de comida, 330 x 64 (a y 288-352 la pantalla redonda mide
+// ~400 de ancho). Todos los juegos estan aqui; el saco antes salia de la ficha.
+#define PLAY_MENU_SLOTS 5
 #define PLAY_MENU_SLOT 66
-#define PLAY_MENU_W (3 * PLAY_MENU_SLOT)
+#define PLAY_MENU_W (PLAY_MENU_SLOTS * PLAY_MENU_SLOT)
 #define PLAY_MENU_X (CX - PLAY_MENU_W / 2)
 
 // minijuego "toques": mantener la pokeball en el aire
@@ -152,6 +155,21 @@ uint16_t sackHits = 0;
 float sackShake = 0;
 uint8_t sackGain = 0;
 bool sackNewHi = false;
+
+// cascada (v1.43, entrena la defensa): el dedo puesto sube la concentracion (zengame.h)
+bool zenOpen = false;
+ZenState zen;
+uint32_t zenIntroUntil = 0, zenOverUntil = 0, zenLastTick = 0;
+bool zenHold = false;        // dedo puesto ahora (handleTouch)
+bool zenTouched = false;     // ya se toco una vez: se quita la explicacion
+bool zenNoSave = false;      // sesion del comando ZEN: ni premio ni record
+bool zenNewHi = false;
+int8_t zenSerialHold = -1;   // comando HOLD: 1 dedo puesto, 0 quitado, -1 el dedo de verdad
+uint8_t zenGainShown = 0;
+uint16_t zenSurgesHeard = 0;
+uint32_t zenDrawUs = 0, zenDrawMaxUs = 0, zenFlushUs = 0;  // lo que tarda un frame de la cascada (ZEN?), sin el volcado
+// colores de la cascada (aqui y no junto a su funcion: el conversor .ino pone los prototipos arriba)
+struct ZenPal { uint16_t rock, rockDk, moss, water, waterLt, pool, foam; };
 
 // definidas al final; se declaran aqui porque el conversor .ino de PlatformIO no
 // genera prototipos para funciones que devuelven punteros
@@ -408,6 +426,7 @@ void loop() {
   wasRunReady = runReady;
 
   handleTouch();
+  zenTick(millis());  // cascada: fisica con el dedo de ahora, en cada vuelta
   static KeyDebounce backKey;  // tecla USER = atras
   if (backKey.update(digitalRead(BOARD_BTN_USER) == BOARD_BTN_PRESSED_LEVEL, millis())) onBack();
   static KeyDebounce bootKey;  // tecla BOOT = brillo
@@ -517,7 +536,7 @@ void onShake() {
   if (screenOff) return;  // apagada con PWR: se respeta
   if (dimStage > 0) { wakeUI(); return; }
   wakeUI();
-  if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen || battleOpen()) return;
+  if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen || zenOpen || battleOpen()) return;
   if (galleryOpen || boxOpen || cardOpen || kbOpen || clockOpen) return;  // el bicho no esta en pantalla
   if (pet.sleeping) pet.wakeGrumpy();
   else pet.shaken();  // tambien el huevo: se tambalea
@@ -528,7 +547,7 @@ void onShake() {
 void onFaceDown(bool down) {
   if (screenOff) return;
   if (!down) { wakeUI(); return; }
-  if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen || battleOpen()) return;
+  if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen || zenOpen || battleOpen()) return;
   int h = sceneHour();
   if ((h >= 20 || h < 6) && !pet.isEgg() && !pet.sleeping) pet.sleepDeferred();
   lastInteract = millis() - POWER_DIM2_MS - 1;  // casi apagada, como tras 5 min sin tocar
@@ -541,7 +560,7 @@ PowerCtx powerCtx(uint32_t now) {
   c.idleMs = idleSince(now, lastInteract);
   c.screenOff = screenOff;
   c.sleeping = pet.sleeping;
-  c.gameOpen = gameOpen || sackOpen || battleOpen() || boxMove;  // combate y luz de la caja, tambien a 85 ms
+  c.gameOpen = gameOpen || sackOpen || zenOpen || battleOpen() || boxMove;  // combate y luz de la caja, tambien a 85 ms
   c.usb = usbPresent();
   c.charging = batCharging();
   c.batPct = batPercent();
@@ -581,6 +600,7 @@ PwrView pwrPress() {
     return next;
   }
   if (battleOpen()) closeBattle();
+  zenOpen = false;  // la cascada tambien se abandona (sin premio)
   if (next == VIEW_SAVER) {
     lastInteract = now - POWER_SAVER_IDLE_MS;
     gFaceDown = false;
@@ -845,6 +865,40 @@ void handleSerial() {
       Serial.printf("ball: score=%ld speed=%.2f\n", n, ballSpeed((uint16_t)n));
     }
     Serial.println("DONE");
+  } else if (line == "ZEN?") {  // estado de la cascada
+    Serial.printf("zen: open=%d intro=%d over=%d t=%lu c=%.1f vc=%.1f band=%.1f-%.1f next=%lu surges=%u focus=%u.%u hold=%d serial=%d nosave=%d draw=%luus max=%luus flush=%luus\n",
+                  zenOpen, timeLeft(zenIntroUntil) ? 1 : 0, zenOverUntil ? 1 : 0, (unsigned long)zen.t, zen.c, zen.vc,
+                  50 - zenBandHalf(zen.t), 50 + zenBandHalf(zen.t), (unsigned long)zen.nextSurge, zen.surges,
+                  zenFocusTenths(zen) / 10, zenFocusTenths(zen) % 10, zenHold, zenSerialHold, zenNoSave,
+                  (unsigned long)zenDrawUs, (unsigned long)zenDrawMaxUs, (unsigned long)zenFlushUs);
+    zenDrawMaxUs = 0;
+    Serial.println("DONE");
+  } else if (line == "ZEN" || line.startsWith("ZEN ")) {  // ZEN [s]: la cascada sin premio, desde el segundo s
+    long sec = line.length() > 4 ? line.substring(4).toInt() : 0;
+    if (sec < 0) sec = 0;
+    if (sec > 29) sec = 29;
+    wakeUI();
+    menuKind = MENU_NONE;
+    startZen();
+    if (!zenOpen) {
+      Serial.println("zen: no puede (huevo, dormido o despedida)");
+    } else {
+      zenNoSave = true;  // ni record ni premio: el guardado del bicho no cambia
+      if (sec) {  // se salta la intro y empieza con la franja y los golpes de ese segundo
+        zenIntroUntil = 0;
+        zen.t = (uint32_t)sec * 1000;
+        while (zen.nextSurge <= zen.t) zen.nextSurge += zenSurgeGap(zen.nextSurge, zen.rng);
+      }
+      Serial.printf("zen: t=%lu band=%.1f kick=%.1f\n", (unsigned long)zen.t, 2 * zenBandHalf(zen.t), zenSurgeKick(zen.t));
+    }
+    Serial.println("DONE");
+  } else if (line.startsWith("HOLD ")) {  // HOLD 1 / HOLD 0 / HOLD OFF: el dedo de la cascada por serie
+    String a = line.substring(5);
+    a.trim();
+    zenSerialHold = a == "1" ? 1 : (a == "0" ? 0 : -1);
+    if (zenSerialHold == 1) zenTouched = true;
+    Serial.printf("hold=%d\n", zenSerialHold);
+    Serial.println("DONE");
   } else if (line == "EGG" || line.startsWith("EGG ")) {  // huevos (v1.39); EGG <n>: n en la mochila (pruebas)
     if (line.length() > 4) {
       long n = line.substring(4).toInt();
@@ -925,6 +979,7 @@ void handleSerial() {
     Serial.printf("shiny=%d streak=%u/%u bond=%u bondT=%u medals=0x%X(%u) nick=%s\n",
                   pet.shiny, pet.streak, pet.bestStreak, pet.bond, pet.bondGainedToday(), pet.medals,
                   pet.totalMedals, pet.nick);
+    Serial.printf("rec ball=%u bag=%u zen=%u.%u\n", pet.gameHi, pet.strHi, pet.zenHi / 10, pet.zenHi % 10);
     // crecimiento (v1.35, growth.h): de el sale el nivel; la edad va aparte
     Serial.printf("grow=%lu lv=%u into=%u/%u age=%lu\n", (unsigned long)pet.growMin, pet.level(),
                   pet.levelMinutesInto(), pet.levelMinutesCost(), (unsigned long)pet.ageMinutes);
@@ -996,6 +1051,23 @@ void handleTouch() {
     return;
   }
 
+  // cascada: cuenta el dedo PUESTO, no solo el toque (FR-ZEN.5); la cabecera abandona sin premio
+  if (zenOpen) {
+    if (pressed && !wasPressed) {
+      wakeUI();
+      if (y < 72 && !zenOverUntil) {
+        zenOpen = false;
+        zenHold = false;
+        wasPressed = pressed;
+        return;
+      }
+      zenTouched = true;
+    }
+    zenHold = pressed && y >= 72;
+    wasPressed = pressed;
+    return;
+  }
+
   // combate: cada toque carga el especial al momento (tocar rapido)
   if (battleOpen()) {
     if (pressed && !wasPressed) {
@@ -1049,7 +1121,7 @@ void openClock();  // prototipo
 
 void onSwipeV(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (gameOpen || galleryOpen || boxOpen || kbOpen || sackOpen || battleOpen() || pet.ceremony) return;
+  if (gameOpen || galleryOpen || boxOpen || kbOpen || sackOpen || zenOpen || battleOpen() || pet.ceremony) return;
   if (clockOpen) { clockOpen = false; return; }
   if (cardOpen) {
     if (dir < 0) { cardOpen = false; itemConfirm = 0; }  // arriba cierra la ficha
@@ -1066,7 +1138,7 @@ void onSwipeV(int dir) {
 // deslizar: dir +1 = hacia la derecha
 void onSwipe(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (gameOpen || kbOpen || clockOpen || battleOpen()) return;
+  if (gameOpen || sackOpen || zenOpen || kbOpen || clockOpen || battleOpen()) return;
   if (cardOpen) {  // dentro de la ficha: cambiar entre las CARD_PAGES paginas
     int p = (int)cardPage + (dir > 0 ? -1 : 1);  // izquierda avanza
     cardPage = p < 0 ? 0 : (p > CARD_PAGES - 1 ? CARD_PAGES - 1 : p);
@@ -1151,6 +1223,10 @@ void onBack() {
   if (pet.awaitingStarter()) return;  // hay que elegir inicial
   if (sackOpen) {                     // abandona (sin premio si aun corre el tiempo)
     sackOpen = false;
+    return;
+  }
+  if (zenOpen) {                      // abandona la cascada (sin premio si no habia acabado)
+    zenOpen = false;
     return;
   }
   if (battleOpen()) {                 // abandona el combate (sin premio)
@@ -1259,9 +1335,11 @@ void onTap(int16_t x, int16_t y) {
       sfxPlay(SFX_EAT);
     } else if (kind == MENU_PLAY && x >= PLAY_MENU_X && x < PLAY_MENU_X + PLAY_MENU_W) {
       sfxPlay(SFX_TAP);
-      int slot = (x - PLAY_MENU_X) / PLAY_MENU_SLOT;  // pelota | combate | saco
+      int slot = (x - PLAY_MENU_X) / PLAY_MENU_SLOT;  // pelota | combate | saco | carrera | cascada
       if (slot == 0) startGame();
       else if (slot == 2) startSack();
+      else if (slot == 3) {}  // carrera: llega con DASH
+      else if (slot == 4) startZen();
       else if (pet.canBattle()) startPractice(0);
       else {
         sfxPlay(SFX_DENY);
@@ -1897,7 +1975,7 @@ void printT(const char *s) {
 // mientras su "clave" no cambie no se repintan ni se vuelcan por QSPI.
 static bool staticScreen() {
   if (pet.awaitingStarter()) return true;
-  if (galleryOpen || gameOpen || sackOpen || battleOpen()) return false;  // la galeria gestiona su propio repintado
+  if (galleryOpen || gameOpen || sackOpen || zenOpen || battleOpen()) return false;  // la galeria gestiona su propio repintado
   if (boxOpen) return !boxMove && !timeLeft(boxShakeUntil);  // la caja, quieta salvo la luz o un hueco que tiembla
   if (kbOpen || clockOpen) return true;
   return cardOpen && cardPage != 0;  // la pagina 0 tiene el retrato animado
@@ -1986,6 +2064,13 @@ bool render() {
   }
   if (sackOpen) {
     renderSack();
+    return true;
+  }
+  if (zenOpen) {
+    uint32_t t0 = micros();
+    renderZen();
+    zenDrawUs = micros() - t0;
+    if (zenDrawUs > zenDrawMaxUs) zenDrawMaxUs = zenDrawUs;
     return true;
   }
   if (battleOpen() && renderBattle()) return true;  // false: se acaba de cerrar, se pinta la casa
@@ -2095,7 +2180,7 @@ bool render() {
   fxPerfNote(fxUs + (micros() - fxT0));
   drawWalkNews();
 
-  // menus emergentes: comida (4 opciones) o juego (pelota | combate | saco)
+  // menus emergentes: comida (4 opciones) o juego (pelota | combate | saco | carrera | cascada)
   if (menuKind && !timeLeft(menuUntil)) menuKind = MENU_NONE;
   if (menuKind == MENU_PLAY) {
     gfx->fillRoundRect(PLAY_MENU_X, 288, PLAY_MENU_W, 64, 14, UI_WHITE);
@@ -2103,6 +2188,7 @@ bool render() {
     drawMap(SPR_ICON_PLAY, 16, PLAY_MENU_X + 9, 296, 3, false);
     drawMap(SPR_ICON_BATTLE, 16, PLAY_MENU_X + PLAY_MENU_SLOT + 9, 296, 3, false);
     drawMap(SPR_ICON_SACK, 16, PLAY_MENU_X + 2 * PLAY_MENU_SLOT + 9, 296, 3, false);
+    drawMap(SPR_ICON_ZEN, 16, PLAY_MENU_X + 4 * PLAY_MENU_SLOT + 9, 296, 3, false);
   }
   if (menuKind == MENU_FEED) {
     {
@@ -2332,6 +2418,279 @@ void renderSack() {
   if (fw > 2) gfx->fillRoundRect(CX - bw / 2, 350, fw, 16, 5, UI_BAR_OK);
 
   gfx->flush();
+}
+
+// ---------- cascada: meditar bajo el agua (entrena la defensa), v1.43 ----------
+// docs/NEW_GAMES.md, Task ZEN. Las reglas estan en zengame.h; aqui el dibujo, el dedo y el premio.
+
+// el bicho del minijuego con la accion `act` (o en reposo si su sprite no la tiene), pies en
+// (x, footY). Sin sprite PMD usa el de flash, como el minijuego de la pokeball.
+void drawGamePet(uint8_t act, int x, int footY) {
+  if (pmd.loaded) {
+    if (!pmd.has(act)) act = PMD_IDLE;
+    drawPmdAct(act, x, footY, millis(), true, false, 3);
+  } else if (mon.loaded) {
+    int s = (mon.h * 2 > 130) ? 1 : 2;
+    int w = mon.w * s, h = mon.h * s;
+    uint16_t fm = mon.frameMs ? mon.frameMs : 100;
+    uint16_t fi = (millis() / fm) % mon.frames;
+    const uint8_t *fr = mon.data + (uint32_t)fi * mon.w * mon.h;
+    int px = x - w / 2, py = footY - h;
+    for (int r = 0; r < mon.h; r++) {
+      const uint8_t *row = fr + r * mon.w;
+      forRuns(mon.w, [&](int c) { return indexedKey(row[c], false); },
+              [&](int c0, int len, int k) { gfx->fillRect(px + c0 * s, py + r * s, len * s, s, mon.pal[k]); });
+    }
+  }
+}
+
+void startZen() {
+  if (pet.isEgg() || pet.sleeping || pet.ceremony) return;
+  zenOpen = true;
+  zenStart(zen, (uint32_t)random(1, 0x7fffffff));
+  uint32_t now = millis();
+  zenIntroUntil = now + ZEN_INTRO_MS;
+  zenOverUntil = 0;
+  zenLastTick = now;
+  zenHold = false;
+  zenTouched = false;
+  zenNoSave = false;
+  zenNewHi = false;
+  zenGainShown = 0;
+  zenSurgesHeard = 0;
+}
+
+// la sesion entera ha terminado: premio (salvo la partida del comando ZEN) y resultado
+void finishZen(uint32_t now) {
+  uint16_t focus = zenFocusTenths(zen);
+  if (zenNoSave) {
+    zenNewHi = false;
+    zenGainShown = zenGain(focus);  // lo que daria, para verlo; no se aplica
+    sfxPlay(SFX_LEVEL);
+  } else {
+    zenNewHi = focus > pet.zenHi;
+    FxNeedSnap ns = fxSnap();
+    zenGainShown = pet.zenResult(focus);  // DEF, lavado, record
+    fxNeeds(ns);  // los "+N" salen al volver a la pantalla principal
+    sfxPlay(zenNewHi && focus > 0 ? SFX_MEDAL : SFX_PLAY);
+  }
+  zenOverUntil = now + 4000;
+}
+
+// fisica de la cascada en cada vuelta del loop (no solo en cada frame): asi un toque corto entre
+// dos frames de 85 ms tambien cuenta. Mientras dura, la pantalla no se atenua (nadie da toques nuevos).
+void zenTick(uint32_t now) {
+  if (!zenOpen || zenOverUntil) return;
+  lastInteract = now;  // FR-G.5: sin atenuar ni salvapantallas a mitad de sesion
+  if (timeLeft(zenIntroUntil)) { zenLastTick = now; return; }
+  bool hold = zenSerialHold >= 0 ? zenSerialHold == 1 : zenHold;
+  zenAdvance(zen, hold, now - zenLastTick);
+  zenLastTick = now;
+  if (zen.surges != zenSurgesHeard) {  // golpe de agua
+    zenSurgesHeard = zen.surges;
+    sfxPlay(SFX_HIT);
+  }
+  if (zenDone(zen)) finishZen(now);
+}
+
+// colores de la cascada, de dia y de noche (ZenPal esta arriba, con las globales)
+static ZenPal zenPalette(bool night) {
+  ZenPal p = { C565(0x6a, 0x6e, 0x7a), C565(0x4a, 0x4e, 0x5a), C565(0x4c, 0x8a, 0x52), C565(0x4f, 0x93, 0xc4),
+               C565(0xa8, 0xdc, 0xf6), C565(0x2f, 0x6c, 0x9c), UI_WHITE };
+  if (night) {
+    uint16_t n = C565(0x10, 0x16, 0x2c);
+    p.rock = lerp565(p.rock, n, 9, 16);
+    p.rockDk = lerp565(p.rockDk, n, 9, 16);
+    p.moss = lerp565(p.moss, n, 9, 16);
+    p.water = lerp565(p.water, n, 7, 16);
+    p.waterLt = lerp565(p.waterLt, n, 6, 16);
+    p.pool = lerp565(p.pool, n, 7, 16);
+    p.foam = lerp565(p.foam, n, 4, 16);
+  }
+  return p;
+}
+
+#define ZEN_WATER_L (CX - 75)
+#define ZEN_WATER_W 150
+#define ZEN_POOL_Y 330
+#define ZEN_PET_FOOT 344
+#define ZEN_GAUGE_X 394
+#define ZEN_GAUGE_W 20
+#define ZEN_GAUGE_TOP 128
+#define ZEN_GAUGE_BOT 346
+
+// manchas fijas de la roca (x, y, w, h, musgo?)
+static const int16_t ZEN_ROCKS[][5] = {
+  { 40, 120, 60, 26, 0 }, { 96, 210, 48, 20, 1 }, { 20, 280, 70, 24, 0 }, { 110, 60, 40, 18, 0 },
+  { 60, 360, 50, 18, 1 }, { 330, 90, 56, 22, 0 }, { 352, 200, 30, 60, 0 }, { 318, 300, 44, 18, 1 },
+  { 400, 380, 40, 18, 0 }, { 120, 150, 34, 14, 1 }, { 316, 160, 30, 14, 1 },
+};
+
+// warn: 0 sin aviso; 1..ZEN_SURGE_WARN_MS: ms que faltan para el golpe de agua
+void drawZenScene(uint32_t now, int8_t zone, uint32_t warn, bool splash) {
+  bool night = sceneHour() < 6 || sceneHour() >= 20;
+  ZenPal p = zenPalette(night);
+  // la roca, con manchas oscuras y musgo
+  gfx->fillRect(0, 0, 466, ZEN_POOL_Y, p.rock);
+  for (auto &r : ZEN_ROCKS) gfx->fillRoundRect(r[0], r[1], r[2], r[3], 8, r[4] ? p.moss : p.rockDk);
+  // la cascada: columna azul con vetas claras que bajan deprisa
+  int wl = ZEN_WATER_L, ww = ZEN_WATER_W;
+  if (warn) { wl -= 10; ww += 20; }  // se hincha antes del golpe
+  gfx->fillRect(wl, 0, ww, ZEN_POOL_Y, p.water);
+  gfx->fillRect(wl - 4, 0, 4, ZEN_POOL_Y, p.rockDk);
+  gfx->fillRect(wl + ww, 0, 4, ZEN_POOL_Y, p.rockDk);
+  // detras del bicho el agua corre mas honda (mas oscura): asi un bicho azul no se pierde en ella
+  gfx->fillRoundRect(CX - 50, 196, 100, ZEN_POOL_Y - 196, 34, night ? lerp565(C565(0x2a, 0x52, 0x78), C565(0x10, 0x16, 0x2c), 7, 16) : C565(0x2a, 0x52, 0x78));
+  uint32_t fall = now * 7 / 10;  // 0,7 px/ms
+  for (int i = 0; i < 12; i++) {
+    int x = wl + 6 + i * (ww - 12) / 12;
+    uint32_t ph = (uint32_t)(i * 2654435761u) >> 24;  // fase fija por veta
+    int len = 40 + (int)(ph % 50);
+    int period = 150 + (int)(ph % 70);
+    for (int y0 = -period + (int)((fall + ph * 3) % period); y0 < ZEN_POOL_Y; y0 += period) {
+      int a = y0 < 0 ? 0 : y0, b = y0 + len > ZEN_POOL_Y ? ZEN_POOL_Y : y0 + len;
+      if (b > a) gfx->fillRect(x, a, 3, b - a, p.waterLt);
+    }
+  }
+  if (warn) {  // la ola que viene: baja por la cascada y llega al bicho justo con el golpe
+    int y = 110 + (int)((ZEN_SURGE_WARN_MS - warn) * (ZEN_PET_FOOT - 120 - 110) / ZEN_SURGE_WARN_MS);
+    gfx->fillRoundRect(wl - 6, y, ww + 12, 30, 14, p.foam);
+    gfx->fillRect(wl, y - 18, ww, 14, p.waterLt);
+  }
+  // la poza y la espuma donde cae el agua
+  gfx->fillRect(0, ZEN_POOL_Y, 466, 466 - ZEN_POOL_Y, p.pool);
+  for (int i = 0; i < 9; i++) {
+    int r = 8 + (int)((now / 90 + i * 5) % 10);
+    int x = ZEN_WATER_L - 10 + i * 21;
+    gfx->fillCircle(x, ZEN_POOL_Y + 4 + (i % 3) * 5, r, p.foam);
+  }
+  // la roca plana donde medita
+  gfx->fillRoundRect(CX - 72, ZEN_PET_FOOT - 6, 144, 34, 14, p.rockDk);
+  gfx->fillRoundRect(CX - 66, ZEN_PET_FOOT - 8, 132, 12, 6, p.rock);
+
+  // el bicho: medita en la franja, se encoge por debajo, se agita por encima
+  uint8_t act = zone < 0 ? PMD_HURT : zone > 0 ? PMD_HOP : (pmd.has(PMD_BREATH) ? PMD_BREATH : PMD_SIT);
+  if (zone == 0 && !zenOverUntil) {  // aura de calma que crece mientras dura
+    int r = 70 + (int)((now / 60) % 12);
+    gfx->drawCircle(CX, ZEN_PET_FOOT - 60, r, C565(0xff, 0xf0, 0xa0));
+    gfx->drawCircle(CX, ZEN_PET_FOOT - 60, r + 1, C565(0xff, 0xf0, 0xa0));
+  }
+  drawGamePet(act, CX, ZEN_PET_FOOT);
+  // el agua le cae encima: vetas sobre la cabeza
+  for (int i = 0; i < 5; i++) {
+    int x = CX - 40 + i * 20, y = 150 + (int)((now / 3 + i * 37) % 60);
+    gfx->fillRect(x, y, 3, 22, p.waterLt);
+  }
+  if (splash || zone < 0) {  // salpicadura: el agua lo saca de la concentracion
+    for (int i = 0; i < 10; i++) {
+      float a = i * 0.628f + now * 0.004f;
+      int d = 50 + (int)((now / 25 + i * 13) % 40);
+      gfx->fillCircle(CX + (int)(d * cosf(a)), 210 + (int)(d * 0.5f * sinf(a)), 5, p.foam);
+    }
+  }
+  if (zone > 0) {  // inquieto: "!" encima
+    gfx->fillRoundRect(CX + 60, 120, 10, 34, 4, UI_BAR_WARN);
+    gfx->fillRoundRect(CX + 60, 160, 10, 10, 4, UI_BAR_WARN);
+  }
+}
+
+// barra de concentracion vertical a la derecha, con la franja verde (FR-ZEN.3)
+void drawZenGauge(float c, uint32_t t, bool inBand) {
+  int h = ZEN_GAUGE_BOT - ZEN_GAUGE_TOP;
+  auto yOf = [&](float v) { return ZEN_GAUGE_BOT - (int)(v * h / 100.0f); };
+  gfx->fillRoundRect(ZEN_GAUGE_X - 3, ZEN_GAUGE_TOP - 3, ZEN_GAUGE_W + 6, h + 6, 8, UI_INK);
+  gfx->fillRect(ZEN_GAUGE_X, ZEN_GAUGE_TOP, ZEN_GAUGE_W, h, UI_TRACK);
+  int fy = yOf(c);
+  if (ZEN_GAUGE_BOT > fy) gfx->fillRect(ZEN_GAUGE_X, fy, ZEN_GAUGE_W, ZEN_GAUGE_BOT - fy, C565(0xa8, 0xdc, 0xf6));
+  float half = zenBandHalf(t);
+  int b0 = yOf(50 + half), b1 = yOf(50 - half);
+  uint16_t band = inBand ? C565(0x6c, 0xe0, 0x7c) : C565(0x3c, 0x8a, 0x4c);
+  gfx->fillRect(ZEN_GAUGE_X, b0, ZEN_GAUGE_W, b1 - b0, band);
+  gfx->fillRect(ZEN_GAUGE_X - 8, fy - 3, ZEN_GAUGE_W + 16, 6, UI_INK);  // marcador
+  gfx->fillRect(ZEN_GAUGE_X - 6, fy - 1, ZEN_GAUGE_W + 12, 2, UI_WHITE);
+}
+
+void renderZen() {
+  uint32_t now = millis();
+  bool intro = timeLeft(zenIntroUntil);
+  int8_t zone = intro ? 0 : zenZone(zen.c, zen.t);
+  bool splash = zen.surges && zen.t - zen.lastSurge < 500 && !zenOverUntil;
+  uint32_t warn = !intro && !zenOverUntil && zenSurgeWarning(zen) ? zen.nextSurge - zen.t : 0;
+  drawZenScene(now, zenOverUntil ? 0 : zone, warn, splash);
+
+  if (zenOverUntil) {  // resultado
+    if (!timeLeft(zenOverUntil)) { zenOpen = false; return; }
+    uint16_t f = zenFocusTenths(zen);
+    gfx->fillRoundRect(CX - 150, 92, 300, 196, 20, UI_WHITE);
+    gfx->drawRoundRect(CX - 150, 92, 300, 196, 20, UI_INK);
+    char b[40];
+    snprintf(b, sizeof(b), T(S_FOCUS_FMT), f / 10, f % 10);
+    gfx->setTextColor(UI_INK);
+    setSize(3);
+    setCur(centerX(b, 3), 116);
+    printT(b);
+    char g[24];
+    snprintf(g, sizeof(g), T(S_DEF_GAIN_FMT), zenGainShown);
+    gfx->setTextColor(C565(0x4f, 0x93, 0xc4));
+    setCur(centerX(g, 3), 160);
+    printT(g);
+    setSize(2);
+    if (zenNewHi && f > 0) {
+      gfx->setTextColor(UI_BAR_WARN);
+      setCur(centerX(T(S_NEW_RECORD), 2), 206);
+      printT(T(S_NEW_RECORD));
+    } else {
+      char r[40];
+      snprintf(r, sizeof(r), T(S_ZEN_BEST_FMT), pet.zenHi / 10, pet.zenHi % 10);
+      gfx->setTextColor(UI_INK);
+      setCur(centerX(r, 2), 206);
+      printT(r);
+    }
+    gfx->setTextColor(UI_BAR_OK);
+    setCur(centerX(T(S_CLEAN), 2), 244);
+    printT(T(S_CLEAN));
+    gfx->flush();
+    return;
+  }
+
+  // concentracion en vivo y record, arriba
+  uint16_t f = zenFocusTenths(zen);
+  char b[40];
+  snprintf(b, sizeof(b), T(S_FOCUS_FMT), f / 10, f % 10);
+  gfx->setTextColor(UI_WHITE);
+  setSize(3);
+  setCur(centerX(b, 3), 34);
+  printT(b);
+  char r[40];
+  snprintf(r, sizeof(r), T(S_ZEN_BEST_FMT), pet.zenHi / 10, pet.zenHi % 10);
+  setSize(2);
+  setCur(centerX(r, 2), 74);
+  printT(r);
+  // tiempo que queda
+  uint32_t left = intro ? ZEN_SESSION_MS : ZEN_SESSION_MS - (zen.t < ZEN_SESSION_MS ? zen.t : ZEN_SESSION_MS);
+  int bw = 200, fw = (int)((uint32_t)bw * left / ZEN_SESSION_MS);
+  gfx->fillRoundRect(CX - bw / 2, 102, bw, 10, 4, UI_TRACK);
+  if (fw > 2) gfx->fillRoundRect(CX - bw / 2, 102, fw, 10, 4, UI_BAR_OK);
+
+  drawZenGauge(intro ? 50 : zen.c, intro ? 0 : zen.t, zone == 0);
+
+  if (intro || !zenTouched) {  // la explicacion, hasta el primer toque
+    const char *l1 = T(S_ZEN_INTRO), *l2 = T(S_ZEN_HOLD);
+    int w = textW(l1, 2);
+    if (textW(l2, 2) > w) w = textW(l2, 2);
+    w += 28;
+    if (w > 380) w = 380;
+    gfx->fillRoundRect(CX - w / 2, 126, w, 62, 14, UI_WHITE);
+    gfx->setTextColor(UI_INK);
+    setCur(centerX(l1, 2), 136);
+    printT(l1);
+    gfx->setTextColor(C565(0x4f, 0x93, 0xc4));
+    setCur(centerX(l2, 2), 162);
+    printT(l2);
+  }
+  uint32_t tf = micros();
+  gfx->flush();
+  zenFlushUs = micros() - tf;
 }
 
 // fondo del minijuego: hatibat del bicho (cielo por hora + suelo del bioma)

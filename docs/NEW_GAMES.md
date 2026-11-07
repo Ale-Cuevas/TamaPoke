@@ -415,6 +415,18 @@ trains DEF, the stat for standing firm.
 - Board: the user plays three sessions. The first is learnable. Staying in the band in the last 10 s
   is hard but possible. Holding the finger down doesn't dim the screen.
 
+### Built in v1.43
+
+- Rules in `zengame.h` (fixed 10 ms steps, seeded surges), 15 host tests in `test/test_zengame.cpp`,
+  reward in `Pet::zenResult()` with 4 tests in `test_pet.cpp`; record `zenHi` (NVS `"zhi"`).
+- The physics runs in `zenTick()` on every loop pass, not only on frames, so a short touch between two
+  85 ms frames still counts.
+- Look, from the renders: the warning is a white wave that runs down the water and reaches the pet as
+  the surge hits (a swell at the top covered the score). A darker patch of deeper water behind the pet
+  keeps blue pets visible. In the band the pet uses DeepBreath if its sprite has it, else Sit.
+- On the board: draw 24 ms + 61 ms panel push per frame (the push is the same for every full-screen
+  game). A scripted serial player stayed 29.3 s of 30 in the band.
+
 ---
 
 ## Order and parallel work

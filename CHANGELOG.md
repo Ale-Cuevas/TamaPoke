@@ -8,6 +8,34 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.43] - 2026-11-07
+
+A new game in PLAY: meditate under a waterfall to train DEFENSE. (1.42 is the Wi-Fi update, still
+on its own branch.)
+
+### Added
+
+- **Waterfall** (fifth slot of the PLAY menu, `docs/NEW_GAMES.md` Task ZEN). The pet sits on a rock
+  under a waterfall. **Hold the screen** and its focus gauge rises; **let go** and it falls. Keep
+  it in the green band in the middle for 30 s.
+  - The gauge has momentum: it keeps moving for a moment after you change, so you learn to let go
+    before it reaches the band, not when it gets there.
+  - The band narrows from 24 % to 12 % over the session, and from 5 s on the waterfall sends
+    **surges** that knock the gauge down, more often and stronger later. Each one shows first as
+    a white wave running down the water and reaching the pet as it hits.
+  - In the band the pet meditates with a calm aura; below it the water splashes it out of focus;
+    above it, it gets restless ("!").
+  - Score: seconds in the band (shown live, best kept as a record). A full session gives
+    **DEF +1 per 2 s** in the band (up to +15) and **washes the pet** (+10 hygiene), costs a little
+    energy and food, and doesn't burn weight. Quitting early (the top of the screen, USER, PWR)
+    gives nothing.
+  - The screen doesn't dim while you hold it.
+- The PLAY menu has room for five games now (ball, battle, bag, an empty slot for the next game,
+  waterfall).
+- Serial: `ZEN [s]` (a session with no reward, optionally from second s), `ZEN?` (state and frame
+  time), `HOLD 1` / `HOLD 0` / `HOLD OFF` (fake finger); `STATS` prints the game records
+  (`rec ball=… bag=… zen=…`).
+
 ## [1.41] - 2026-11-07
 
 No egg comes home by itself after an ending: you hatch it from the empty home.

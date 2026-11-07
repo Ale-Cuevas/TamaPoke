@@ -53,6 +53,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "SIN HUEVO", "Camina para encontrar uno!", "Desliza a la derecha: caja", "Sin huevo: casa vac\241a", "El huevo nace con la casa libre",
     // huevos al acabar una crianza (v1.40/v1.41)
     "Abrir un huevo (%u)", "Llegar\240 un huevo nuevo", "Tus huevos esperan!", "REGALO!",
+    // la cascada (v1.43)
+    "Manten la barra en el verde!", "MANTEN PULSADO", "FOCO %u.%us", "RECORD %u.%us", "DEFENSA +%u", "Limpito!",
   },
   // ---------------- EN ----------------
   {
@@ -100,6 +102,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "NO EGG", "Walk to find an egg!", "Swipe right: the Box", "No egg: home stays empty", "Eggs hatch when home is free",
     // huevos al acabar una crianza (v1.40/v1.41)
     "Hatch an egg (%u)", "A new egg will come", "Your eggs are waiting!", "GIFT!",
+    // la cascada (v1.43)
+    "Keep the bar in the green!", "HOLD TO FOCUS", "FOCUS %u.%us", "BEST %u.%us", "DEF +%u", "Squeaky clean!",
   },
   // ---------------- FR ----------------
   {
@@ -147,6 +151,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "PAS D'OEUF", "Marche pour en trouver un!", "Glisse \205 droite: bo\214te", "Pas d'oeuf: maison vide", "Oeuf: \202clot si maison libre",
     // huevos al acabar una crianza (v1.40/v1.41)
     "Faire \202clore (%u)", "Un oeuf va arriver", "Tes oeufs attendent!", "CADEAU!",
+    // la cascada (v1.43)
+    "Garde la barre dans le vert!", "MAINTIENS APPUYE", "FOCUS %u.%us", "RECORD %u.%us", "DEFENSE +%u", "Tout propre!",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -199,6 +205,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "KEIN EI", "Lauf los und finde eins!", "Nach rechts: die Box", "Kein Ei: Zuhause leer", "Ei schl\201pft bei leerem Zuhause",
     // huevos al acabar una crianza (v1.40/v1.41)
     "Ei ausbr\201ten (%u)", "Ein neues Ei kommt", "Deine Eier warten!", "GESCHENK!",
+    // la cascada (v1.43)
+    "Halte den Balken im Gr\201nen!", "GEDR\232CKT HALTEN", "FOKUS %u.%us", "REKORD %u.%us", "VERT +%u", "Blitzsauber!",
   },
   // ---------------- IT ----------------
   {
@@ -246,6 +254,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "NESSUN UOVO", "Cammina per trovarne uno!", "Scorri a destra: il box", "Niente uovo: casa vuota", "L'uovo nasce a casa libera",
     // huevos al acabar una crianza (v1.40/v1.41)
     "Schiudi uovo (%u)", "Arriva un uovo nuovo", "Le uova ti aspettano!", "REGALO!",
+    // la cascada (v1.43)
+    "Tieni la barra nel verde!", "TIENI PREMUTO", "FOCUS %u.%us", "RECORD %u.%us", "DIFESA +%u", "Pulitissimo!",
   },
   // ---------------- PT ----------------
   {
@@ -293,6 +303,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "SEM OVO", "Caminhe para achar um!", "Deslize p/ direita: caixa", "Sem ovo: casa vazia", "O ovo nasce com a casa livre",
     // huevos al acabar una crianza (v1.40/v1.41)
     "Chocar um ovo (%u)", "Vem um ovo novo", "Seus ovos esperam!", "PRESENTE!",
+    // la cascada (v1.43)
+    "Mantenha a barra no verde!", "SEGURE O TOQUE", "FOCO %u.%us", "RECORDE %u.%us", "DEFESA +%u", "Limpinho!",
   },
   // ---------------- JA ----------------
   {
@@ -363,6 +375,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "たまごなし", "あるいて たまごを さがそう！", "みぎへ スワイプ: ボックス", "たまごなし: いえが からっぽに", "いえが あくと たまごが かえる",
     // huevos al acabar una crianza (v1.40/v1.41)
     "たまごを かえす (%u)", "あたらしい たまごが くるよ", "たまごが まってるよ！", "プレゼント！",
+    // la cascada (v1.43)
+    "ゲージを みどりに たもとう！", "ながおしで しゅうちゅう", "しゅうちゅう %u.%uびょう", "きろく %u.%uびょう", "ぼうぎょ +%u", "ぴかぴか！",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -415,6 +429,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "알 없음", "걸어서 알을 찾자!", "오른쪽으로 밀기: 박스", "알 없음: 집이 비어요", "집이 비면 알이 부화해요",
     // huevos al acabar una crianza (v1.40/v1.41)
     "알 부화하기 (%u)", "새 알이 와요", "알이 기다려요!", "선물!",
+    // la cascada (v1.43)
+    "게이지를 초록색에 유지!", "길게 눌러 집중", "집중 %u.%u초", "최고 %u.%u초", "방어 +%u", "깨끗해졌다!",
   },
 };
 

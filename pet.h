@@ -161,6 +161,7 @@ public:
   uint16_t lastMilestone = 0;  // hito de racha ya celebrado
   uint16_t gameHi = 0;     // record del minijuego (del jugador)
   uint16_t strHi = 0;      // record de golpes al saco
+  uint16_t zenHi = 0;      // record de la cascada: decimas de segundo en la franja (v1.43)
   // pasos (del jugador: sobreviven a un huevo nuevo y a un reinicio)
   uint32_t stepsToday = 0;   // desde la medianoche local (el mismo dia que la racha)
   uint32_t stepsTotal = 0;   // de toda la vida
@@ -188,6 +189,7 @@ public:
   }
   void playResult(uint8_t score);  // recompensa del minijuego (entrena VEL)
   uint8_t trainStrength(uint16_t hits);  // saco de entrenamiento (entrena FUE)
+  uint8_t zenResult(uint16_t focusTenths);  // cascada completa (entrena DEF y lava), v1.43
 
   // stats de combate: base real de gen 1 x genes + nivel + entrenamiento
   uint16_t atkStat() const;

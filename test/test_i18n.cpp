@@ -68,6 +68,9 @@ static const ExpectedFmt EXPECTED[] = {
   { S_WAKE_Q_FMT,      "%s" },
   { S_SWAP_NOTE_FMT,   "%s" },
   { S_NOW_FMT,         "%s" },
+  { S_FOCUS_FMT,       "%u,%u" },
+  { S_ZEN_BEST_FMT,    "%u,%u" },
+  { S_DEF_GAIN_FMT,    "%u" },
 };
 static const int NUM_EXPECTED = (int)(sizeof(EXPECTED) / sizeof(EXPECTED[0]));
 

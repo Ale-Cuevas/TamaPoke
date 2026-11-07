@@ -126,7 +126,8 @@ static void resetUi() {
   gHostRandom = 12345;
   beh = decltype(beh){};
   walkLast = 0;
-  galleryOpen = cardOpen = kbOpen = clockOpen = gameOpen = sackOpen = false;
+  galleryOpen = cardOpen = kbOpen = clockOpen = gameOpen = sackOpen = zenOpen = false;
+  zenSerialHold = -1;
   // la caja (v1.37): cerrada, vacia y sin huevo esperando (newEgg() lo devuelve a su sitio)
   boxOpen = false;
   boxAsk = 0;
@@ -236,6 +237,19 @@ static void pokemon(int16_t dex, int hour, bool shiny = false) {
   ensureMon();
 }
 
+// the waterfall mid-session: 12 s in, the gauge at c, 9.4 s of focus, a 23.4 s record
+static void zenPlaying(int16_t dex, int hour, float c) {
+  pokemon(dex, hour);
+  startZen();
+  zenIntroUntil = 0;
+  zenTouched = true;
+  zen.t = 12000;
+  zen.nextSurge = 14000;
+  zen.c = c;
+  zen.inBandMs = 9400;
+  pet.zenHi = 234;
+}
+
 // a pet in box slot k (v1.37): Lv `lv`, asleep in the box as every stored pet
 static void boxPet(uint8_t k, int16_t dex, uint16_t lv, bool shiny = false, const char *nick = "") {
   PetRecord r;
@@ -329,6 +343,21 @@ static const std::vector<Scene> &scenes() {
     { "minigame-swamp", [] { pokemon(23, 13); startGame(); gameScore = 3; }, 4 },
     { "feed", [] { pokemon(133, 12); menuKind = MENU_FEED; menuUntil = millis() + 6000; } },
     { "play-menu", [] { pokemon(133, 12); menuKind = MENU_PLAY; menuUntil = millis() + 6000; } },
+    // the waterfall (v1.43): intro, in the band, below (spray), above, a surge on its way, the result
+    { "zen-intro", [] { pokemon(7, 13); startZen(); } },
+    { "zen-band", [] { zenPlaying(7, 13, 52); } },
+    { "zen-low", [] { zenPlaying(7, 13, 20); zen.surges = 1; zen.lastSurge = zen.t - 120; } },
+    { "zen-high", [] { zenPlaying(7, 13, 86); } },
+    { "zen-warn", [] { zenPlaying(7, 13, 50); zen.nextSurge = zen.t + 200; } },
+    { "zen-warn-early", [] { zenPlaying(25, 13, 50); zen.nextSurge = zen.t + 380; } },
+    { "zen-late-night", [] { zenPlaying(143, 22, 49); zen.t = 27000; } },
+    { "zen-result", [] { zenPlaying(7, 13, 50); zen.t = ZEN_SESSION_MS; zen.inBandMs = 23400; zenGainShown = 11;
+                         zenNewHi = true; zenOverUntil = millis() + 4000; } },
+    { "zen-result-best", [] { zenPlaying(7, 13, 50); zen.t = ZEN_SESSION_MS; zen.inBandMs = 9100; zenGainShown = 4;
+                              zenOverUntil = millis() + 4000; } },
+    { "zen-ja", [] { zenPlaying(7, 13, 52); setLang(LANG_JA); applyLangFont(); zenTouched = false; } },
+    { "zen-result-ko", [] { zenPlaying(7, 13, 50); setLang(LANG_KO); applyLangFont(); zen.t = ZEN_SESSION_MS;
+                            zen.inBandMs = 23400; zenGainShown = 11; zenOverUntil = millis() + 4000; } },
     // no egg and nobody in the Box: a gift egg will come (v1.40); with pets in the Box, the home stays empty
     { "release", [] { pokemon(54, 15); confirmUntil = millis() + 10000; } },
     { "release-boxed", [] { pokemon(54, 15); boxThree(); confirmUntil = millis() + 10000; } },
