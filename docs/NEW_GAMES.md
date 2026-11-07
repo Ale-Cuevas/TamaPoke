@@ -288,6 +288,23 @@ short calibration that takes the angle the player is holding as "straight".
   calibration. A run at 1× is easy. At 2× (≈ 40 s) it's hard, but every row can be dodged. Frame
   time stays ≤ 85 ms (serial `scene`).
 
+### Built in v1.44
+
+- Rules in `dashgame.h` (fixed 10 ms steps, seeded rows, the sled's fixed hitbox), 15 host tests in
+  `test/test_dashgame.cpp` (10 000 rows per speed always passable; a player who heads for each gap gets
+  through 2 minutes up to 3× without a hit), reward in `Pet::dashResult()` with 3 tests; record `dashHi`
+  (NVS `"dhi"`). Fast roll `FastRoll` in `motion.h` with 3 tests (pitch-independent at 0°, 45°, 90°).
+- Changed while building, from the renders:
+  - `DASH_PET_Y` is **225**, not 200: at 200 the score box covered the pet. The look-ahead is 241 px.
+  - The score box is compact (the number, then the record with the hearts beside it).
+  - The pet rides in its **Idle** animation, not Sit: some Sit animations (Pikachu's) face away.
+  - The sled is a round tub with a curved front lip and a runner base (a first try with flat boxes looked
+    like a bench).
+  - Hits play `SFX_HIT`, and every 10 rows dodged `SFX_PLAY`.
+- Double rows put their gap nearer the middle, so both obstacles fit: the share of double rows now
+  follows `DASH_DOUBLE_P`.
+- On the board: draw ~26 ms + 61 ms panel push per frame.
+
 ---
 
 ## Task ZEN: meditate under the waterfall

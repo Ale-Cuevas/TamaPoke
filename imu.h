@@ -29,6 +29,11 @@ bool imuFaceDown();          // boca abajo ahora mismo
 int8_t imuTiltSide();        // -1 lado izquierdo abajo, 0 a nivel, +1 derecho abajo
 bool imuTiltSlide();         // inclinada de mas: el bicho resbala
 float imuTiltDeg();          // angulo lateral, + = lado derecho abajo
+// carrera (v1.44): inclinacion lateral con filtro corto (FastRoll, motion.h) y lectura rapida del
+// FIFO (cada FIFO_READ_FAST_MS) mientras imuSetFast(true); el contador de pasos, en pausa
+#define FIFO_READ_FAST_MS 40
+float imuRollFast();
+void imuSetFast(bool on);
 
 // IMULOG: vuelca cada muestra por serie como CSV (t_ms,ax_mg,ay_mg,az_mg,steps,
 // el formato de test/data/imu/) durante ms; 0 lo para

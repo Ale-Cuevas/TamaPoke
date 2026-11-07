@@ -83,6 +83,8 @@ enum StrId : uint8_t {
   S_HATCH_FMT, S_GIFT_EGG_NOTE, S_NOEGG_HAVE, S_GIFT,
   // la cascada (v1.43): intro, pista, concentracion en vivo, record, resultado y el lavado
   S_ZEN_INTRO, S_ZEN_HOLD, S_FOCUS_FMT, S_ZEN_BEST_FMT, S_DEF_GAIN_FMT, S_CLEAN,
+  // la carrera en trineo (v1.44): calibracion, pista, resultado
+  S_DASH_HOLD, S_DASH_STILL, S_DASH_TILT, S_DODGED_FMT, S_SPD_GAIN_FMT,
   STR_COUNT
 };
 

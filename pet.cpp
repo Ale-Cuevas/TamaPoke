@@ -2,6 +2,7 @@
 #include "dex.h"
 #include "audio.h"
 #include "zengame.h"
+#include "dashgame.h"
 
 void Pet::begin() {
   prefs.begin("tamapoke", false);
@@ -662,6 +663,27 @@ uint8_t Pet::zenResult(uint16_t focusTenths) {
   return gain;
 }
 
+// carrera en trineo (DASH, docs/NEW_GAMES.md FR-DASH.17): las filas esquivadas entrenan la
+// velocidad (con el tope del saco) y queman algo de peso. Devuelve los puntos que de verdad entraron.
+uint8_t Pet::dashResult(uint16_t dodged) {
+  if (ceremony != CER_NONE || isEgg()) return 0;
+  uint8_t antes = trSpe;
+  uint16_t v = (uint16_t)trSpe + dashGain(dodged);
+  trSpe = v > 100 ? 100 : (uint8_t)v;
+  uint8_t gain = trSpe - antes;
+  energy = dropTo(energy, 12, 5);
+  fullness = dropTo(fullness, 5, 5);
+  int burn = (int)weight - dodged / DASH_WEIGHT_DIV;
+  weight = burn > 0 ? burn : 0;
+  joy = clamp100(joy + 5 + (dodged > 15 ? 15 : dodged) * 2);
+  if (dodged >= 10) heartUntil = millis() + HEART_MS;
+  if (dodged > dashHi) dashHi = dodged;
+  addBond(2);
+  registerCare();
+  save();
+  return gain;
+}
+
 void Pet::play() {
   if (ceremony != CER_NONE) return;
   if (isEgg() || sleeping) return;
@@ -1019,6 +1041,7 @@ void Pet::save() {
   prefs.putUShort("ghi", gameHi);
   prefs.putUShort("shi", strHi);
   prefs.putUShort("zhi", zenHi);
+  prefs.putUShort("dhi", dashHi);
   prefs.putString("nick", nick);
   // pasos y mochila (v1.20)
   prefs.putUInt("stpT", stepsToday);
@@ -1102,6 +1125,7 @@ void Pet::load() {
   gameHi = prefs.getUShort("ghi", 0);
   strHi = prefs.getUShort("shi", 0);
   zenHi = prefs.getUShort("zhi", 0);
+  dashHi = prefs.getUShort("dhi", 0);
   prefs.getString("nick", nick, sizeof(nick));
   // pasos y mochila (v1.20): un guardado anterior no trae las claves y quedan a 0
   stepsToday = prefs.getUInt("stpT", 0);

@@ -61,6 +61,10 @@ waterfall, you hold the screen to raise its focus and let go to lower it, and ke
 the green band for 30 s while the band narrows and surges of water push it down. A full session
 also washes the pet.
 
+**v1.44: the sled run.** Another new game in PLAY trains SPEED: the pet rides a sled down a
+slope and you tilt the board to dodge rocks, logs and bushes that come faster and faster. A short
+countdown takes however you hold the board as "straight", so it plays upright or lying face up.
+
 **v1.39: eggs are found by walking.** A new egg no longer appears for free after
 an ending or a store: you find eggs on walks, about 3 a week at 5000 steps a
 day. With none, the home stays empty until you find one. Host-tested (300
@@ -132,10 +136,13 @@ While **awake**, per minute:
 - 🍬 **Candy:** +10 FOOD, +12 JOY, but **+12 weight** (fattening).
 - ⚽ **Play:** a menu with all the games: the **ball minigame** (+JOY, −ENE; trains **SPEED** and
   burns weight; the ball keeps speeding up as you score: twice as fast at 80 as at 1, up to 3×),
-  a **practice battle** (+3 JOY, at most once an hour; see Battles below), the training bag and the
-  waterfall.
+  a **practice battle** (+3 JOY, at most once an hour; see Battles below), the training bag, the
+  sled run and the waterfall.
 - 🥊 **Training bag** (third slot of the Play menu): trains **STRENGTH** (~4 hits = 1 pt, cap
   +18/session), tires it.
+- 🛷 **Sled run** (fourth slot, v1.44): tilt the board to steer the sled around obstacles that come
+  faster and faster (2× at 40 s, 3× at 80 s); three hits end it. Trains **SPEED** (1 pt per 4 rows
+  dodged, cap +18/run), burns a little weight. Needs the IMU.
 - 🌊 **Waterfall** (fifth slot, v1.43): hold the screen to raise the focus gauge, let go to lower
   it; keep it in the green band for 30 s. Trains **DEFENSE** (1 pt per 2 s in the band, cap
   +15/session) and washes the pet (+10 HYG); no weight burn.
@@ -243,7 +250,7 @@ Swipe **right** from the home screen (pet or egg) to open the Box: **6 slots** w
 
 ### Battle stats
 ATK / DEF / SPD = real **Gen-1 base** × genes + level + training (STRENGTH ← bag,
-SPEED ← minigame, DEFENSE ← waterfall and 12 h of unbroken good care; vitamins from walks add
+SPEED ← minigame and sled run, DEFENSE ← waterfall and 12 h of unbroken good care; vitamins from walks add
 +3 each). They are what battles use, with the level capped at 100.
 
 ### Battles (practice, v1.24)

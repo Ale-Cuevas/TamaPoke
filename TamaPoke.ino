@@ -43,10 +43,11 @@
 #include "fx.h"     // efectos de respuesta: celebraciones en cola, "+N", botones, eclosion (logica pura)
 #include "ballgame.h" // minijuego de la pokeball: velocidad segun la puntuacion y la fisica (logica pura)
 #include "zengame.h"  // cascada (v1.43): la barra de concentracion, la franja y los golpes de agua (logica pura)
+#include "dashgame.h" // carrera en trineo (v1.44): direccion, velocidad, filas de obstaculos y choques (logica pura)
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.43"
+#define FW_VERSION "1.44"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -170,6 +171,27 @@ uint16_t zenSurgesHeard = 0;
 uint32_t zenDrawUs = 0, zenDrawMaxUs = 0, zenFlushUs = 0;  // lo que tarda un frame de la cascada (ZEN?), sin el volcado
 // colores de la cascada (aqui y no junto a su funcion: el conversor .ino pone los prototipos arriba)
 struct ZenPal { uint16_t rock, rockDk, moss, water, waterLt, pool, foam; };
+
+// carrera en trineo (v1.44, entrena la velocidad): inclinar la placa esquiva (dashgame.h)
+bool dashOpen = false;
+DashState dash;
+DashCal dashCal;
+uint32_t dashCalStart = 0, dashOverUntil = 0, dashLastTick = 0, dashRunStart = 0;
+uint8_t dashCalRetries = 0, dashGainShown = 0, dashHitsSeen = 0;
+bool dashCalibrating = false;  // cuenta atras: se mide la inclinacion "recta" del jugador
+bool dashShaky = false;        // la ultima cuenta temblaba: "Quieta un momento..."
+bool dashNoSave = false;       // carrera del comando DASH: ni premio ni record
+bool dashNewHi = false;
+float dashBase = 0;            // inclinacion de la calibracion (grados)
+bool dashSerialSteerOn = false;  // comando STEER: un angulo fijo en vez de la placa
+float dashSerialSteer = 0;
+int dashSledPx = 80;           // ancho dibujado del trineo (sigue al sprite)
+#define DASH_TRAIL 12          // huella de los patines: x del trineo cada DASH_TRAIL_STEP px
+#define DASH_TRAIL_STEP 24.0f
+float dashTrailX[DASH_TRAIL], dashTrailY[DASH_TRAIL];
+uint32_t dashTrailN = 0;
+uint32_t dashDrawUs = 0, dashDrawMaxUs = 0;
+struct DashPal { uint16_t track, outside, edge, mark, rock, log, bush, sled, sledDk, runner; };
 
 // definidas al final; se declaran aqui porque el conversor .ino de PlatformIO no
 // genera prototipos para funciones que devuelven punteros
@@ -435,6 +457,7 @@ void loop() {
   handleSerial();
   ensureMon();
   imuTick(now);  // pasos, sacudidas, boca abajo
+  dashTick(millis());  // carrera: calibracion o fisica con la inclinacion que acaba de leer
 
   // pulsacion corta del PWR: juego -> salvapantallas -> apagada -> juego (v1.32)
   static uint32_t lastPwr = 0;
@@ -536,7 +559,7 @@ void onShake() {
   if (screenOff) return;  // apagada con PWR: se respeta
   if (dimStage > 0) { wakeUI(); return; }
   wakeUI();
-  if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen || zenOpen || battleOpen()) return;
+  if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen()) return;
   if (galleryOpen || boxOpen || cardOpen || kbOpen || clockOpen) return;  // el bicho no esta en pantalla
   if (pet.sleeping) pet.wakeGrumpy();
   else pet.shaken();  // tambien el huevo: se tambalea
@@ -547,7 +570,7 @@ void onShake() {
 void onFaceDown(bool down) {
   if (screenOff) return;
   if (!down) { wakeUI(); return; }
-  if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen || zenOpen || battleOpen()) return;
+  if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen()) return;
   int h = sceneHour();
   if ((h >= 20 || h < 6) && !pet.isEgg() && !pet.sleeping) pet.sleepDeferred();
   lastInteract = millis() - POWER_DIM2_MS - 1;  // casi apagada, como tras 5 min sin tocar
@@ -560,7 +583,7 @@ PowerCtx powerCtx(uint32_t now) {
   c.idleMs = idleSince(now, lastInteract);
   c.screenOff = screenOff;
   c.sleeping = pet.sleeping;
-  c.gameOpen = gameOpen || sackOpen || zenOpen || battleOpen() || boxMove;  // combate y luz de la caja, tambien a 85 ms
+  c.gameOpen = gameOpen || sackOpen || zenOpen || dashOpen || battleOpen() || boxMove;  // combate y luz de la caja, tambien a 85 ms
   c.usb = usbPresent();
   c.charging = batCharging();
   c.batPct = batPercent();
@@ -601,6 +624,7 @@ PwrView pwrPress() {
   }
   if (battleOpen()) closeBattle();
   zenOpen = false;  // la cascada tambien se abandona (sin premio)
+  if (dashOpen) closeDash();  // y la carrera
   if (next == VIEW_SAVER) {
     lastInteract = now - POWER_SAVER_IDLE_MS;
     gFaceDown = false;
@@ -865,6 +889,40 @@ void handleSerial() {
       Serial.printf("ball: score=%ld speed=%.2f\n", n, ballSpeed((uint16_t)n));
     }
     Serial.println("DONE");
+  } else if (line == "DASH?") {  // estado de la carrera
+    Serial.printf("dash: open=%d cal=%d retries=%u over=%d t=%lu speed=%.2f dist=%.0f px=%.1f steer=%.2f roll=%+.1f base=%+.1f dodged=%u hits=%u invuln=%d sled=%d draw=%luus max=%luus\n",
+                  dashOpen, dashCalibrating, dashCalRetries, dashOverUntil ? 1 : 0, (unsigned long)dash.t, dashSpeed(dash.t),
+                  dash.dist, dash.px, dash.steer, imuRollFast(), dashBase, dash.dodged, dash.hits, dashInvuln(dash) ? 1 : 0,
+                  dashSledPx, (unsigned long)dashDrawUs, (unsigned long)dashDrawMaxUs);
+    dashDrawMaxUs = 0;
+    Serial.println("DONE");
+  } else if (line == "DASH" || line.startsWith("DASH ")) {  // DASH [s]: la carrera sin premio, a la velocidad del segundo s
+    long sec = line.length() > 5 ? line.substring(5).toInt() : 0;
+    if (sec < 0) sec = 0;
+    if (sec > 120) sec = 120;
+    wakeUI();
+    menuKind = MENU_NONE;
+    startDash();
+    if (!dashOpen) {
+      Serial.println("dash: no puede (huevo, dormido, despedida, sin IMU u otro juego abierto)");
+    } else {
+      dashNoSave = true;  // ni record ni premio: el guardado del bicho no cambia
+      if (sec) {  // sin calibrar (la linea base, la inclinacion de ahora) y a esa velocidad
+        dashCalibrating = false;
+        dashBase = imuRollFast();
+        dash.t = (uint32_t)sec * 1000;
+        dashLastTick = dashRunStart = millis();
+      }
+      Serial.printf("dash: t=%lu speed=%.2f sled=%d\n", (unsigned long)dash.t, dashSpeed(dash.t), dashSledPx);
+    }
+    Serial.println("DONE");
+  } else if (line.startsWith("STEER ")) {  // STEER <grados> / STEER OFF: inclinacion fija para la carrera
+    String a = line.substring(6);
+    a.trim();
+    dashSerialSteerOn = a != "OFF";
+    dashSerialSteer = dashSerialSteerOn ? (float)atof(a.c_str()) : 0;
+    Serial.printf("steer=%s %.1f -> %.2f\n", dashSerialSteerOn ? "on" : "off", dashSerialSteer, dashSteer(dashSerialSteer));
+    Serial.println("DONE");
   } else if (line == "ZEN?") {  // estado de la cascada
     Serial.printf("zen: open=%d intro=%d over=%d t=%lu c=%.1f vc=%.1f band=%.1f-%.1f next=%lu surges=%u focus=%u.%u hold=%d serial=%d nosave=%d draw=%luus max=%luus flush=%luus\n",
                   zenOpen, timeLeft(zenIntroUntil) ? 1 : 0, zenOverUntil ? 1 : 0, (unsigned long)zen.t, zen.c, zen.vc,
@@ -881,7 +939,7 @@ void handleSerial() {
     menuKind = MENU_NONE;
     startZen();
     if (!zenOpen) {
-      Serial.println("zen: no puede (huevo, dormido o despedida)");
+      Serial.println("zen: no puede (huevo, dormido, despedida u otro juego abierto)");
     } else {
       zenNoSave = true;  // ni record ni premio: el guardado del bicho no cambia
       if (sec) {  // se salta la intro y empieza con la franja y los golpes de ese segundo
@@ -915,6 +973,12 @@ void handleSerial() {
     int16_t x = (int16_t)a.substring(0, sp).toInt(), y = sp > 0 ? (int16_t)a.substring(sp + 1).toInt() : 0;
     wakeUI();
     if (battleOpen()) battleTap(x, y);  // como handleTouch: el combate se lleva los toques
+    else if (dashOpen) { if (y < 72 && !dashOverUntil) closeDash(); }  // la carrera: solo la cabecera
+    else if (zenOpen) {  // la cascada: la cabecera abandona; otro toque, un toque corto
+      if (y < 72 && !zenOverUntil) zenOpen = false;
+      else zenTouched = true;
+    }
+    else if (sackOpen) { if (y < 72) sackOpen = false; else sackTap(); }
     else onTap(x, y);
     Serial.printf("tap %d %d battle=%d phase=%u\n", x, y, battleOpen() ? 1 : 0, battlePhase());
     Serial.println("DONE");
@@ -979,7 +1043,7 @@ void handleSerial() {
     Serial.printf("shiny=%d streak=%u/%u bond=%u bondT=%u medals=0x%X(%u) nick=%s\n",
                   pet.shiny, pet.streak, pet.bestStreak, pet.bond, pet.bondGainedToday(), pet.medals,
                   pet.totalMedals, pet.nick);
-    Serial.printf("rec ball=%u bag=%u zen=%u.%u\n", pet.gameHi, pet.strHi, pet.zenHi / 10, pet.zenHi % 10);
+    Serial.printf("rec ball=%u bag=%u zen=%u.%u dash=%u\n", pet.gameHi, pet.strHi, pet.zenHi / 10, pet.zenHi % 10, pet.dashHi);
     // crecimiento (v1.35, growth.h): de el sale el nivel; la edad va aparte
     Serial.printf("grow=%lu lv=%u into=%u/%u age=%lu\n", (unsigned long)pet.growMin, pet.level(),
                   pet.levelMinutesInto(), pet.levelMinutesCost(), (unsigned long)pet.ageMinutes);
@@ -1068,6 +1132,16 @@ void handleTouch() {
     return;
   }
 
+  // carrera: solo la cabecera cuenta (abandonar sin premio); se juega inclinando
+  if (dashOpen) {
+    if (pressed && !wasPressed) {
+      wakeUI();
+      if (y < 72 && !dashOverUntil) closeDash();
+    }
+    wasPressed = pressed;
+    return;
+  }
+
   // combate: cada toque carga el especial al momento (tocar rapido)
   if (battleOpen()) {
     if (pressed && !wasPressed) {
@@ -1121,7 +1195,7 @@ void openClock();  // prototipo
 
 void onSwipeV(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (gameOpen || galleryOpen || boxOpen || kbOpen || sackOpen || zenOpen || battleOpen() || pet.ceremony) return;
+  if (gameOpen || galleryOpen || boxOpen || kbOpen || sackOpen || zenOpen || dashOpen || battleOpen() || pet.ceremony) return;
   if (clockOpen) { clockOpen = false; return; }
   if (cardOpen) {
     if (dir < 0) { cardOpen = false; itemConfirm = 0; }  // arriba cierra la ficha
@@ -1138,7 +1212,7 @@ void onSwipeV(int dir) {
 // deslizar: dir +1 = hacia la derecha
 void onSwipe(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (gameOpen || sackOpen || zenOpen || kbOpen || clockOpen || battleOpen()) return;
+  if (gameOpen || sackOpen || zenOpen || dashOpen || kbOpen || clockOpen || battleOpen()) return;
   if (cardOpen) {  // dentro de la ficha: cambiar entre las CARD_PAGES paginas
     int p = (int)cardPage + (dir > 0 ? -1 : 1);  // izquierda avanza
     cardPage = p < 0 ? 0 : (p > CARD_PAGES - 1 ? CARD_PAGES - 1 : p);
@@ -1227,6 +1301,10 @@ void onBack() {
   }
   if (zenOpen) {                      // abandona la cascada (sin premio si no habia acabado)
     zenOpen = false;
+    return;
+  }
+  if (dashOpen) {                     // abandona la carrera (sin premio si no habia acabado)
+    closeDash();
     return;
   }
   if (battleOpen()) {                 // abandona el combate (sin premio)
@@ -1338,7 +1416,13 @@ void onTap(int16_t x, int16_t y) {
       int slot = (x - PLAY_MENU_X) / PLAY_MENU_SLOT;  // pelota | combate | saco | carrera | cascada
       if (slot == 0) startGame();
       else if (slot == 2) startSack();
-      else if (slot == 3) {}  // carrera: llega con DASH
+      else if (slot == 3) {  // carrera: sin IMU no se puede inclinar
+        if (imuPresent() && !pet.isEgg() && !pet.sleeping && !pet.ceremony) startDash();
+        else {
+          sfxPlay(SFX_DENY);
+          fxo.push(FXO_DENY, 1, 0, millis());
+        }
+      }
       else if (slot == 4) startZen();
       else if (pet.canBattle()) startPractice(0);
       else {
@@ -1975,7 +2059,7 @@ void printT(const char *s) {
 // mientras su "clave" no cambie no se repintan ni se vuelcan por QSPI.
 static bool staticScreen() {
   if (pet.awaitingStarter()) return true;
-  if (galleryOpen || gameOpen || sackOpen || zenOpen || battleOpen()) return false;  // la galeria gestiona su propio repintado
+  if (galleryOpen || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen()) return false;  // la galeria gestiona su propio repintado
   if (boxOpen) return !boxMove && !timeLeft(boxShakeUntil);  // la caja, quieta salvo la luz o un hueco que tiembla
   if (kbOpen || clockOpen) return true;
   return cardOpen && cardPage != 0;  // la pagina 0 tiene el retrato animado
@@ -2064,6 +2148,13 @@ bool render() {
   }
   if (sackOpen) {
     renderSack();
+    return true;
+  }
+  if (dashOpen) {
+    uint32_t t0 = micros();
+    renderDash();
+    dashDrawUs = micros() - t0;
+    if (dashDrawUs > dashDrawMaxUs) dashDrawMaxUs = dashDrawUs;
     return true;
   }
   if (zenOpen) {
@@ -2188,6 +2279,8 @@ bool render() {
     drawMap(SPR_ICON_PLAY, 16, PLAY_MENU_X + 9, 296, 3, false);
     drawMap(SPR_ICON_BATTLE, 16, PLAY_MENU_X + PLAY_MENU_SLOT + 9, 296, 3, false);
     drawMap(SPR_ICON_SACK, 16, PLAY_MENU_X + 2 * PLAY_MENU_SLOT + 9, 296, 3, false);
+    if (imuPresent()) drawMap(SPR_ICON_DASH, 16, PLAY_MENU_X + 3 * PLAY_MENU_SLOT + 9, 296, 3, false);
+    else drawMapTint(SPR_ICON_DASH, 16, PLAY_MENU_X + 3 * PLAY_MENU_SLOT + 9, 296, 3, UI_TRACK);  // sin IMU: en gris
     drawMap(SPR_ICON_ZEN, 16, PLAY_MENU_X + 4 * PLAY_MENU_SLOT + 9, 296, 3, false);
   }
   if (menuKind == MENU_FEED) {
@@ -2444,8 +2537,11 @@ void drawGamePet(uint8_t act, int x, int footY) {
   }
 }
 
+// hay un juego en pantalla (desde el menu nunca se abren dos, pero los comandos serie podrian)
+bool anyGameOpen() { return gameOpen || sackOpen || zenOpen || dashOpen || battleOpen(); }
+
 void startZen() {
-  if (pet.isEgg() || pet.sleeping || pet.ceremony) return;
+  if (pet.isEgg() || pet.sleeping || pet.ceremony || anyGameOpen()) return;
   zenOpen = true;
   zenStart(zen, (uint32_t)random(1, 0x7fffffff));
   uint32_t now = millis();
@@ -2691,6 +2787,393 @@ void renderZen() {
   uint32_t tf = micros();
   gfx->flush();
   zenFlushUs = micros() - tf;
+}
+
+// ---------- carrera en trineo: inclinar para esquivar (entrena la velocidad), v1.44 ----------
+// docs/NEW_GAMES.md, Task DASH. Las reglas estan en dashgame.h; aqui la calibracion, el dibujo
+// (trineo y obstaculos hechos con primitivas, sin sprites nuevos) y el premio.
+
+// ancho visible en pantalla del sprite en reposo (de su primer frame), para el ancho del trineo
+int petSpriteVisibleW(uint8_t act) {
+  if (pmd.loaded) {
+    if (!pmd.has(act)) act = PMD_IDLE;
+    const PmdAct &a = pmd.acts[act];
+    if (!a.frames) return 80;
+    uint8_t s = pmd.acts[PMD_IDLE].h ? 170 / pmd.acts[PMD_IDLE].h : 5;  // la escala de drawPmdActM
+    if (s < 2) s = 2;
+    if (s > 3) s = 3;
+    while (s > 2 && a.h * s > 250) s--;
+    int c0 = a.w, c1 = -1;
+    for (int r = 0; r < a.h; r++)
+      for (int c = 0; c < a.w; c++)
+        if (a.data[r * a.w + c] != 0xFF) {
+          if (c < c0) c0 = c;
+          if (c > c1) c1 = c;
+        }
+    return c1 >= c0 ? (c1 - c0 + 1) * s : 80;
+  }
+  if (mon.loaded) return mon.w * ((mon.h * 2 > 130) ? 1 : 2);
+  return 80;
+}
+
+void startDash() {
+  if (pet.isEgg() || pet.sleeping || pet.ceremony || !imuPresent() || anyGameOpen()) return;
+  dashOpen = true;
+  dashStart(dash, (uint32_t)random(1, 0x7fffffff));
+  uint32_t now = millis();
+  dashCalibrating = true;
+  dashCalStart = now;
+  dashCal.reset();
+  dashCalRetries = 0;
+  dashShaky = false;
+  dashBase = 0;
+  dashOverUntil = 0;
+  dashLastTick = now;
+  dashNoSave = false;
+  dashNewHi = false;
+  dashGainShown = 0;
+  dashHitsSeen = 0;
+  dashTrailN = 0;
+  dashSledPx = dashSledW(petSpriteVisibleW(PMD_IDLE));
+  imuSetFast(true);  // FIFO cada 40 ms y los pasos en pausa (FR-DASH.1, FR-DASH.4)
+}
+
+// cierra la carrera por cualquier camino (fin, cabecera, USER, PWR): el IMU vuelve a su ritmo
+void closeDash() {
+  dashOpen = false;
+  imuSetFast(false);
+}
+
+void finishDash(uint32_t now) {
+  imuSetFast(false);
+  if (dashNoSave) {
+    dashNewHi = false;
+    dashGainShown = dashGain(dash.dodged);  // lo que daria, para verlo; no se aplica
+    sfxPlay(SFX_LEVEL);
+  } else {
+    dashNewHi = dash.dodged > pet.dashHi;
+    FxNeedSnap ns = fxSnap();
+    dashGainShown = pet.dashResult(dash.dodged);
+    fxNeeds(ns);
+    sfxPlay(dashNewHi && dash.dodged > 0 ? SFX_MEDAL : SFX_PLAY);
+  }
+  dashOverUntil = now + 4000;
+}
+
+// la direccion de ahora: la inclinacion rapida respecto a la calibracion (o la del comando STEER)
+float dashSteerNow() {
+  float rel = dashSerialSteerOn ? dashSerialSteer : imuRollFast() - dashBase;
+  return dashSteer(rel);
+}
+
+void dashTick(uint32_t now) {
+  if (!dashOpen || dashOverUntil) return;
+  lastInteract = now;  // FR-G.5: nadie toca la pantalla, pero no se atenua
+  if (dashCalibrating) {
+    uint32_t el = now - dashCalStart;
+    if (el >= DASH_CAL_MS - DASH_CAL_WINDOW_MS) dashCal.add(imuRollFast());
+    if (el >= DASH_CAL_MS) {
+      if (dashCal.shaky(dashCalRetries)) {  // tiembla: "Quieta un momento..." y otra cuenta
+        dashCalRetries++;
+        dashShaky = true;
+        dashCalStart = now;
+        dashCal.reset();
+      } else {
+        dashBase = dashCal.mean();
+        dashCalibrating = false;
+        dashLastTick = now;
+        dashRunStart = now;
+        sfxPlay(SFX_TAP);
+      }
+    }
+    return;
+  }
+  uint16_t before = dash.dodged;
+  dashAdvance(dash, dashSteerNow(), now - dashLastTick);
+  dashLastTick = now;
+  // huella de los patines: la x del trineo cada DASH_TRAIL_STEP px recorridos
+  while (dashTrailN == 0 || dash.dist - dashTrailY[(dashTrailN - 1) % DASH_TRAIL] >= DASH_TRAIL_STEP) {
+    dashTrailX[dashTrailN % DASH_TRAIL] = dash.px;
+    dashTrailY[dashTrailN % DASH_TRAIL] = dash.dist;
+    dashTrailN++;
+  }
+  if (dash.hits != dashHitsSeen) {  // golpe
+    dashHitsSeen = dash.hits;
+    sfxPlay(SFX_HIT);
+  }
+  if (dash.dodged / 10 != before / 10) sfxPlay(SFX_PLAY);  // cada 10 esquivados
+  if (dashOver(dash)) finishDash(now);
+}
+
+// colores de la pista segun el bioma de casa
+static DashPal dashPalette(bool night) {
+  uint8_t bio = pet.isEgg() ? 0 : DEX_TBL[pet.speciesId].biome;
+  if (bio >= BIOME_COUNT) bio = 0;
+  uint16_t soil = BIOME_SOIL[bio];
+  DashPal p;
+  p.track = lerp565(soil, UI_WHITE, 3, 16);
+  p.outside = lerp565(soil, C565(0x20, 0x30, 0x20), 5, 16);
+  p.edge = lerp565(soil, C565(0x10, 0x10, 0x10), 8, 16);
+  p.mark = lerp565(soil, C565(0x20, 0x20, 0x20), 4, 16);
+  p.rock = bio == 5 ? C565(0xa8, 0xdc, 0xf6) : bio == 3 ? C565(0x3a, 0x30, 0x34) : bio == 8 ? C565(0x7a, 0x70, 0x90)
+                                                                                  : C565(0x88, 0x8c, 0x98);
+  p.log = C565(0x8e, 0x5c, 0x34);
+  p.bush = bio == 5 ? C565(0xf4, 0xf8, 0xfc) : bio == 3 ? C565(0xb0, 0x3a, 0x2a) : bio == 1 ? C565(0x5f, 0xae, 0x5c)
+                                                                                  : C565(0x3c, 0x8a, 0x4c);
+  p.sled = bio == 5 ? C565(0xc8, 0x3a, 0x30) : C565(0x9a, 0x5a, 0x2c);
+  p.sledDk = lerp565(p.sled, C565(0x10, 0x10, 0x10), 6, 16);
+  p.runner = C565(0x48, 0x4c, 0x58);
+  if (night) {
+    uint16_t n = C565(0x10, 0x16, 0x2c);
+    p.track = lerp565(p.track, n, 8, 16);
+    p.outside = lerp565(p.outside, n, 8, 16);
+    p.edge = lerp565(p.edge, n, 8, 16);
+    p.mark = lerp565(p.mark, n, 8, 16);
+    p.rock = lerp565(p.rock, n, 6, 16);
+    p.log = lerp565(p.log, n, 6, 16);
+    p.bush = lerp565(p.bush, n, 6, 16);
+    p.sled = lerp565(p.sled, n, 5, 16);
+    p.sledDk = lerp565(p.sledDk, n, 5, 16);
+  }
+  return p;
+}
+
+// poligono convexo girado `a` radianes alrededor de (cx, cy): n vertices relativos al centro,
+// rellenado en abanico desde el primero
+void fillPolyRot(int cx, int cy, const float (*q)[2], int n, float a, uint16_t col) {
+  float c = cosf(a), s = sinf(a);
+  int x0 = cx + (int)lroundf(q[0][0] * c - q[0][1] * s), y0 = cy + (int)lroundf(q[0][0] * s + q[0][1] * c);
+  int px = 0, py = 0;
+  for (int i = 1; i < n; i++) {
+    int x = cx + (int)lroundf(q[i][0] * c - q[i][1] * s), y = cy + (int)lroundf(q[i][0] * s + q[i][1] * c);
+    if (i >= 2) gfx->fillTriangle(x0, y0, px, py, x, y, col);
+    px = x;
+    py = y;
+  }
+}
+
+// el trineo, de frente y un poco desde arriba: una cubeta redonda con el borde delantero curvado y
+// una tabla de patines debajo. back = el fondo de la cubeta (detras del bicho); si no, el borde
+// delantero (tapa sus patas) y los patines. Todo se inclina `leanDeg` grados.
+void drawSled(int cx, int by, int w, float leanDeg, const DashPal &p, bool back) {
+  float a = leanDeg / 57.29578f;
+  float hw = w / 2.0f;
+  int cy = by - 16;  // centro de giro
+  const int N = 14;
+  float q[N + 2][2];
+  if (back) {  // fondo: elipse entera, oscura
+    for (int i = 0; i < N; i++) {
+      float t = i * 6.2832f / N;
+      q[i][0] = (hw - 3) * cosf(t);
+      q[i][1] = -10 + 11 * sinf(t);
+    }
+    fillPolyRot(cx, cy, q, N, a, p.sledDk);
+    return;
+  }
+  // tabla de patines y sus puntas curvadas
+  const float base[4][2] = { { -hw + 8, 9 }, { hw - 8, 9 }, { hw - 8, 15 }, { -hw + 8, 15 } };
+  fillPolyRot(cx, cy, base, 4, a, p.runner);
+  float c = cosf(a), s = sinf(a);
+  for (int k = -1; k <= 1; k += 2) {
+    float rx = k * (hw - 12), ry = 15;
+    gfx->fillCircle(cx + (int)lroundf(rx * c - ry * s), cy + (int)lroundf(rx * s + ry * c), 4, p.runner);
+  }
+  // borde delantero: media elipse por debajo de la linea y = -6
+  for (int i = 0; i <= N; i++) {
+    float t = i * 3.1416f / N;
+    q[i][0] = hw * cosf(t);
+    q[i][1] = -6 + 17 * sinf(t);
+  }
+  fillPolyRot(cx, cy, q, N + 1, a, p.sled);
+  const float shine[4][2] = { { -hw + 10, -3 }, { hw - 10, -3 }, { hw - 12, 0 }, { -hw + 12, 0 } };
+  fillPolyRot(cx, cy, shine, 4, a, lerp565(p.sled, UI_WHITE, 7, 16));
+}
+
+void drawDashObstacle(int x0, int x1, int y, uint8_t kind, const DashPal &p) {
+  int w = x1 - x0, h = (int)DASH_OBS_H;
+  if (kind == 0) {  // roca (o bloque de hielo, o piedra de las ruinas)
+    gfx->fillRoundRect(x0, y, w, h, 12, p.rock);
+    gfx->fillRoundRect(x0 + 6, y + 4, w / 2, 8, 4, lerp565(p.rock, UI_WHITE, 6, 16));
+    gfx->drawRoundRect(x0, y, w, h, 12, lerp565(p.rock, C565(0, 0, 0), 7, 16));
+  } else if (kind == 1) {  // tronco atravesado
+    gfx->fillRoundRect(x0, y + 6, w, h - 12, 10, p.log);
+    gfx->fillRect(x0 + 8, y + 12, w - 16, 3, lerp565(p.log, C565(0, 0, 0), 5, 16));
+    gfx->fillCircle(x1 - 10, y + h / 2, (h - 12) / 2 - 2, lerp565(p.log, UI_WHITE, 5, 16));
+  } else {  // matorral (o monticulo de nieve, o roca de lava)
+    int n = w / 26 + 1;
+    for (int i = 0; i < n; i++) {
+      int cx = x0 + 13 + i * (w - 26) / (n > 1 ? n - 1 : 1);
+      gfx->fillCircle(cx, y + h / 2 + 2, 15, p.bush);
+    }
+    gfx->fillCircle(x0 + w / 2, y + h / 2 - 6, 12, lerp565(p.bush, UI_WHITE, 3, 16));
+  }
+}
+
+// el mundo: fuera de pista, la pista con sus bordes, marcas del suelo, huella y obstaculos
+void drawDashWorld(uint32_t now, int shx, const DashPal &p) {
+  float f = dashSpeed(dash.t);
+  gfx->fillRect(0, 0, 466, 466, p.outside);
+  int tl = CX + shx + (int)(-DASH_HALF_W - dash.px), tr = CX + shx + (int)(DASH_HALF_W - dash.px);
+  gfx->fillRect(tl, 0, tr - tl, 466, p.track);
+  gfx->fillRect(tl - 8, 0, 8, 466, p.edge);
+  gfx->fillRect(tr, 0, 8, 466, p.edge);
+  // marcas que pasan hacia arriba (enseñan la velocidad): una cada 40 px de pista
+  float y0 = dash.dist - DASH_PET_Y - 40, y1 = dash.dist + (466 - DASH_PET_Y) + 40;
+  for (int b = (int)floorf(y0 / 40); b * 40 < y1; b++) {
+    uint32_t h = (uint32_t)b * 2654435761u;
+    float wx = -DASH_HALF_W - 90 + (float)((h >> 8) % 520);
+    int sx = CX + shx + (int)(wx - dash.px), sy = DASH_PET_Y + (int)(b * 40 - dash.dist);
+    bool on = wx > -DASH_HALF_W && wx < DASH_HALF_W;
+    uint16_t c = on ? p.mark : p.edge;
+    if ((h >> 4) & 1) gfx->fillRect(sx, sy, 10, 3, c);
+    else { gfx->fillRect(sx, sy, 3, 8, c); gfx->fillRect(sx + 5, sy + 2, 3, 6, c); }
+  }
+  // huella de los dos patines detras del trineo (arriba en pantalla): se curva al girar
+  int n = dashTrailN < DASH_TRAIL ? dashTrailN : DASH_TRAIL;
+  for (int k = -1; k <= 1; k += 2)
+    for (int i = 1; i < n; i++) {
+      int ia = (dashTrailN - i) % DASH_TRAIL, ib = (dashTrailN - i - 1) % DASH_TRAIL;
+      int xa = CX + shx + (int)(dashTrailX[ia] - dash.px) + k * (dashSledPx / 2 - 10);
+      int xb = CX + shx + (int)(dashTrailX[ib] - dash.px) + k * (dashSledPx / 2 - 10);
+      int ya = DASH_PET_Y - 30 + (int)(dashTrailY[ia] - dash.dist), yb = DASH_PET_Y - 30 + (int)(dashTrailY[ib] - dash.dist);
+      if (yb < -10) break;
+      for (int o = 0; o < 3; o++) gfx->drawLine(xa + o, ya, xb + o, yb, p.mark);
+    }
+  // obstaculos
+  for (const DashRow &r : dash.rows) {
+    if (!r.live) continue;
+    int sy = DASH_PET_Y + (int)(r.y - dash.dist);
+    if (sy > 470 || sy + DASH_OBS_H < -4) continue;
+    for (uint8_t i = 0; i < r.n; i++)
+      drawDashObstacle(CX + shx + (int)(r.o[i].x0 - dash.px), CX + shx + (int)(r.o[i].x1 - dash.px), sy, r.o[i].kind, p);
+  }
+  // lineas de velocidad a los lados desde 2x
+  if (f >= 2.0f) {
+    int len = 30 + (int)((f - 2) * 40);
+    for (int i = 0; i < 6; i++) {
+      int x = i < 3 ? 40 + i * 22 : 466 - 40 - (i - 3) * 22;
+      int y = 466 - (int)((uint32_t)(now * f * 0.5f + i * 97) % 520);
+      gfx->fillRect(x, y, 3, len, UI_WHITE);
+    }
+  }
+}
+
+void renderDash() {
+  uint32_t now = millis();
+  bool night = sceneHour() < 6 || sceneHour() >= 20;
+  DashPal p = dashPalette(night);
+  bool justHit = dash.hits && dash.t - dash.lastHitT < 220 && !dashOverUntil && !dashCalibrating;
+  int shx = justHit ? ((now / 40) % 2 ? 4 : -4) : 0;
+  drawDashWorld(now, shx, p);
+
+  // trineo y bicho (parpadean mientras es invulnerable)
+  bool blink = !dashCalibrating && !dashOverUntil && dashInvuln(dash) && (now / 100) % 2;
+  if (!blink) {
+    float f = dashSpeed(dash.t);
+    int bounce = (dashCalibrating || dashOverUntil) ? 0 : ((now / (uint32_t)(240 / f)) % 2 ? 2 : 0);
+    float steer = dashCalibrating ? 0 : dash.steer;
+    float lean = steer * DASH_SLED_LEAN_DEG;
+    int sx = CX + shx, by = DASH_PET_Y - bounce;
+    if (justHit) sx += (now / 30) % 2 ? 6 : -6;  // sacudida del trineo
+    drawSled(sx, by, dashSledPx, lean, p, true);
+    // en reposo (de frente en todos los sprites: el Sit de algunos, como Pikachu, mira hacia atras)
+    uint8_t act = (dash.hits && dash.t - dash.lastHitT < 600 && !dashCalibrating) ? PMD_HURT : PMD_IDLE;
+    drawGamePet(act, sx + (int)(steer * 3), by - 16);
+    drawSled(sx, by, dashSledPx, lean, p, false);
+    if (!dashCalibrating && f >= 2.0f) {  // polvo o nieve que levantan los patines
+      for (int i = 0; i < 4; i++) {
+        int k = i % 2 ? 1 : -1;
+        int px = sx + k * (dashSledPx / 2 - 10) + (int)((now / 20 + i * 7) % 9) - 4;
+        int py = by - 30 - (int)((now / 15 + i * 23) % 26);
+        gfx->fillCircle(px, py, 4 - i % 2, lerp565(p.track, UI_WHITE, 10, 16));
+      }
+    }
+  }
+
+  gfx->setTextColor(UI_INK);
+  if (dashOverUntil) {  // resultado
+    if (!timeLeft(dashOverUntil)) { closeDash(); return; }
+    gfx->fillRoundRect(CX - 150, 230, 300, 160, 20, UI_WHITE);
+    gfx->drawRoundRect(CX - 150, 230, 300, 160, 20, UI_INK);
+    char b[40];
+    snprintf(b, sizeof(b), T(S_DODGED_FMT), dash.dodged);
+    setSize(3);
+    setCur(centerX(b, 3), 250);
+    printT(b);
+    char g[28];
+    snprintf(g, sizeof(g), T(S_SPD_GAIN_FMT), dashGainShown);
+    gfx->setTextColor(UI_BAR_WARN);
+    setCur(centerX(g, 3), 294);
+    printT(g);
+    setSize(2);
+    if (dashNewHi && dash.dodged > 0) {
+      gfx->setTextColor(UI_BAR_OK);
+      setCur(centerX(T(S_NEW_RECORD), 2), 342);
+      printT(T(S_NEW_RECORD));
+    } else {
+      char r[24];
+      snprintf(r, sizeof(r), T(S_RECORD_FMT), pet.dashHi);
+      gfx->setTextColor(UI_INK);
+      setCur(centerX(r, 2), 342);
+      printT(r);
+    }
+    gfx->flush();
+    return;
+  }
+
+  if (dashCalibrating) {  // cuenta atras de la calibracion
+    uint32_t el = millis() - dashCalStart;
+    char c[4];
+    snprintf(c, sizeof(c), "%lu", (unsigned long)((DASH_CAL_MS - (el < DASH_CAL_MS ? el : DASH_CAL_MS)) / 700 + 1));
+    gfx->fillCircle(CX, 296, 34, UI_WHITE);
+    gfx->drawCircle(CX, 296, 34, UI_INK);
+    setSize(5);
+    setCur(centerX(c, 5), 277);
+    printT(c);
+    const char *msg = dashShaky ? T(S_DASH_STILL) : T(S_DASH_HOLD);
+    int w = textW(msg, 2) + 28;
+    if (w > 350) w = 350;
+    gfx->fillRoundRect(CX - w / 2, 344, w, 38, 12, UI_WHITE);
+    gfx->setTextColor(dashShaky ? UI_BAR_BAD : UI_INK);
+    setSize(2);
+    setCur(centerX(msg, 2), 355);
+    printT(msg);
+    gfx->flush();
+    return;
+  }
+
+  // marcador, record y vidas, como en el minijuego de la pokeball
+  char buf[8];
+  snprintf(buf, sizeof(buf), "%u", dash.dodged);
+  gfx->setTextColor(UI_INK);
+  // pastilla compacta arriba (el bicho empieza unos 100 px por encima de DASH_PET_Y): la cifra y,
+  // debajo, el record con las vidas al lado
+  char rec[24];
+  snprintf(rec, sizeof(rec), T(S_REC_FMT), pet.dashHi);
+  setSize(2);
+  int rw = textW(rec, 2), lw = rw + 14 + DASH_LIVES * 20;
+  int pw = lw + 28 < 150 ? 150 : lw + 28;
+  gfx->fillRoundRect(CX - pw / 2, 14, pw, 74, 16, UI_WHITE);
+  setSize(4);
+  setCur(centerX(buf, 4), 20);
+  printT(buf);
+  setSize(2);
+  int lx = CX - lw / 2;
+  setCur(lx, 62);
+  printT(rec);
+  for (int i = 0; i < DASH_LIVES; i++) {
+    int hx = lx + rw + 14 + i * 20 + 6;
+    if (i < DASH_LIVES - dash.hits) gfx->fillCircle(hx, 69, 6, UI_BAR_BAD);
+    else gfx->drawCircle(hx, 69, 6, UI_TRACK);
+  }
+  if (now - dashRunStart < 3000) {  // pista: inclinar para girar
+    const char *t = T(S_DASH_TILT);
+    int w = textW(t, 2) + 24;
+    gfx->fillRoundRect(CX - w / 2, 372, w, 34, 10, UI_WHITE);
+    setCur(centerX(t, 2), 381);
+    printT(t);
+  }
+  gfx->flush();
 }
 
 // fondo del minijuego: hatibat del bicho (cielo por hora + suelo del bioma)

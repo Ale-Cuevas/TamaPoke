@@ -3,6 +3,7 @@
 #include "shim/Arduino.h"
 #include "../pet.h"
 #include "../zengame.h"
+#include "../dashgame.h"
 #include "../dex.h"
 #include "../audio.h"
 #include <string.h>
@@ -510,6 +511,49 @@ TEST(train, el_record_de_la_cascada_sobrevive_a_un_reinicio) {
   Pet q;
   q.begin();
   CHECK_EQ(q.zenHi, (uint16_t)123);
+}
+
+TEST(train, carrera_da_vel_cansa_quema_peso_y_guarda_record) {
+  Pet p;
+  makePet(p, 4);
+  p.trSpe = 10;
+  p.energy = 80;
+  p.fullness = 80;
+  p.weight = 40;
+  p.joy = 10;
+  CHECK_EQ(p.dashResult(41), (uint8_t)10);  // 1 punto cada 4 filas
+  CHECK_EQ(p.trSpe, (uint8_t)20);
+  CHECK_EQ(p.energy, (uint8_t)68);
+  CHECK_EQ(p.fullness, (uint8_t)75);
+  CHECK_EQ(p.weight, (uint8_t)35);  // 40 - 41/8
+  CHECK_EQ(p.joy, (uint8_t)45);     // +5 +30
+  CHECK_EQ(p.dashHi, (uint16_t)41);
+  CHECK_MSG(p.dashResult(500) == DASH_GAIN_MAX, "tope de 18 por carrera");
+  CHECK_EQ(p.dashHi, (uint16_t)500);
+  p.dashResult(3);
+  CHECK_EQ(p.dashHi, (uint16_t)500);
+}
+
+TEST(train, la_carrera_anuncia_lo_que_de_verdad_sube) {
+  Pet p;
+  makePet(p, 4);
+  p.trSpe = 95;
+  CHECK_EQ(p.dashResult(72), (uint8_t)5);
+  CHECK_EQ(p.trSpe, (uint8_t)100);
+}
+
+TEST(train, la_carrera_no_vale_con_huevo_y_su_record_se_guarda) {
+  mockNvsReset();
+  Pet e;
+  e.begin();
+  CHECK_EQ(e.dashResult(50), (uint8_t)0);
+  Pet p;
+  makePet(p, 4);
+  p.dashResult(37);
+  p.flushSave();
+  Pet q;
+  q.begin();
+  CHECK_EQ(q.dashHi, (uint16_t)37);
 }
 
 TEST(play, minijuego_entrena_velocidad_y_guarda_record) {
