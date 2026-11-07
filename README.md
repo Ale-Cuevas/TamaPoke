@@ -51,9 +51,10 @@ included); tapping the screen charges a special attack. Built, host-tested
 (every one of the 151×151 pairings at three levels) and rendered on the PC; the
 on-board checks are in [docs/DEVICE_TESTS.md](docs/DEVICE_TESTS.md#battle).
 
-**v1.40: releasing asks about the egg.** With eggs, a release asks whether to hatch one
-or leave the home empty; with no egg and nobody in the Box, a gift egg comes home; a
-farewell always leaves an egg. The egg waiting from the Box now counts as one of yours.
+**v1.41: after an ending, you choose when to hatch.** A release, farewell or runaway leaves
+the home empty with a **Hatch an egg (N)** button; no egg comes home by itself. A farewell
+leaves an egg in the Backpack, and with no egg and nobody in the Box a gift egg goes there
+(v1.40). The egg waiting from the Box counts as one of yours.
 
 **v1.39: eggs are found by walking.** A new egg no longer appears for free after
 an ending or a store: you find eggs on walks, about 3 a week at 5000 steps a
@@ -148,14 +149,14 @@ While **awake**, per minute:
 - **Eggs are limited (v1.39):** after the starter, you only get eggs by **walking**,
   one every 8000–15000 steps at random (about **3 a week at 5000 steps a day**, 2 to 4
   in any week). All steps count, also while the pet sleeps or an egg is at home. An
-  egg goes into the Backpack (up to 9) and comes home as soon as home is free: after
-  an ending, or when you store the pet in the Box. With none, the home stays
+  egg goes into the Backpack (up to 9). Storing the pet in the Box brings one home; after
+  an ending the home stays empty and you hatch one with its button (v1.41). With none, the home stays
   **empty** ("NO EGG", today's steps, the Pokédex, and a hint when the Box has pets
   to wake) until you find one; it then goes straight home.
 - **Never stuck (v1.40):** when a pet leaves and you have no egg and nobody in the Box, a
-  **gift egg** comes home (normal odds). A **farewell** always leaves an egg as its reward.
-- **Releasing with eggs (v1.40)** asks "Use an egg?": **Hatch an egg (N)** or **Leave home
-  empty**. An empty home with eggs shows a **Hatch an egg (N)** button.
+  **gift egg** goes into the Backpack. A **farewell** always leaves an egg as its reward.
+- **After an ending (v1.41)** the home is empty; with eggs it shows "Your eggs are waiting!"
+  and a **Hatch an egg (N)** button.
 - Every later egg rolls a **rarity tier** (over the ~79 base forms that come from eggs):
 
 | Tier | Base chance | After a proper goodbye | # species |
@@ -189,12 +190,12 @@ While **awake**, per minute:
   act of care cancels it. It **curses the next egg** (forces Common). The sad ending.
 - 👋 **Release** — long-press the creature to let it go on your terms (neutral).
 
-After any ending, the egg that was waiting while you woke a pet from the Box comes home (see
-below); if none was waiting, an egg from the Backpack; if you have none, the home stays empty
-until you find one on a walk (v1.39). v1.40: a release with eggs asks whether to hatch one or
-leave the home empty; with no egg and nobody in the Box a gift egg comes instead ("A new egg will
-come"); with pets in the Box the dialog warns "No egg: home stays empty". A farewell adds an egg to
-the Backpack first, so it's always followed by an egg.
+After any ending the home is empty (v1.41). The egg that was waiting while you woke a pet from the
+Box (see below) goes into the Backpack, and a farewell adds one more as its reward. With eggs, the
+empty home's **Hatch an egg (N)** button brings one home when you want; with none, wait for one on
+a walk or wake a pet from the Box. With no egg and nobody in the Box, a gift egg goes into the
+Backpack ("A new egg will come" in the Release dialog); with pets in the Box the dialog warns "No
+egg: home stays empty".
 
 ### The Box (v1.37)
 Swipe **right** from the home screen (pet or egg) to open the Box: **6 slots** where pets
@@ -704,8 +705,7 @@ waiting egg) · `STORE <k>` / `WAKE <k>` (store into / wake from slot k = 0–5,
 without the light) · `BOXFILL` (made-up pets in the empty slots, for tests and screenshots) ·
 `BOXCLR <k>` (empty slot k, also a damaged one) · `NVS` (used and free NVS entries) ·
 `EGG` (eggs in the Backpack, the waiting egg, steps to the next one, empty home or not) · `EGG <n>` (set the
-Backpack to n eggs, for tests) · `RELEASE` / `RELEASE EGG` / `RELEASE EMPTY` (release without the
-dialogs; EGG / EMPTY are the two answers of "Use an egg?") · `AGE <min>` (the pet's age in game minutes, for tests: 4320 on a final
+Backpack to n eggs, for tests) · `RELEASE` (release without the dialog) · `AGE <min>` (the pet's age in game minutes, for tests: 4320 on a final
 form shows the farewell button) · `TAP <x> <y>` (a tap at
 canvas coordinates, through the same path as a finger; prints the battle phase).
 

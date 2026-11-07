@@ -8,6 +8,27 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.41] - 2026-11-07
+
+No egg comes home by itself after an ending: you hatch it from the empty home.
+
+### Changed
+
+- **No "Use an egg?" question after a release.** After trying v1.40 on the board, the question was
+  redundant: the empty home already has its **Hatch an egg (N)** button. Now every ending
+  (release, farewell, runaway) leaves the home empty:
+  - the egg that was waiting from the Box goes into the Backpack (with a full Backpack it can't,
+    and comes home instead);
+  - the farewell's reward egg goes into the Backpack ("GIFT!"; lost with a full Backpack, which
+    the popup says);
+  - with no egg and nobody in the Box, the gift egg goes into the Backpack too.
+  
+  With eggs, the empty home shows "Your eggs are waiting!" and the button. Storing a pet in the Box
+  still brings an egg home, as in v1.39.
+- The gift egg is now an ordinary Backpack egg: like any egg out of the Backpack, it spends the
+  Shiny Charm if you hold one.
+- Serial: `RELEASE EGG` / `RELEASE EMPTY` are gone (`RELEASE` stays).
+
 ## [1.40] - 2026-11-07
 
 Releasing a pet no longer brings an egg you didn't know you had, and you can't end up with nothing.
@@ -21,7 +42,7 @@ Releasing a pet no longer brings an egg you didn't know you had, and you can't e
 
 ### Changed
 
-- **Releasing asks about the egg.** After "Release X? YES", if you have any egg (the waiting one
+- **Releasing asks about the egg** (dropped again in v1.41). After "Release X? YES", if you have any egg (the waiting one
   or the Backpack), a second dialog asks "Use an egg?": **Hatch an egg (N)** (the waiting one
   first, then one from the Backpack) or **Leave home empty** (the eggs stay; the waiting egg
   moves into the Backpack, and its hidden species is rolled again when it comes out). With a

@@ -41,7 +41,7 @@ void Pet::resetHome() {
   sleeping = false;
 }
 
-void Pet::newEgg(bool saveNow, bool charmOk) {
+void Pet::newEgg(bool saveNow) {
   resetHome();
   vacant = false;
   if (eggHeldFlag) {
@@ -55,7 +55,7 @@ void Pet::newEgg(bool saveNow, bool charmOk) {
     starterPick = (registeredCount() == 0);  // primera partida: el jugador elige inicial
     // amuleto shiny de la mochila: lo gasta este huevo. No el inicial, ni
     // pickEggSpecies(), que tambien usa la simulacion de tiradas (comando EGGS).
-    bool charm = charmOk && items[IT_CHARM] && !starterPick;
+    bool charm = items[IT_CHARM] && !starterPick;
     if (charm) items[IT_CHARM] = 0;
     eggShiny = (random(shinyOdds(charm)) == 0);
     eggTaps = 0;
@@ -63,37 +63,43 @@ void Pet::newEgg(bool saveNow, bool charmOk) {
   persist(saveNow);
 }
 
-// La casa queda libre (fin de una crianza o guardar en la caja). Huevos limitados (v1.39): vuelve el
-// que esperaba en la incubadora; si no, sale uno de la mochila (y se sortea ahora, con el amuleto si
-// lo hay); si tampoco, la casa se queda vacia.
-// v1.40: sin huevos y sin nadie en la caja llega un huevo de regalo (tirada normal, sin amuleto):
-// nunca se acaba sin bicho, sin huevo y sin nadie a quien despertar. HOME_EMPTY ("Dejar casa vacia"
-// al soltar) deja los huevos donde estan; el que esperaba pasa a la mochila (su especie y su tirada
-// shiny se pierden: se sortea de nuevo al salir). save() escribe la mochila antes que "eggH", asi
-// que un corte entre los dos deja un huevo de mas, nunca uno de menos.
-void Pet::freeHome(uint8_t mode) {
-  if (mode == HOME_EMPTY && (eggHeldFlag || items[IT_EGG])) {
-    if (eggHeldFlag && items[IT_EGG] < ITEM_MAX) {
-      items[IT_EGG]++;
-      eggHeldFlag = false;
-    }
-    if (!eggHeldFlag) {
-      vacate();
-      return;
-    }
-    // mochila llena: el que esperaba no cabe y vuelve a casa (la UI no ofrece esa opcion)
-  }
+// Guardar en la caja deja la casa libre. Huevos limitados (v1.39): vuelve el que esperaba en la
+// incubadora; si no, sale uno de la mochila (y se sortea ahora, con el amuleto si lo hay); si
+// tampoco, la casa se queda vacia.
+void Pet::freeHome() {
   if (eggHeldFlag) {
     newEgg();
   } else if (items[IT_EGG]) {
     items[IT_EGG]--;
     newEgg();
-  } else if (!boxHasPets()) {
-    queueFound(IT_EGG, false, true);  // "REGALO!" con el huevo, ya en casa
-    newEgg(true, false);
   } else {
     vacate();
   }
+}
+
+// Fin de una crianza (soltar, despedida, escapada; v1.41): ningun huevo llega solo a casa. La casa se
+// queda vacia y, con huevos, ofrece su boton "Abrir un huevo (N)" (preguntarlo al soltar, como hacia
+// la v1.40, era redundante con ese boton).
+// - La despedida deja un huevo de premio en la mochila (con la mochila llena se pierde y lo dice).
+//   Se da aqui y no al empezar: la ceremonia no se guarda, y un corte durante ella devuelve al bicho
+//   con su boton de despedida.
+// - El huevo que esperaba en la incubadora pasa a la mochila (se sortea de nuevo al salir); con la
+//   mochila llena no cabe y vuelve a casa. save() escribe la mochila antes que "eggH": un corte
+//   entre los dos deja un huevo de mas, nunca uno de menos.
+// - Sin huevos y sin nadie en la caja, un huevo de regalo a la mochila: nunca se acaba sin bicho,
+//   sin huevo y sin nadie a quien despertar.
+void Pet::endLife(uint8_t cer) {
+  if (cer == CER_FAREWELL) giveFound(IT_EGG, true);
+  if (eggHeldFlag) {
+    if (items[IT_EGG] >= ITEM_MAX) {
+      newEgg();
+      return;
+    }
+    items[IT_EGG]++;
+    eggHeldFlag = false;
+  }
+  if (!items[IT_EGG] && !boxHasPets()) giveFound(IT_EGG, true);
+  vacate();
 }
 
 bool Pet::boxHasPets() const {
@@ -197,19 +203,9 @@ void Pet::syncClock(uint32_t nowEpoch) {
 }
 
 void Pet::update(uint32_t nowMs) {
-  // fin de ceremonia: la criatura se va y llega el huevo que esperaba, uno de la mochila o nadie
+  // fin de ceremonia: la criatura se va y la casa se queda vacia (v1.41, ver endLife)
   if (ceremony != CER_NONE && !timeLeft(ceremonyUntil)) {
-    // v1.40: la despedida (el final bueno) deja un huevo de premio. Se da aqui y no al empezar: la
-    // ceremonia no se guarda, y un corte durante ella devuelve al bicho con su boton de despedida.
-    // Con la mochila llena y sin huevo esperando, cabe igual: freeHome() lo saca ahora mismo.
-    if (ceremony == CER_FAREWELL) {
-      bool full = items[IT_EGG] >= ITEM_MAX && eggHeldFlag;
-      if (!full) items[IT_EGG]++;
-      queueFound(IT_EGG, full, true);
-    }
-    uint8_t mode = endHome;
-    endHome = HOME_AUTO;
-    freeHome(mode);
+    endLife(ceremony);
     return;
   }
   while (nowMs - lastTick >= PET_TICK_MS) {
@@ -492,7 +488,6 @@ bool Pet::canRunawayNow() const {
 
 void Pet::startFarewell() {
   if (isEgg() || ceremony != CER_NONE) return;
-  endHome = HOME_AUTO;
   lastEnd = CER_FAREWELL;
   ceremony = CER_FAREWELL;
   ceremonyUntil = millis() + CEREMONY_MS;
@@ -503,7 +498,6 @@ void Pet::startFarewell() {
 
 void Pet::startRunaway() {
   if (isEgg() || ceremony != CER_NONE) return;
-  endHome = HOME_AUTO;
   lastEnd = CER_RUNAWAY;
   ceremony = CER_RUNAWAY;
   ceremonyUntil = millis() + CEREMONY_MS;
@@ -511,9 +505,8 @@ void Pet::startRunaway() {
   save();
 }
 
-void Pet::release(uint8_t home) {
+void Pet::release() {
   if (isEgg() || ceremony != CER_NONE) return;
-  endHome = home;
   lastEnd = CER_RELEASE;
   ceremony = CER_RELEASE;
   ceremonyUntil = millis() + CEREMONY_MS;

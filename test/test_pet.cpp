@@ -1212,7 +1212,10 @@ TEST(items, el_amuleto_lo_gasta_el_siguiente_huevo_y_no_el_inicial) {
   p.items[IT_EGG] = 1;  // v1.39: el huevo sale de la mochila
   p.release();
   mockAdvanceMillis(CEREMONY_MS + 1);
-  p.update(millis());  // fin de la ceremonia: huevo nuevo
+  p.update(millis());  // fin de la ceremonia: la casa vacia (v1.41), el amuleto aun sin gastar
+  CHECK(p.isVacant());
+  CHECK_EQ(p.items[IT_CHARM], (uint8_t)1);
+  CHECK(p.hatchFromBag());  // el boton de la casa vacia: huevo nuevo
   CHECK(p.isEgg());
   CHECK(!p.isVacant());
   CHECK_EQ(p.items[IT_EGG], (uint8_t)0);
