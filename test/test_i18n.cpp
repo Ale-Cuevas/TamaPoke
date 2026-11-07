@@ -73,6 +73,7 @@ static const ExpectedFmt EXPECTED[] = {
   { S_DEF_GAIN_FMT,    "%u" },
   { S_DODGED_FMT,      "%u" },
   { S_SPD_GAIN_FMT,    "%u" },
+  { S_ZEN_BONUS_FMT,   "%u" },
 };
 static const int NUM_EXPECTED = (int)(sizeof(EXPECTED) / sizeof(EXPECTED[0]));
 

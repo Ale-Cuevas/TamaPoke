@@ -190,7 +190,9 @@ public:
   }
   void playResult(uint8_t score);  // recompensa del minijuego (entrena VEL)
   uint8_t trainStrength(uint16_t hits);  // saco de entrenamiento (entrena FUE)
-  uint8_t zenResult(uint16_t focusTenths);  // cascada completa (entrena DEF y lava), v1.43
+  // cascada completa (entrena DEF y lava), v1.43; driftTenths: la parte con la franja moviendose,
+  // que da DEF de bonificacion (v1.47)
+  uint8_t zenResult(uint16_t focusTenths, uint16_t driftTenths = 0);
   uint8_t dashResult(uint16_t dodged);      // carrera en trineo (entrena VEL), v1.44
 
   // stats de combate: base real de gen 1 x genes + nivel + entrenamiento

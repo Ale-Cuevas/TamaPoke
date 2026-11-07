@@ -47,7 +47,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.46"
+#define FW_VERSION "1.47"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -166,7 +166,8 @@ bool zenTouched = false;     // ya se toco una vez: se quita la explicacion
 bool zenNoSave = false;      // sesion del comando ZEN: ni premio ni record
 bool zenNewHi = false;
 int8_t zenSerialHold = -1;   // comando HOLD: 1 dedo puesto, 0 quitado, -1 el dedo de verdad
-uint8_t zenGainShown = 0;
+uint8_t zenGainShown = 0, zenBonusShown = 0;
+bool zenDriftAnnounced = false;  // ya sono el aviso de que la franja empieza a moverse
 uint16_t zenSurgesHeard = 0;
 uint32_t zenDrawUs = 0, zenDrawMaxUs = 0, zenFlushUs = 0;  // lo que tarda un frame de la cascada (ZEN?), sin el volcado
 // colores de la cascada (aqui y no junto a su funcion: el conversor .ino pone los prototipos arriba)
@@ -924,10 +925,12 @@ void handleSerial() {
     Serial.printf("steer=%s %.1f -> %.2f\n", dashSerialSteerOn ? "on" : "off", dashSerialSteer, dashSteer(dashSerialSteer));
     Serial.println("DONE");
   } else if (line == "ZEN?") {  // estado de la cascada
-    Serial.printf("zen: open=%d intro=%d over=%d t=%lu c=%.1f vc=%.1f band=%.1f-%.1f next=%lu surges=%u focus=%u.%u hold=%d serial=%d nosave=%d draw=%luus max=%luus flush=%luus\n",
+    Serial.printf("zen: open=%d intro=%d over=%d t=%lu c=%.1f vc=%.1f band=%.1f-%.1f dir=%d next=%lu surges=%u focus=%u.%u drift=%u.%u bonus=%u hold=%d serial=%d nosave=%d draw=%luus max=%luus flush=%luus\n",
                   zenOpen, timeLeft(zenIntroUntil) ? 1 : 0, zenOverUntil ? 1 : 0, (unsigned long)zen.t, zen.c, zen.vc,
-                  50 - zenBandHalf(zen.t), 50 + zenBandHalf(zen.t), (unsigned long)zen.nextSurge, zen.surges,
-                  zenFocusTenths(zen) / 10, zenFocusTenths(zen) % 10, zenHold, zenSerialHold, zenNoSave,
+                  zenCenter(zen.t, zen.driftDir) - zenBandHalf(zen.t), zenCenter(zen.t, zen.driftDir) + zenBandHalf(zen.t),
+                  zen.driftDir, (unsigned long)zen.nextSurge, zen.surges,
+                  zenFocusTenths(zen) / 10, zenFocusTenths(zen) % 10, zenDriftTenths(zen) / 10, zenDriftTenths(zen) % 10,
+                  zenBonus(zenDriftTenths(zen)), zenHold, zenSerialHold, zenNoSave,
                   (unsigned long)zenDrawUs, (unsigned long)zenDrawMaxUs, (unsigned long)zenFlushUs);
     zenDrawMaxUs = 0;
     Serial.println("DONE");
@@ -2448,7 +2451,8 @@ void renderSack() {
     setCur(centerX(b, 4), 150);
     printT(b);
     char g[18];
-    snprintf(g, sizeof(g), T(S_STR_GAIN_FMT), sackGain);
+    if (sackGain == 0 && pet.trAtk >= 100) snprintf(g, sizeof(g), "%s", T(S_ATK_MAX));  // ya al tope: no "+0"
+    else snprintf(g, sizeof(g), T(S_STR_GAIN_FMT), sackGain);
     gfx->setTextColor(UI_BAR_BAD);
     setSize(3);
     setCur(centerX(g, 3), 210);
@@ -2553,20 +2557,23 @@ void startZen() {
   zenNoSave = false;
   zenNewHi = false;
   zenGainShown = 0;
+  zenBonusShown = 0;
+  zenDriftAnnounced = false;
   zenSurgesHeard = 0;
 }
 
 // la sesion entera ha terminado: premio (salvo la partida del comando ZEN) y resultado
 void finishZen(uint32_t now) {
-  uint16_t focus = zenFocusTenths(zen);
+  uint16_t focus = zenFocusTenths(zen), drift = zenDriftTenths(zen);
+  zenBonusShown = zenBonus(drift);
   if (zenNoSave) {
     zenNewHi = false;
-    zenGainShown = zenGain(focus);  // lo que daria, para verlo; no se aplica
+    zenGainShown = zenTotalGain(focus, drift);  // lo que daria, para verlo; no se aplica
     sfxPlay(SFX_LEVEL);
   } else {
     zenNewHi = focus > pet.zenHi;
     FxNeedSnap ns = fxSnap();
-    zenGainShown = pet.zenResult(focus);  // DEF, lavado, record
+    zenGainShown = pet.zenResult(focus, drift);  // DEF (con la bonificacion), lavado, record
     fxNeeds(ns);  // los "+N" salen al volver a la pantalla principal
     sfxPlay(zenNewHi && focus > 0 ? SFX_MEDAL : SFX_PLAY);
   }
@@ -2582,6 +2589,10 @@ void zenTick(uint32_t now) {
   bool hold = zenSerialHold >= 0 ? zenSerialHold == 1 : zenHold;
   zenAdvance(zen, hold, now - zenLastTick);
   zenLastTick = now;
+  if (zenDrifting(zen.t) && !zenDriftAnnounced) {  // la franja empieza a moverse: bonificacion
+    zenDriftAnnounced = true;
+    sfxPlay(SFX_LEVEL);
+  }
   if (zen.surges != zenSurgesHeard) {  // golpe de agua
     zenSurgesHeard = zen.surges;
     sfxPlay(SFX_HIT);
@@ -2691,15 +2702,15 @@ void drawZenScene(uint32_t now, int8_t zone, uint32_t warn, bool splash) {
 }
 
 // barra de concentracion vertical a la derecha, con la franja verde (FR-ZEN.3)
-void drawZenGauge(float c, uint32_t t, bool inBand) {
+void drawZenGauge(float c, uint32_t t, int8_t dir, bool inBand) {
   int h = ZEN_GAUGE_BOT - ZEN_GAUGE_TOP;
   auto yOf = [&](float v) { return ZEN_GAUGE_BOT - (int)(v * h / 100.0f); };
   gfx->fillRoundRect(ZEN_GAUGE_X - 3, ZEN_GAUGE_TOP - 3, ZEN_GAUGE_W + 6, h + 6, 8, UI_INK);
   gfx->fillRect(ZEN_GAUGE_X, ZEN_GAUGE_TOP, ZEN_GAUGE_W, h, UI_TRACK);
   int fy = yOf(c);
   if (ZEN_GAUGE_BOT > fy) gfx->fillRect(ZEN_GAUGE_X, fy, ZEN_GAUGE_W, ZEN_GAUGE_BOT - fy, C565(0xa8, 0xdc, 0xf6));
-  float half = zenBandHalf(t);
-  int b0 = yOf(50 + half), b1 = yOf(50 - half);
+  float half = zenBandHalf(t), mid = zenCenter(t, dir);
+  int b0 = yOf(mid + half), b1 = yOf(mid - half);
   uint16_t band = inBand ? C565(0x6c, 0xe0, 0x7c) : C565(0x3c, 0x8a, 0x4c);
   gfx->fillRect(ZEN_GAUGE_X, b0, ZEN_GAUGE_W, b1 - b0, band);
   gfx->fillRect(ZEN_GAUGE_X - 8, fy - 3, ZEN_GAUGE_W + 16, 6, UI_INK);  // marcador
@@ -2709,7 +2720,7 @@ void drawZenGauge(float c, uint32_t t, bool inBand) {
 void renderZen() {
   uint32_t now = millis();
   bool intro = timeLeft(zenIntroUntil);
-  int8_t zone = intro ? 0 : zenZone(zen.c, zen.t);
+  int8_t zone = intro ? 0 : zenZone(zen.c, zen.t, zen.driftDir);
   bool splash = zen.surges && zen.t - zen.lastSurge < 500 && !zenOverUntil;
   uint32_t warn = !intro && !zenOverUntil && zenSurgeWarning(zen) ? zen.nextSurge - zen.t : 0;
   drawZenScene(now, zenOverUntil ? 0 : zone, warn, splash);
@@ -2717,8 +2728,8 @@ void renderZen() {
   if (zenOverUntil) {  // resultado
     if (!timeLeft(zenOverUntil)) { zenOpen = false; return; }
     uint16_t f = zenFocusTenths(zen);
-    gfx->fillRoundRect(CX - 150, 92, 300, 196, 20, UI_WHITE);
-    gfx->drawRoundRect(CX - 150, 92, 300, 196, 20, UI_INK);
+    gfx->fillRoundRect(CX - 150, 86, 300, 224, 20, UI_WHITE);
+    gfx->drawRoundRect(CX - 150, 86, 300, 224, 20, UI_INK);
     char b[40];
     snprintf(b, sizeof(b), T(S_FOCUS_FMT), f / 10, f % 10);
     gfx->setTextColor(UI_INK);
@@ -2726,24 +2737,32 @@ void renderZen() {
     setCur(centerX(b, 3), 116);
     printT(b);
     char g[24];
-    snprintf(g, sizeof(g), T(S_DEF_GAIN_FMT), zenGainShown);
+    if (zenGainShown == 0 && pet.trDef >= 100) snprintf(g, sizeof(g), "%s", T(S_DEF_MAX));  // ya al tope
+    else snprintf(g, sizeof(g), T(S_DEF_GAIN_FMT), zenGainShown);
     gfx->setTextColor(C565(0x4f, 0x93, 0xc4));
-    setCur(centerX(g, 3), 160);
+    setCur(centerX(g, 3), 156);
     printT(g);
     setSize(2);
+    if (zenBonusShown && !(zenGainShown == 0 && pet.trDef >= 100)) {
+      char bo[32];  // la parte de la bonificacion (franja en movimiento), incluida en la cifra de arriba
+      snprintf(bo, sizeof(bo), T(S_ZEN_BONUS_FMT), zenBonusShown);
+      gfx->setTextColor(UI_BAR_WARN);
+      setCur(centerX(bo, 2), 198);
+      printT(bo);
+    }
     if (zenNewHi && f > 0) {
       gfx->setTextColor(UI_BAR_WARN);
-      setCur(centerX(T(S_NEW_RECORD), 2), 206);
+      setCur(centerX(T(S_NEW_RECORD), 2), 232);
       printT(T(S_NEW_RECORD));
     } else {
       char r[40];
       snprintf(r, sizeof(r), T(S_ZEN_BEST_FMT), pet.zenHi / 10, pet.zenHi % 10);
       gfx->setTextColor(UI_INK);
-      setCur(centerX(r, 2), 206);
+      setCur(centerX(r, 2), 232);
       printT(r);
     }
     gfx->setTextColor(UI_BAR_OK);
-    setCur(centerX(T(S_CLEAN), 2), 244);
+    setCur(centerX(T(S_CLEAN), 2), 268);
     printT(T(S_CLEAN));
     gfx->flush();
     return;
@@ -2758,17 +2777,23 @@ void renderZen() {
   setCur(centerX(b, 3), 34);
   printT(b);
   char r[40];
-  snprintf(r, sizeof(r), T(S_ZEN_BEST_FMT), pet.zenHi / 10, pet.zenHi % 10);
+  if (!intro && zenDrifting(zen.t)) {  // franja en movimiento: la bonificacion que lleva, en dorado
+    snprintf(r, sizeof(r), T(S_ZEN_BONUS_FMT), zenBonus(zenDriftTenths(zen)));
+    gfx->setTextColor(UI_BAR_WARN);
+  } else {
+    snprintf(r, sizeof(r), T(S_ZEN_BEST_FMT), pet.zenHi / 10, pet.zenHi % 10);
+  }
   setSize(2);
   setCur(centerX(r, 2), 74);
   printT(r);
+  gfx->setTextColor(UI_WHITE);
   // tiempo que queda
   uint32_t left = intro ? ZEN_SESSION_MS : ZEN_SESSION_MS - (zen.t < ZEN_SESSION_MS ? zen.t : ZEN_SESSION_MS);
   int bw = 200, fw = (int)((uint32_t)bw * left / ZEN_SESSION_MS);
   gfx->fillRoundRect(CX - bw / 2, 102, bw, 10, 4, UI_TRACK);
   if (fw > 2) gfx->fillRoundRect(CX - bw / 2, 102, fw, 10, 4, UI_BAR_OK);
 
-  drawZenGauge(intro ? 50 : zen.c, intro ? 0 : zen.t, zone == 0);
+  drawZenGauge(intro ? 50 : zen.c, intro ? 0 : zen.t, zen.driftDir, zone == 0);
 
   if (intro || !zenTouched) {  // la explicacion, hasta el primer toque
     const char *l1 = T(S_ZEN_INTRO), *l2 = T(S_ZEN_HOLD);
@@ -3109,7 +3134,8 @@ void renderDash() {
     setCur(centerX(b, 3), 250);
     printT(b);
     char g[28];
-    snprintf(g, sizeof(g), T(S_SPD_GAIN_FMT), dashGainShown);
+    if (dashGainShown == 0 && pet.trSpe >= 100) snprintf(g, sizeof(g), "%s", T(S_SPE_MAX));  // ya al tope
+    else snprintf(g, sizeof(g), T(S_SPD_GAIN_FMT), dashGainShown);
     gfx->setTextColor(UI_BAR_WARN);
     setCur(centerX(g, 3), 294);
     printT(g);

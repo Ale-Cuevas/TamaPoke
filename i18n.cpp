@@ -57,6 +57,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Manten la barra en el verde!", "MANTEN PULSADO", "FOCO %u.%us", "RECORD %u.%us", "DEFENSA +%u", "Limpito!",
     // la carrera en trineo (v1.44)
     "Sujetala como vas a jugar", "Quieta un momento...", "INCLINA PARA GIRAR", "ESQUIVADOS: %u", "VELOCIDAD +%u",
+    // v1.47: bonificacion de la cascada, entrenamiento al tope
+    "EXTRA +%u", "FUERZA MAX", "DEFENSA MAX", "VELOCIDAD MAX",
   },
   // ---------------- EN ----------------
   {
@@ -108,6 +110,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Keep the bar in the green!", "HOLD TO FOCUS", "FOCUS %u.%us", "BEST %u.%us", "DEF +%u", "Squeaky clean!",
     // la carrera en trineo (v1.44)
     "Hold it the way you'll play", "Hold still...", "TILT TO STEER", "DODGED: %u", "SPD +%u",
+    // v1.47: bonificacion de la cascada, entrenamiento al tope
+    "BONUS +%u", "STR MAX", "DEF MAX", "SPD MAX",
   },
   // ---------------- FR ----------------
   {
@@ -159,6 +163,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Garde la barre dans le vert!", "MAINTIENS APPUYE", "FOCUS %u.%us", "RECORD %u.%us", "DEFENSE +%u", "Tout propre!",
     // la carrera en trineo (v1.44)
     "Tiens-la comme pour jouer", "Ne bouge plus...", "PENCHE POUR TOURNER", "ESQUIVES: %u", "VITESSE +%u",
+    // v1.47: bonificacion de la cascada, entrenamiento al tope
+    "BONUS +%u", "FORCE MAX", "DEFENSE MAX", "VITESSE MAX",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -215,6 +221,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Halte den Balken im Gr\201nen!", "GEDR\232CKT HALTEN", "FOKUS %u.%us", "REKORD %u.%us", "VERT +%u", "Blitzsauber!",
     // la carrera en trineo (v1.44)
     "Halte es wie beim Spielen", "Still halten...", "NEIGEN ZUM LENKEN", "AUSGEWICHEN: %u", "INIT +%u",
+    // v1.47: bonificacion de la cascada, entrenamiento al tope
+    "BONUS +%u", "KRAFT MAX", "VERT MAX", "INIT MAX",
   },
   // ---------------- IT ----------------
   {
@@ -266,6 +274,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Tieni la barra nel verde!", "TIENI PREMUTO", "FOCUS %u.%us", "RECORD %u.%us", "DIFESA +%u", "Pulitissimo!",
     // la carrera en trineo (v1.44)
     "Tienila come per giocare", "Fermo un attimo...", "INCLINA PER STERZARE", "SCHIVATI: %u", "VELOCITA +%u",
+    // v1.47: bonificacion de la cascada, entrenamiento al tope
+    "BONUS +%u", "FORZA MAX", "DIFESA MAX", "VELOCITA MAX",
   },
   // ---------------- PT ----------------
   {
@@ -317,6 +327,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Mantenha a barra no verde!", "SEGURE O TOQUE", "FOCO %u.%us", "RECORDE %u.%us", "DEFESA +%u", "Limpinho!",
     // la carrera en trineo (v1.44)
     "Segure como vai jogar", "Parado um pouco...", "INCLINE PARA VIRAR", "DESVIOS: %u", "VELOCIDADE +%u",
+    // v1.47: bonificacion de la cascada, entrenamiento al tope
+    "EXTRA +%u", "FOR\200A MAX", "DEFESA MAX", "VELOCIDADE MAX",
   },
   // ---------------- JA ----------------
   {
@@ -391,6 +403,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "ゲージを みどりに たもとう！", "ながおしで しゅうちゅう", "しゅうちゅう %u.%uびょう", "きろく %u.%uびょう", "ぼうぎょ +%u", "ぴかぴか！",
     // la carrera en trineo (v1.44)
     "あそぶ ときの もちかたで", "うごかさないで...", "かたむけて よけよう", "よけた: %u", "すばやさ +%u",
+    // v1.47: bonificacion de la cascada, entrenamiento al tope
+    "ボーナス +%u", "ちから MAX", "ぼうぎょ MAX", "すばやさ MAX",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -447,6 +461,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "게이지를 초록색에 유지!", "길게 눌러 집중", "집중 %u.%u초", "최고 %u.%u초", "방어 +%u", "깨끗해졌다!",
     // la carrera en trineo (v1.44)
     "플레이할 때처럼 잡아요", "잠깐 가만히...", "기울여서 피하기", "피한 수: %u", "속도 +%u",
+    // v1.47: bonificacion de la cascada, entrenamiento al tope
+    "보너스 +%u", "힘 MAX", "방어 MAX", "속도 MAX",
   },
 };
 

@@ -468,6 +468,13 @@ The user's feedback on 2026-11-07: steering felt right, but both games were too 
 the band and the surges (`zenProgress()` runs on it), so at the end of a session the band is only halfway
 narrowed: 31.2 → 21.6 (about 39–61).
 
+**v1.47:** sessions are **45 s** (`ZEN_SESSION_MS`). From `ZEN_DRIFT_FROM_MS` = 30 s the band's centre
+moves `50 ± ZEN_DRIFT_AMP·sin(2π·(t−30 s)/ZEN_DRIFT_PERIOD_MS)` (22 %, 12 s: at most ~11.5 %/s; the
+direction is seeded per session). Time in the moving band counts toward the record as usual and also
+gives **bonus DEF**: 1 per 1.5 s (`ZEN_BONUS_TENTHS_PER_POINT`), up to `ZEN_BONUS_MAX` = 10, on top of the
+normal part's 15 (`zenTotalGain()`; `Pet::zenResult(focus, drift)`). A full training stat now shows
+"STR/DEF/SPD MAX" instead of "+0".
+
 ## Order and parallel work
 
 The two games don't depend on each other. Each runs on its own branch off `main`, after or beside

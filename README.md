@@ -58,7 +58,7 @@ leaves an egg in the Backpack, and with no egg and nobody in the Box a gift egg 
 
 **v1.43: the waterfall.** A new game in PLAY trains DEFENSE: the pet meditates under a
 waterfall, you hold the screen to raise its focus and let go to lower it, and keep the gauge in
-the green band for 30 s while the band slowly narrows and surges of water push it down. A full session
+the green band for 45 s while the band slowly narrows (and from 30 s drifts up and down for bonus DEF) and surges of water push it down. A full session
 also washes the pet.
 
 **v1.44: the sled run.** Another new game in PLAY trains SPEED: the pet rides a sled down a
@@ -144,8 +144,10 @@ While **awake**, per minute:
   faster and faster (2× at 40 s, 3× at 80 s); three hits end it. Trains **SPEED** (1 pt per 4 rows
   dodged, cap +18/run), burns a little weight. Needs the IMU.
 - 🌊 **Waterfall** (fifth slot, v1.43): hold the screen to raise the focus gauge, let go to lower
-  it; keep it in the green band for 30 s. Trains **DEFENSE** (1 pt per 2 s in the band, cap
-  +15/session) and washes the pet (+10 HYG); no weight burn.
+  it; keep it in the green band for 45 s. Trains **DEFENSE** (1 pt per 2 s in the band, cap
+  +15) and washes the pet (+10 HYG); no weight burn. From 30 s the band drifts slowly up and
+  down: time in it then gives **bonus DEF** (1 pt per 1.5 s, up to +10, so +25 for a perfect
+  session).
 - 🫧 **Bath:** clears poops, HYG → 100.
 - 👆 **Pet it:** +5 JOY + bond.
 - 🌙 **Sleep:** rest — ENE **+6/min**, needs drain ~**4× slower** with floors

@@ -482,6 +482,15 @@ TEST(train, cascada_da_def_lava_y_guarda_record) {
   CHECK_EQ(p.zenHi, (uint16_t)300);  // un peor resultado no baja el record
 }
 
+TEST(train, la_cascada_suma_la_bonificacion_de_la_franja_en_movimiento) {
+  Pet p;
+  makePet(p, 4);
+  p.trDef = 10;
+  CHECK_EQ(p.zenResult(450, 150), (uint8_t)25);  // 30 s normales (15) + 15 s moviendose (10)
+  CHECK_EQ(p.trDef, (uint8_t)35);
+  CHECK_EQ(p.zenHi, (uint16_t)450);
+}
+
 TEST(train, la_cascada_anuncia_lo_que_de_verdad_sube_y_topa) {
   Pet p;
   makePet(p, 4);
