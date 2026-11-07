@@ -47,7 +47,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.50"
+#define FW_VERSION "1.49"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -3360,7 +3360,7 @@ void drawCardStat(int y, const char *label, uint16_t val, uint16_t maxBar, uint1
   if (fw > 2) gfx->fillRoundRect(bx, y + 2, fw, 11, 3, color);
 }
 
-// Barra fina bajo una de combate (v1.50): el entrenamiento de ese stat, 0-100. El numero de
+// Barra fina bajo una de combate (v1.49): el entrenamiento de ese stat, 0-100. El numero de
 // arriba es el stat de combate (base x genes + nivel + entrenamiento), que sigue subiendo con
 // el nivel; esta es solo la parte entrenada, la que topa en 100 y hace que el juego diga
 // "<stat> MAX". Sin ella, ese MAX con un stat de combate bajo parecia un fallo.
@@ -4118,7 +4118,7 @@ void renderCardStats() {
   drawCardTrain(236, pet.trSpe, UI_BAR_WARN);
   drawCardStat(292, T(S_STAT_WGT), pet.weight, 100, 0xB3C8);
 
-  // que es la barra fina (v1.50)
+  // que es la barra fina (v1.49)
   gfx->setTextColor(UI_TRACK);
   setSize(2);
   setCur(centerX(T(S_TRAIN_LEGEND), 2), 338);

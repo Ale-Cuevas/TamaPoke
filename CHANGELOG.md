@@ -8,9 +8,7 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
-## [1.50] - 2026-11-07
-
-(v1.49 is reserved for the OTA update, still on its own branch.)
+## [1.49] - 2026-11-07
 
 ### Added
 

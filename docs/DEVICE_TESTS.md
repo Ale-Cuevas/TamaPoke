@@ -309,7 +309,7 @@ doesn't touch the record or give rewards.
   ball and bag slots still work.
 - [ ] The stat card's Battle page shows only the four bars (ATK, DEF, SPD, WGT), spread over the page, with no
   button; a tap anywhere on it closes the card.
-- [ ] (v1.50) Under ATK, DEF and SPD there is a thin bar with the training (0–100) and its number on the
+- [ ] (v1.49) Under ATK, DEF and SPD there is a thin bar with the training (0–100) and its number on the
   right, "MAX" in the stat's colour at 100, and "thin bar: training" under the WGT bar. After a bag session
   the thin ATK bar grows by the "STR +N" the result showed.
 - [ ] USER = back still quits the bag (no reward while the time runs).

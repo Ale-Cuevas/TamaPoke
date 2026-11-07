@@ -87,7 +87,7 @@ enum StrId : uint8_t {
   S_DASH_HOLD, S_DASH_STILL, S_DASH_TILT, S_DODGED_FMT, S_SPD_GAIN_FMT,
   // v1.47: bonificacion de la cascada y el entrenamiento ya al tope (en vez de "+0")
   S_ZEN_BONUS_FMT, S_ATK_MAX, S_DEF_MAX, S_SPE_MAX,
-  // v1.50: leyenda de la barra fina de entrenamiento en la ficha de combate
+  // v1.49: leyenda de la barra fina de entrenamiento en la ficha de combate
   S_TRAIN_LEGEND,
   STR_COUNT
 };
