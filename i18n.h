@@ -85,6 +85,8 @@ enum StrId : uint8_t {
   S_ZEN_INTRO, S_ZEN_HOLD, S_FOCUS_FMT, S_ZEN_BEST_FMT, S_DEF_GAIN_FMT, S_CLEAN,
   // la carrera en trineo (v1.44): calibracion, pista, resultado
   S_DASH_HOLD, S_DASH_STILL, S_DASH_TILT, S_DODGED_FMT, S_SPD_GAIN_FMT,
+  // v1.47: bonificacion de la cascada y el entrenamiento ya al tope (en vez de "+0")
+  S_ZEN_BONUS_FMT, S_ATK_MAX, S_DEF_MAX, S_SPE_MAX,
   STR_COUNT
 };
 

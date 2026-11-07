@@ -320,14 +320,15 @@ the gauge, band, next surge, focus and the frame's draw time.
 - [ ] Intro: "Keep the bar in the green!" / "HOLD TO FOCUS" for 1.5 s, and the hint stays until the first touch.
 - [ ] Holding anywhere below the top raises the gauge, letting go lowers it, and it keeps moving a moment after
   either; a quick tap between two frames still nudges it.
-- [ ] The band narrows slowly (by the end of the 30 s it's only halfway to its narrowest, v1.46); surges come from 5 s on, each one after a white wave runs down the water,
+- [ ] A session lasts 45 s (v1.47). The band narrows slowly; from 30 s it drifts up or down and back, "BONUS +N" replaces the record line and counts up while you stay in it, and the result shows the bonus line (included in "DEF +N"). Surges come from 5 s on, each one after a white wave runs down the water,
   and they push the gauge down harder at the end.
 - [ ] Pet: calm with the aura in the band, splashed below, "!" above. A blue pet (Squirtle line) stands out on
   the darker water behind it.
-- [ ] The screen doesn't dim during a session even with the finger held still for 30 s.
+- [ ] The screen doesn't dim during a session even with the finger held still for 45 s.
 - [ ] Result: focus, "DEF +N", record or "NEW RECORD!", "Squeaky clean!"; after it the home shows the "+N"
   on the hygiene bar, and `STATS` shows `tr=…/<def>/…` and `rec … zen=`.
 - [ ] Quitting (tap the top, USER, PWR) gives nothing and keeps the record.
+- [ ] With DEF training at 100 the result says "DEF MAX" (and the bag "STR MAX", the sled "SPD MAX") instead of "+0".
 - [ ] Learnable: the first session is hard, the third clearly better; the last 10 s are hard but possible.
 
 ### Sled run (v1.44)

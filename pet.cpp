@@ -645,10 +645,10 @@ uint8_t Pet::trainStrength(uint16_t hits) {
 // cascada (ZEN, docs/NEW_GAMES.md FR-ZEN.12): solo se llama al acabar la sesion entera (abandonar
 // no da nada). La concentracion entrena la defensa y el agua lava al bicho. Sentado no quema
 // peso. Devuelve los puntos de DEF que de verdad entraron.
-uint8_t Pet::zenResult(uint16_t focusTenths) {
+uint8_t Pet::zenResult(uint16_t focusTenths, uint16_t driftTenths) {
   if (ceremony != CER_NONE || isEgg()) return 0;
   uint8_t antes = trDef;
-  uint16_t v = (uint16_t)trDef + zenGain(focusTenths);
+  uint16_t v = (uint16_t)trDef + zenTotalGain(focusTenths, driftTenths);
   trDef = v > 100 ? 100 : (uint8_t)v;
   uint8_t gain = trDef - antes;
   energy = dropTo(energy, 8, 5);

@@ -8,6 +8,23 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.47] - 2026-11-07
+
+### Changed
+
+- **Waterfall: 45 s, with a bonus part.** For the first 30 s it plays as before. Then the green band
+  starts drifting slowly up or down and back (the direction changes from session to session), and
+  the time you keep the gauge in it gives **bonus DEF**: 1 point per 1.5 s, up to +10. The normal
+  part still gives up to +15, so a perfect session gives +25. While the band moves, "BONUS +N"
+  replaces the record line and counts up; the result shows the bonus line, which is included in
+  the "DEF +N" above it.
+
+### Fixed
+
+- **"STR +0" after a full training bag.** It wasn't a bug in the count: each stat's training stops
+  at 100, and a pet already there has nothing left to gain. The bag now says **"STR MAX"** in that
+  case, and the waterfall and the sled run say "DEF MAX" / "SPD MAX".
+
 ## [1.46] - 2026-11-07
 
 ### Changed

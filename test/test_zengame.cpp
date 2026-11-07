@@ -62,13 +62,13 @@ TEST(zengame, la_velocidad_tiene_tope) {
 
 TEST(zengame, la_franja_se_estrecha_despacio_y_a_los_30s_va_por_la_mitad) {
   CHECK(near(2 * zenBandHalf(0), ZEN_BAND_START));
-  CHECK(near(2 * zenBandHalf(ZEN_SESSION_MS), (ZEN_BAND_START + ZEN_BAND_END) / 2));  // fin de sesion: 21,6
+  CHECK(near(2 * zenBandHalf(30000), (ZEN_BAND_START + ZEN_BAND_END) / 2));  // a los 30 s: 21,6
   CHECK(near(2 * zenBandHalf(ZEN_RAMP_MS), ZEN_BAND_END));
   CHECK(near(2 * zenBandHalf(ZEN_RAMP_MS + 5000), ZEN_BAND_END));
   CHECK(zenInBand(65, 0) && !zenInBand(66, 0));  // 34,4-65,6 al empezar
-  CHECK_EQ(ZEN_SESSION_MS, 30000u);
+  CHECK_EQ(ZEN_SESSION_MS, 45000u);
   CHECK_EQ(ZEN_RAMP_MS, 60000u);
-  CHECK(zenInBand(60, ZEN_SESSION_MS) && !zenInBand(61, ZEN_SESSION_MS));  // 39,2-60,8 al acabar
+  CHECK(zenInBand(60, 29990) && !zenInBand(61, 29990));  // 39,2-60,8 justo antes de moverse
   CHECK(zenInBand(55, ZEN_RAMP_MS) && !zenInBand(57, ZEN_RAMP_MS));
   CHECK_EQ(zenZone(30, 0), -1);
   CHECK_EQ(zenZone(50, 0), 0);
@@ -156,7 +156,7 @@ TEST(zengame, un_frame_tardio_cuenta_como_mucho_250ms) {
   CHECK_EQ(z.t, ZEN_LATE_MAX_MS);
 }
 
-TEST(zengame, la_sesion_dura_30s_y_no_pasa_de_ahi) {
+TEST(zengame, la_sesion_dura_45s_y_no_pasa_de_ahi) {
   ZenState z = calm();
   for (int i = 0; i < 4000; i++) zenAdvance(z, z.c < 50, 20);
   CHECK(zenDone(z));
@@ -172,8 +172,8 @@ static float scripted(uint32_t seed, int lag, float lead) {
   std::deque<float> seen;
   bool hold = false;
   while (!zenDone(z)) {
-    seen.push_back(z.c + z.vc * lead);
-    if ((int)seen.size() > lag / 20) { hold = seen.front() < 50; seen.pop_front(); }
+    seen.push_back(z.c + z.vc * lead - zenCenter(z.t, z.driftDir));  // lo que le falta para el centro
+    if ((int)seen.size() > lag / 20) { hold = seen.front() < 0; seen.pop_front(); }
     zenAdvance(z, hold, 20);
   }
   return (float)z.inBandMs / ZEN_SESSION_MS;
@@ -189,6 +189,51 @@ TEST(zengame, se_puede_ganar_pero_no_es_trivial) {
   // reacciona se queda en ~60 % (era ~33 % con la v1.43)
   CHECK(good / 30 > 0.9f);
   CHECK(naive / 30 < 0.75f);
+}
+
+TEST(zengame, desde_los_30s_la_franja_sube_y_baja_sin_salirse) {
+  CHECK(!zenDrifting(29990));
+  CHECK(zenDrifting(30000));
+  CHECK(near(zenCenter(0, 1), 50) && near(zenCenter(29990, -1), 50));
+  CHECK(near(zenCenter(30000, 1), 50));                       // arranca desde el centro, sin salto
+  CHECK(near(zenCenter(33000, 1), 50 + ZEN_DRIFT_AMP, 0.01f));  // un cuarto de vaiven: arriba del todo
+  CHECK(near(zenCenter(33000, -1), 50 - ZEN_DRIFT_AMP, 0.01f)); // ...o abajo, segun el sentido
+  float prev = zenCenter(30000, 1);
+  for (uint32_t t = 30000; t <= ZEN_SESSION_MS; t += 10) {
+    float m = zenCenter(t, 1), h = zenBandHalf(t);
+    CHECK(m - h >= 0 && m + h <= 100);                         // nunca se sale de la barra
+    CHECK(std::fabs(m - prev) <= 0.13f);                        // despacio: <= ~12 %/s
+    prev = m;
+  }
+  // los dos sentidos salen con semillas distintas
+  int up = 0;
+  for (uint32_t s = 1; s <= 100; s++) { ZenState z; zenStart(z, s); up += z.driftDir > 0; }
+  CHECK(up > 20 && up < 80);
+}
+
+TEST(zengame, la_concentracion_con_la_franja_moviendose_se_cuenta_aparte) {
+  ZenState z;
+  zenStart(z, 3);
+  z.nextSurge = ZEN_SESSION_MS;
+  while (!zenDone(z)) {  // sigue al centro perfectamente
+    z.c = zenCenter(z.t, z.driftDir);
+    z.vc = 0;
+    zenAdvance(z, false, 10);
+  }
+  CHECK_EQ(z.inBandMs, ZEN_SESSION_MS);
+  CHECK_EQ(z.driftInBandMs, ZEN_SESSION_MS - ZEN_DRIFT_FROM_MS);
+  CHECK_EQ(zenDriftTenths(z), 150);
+}
+
+TEST(zengame, bonificacion_1_cada_1_5s_tope_10_y_el_total) {
+  CHECK_EQ(zenBonus(0), 0);
+  CHECK_EQ(zenBonus(15), 1);
+  CHECK_EQ(zenBonus(150), 10);
+  CHECK_EQ(zenBonus(400), 10);
+  CHECK_EQ(zenTotalGain(450, 150), 25);  // sesion perfecta: 15 + 10
+  CHECK_EQ(zenTotalGain(200, 60), 7 + 4);
+  CHECK_EQ(zenTotalGain(100, 0), 5);
+  CHECK_EQ(zenTotalGain(50, 90), 3);     // drift mayor que el total: se recorta
 }
 
 TEST(zengame, ganancia_de_def_1_cada_2s_tope_15) {

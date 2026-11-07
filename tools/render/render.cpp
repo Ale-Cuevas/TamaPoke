@@ -399,6 +399,13 @@ static const std::vector<Scene> &scenes() {
     { "zen-warn", [] { zenPlaying(7, 13, 50); zen.nextSurge = zen.t + 200; } },
     { "zen-warn-early", [] { zenPlaying(25, 13, 50); zen.nextSurge = zen.t + 380; } },
     { "zen-late-night", [] { zenPlaying(143, 22, 49); zen.t = 27000; } },
+    // v1.47: from 30 s the band drifts and its focus gives bonus DEF
+    { "zen-drift", [] { zenPlaying(7, 13, 68); zen.driftDir = 1; zen.t = 32500; zen.driftInBandMs = 2100; } },
+    { "zen-result-bonus", [] { zenPlaying(7, 13, 50); zen.t = ZEN_SESSION_MS; zen.inBandMs = 38200; zenGainShown = 22;
+                               zenBonusShown = 8; zenNewHi = true; zenOverUntil = millis() + 4000; } },
+    { "zen-result-max", [] { zenPlaying(7, 13, 50); pet.trDef = 100; zen.t = ZEN_SESSION_MS; zen.inBandMs = 30000;
+                             zenGainShown = 0; zenBonusShown = 5; zenOverUntil = millis() + 4000; } },
+    { "sack-max", [] { pokemon(123, 13); startSack(); pet.trAtk = 100; sackHits = 31; sackGain = 0; sackOverUntil = millis() + 3000; } },
     { "zen-result", [] { zenPlaying(7, 13, 50); zen.t = ZEN_SESSION_MS; zen.inBandMs = 23400; zenGainShown = 11;
                          zenNewHi = true; zenOverUntil = millis() + 4000; } },
     { "zen-result-best", [] { zenPlaying(7, 13, 50); zen.t = ZEN_SESSION_MS; zen.inBandMs = 9100; zenGainShown = 4;
