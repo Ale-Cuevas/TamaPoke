@@ -705,7 +705,8 @@ without the light) · `BOXFILL` (made-up pets in the empty slots, for tests and 
 `BOXCLR <k>` (empty slot k, also a damaged one) · `NVS` (used and free NVS entries) ·
 `EGG` (eggs in the Backpack, the waiting egg, steps to the next one, empty home or not) · `EGG <n>` (set the
 Backpack to n eggs, for tests) · `RELEASE` / `RELEASE EGG` / `RELEASE EMPTY` (release without the
-dialogs; EGG / EMPTY are the two answers of "Use an egg?") · `TAP <x> <y>` (a tap at
+dialogs; EGG / EMPTY are the two answers of "Use an egg?") · `AGE <min>` (the pet's age in game minutes, for tests: 4320 on a final
+form shows the farewell button) · `TAP <x> <y>` (a tap at
 canvas coordinates, through the same path as a finger; prints the battle phase).
 
 To test fast: lower `PET_TICK_MS` and `FAREWELL_AGE_MIN` in `pet.h` (levels count game minutes, so they

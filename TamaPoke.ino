@@ -686,6 +686,13 @@ void handleSerial() {
     if (n >= 1 && n <= LEVEL_MAX) pet.setLevel((uint16_t)n);
     Serial.printf("lv=%u grow=%lu\n", pet.level(), (unsigned long)pet.growMin);
     Serial.println("DONE");
+  } else if (line.startsWith("AGE ")) {  // AGE <min>: edad del bicho (pruebas: 4320 = lista para despedirse)
+    long n = line.substring(4).toInt();
+    if (n >= 0 && !pet.isEgg()) {
+      pet.dbgSetAge((uint32_t)n);
+    }
+    Serial.printf("age=%lu farewell=%d\n", (unsigned long)pet.ageMinutes, pet.wantFarewellButton() ? 1 : 0);
+    Serial.println("DONE");
   } else if (line.startsWith("TIME ")) {
     uint32_t e = (uint32_t)line.substring(5).toInt();
     rtcSetEpoch(e);

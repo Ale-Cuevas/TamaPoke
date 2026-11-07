@@ -43,7 +43,8 @@ Releasing a pet no longer brings an egg you didn't know you had, and you can't e
 
 ### Added
 
-- Serial: `RELEASE`, `RELEASE EGG`, `RELEASE EMPTY` (release with no dialogs). `EGG` also prints
+- Serial: `RELEASE`, `RELEASE EGG`, `RELEASE EMPTY` (release with no dialogs); `AGE <min>` (the
+  pet's age, to make a final form ready for its farewell). `EGG` also prints
   `held=` (the waiting egg), `owned=` (all your eggs) and `boxPets=`.
 - Strings in all eight languages. Render scenes: `release-boxed`, `release-choice` (+ `-ja`,
   `-de`, `-full`), `home-vacant-eggs` (+ `-ja`, `-es`), `farewell-gift`.
