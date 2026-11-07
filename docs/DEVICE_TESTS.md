@@ -342,24 +342,24 @@ without moving anyone.
   isn't 0 and stays the same after a restart.
 - [x] `NVS` with the box empty, then after `BOXFILL` (6 pets): note used / free entries in PENDING_TESTS. Each
   slot should cost about 4 entries. `BOXCLR 0` … `BOXCLR 5` to empty it again.
-- [ ] Gestures, from the pet and from the egg: swipe right opens the Box, swipe left opens the Pokédex. In the
+- [x] Gestures, from the pet and from the egg: swipe right opens the Box, swipe left opens the Pokédex. In the
   Box, swipe left closes it, swipe right does nothing, the title or USER closes it. The Pokédex pages as before.
-- [ ] Store: tap an empty slot (it has a "+"), "Store <name>?", YES. A light flies from the pet at "Now" into the
+- [x] Store: tap an empty slot (it has a "+"), "Store <name>?", YES. A light flies from the pet at "Now" into the
   slot with a falling sparkle sound, the result holds briefly while it saves (40–180 ms over serial), then home
   shows the egg coming out of a light. `BOX`: the pet in that slot with `crc=ok`, the egg active.
-- [ ] Wake with the egg active: tap the pet, "Wake <name>?" with no second line, YES. The light flies out to
+- [x] Wake with the egg active: tap the pet, "Wake <name>?" with no second line, YES. The light flies out to
   "Now" with a rising sparkle, and home shows the pet coming out of a light (asleep, if it was asleep). `BOX`: the
   slot empty and `eggHeld=1`; the Box shows a small sleeping egg next to "Now".
-- [ ] Store again: the same egg comes back (same `eggT=` and rarity, same cracks).
-- [ ] Swap: with a pet active, wake another. The dialog adds "<current> goes in the box", two lights cross, and
+- [x] Store again: the same egg comes back (same `eggT=` and rarity, same cracks).
+- [x] Swap: with a pet active, wake another. The dialog adds "<current> goes in the box", two lights cross, and
   the two swap places in that slot. `STATS` before and after: level, stats, bond, medals and nickname go with
   each pet; streak, steps, Backpack and the Pokédex count don't change.
-- [ ] A full box (`BOXFILL`): every slot can still be woken (swap); there's no "+" and storing isn't offered.
+- [x] A full box (`BOXFILL`): every slot can still be woken (swap); there's no "+" and storing isn't offered.
 - [ ] Hibernation: store a pet, power off (hold PWR 4 s) for 10+ minutes, power on. `BOX`: its `age=` and `grow=`
   unchanged; the active pet aged.
 - [x] Power-off right after a move: tap YES and hold PWR straight away. The board only turns off after ~4 s, when
   the write is done, so this checks a move survives an immediate power-off. A cut in the middle of a write is
   covered by the host tests (after every write of every move). After power-on, `BOX` and `STATS`: each pet
   exactly once, the egg either active or `eggHeld=1`.
-- [ ] Taps that can't work: an empty slot with the egg active, or a damaged slot, shakes with the deny sound.
-- [ ] Long names fit inside the slot and the dialogs: a 10-letter species (Charmander) and an 11-letter nickname.
+- [x] Taps that can't work: an empty slot with the egg active, or a damaged slot, shakes with the deny sound.
+- [x] Long names fit inside the slot and the dialogs: a 10-letter species (Charmander) and an 11-letter nickname.
