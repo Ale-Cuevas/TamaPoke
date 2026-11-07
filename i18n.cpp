@@ -47,6 +47,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "SUBE DE NIVEL!",
     // la caja (v1.37)
     "CAJA %u/%u", "Guardar a %s?", "Despertar a %s?", "%s va a la caja", "Ahora: %s", "Vac\241o", "Da\244ado",
+    // combate (v1.38)
+    "Toca!",
   },
   // ---------------- EN ----------------
   {
@@ -88,6 +90,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "LEVEL UP!",
     // la caja (v1.37)
     "BOX %u/%u", "Store %s?", "Wake %s?", "%s goes in the box", "Now: %s", "Empty", "Damaged",
+    // combate (v1.38)
+    "Tap!",
   },
   // ---------------- FR ----------------
   {
@@ -129,6 +133,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "NOUVEAU NIVEAU!",
     // la caja (v1.37)
     "BOITE %u/%u", "Ranger %s?", "R\202veiller %s?", "%s va dans la bo\214te", "Actif: %s", "Vide", "Ab\214m\202",
+    // combate (v1.38)
+    "Tape!",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -175,6 +181,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "AUFGESTIEGEN!",
     // la caja (v1.37)
     "BOX %u/%u", "%s ablegen?", "%s wecken?", "%s kommt in die Box", "Jetzt: %s", "Leer", "Besch\204digt",
+    // combate (v1.38)
+    "Tippen!",
   },
   // ---------------- IT ----------------
   {
@@ -216,6 +224,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "NUOVO LIVELLO!",
     // la caja (v1.37)
     "BOX %u/%u", "Depositare %s?", "Svegliare %s?", "%s va nel box", "Ora: %s", "Vuoto", "Danneggiato",
+    // combate (v1.38)
+    "Tocca!",
   },
   // ---------------- PT ----------------
   {
@@ -257,6 +267,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "SUBIU DE NIVEL!",
     // la caja (v1.37)
     "CAIXA %u/%u", "Guardar %s?", "Acordar %s?", "%s vai para a caixa", "Agora: %s", "Vazio", "Danificado",
+    // combate (v1.38)
+    "Toque!",
   },
   // ---------------- JA ----------------
   {
@@ -321,6 +333,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "レベルアップ！",
     // la caja (v1.37)
     "ボックス %u/%u", "%sを あずける？", "%sを おこす？", "%sは ボックスへ", "いま: %s", "あき", "こわれている",
+    // combate (v1.38)
+    "タッチ",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -367,6 +381,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "레벨 업!",
     // la caja (v1.37)
     "박스 %u/%u", "%s 맡길까요?", "%s 깨울까요?", "%s는 박스로", "지금: %s", "빈 칸", "손상됨",
+    // combate (v1.38)
+    "탭!",
   },
 };
 

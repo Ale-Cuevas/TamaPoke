@@ -73,6 +73,8 @@ enum StrId : uint8_t {
   S_LEVEL_UP,
   // la caja (v1.37): titulo, dialogos de guardar / despertar, el activo y los huecos sin bicho
   S_BOX_FMT, S_STORE_Q_FMT, S_WAKE_Q_FMT, S_SWAP_NOTE_FMT, S_NOW_FMT, S_BOX_EMPTY, S_BOX_DAMAGED,
+  // combate (v1.38): el cartel que pide tocar, al lado de las flechas del especial
+  S_TAP_BOX,
   STR_COUNT
 };
 

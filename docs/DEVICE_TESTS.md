@@ -255,6 +255,10 @@ serial starts one; the log prints the matchup and the result.
 - [ ] No stutter in the 85 ms frames when big Attack frames are drawn (Onix, Gyarados, Dragonite: `SPEC 95`, then
   `BATTLE 130`).
 - [ ] `HEALTH` before and after 20 battles: the minimum heap stays flat (the opponent's sprite is freed each time).
+- [ ] v1.38: the meter is five arrows `> > > > >` with a yellow "Tap!" box after them; the box is there from the
+  first attack, goes away when the five are full (they blink) and while the grey outlines rest after a special.
+- [ ] v1.38: keep tapping fast through the last hit: the result stays on screen, without "tap: back", for about
+  2 s; then "tap: back" appears and one tap closes it. USER still closes it at once.
 
 ### Feedback (v1.30)
 ([NEXT_FEATURES.md, Task FX](NEXT_FEATURES.md#task-fx-feedback-for-what-the-pet-does).) `FX <effect>` over

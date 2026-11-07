@@ -8,6 +8,21 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.38] - 2026-11-06
+
+Battle polish, from playing the practice battles.
+
+### Changed
+
+- **The result can't be closed by accident.** For 1.8 s after a battle ends, the result screen
+  ignores taps. You usually arrive there tapping fast to charge the special, and the next tap closed
+  the result before you could see it. "tap: back" appears when a tap works again. The USER key still
+  closes it right away, and it still closes by itself after 7 s.
+- **The special meter is five arrows, `> > > > >`**, instead of five round pips (same colours: white
+  empty, yellow charged, blinking when the special is ready, grey outlines while it rests).
+- **A "Tap!" box** sits after the arrows while a tap counts, so you know when to start tapping. It
+  goes away when the meter is full or resting. In all eight languages.
+
 ## [1.37] - 2026-11-06
 
 The Box ([NEXT_FEATURES.md, Task BOX](docs/NEXT_FEATURES.md#task-box-store-a-pet-raise-another)):

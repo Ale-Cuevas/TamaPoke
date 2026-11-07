@@ -224,13 +224,15 @@ attacking until one faints, in 10–20 s after a 3 s VS card and jingle.
 - Every hit takes **5–25 %** of the target's max HP, so a battle is never over
   in fewer than 7 attacks, and after **15 attacks** the pet with more HP left
   wins (an exact tie is a draw).
-- **Your one input: tap the screen.** 5 taps fill the meter, and your next
-  attack is a **special** (+30 % power, up to 30 %, with a flash and a shake).
-  After a special the meter rests for 2 normal attacks. The opponent charges
-  its own.
+- **Your one input: tap the screen.** 5 taps fill the meter of five arrows
+  (`> > > > >`, with a "Tap!" box next to it while a tap counts; v1.38), and
+  your next attack is a **special** (+30 % power, up to 30 %, with a flash and
+  a shake). After a special the meter rests for 2 normal attacks. The opponent
+  charges its own.
 - **Reward:** +3 JOY whether you win or lose, at most once an hour. Practice
   isn't counted in any win/loss record. The USER key, or PWR (to the screensaver
-  or off), quits with no reward.
+  or off), quits with no reward. The result ignores taps for its first 1.8 s
+  (v1.38), so the taps that charged the special don't close it unseen.
 - Battles between two boards over the air are next (see the roadmap).
 
 ### Steps, finds & the Backpack (v1.20)

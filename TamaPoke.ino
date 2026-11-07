@@ -45,7 +45,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.37"
+#define FW_VERSION "1.38"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -4852,6 +4852,10 @@ enum : uint8_t { BT_OFF = 0, BT_INTRO, BT_FIGHT, BT_END };
 #define BT_HPBAR_MS 400    // la barra de vida baja en este tiempo
 #define BT_FAINT_MS 900    // el derrotado se desvanece
 #define BT_END_MS 7000     // el resultado se cierra solo (o con un toque)
+// v1.38: el resultado no atiende toques durante 1,8 s. Se suele llegar al final aporreando la
+// pantalla para cargar el especial, y el siguiente toque cerraba el resultado sin dejarlo ver.
+// La pista "toca: volver" aparece cuando ya se puede tocar.
+#define BT_END_LOCK_MS 1800
 #define BT_HORIZON 150
 #define BT_ME_X 140        // tu bicho: abajo a la izquierda
 #define BT_ME_GROUND 352
@@ -4907,7 +4911,10 @@ void startPractice(int16_t forceDex) {
 }
 
 void battleTap(int16_t x, int16_t y) {
-  if (bt.phase == BT_END) { closeBattle(); return; }
+  if (bt.phase == BT_END) {
+    if (millis() - bt.t0 >= BT_END_LOCK_MS) closeBattle();  // antes, el toque no hace nada
+    return;
+  }
   if (bt.phase != BT_FIGHT || bt.eng.over()) return;  // en la intro los toques no cuentan
   if (bt.meter.tap()) sfxPlay(SFX_TAP);
 }
@@ -5076,22 +5083,57 @@ void drawHpBox(uint8_t side, int x, int y, uint16_t hp) {
   }
 }
 
-// medidor del especial: 5 pastillas; llenas laten; bloqueado tras un especial, en gris
+// Una flecha ">" sin palo (v1.38): dos brazos de METER_T px de grueso que se juntan en la punta.
+// x = su borde izquierdo, y = su centro. fill = 0 la deja hueca (solo el contorno).
+#define METER_W 14     // ancho de una flecha
+#define METER_H 12     // media altura
+#define METER_T 6      // grueso de cada brazo, en horizontal
+#define METER_PITCH 21
+#define METER_X 236    // la primera flecha; el cartel "Toca!" va detras de la ultima
+#define METER_Y 350
+void drawChevron(int x, int y, bool filled, uint16_t fill, uint16_t edge) {
+  int tip = x + METER_W, notch = x + METER_W - METER_T;
+  if (filled) {
+    gfx->fillTriangle(x, y - METER_H, x + METER_T, y - METER_H, tip, y, fill);  // brazo de arriba
+    gfx->fillTriangle(x, y - METER_H, tip, y, notch, y, fill);
+    gfx->fillTriangle(notch, y, tip, y, x + METER_T, y + METER_H, fill);        // brazo de abajo
+    gfx->fillTriangle(notch, y, x + METER_T, y + METER_H, x, y + METER_H, fill);
+  }
+  gfx->drawLine(x, y - METER_H, x + METER_T, y - METER_H, edge);
+  gfx->drawLine(x + METER_T, y - METER_H, tip, y, edge);
+  gfx->drawLine(tip, y, x + METER_T, y + METER_H, edge);
+  gfx->drawLine(x + METER_T, y + METER_H, x, y + METER_H, edge);
+  gfx->drawLine(x, y + METER_H, notch, y, edge);
+  gfx->drawLine(notch, y, x, y - METER_H, edge);
+}
+
+// medidor del especial (v1.38): "> > > > >" y un cartel "Toca!" mientras los toques cargan.
+// Llenas laten cuando esta listo; bloqueado tras un especial, en gris y sin cartel.
 void drawSpecialMeter(uint32_t now) {
   bool armed = bt.meter.armed(), locked = bt.meter.locked();
   for (int i = 0; i < SPECIAL_TAPS; i++) {
-    int x = 248 + i * 24, y = 350;
+    int x = METER_X + i * METER_PITCH;
     if (locked) {
-      gfx->drawCircle(x, y, 8, UI_TRACK);
+      drawChevron(x, METER_Y, false, 0, UI_TRACK);
     } else if (i < bt.meter.pips) {
       uint16_t c = (armed && (now / 160) % 2) ? UI_WHITE : UI_BAR_WARN;
-      gfx->fillCircle(x, y, 8, c);
-      gfx->drawCircle(x, y, 8, UI_INK);
+      drawChevron(x, METER_Y, true, c, UI_INK);
     } else {
-      gfx->fillCircle(x, y, 8, UI_WHITE);
-      gfx->drawCircle(x, y, 8, UI_INK);
+      drawChevron(x, METER_Y, true, UI_WHITE, UI_INK);
     }
   }
+  // el cartel: solo cuando un toque cuenta (ni lleno, ni bloqueado, ni con el combate decidido)
+  if (locked || bt.meter.pips >= SPECIAL_TAPS || bt.eng.over()) return;
+  const char *tap = T(S_TAP_BOX);
+  setSize(2);
+  // ancho minimo: con la fuente coreana textW() se queda corto (mide la tinta, no el avance)
+  int tw = textW(tap, 2), bw = tw + 16 < 64 ? 64 : tw + 16, bh = 28;
+  int bx = METER_X + (SPECIAL_TAPS - 1) * METER_PITCH + METER_W + 10, by = METER_Y - bh / 2;
+  gfx->fillRoundRect(bx, by, bw, bh, 8, UI_BAR_WARN);
+  gfx->drawRoundRect(bx, by, bw, bh, 8, UI_INK);
+  gfx->setTextColor(UI_INK);
+  setCur(bx + (bw - tw) / 2, by + (bh - 14) / 2);
+  printT(tap);
 }
 
 // tarjeta VS: el rival arriba, tu bicho abajo, cada mitad del color de su tipo
@@ -5268,7 +5310,9 @@ void drawBattleResult(uint32_t now) {
   setSize(2);
   setCur(centerX(r, 2), 342);
   printT(r);
-  gfx->setTextColor(UI_TRACK);
-  setCur(centerX(T(S_BACK), 2), 368);
-  printT(T(S_BACK));
+  if (t >= BT_END_LOCK_MS) {  // ya se puede cerrar con un toque (v1.38)
+    gfx->setTextColor(UI_TRACK);
+    setCur(centerX(T(S_BACK), 2), 368);
+    printT(T(S_BACK));
+  }
 }

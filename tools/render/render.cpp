@@ -519,6 +519,53 @@ static const std::vector<Scene> &scenes() {
        startPractice(129);  // Magikarp: a win
        battleUntil([] { return bt.phase == BT_END; });
      }, 4 },
+    // v1.38: "> > > > >" and the "Tap!" box from the first moment of the fight; three charged
+    { "battle-tap", [] {
+       pokemon(25, 13);
+       startPractice(79);
+       battleUntil([] { return bt.phase == BT_FIGHT; });
+     }, 1 },
+    { "battle-charging", [] {
+       pokemon(25, 13);
+       startPractice(79);
+       battleUntil([] { return bt.eng.attacks >= 2 && millis() - bt.evAt >= BT_HIT_MS + 900; });
+       bt.meter.pips = 3;
+     }, 1 },
+    { "battle-armed", [] {
+       pokemon(25, 13);
+       startPractice(79);
+       battleUntil([] { return bt.eng.attacks >= 2 && millis() - bt.evAt >= BT_HIT_MS + 900; });
+       bt.meter.pips = SPECIAL_TAPS;
+     }, 1 },
+    { "battle-locked", [] {  // after a special: grey outlines, no box
+       pokemon(25, 13);
+       startPractice(79);
+       battleUntil([] { return bt.eng.attacks >= 2 && millis() - bt.evAt >= BT_HIT_MS + 900; });
+       bt.meter.cooldown = SPECIAL_COOLDOWN;
+     }, 1 },
+    { "battle-tap-ja", [] {
+       pokemon(4, 19);
+       setLang(LANG_JA);
+       applyLangFont();
+       startPractice(7);
+       battleUntil([] { return bt.phase == BT_FIGHT; });
+       bt.meter.pips = 2;
+     }, 1 },
+    { "battle-tap-ko", [] {
+       pokemon(4, 13);
+       setLang(LANG_KO);
+       applyLangFont();
+       startPractice(7);
+       battleUntil([] { return bt.phase == BT_FIGHT; });
+     }, 1 },
+    // the result ignores taps for BT_END_LOCK_MS: "battle-result" is inside the lock (no "tap: back"),
+    // "battle-result-open" just after it
+    { "battle-result-open", [] {
+       pokemon(25, 13);
+       startPractice(129);
+       battleUntil([] { return bt.phase == BT_END; });
+       gHostMillis += BT_END_LOCK_MS;
+     }, 1 },
     { "battle-draw", [] {
        pokemon(19, 20);
        startPractice(92);  // Rattata vs Gastly: neither can touch the other
