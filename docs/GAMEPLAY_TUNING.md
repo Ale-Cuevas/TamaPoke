@@ -11,7 +11,7 @@ or FX / BOX / OTA. The number is the user's original order.
 | 2 | **LIT** | Same screen brightness when the pet sleeps as when it's awake | S | Screen |
 | 3 | **PWR** | PWR short press cycles: game → screensaver → off → game | M | Screen |
 | 4 | **GAMES** | Strength training moves into the PLAY menu, next to ball and battle | S–M | Games |
-| 5 | **CURVE** | New level pace: 20 min per level (Lv 1–10), a log curve 20 → 180 min (Lv 11–89), 3 h per level (Lv 90+) | L | Growth |
+| 5 | **CURVE** | New level pace: 20 min per level (Lv 1–10), a log curve 20 → 180 min (Lv 11–89), 3 h per level (Lv 90+). Sped up after v1.49: 20 → 120 min, 2 h per level (see "Faster curve (v2)") | L | Growth |
 | 6 | **STEPLV** | Step goals give levels: 3000 → +1, 6000 → +1, 10000 → +2 | S | Growth |
 
 ---
@@ -395,6 +395,27 @@ A pure log curve climbs fastest right after Lv 10 (20 → 45 → 60 min for Lv 1
 - At Lv 999 the progress card shows a full bar and no "next level" line.
 - `test_dex`: every line reaches its final form by `levelFor(4 days)` = Lv 55; the 3-day level (46) is
   checked for reference.
+
+### Faster curve (v2, after v1.49)
+
+Leveling felt too slow, so the curve was flattened:
+
+- **Lv 11–89:** `cost(L) = 20 + 100 · ln(L − 10) / ln(80)`, rounded (20 → 120 min).
+- **Lv 90 and up:** 120 min (2 h). Lv 1–10 is unchanged (20 min).
+
+| Level | 10 | 16 | 20 | 25 | 31 | 36 | 40 | 50 | 55 | 90 |
+|-------|----|----|----|----|----|----|----|----|----|----|
+| Reached after | 3.0 h | 6.8 h | 11.2 h | 17.6 h | 26.1 h | 33.8 h | 40.1 h | 2.4 d | 2.7 d | 5.5 d |
+
+3 days of growth is now Lv 58 and 4 days Lv 71 (`test_dex` checks every line finishes by then).
+
+- **Existing pets keep their level** (the user's choice): the old table stays in `growth.h` as
+  `LV_COST_V1` / `GROW_SLOW_MIN_V1`, and `growthFromCurveV1(g)` maps a v1 counter to the same level with
+  the same bar fraction (into × new cost / old cost).
+- **NVS key `"gcv"`** (growth curve version, 2). On boot, a save without it converts `"grow"`, every valid
+  Box slot and a pending `"boxT"`, then writes `"gcv"`. All new values are first written together to
+  `"gmig"` so a power cut mid-way reapplies the same values instead of converting twice. A new game (and
+  `WIPE`) writes `"gcv"` before `"init"`. `PET_RECORD_VER` is unchanged.
 
 ---
 

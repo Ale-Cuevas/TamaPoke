@@ -94,15 +94,17 @@ test. See **Roadmap**.
 A quick reference to how the game really works (values straight from the code).
 
 ### Time & leveling
-- **1 real minute = 1 in-game minute.** Each level costs more than the last (v1.35),
-  as a stronger pet is harder to raise:
+- **1 real minute = 1 in-game minute.** Each level costs more than the last (v1.35; faster
+  curve after v1.49), as a stronger pet is harder to raise:
   - **Lv 1–10:** 20 min per level;
-  - **Lv 11–89:** a log curve, `20 + 160 · ln(L − 10) / ln 80` minutes, rising from 20 to 180;
-  - **Lv 90 on:** 3 h per level.
+  - **Lv 11–89:** a log curve, `20 + 100 · ln(L − 10) / ln 80` minutes, rising from 20 to 120;
+  - **Lv 90 on:** 2 h per level.
 
   | Level | 10 | 16 | 20 | 25 | 31 | 36 | 40 | 50 | 55 | 90 |
   |---|---|---|---|---|---|---|---|---|---|---|
-  | Reached after (no walking) | 3 h | 7.9 h | 14 h | 23 h | 36 h | 47 h | 56 h | 3.4 d | 3.9 d | 8.1 d |
+  | Reached after (no walking) | 3 h | 6.8 h | 11 h | 18 h | 26 h | 34 h | 40 h | 2.4 d | 2.7 d | 5.5 d |
+
+  Updating from the old 3 h curve keeps every pet's level (and how full its bar is), boxed pets included.
 
 - Levels come from a **growth** counter that runs with the pet's age (awake or asleep, and
   while powered off) and that the Rare Candy can push ahead. Age stays real time: the days on

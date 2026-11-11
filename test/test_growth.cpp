@@ -1,5 +1,5 @@
-// Ritmo de los niveles (growth.h, v1.35): la curva, la tabla, los saltos de nivel y la
-// migracion de los guardados de "1 nivel por hora de edad".
+// Ritmo de los niveles (growth.h, v1.35; curva v2 tras la v1.49): la curva, la tabla, los saltos
+// de nivel y las migraciones de los guardados ("1 nivel por hora de edad" y la curva v1 de 3 h).
 #include "framework.h"
 #include "shim/Arduino.h"
 #include "../growth.h"
@@ -7,11 +7,11 @@
 #include <cmath>
 #include <string>
 
-// la formula de docs/GAMEPLAY_TUNING.md #5, en coma flotante del PC
-static long formulaCost(int lv) {
+// la formula de docs/GAMEPLAY_TUNING.md #5, en coma flotante del PC: la curva v2 (2 h) y la v1 (3 h)
+static long formulaCost(int lv, double k = 100.0, long top = 120) {
   if (lv <= 10) return 20;
-  if (lv >= 90) return 180;
-  return lround(20.0 + 160.0 * std::log((double)(lv - 10)) / std::log(80.0));
+  if (lv >= 90) return top;
+  return lround(20.0 + k * std::log((double)(lv - 10)) / std::log(80.0));
 }
 
 TEST(growth, la_tabla_coincide_con_la_formula) {
@@ -19,15 +19,21 @@ TEST(growth, la_tabla_coincide_con_la_formula) {
     CHECK_MSG((long)levelCost((uint16_t)lv) == formulaCost(lv), std::string("coste del nivel ") + std::to_string(lv));
 }
 
+TEST(growth, la_tabla_v1_coincide_con_su_formula) {
+  for (int lv = 1; lv <= 200; lv++)
+    CHECK_MSG((long)levelCostV1((uint16_t)lv) == formulaCost(lv, 160.0, 180),
+              std::string("coste v1 del nivel ") + std::to_string(lv));
+}
+
 TEST(growth, los_extremos_de_la_curva_no_saltan) {
   CHECK_EQ(levelCost(1), (uint16_t)20);
   CHECK_EQ(levelCost(10), (uint16_t)20);
   CHECK_EQ(levelCost(11), (uint16_t)20);
-  CHECK_EQ(levelCost(12), (uint16_t)45);
-  CHECK_EQ(levelCost(89), (uint16_t)180);
-  CHECK_EQ(levelCost(90), (uint16_t)180);
-  CHECK_EQ(levelCost(200), (uint16_t)180);
-  CHECK_EQ(levelCost(LEVEL_MAX), (uint16_t)180);
+  CHECK_EQ(levelCost(12), (uint16_t)36);
+  CHECK_EQ(levelCost(89), (uint16_t)120);
+  CHECK_EQ(levelCost(90), (uint16_t)120);
+  CHECK_EQ(levelCost(200), (uint16_t)120);
+  CHECK_EQ(levelCost(LEVEL_MAX), (uint16_t)120);
   for (uint16_t lv = 2; lv <= 120; lv++) CHECK(levelCost(lv) >= levelCost(lv - 1));  // nunca abarata
 }
 
@@ -38,14 +44,14 @@ TEST(growth, tiempos_de_la_tabla_del_plan) {
   CHECK_EQ(levelStart(10), (uint32_t)180);   // 3 h
   CHECK_EQ(levelStart(11), (uint32_t)200);
   CHECK_EQ(levelStart(12), (uint32_t)220);
-  CHECK_EQ(levelStart(16), (uint32_t)475);   // 7,9 h
-  CHECK_EQ(levelStart(31), (uint32_t)2146);  // 35,8 h
-  CHECK_EQ(levelStart(36), (uint32_t)2818);  // 47 h
-  CHECK_EQ(levelStart(55), (uint32_t)5657);  // 3,9 dias
-  CHECK_EQ(levelStart(90), (uint32_t)11616); // 8,1 dias
-  CHECK_EQ(levelStart(91), (uint32_t)(11616 + 180));
-  CHECK_EQ(levelFor(3UL * 24 * 60), (uint16_t)46);  // 3 dias de crecimiento
-  CHECK_EQ(levelFor(4UL * 24 * 60), (uint16_t)55);  // 4 dias: la linea de Dratini completa
+  CHECK_EQ(levelStart(16), (uint32_t)410);   // 6,8 h
+  CHECK_EQ(levelStart(31), (uint32_t)1567);  // 26,1 h
+  CHECK_EQ(levelStart(36), (uint32_t)2025);  // 33,8 h
+  CHECK_EQ(levelStart(55), (uint32_t)3940);  // 2,7 dias: la linea de Dratini completa
+  CHECK_EQ(levelStart(90), (uint32_t)7926);  // 5,5 dias
+  CHECK_EQ(levelStart(91), (uint32_t)(7926 + 120));
+  CHECK_EQ(levelFor(3UL * 24 * 60), (uint16_t)58);  // 3 dias de crecimiento
+  CHECK_EQ(levelFor(4UL * 24 * 60), (uint16_t)71);  // 4 dias
 }
 
 TEST(growth, nivel_y_comienzo_son_inversos) {
@@ -66,17 +72,17 @@ TEST(growth, el_tope_es_999_y_no_da_la_vuelta) {
 }
 
 TEST(growth, subir_niveles_conserva_lo_lleno_de_la_barra) {
-  // nivel 31 a medio camino (131 min): +1 -> nivel 32 a medio camino (133 min)
-  uint32_t g = levelStart(31) + 65;
+  // nivel 31 a medio camino (89 min): +1 -> nivel 32 a medio camino (91 min)
+  uint32_t g = levelStart(31) + 44;
   uint32_t h = addLevels(g, 1);
   CHECK_EQ(levelFor(h), (uint16_t)32);
-  CHECK_EQ(levelInto(h), (uint16_t)(65 * 133 / 131));
+  CHECK_EQ(levelInto(h), (uint16_t)(44 * 91 / 89));
   // +2 de golpe
   CHECK_EQ(levelFor(addLevels(g, 2)), (uint16_t)33);
-  // del tramo rapido al lento: nivel 10 al 75 % (15 de 20) -> nivel 12 al 75 % (33 de 45)
+  // del tramo rapido al lento: nivel 10 al 75 % (15 de 20) -> nivel 12 al 75 % (27 de 36)
   uint32_t k = addLevels(levelStart(10) + 15, 2);
   CHECK_EQ(levelFor(k), (uint16_t)12);
-  CHECK_EQ(levelInto(k), (uint16_t)33);
+  CHECK_EQ(levelInto(k), (uint16_t)27);
   // al principio del nivel se queda al principio
   CHECK_EQ(addLevels(levelStart(20), 1), levelStart(21));
   // 0 niveles: nada
@@ -93,7 +99,7 @@ TEST(growth, migracion_mismo_nivel_y_misma_barra) {
   // la del plan: 30 h 15 min de edad = nivel 31 al 25 %
   uint32_t g = growthFromLegacyAge(30 * 60 + 15);
   CHECK_EQ(levelFor(g), (uint16_t)31);
-  CHECK_EQ(levelInto(g), (uint16_t)(15 * 131 / 60));
+  CHECK_EQ(levelInto(g), (uint16_t)(15 * 89 / 60));
   // cualquier edad: el nivel es el de antes (1 + edad / 60, tope 999)
   for (uint32_t age = 0; age < 1200UL * 60; age += 7) {
     uint32_t old = 1 + age / 60;
@@ -102,6 +108,53 @@ TEST(growth, migracion_mismo_nivel_y_misma_barra) {
     CHECK_EQ((uint32_t)levelFor(gg), old);
     if (old < LEVEL_MAX) CHECK_EQ((uint32_t)levelInto(gg), (age % 60) * levelCost((uint16_t)old) / 60);
   }
+}
+
+// curva v1 (3 h) -> v2 (2 h): mismo nivel, barra igual de llena (por abajo, al minuto)
+static void checkV1(uint16_t lv, uint32_t intoV1) {
+  uint32_t g = growthFromCurveV1(levelStartV1(lv) + intoV1);
+  std::string at = "nivel " + std::to_string(lv) + " +" + std::to_string(intoV1);
+  CHECK_MSG(levelFor(g) == lv, at);
+  uint32_t into = levelInto(g);
+  CHECK_MSG(into == intoV1 * levelCost(lv) / levelCostV1(lv), at);
+  // la fraccion de la barra no se mueve mas de un minuto de la curva nueva
+  double fOld = (double)intoV1 / levelCostV1(lv), fNew = (double)into / levelCost(lv);
+  CHECK_MSG(fNew <= fOld && fOld - fNew < 1.0 / levelCost(lv), at);
+}
+
+TEST(growth, la_curva_v1_es_la_de_antes) {
+  CHECK_EQ(levelCostV1(12), (uint16_t)45);
+  CHECK_EQ(levelCostV1(90), (uint16_t)180);
+  CHECK_EQ(levelStartV1(31), (uint32_t)2146);
+  CHECK_EQ(levelStartV1(90), (uint32_t)11616);
+  for (uint16_t lv = 1; lv <= LEVEL_MAX; lv++) {
+    CHECK_EQ(levelForV1(levelStartV1(lv)), lv);
+    if (lv > 1) CHECK_EQ(levelForV1(levelStartV1(lv) - 1), (uint16_t)(lv - 1));
+  }
+}
+
+TEST(growth, de_la_curva_v1_conserva_nivel_y_barra) {
+  // los del encargo: Lv 40 al 25 % sigue Lv 40 al 25 %; Lv 95, Lv 5
+  checkV1(40, 36);  // 36 de 144 -> 24 de 98 (24,5 %)
+  CHECK_EQ(levelInto(growthFromCurveV1(levelStartV1(40) + 36)), (uint16_t)24);
+  checkV1(95, 90);  // 90 de 180 -> 60 de 120
+  CHECK_EQ(levelInto(growthFromCurveV1(levelStartV1(95) + 90)), (uint16_t)60);
+  checkV1(5, 10);   // Lv 1-10 cuesta lo mismo: no cambia nada
+  CHECK_EQ(growthFromCurveV1(levelStartV1(5) + 10), levelStart(5) + 10);
+  CHECK_EQ(growthFromCurveV1(0), (uint32_t)0);  // un huevo o un recien nacido
+  // todos los niveles, al principio, a medias y en el ultimo minuto
+  for (uint16_t lv = 1; lv < LEVEL_MAX; lv++) {
+    checkV1(lv, 0);
+    checkV1(lv, levelCostV1(lv) / 2);
+    checkV1(lv, levelCostV1(lv) - 1);
+  }
+  // el tope: se queda en LEVEL_MAX, al principio (como la migracion de la edad)
+  CHECK_EQ(growthFromCurveV1(levelStartV1(LEVEL_MAX)), levelStart(LEVEL_MAX));
+  CHECK_EQ(growthFromCurveV1(levelStartV1(LEVEL_MAX) + 50), levelStart(LEVEL_MAX));
+  CHECK_EQ(growthFromCurveV1(0xFFFFFFFFUL), levelStart(LEVEL_MAX));
+  CHECK_EQ(levelFor(growthFromCurveV1(levelStartV1(998) + 179)), (uint16_t)998);
+  // nunca sube: la curva nueva es mas barata, el contador baja o se queda
+  for (uint32_t g = 0; g < 20000; g += 13) CHECK(growthFromCurveV1(g) <= g);
 }
 
 // ---------------------------------------------------------------- Pet: crecimiento y edad
@@ -201,8 +254,8 @@ TEST(growth_pet, un_guardado_sin_grow_conserva_el_nivel) {
   CHECK(b.shiny);
   CHECK_EQ(b.level(), (uint16_t)31);
   CHECK_EQ(b.ageMinutes, (uint32_t)(30 * 60 + 42));      // la edad no cambia
-  CHECK_EQ(b.levelMinutesInto(), (uint16_t)(42 * 131 / 60));  // la barra, igual de llena (70 %)
-  CHECK_EQ(b.levelMinutesCost(), (uint16_t)131);
+  CHECK_EQ(b.levelMinutesInto(), (uint16_t)(42 * 89 / 60));  // la barra, igual de llena (70 %)
+  CHECK_EQ(b.levelMinutesCost(), (uint16_t)89);
   // y tras el primer guardado ya lleva "grow": un segundo arranque da lo mismo
   b.flushSave();
   b.rename("TORTI");
@@ -247,4 +300,187 @@ TEST(growth_pet, el_comando_lvl_pone_el_principio_del_nivel) {
   CHECK_EQ(p.level(), (uint16_t)16);
   CHECK_EQ(p.levelMinutesInto(), (uint16_t)0);
   CHECK_EQ(p.ageMinutes, age);  // no envejece
+}
+
+// ---------------------------------------------------------------- Pet: curva v1 -> v2 ("gcv")
+
+// un guardado de la v1.35-v1.49: "grow" en la curva v1 y sin "gcv"
+static void dropGcv() {
+  Preferences raw;
+  raw.begin("tamapoke", false);
+  raw.remove("gcv");
+  raw.end();
+}
+
+static bool hasKey(const char *k) {
+  Preferences raw;
+  raw.begin("tamapoke", false);
+  bool r = raw.isKey(k);
+  raw.end();
+  return r;
+}
+
+TEST(growth_pet, partida_nueva_y_wipe_ya_son_de_la_curva_v2) {
+  Pet p;
+  freshPet(p, 4);
+  CHECK(hasKey("gcv"));
+  p.growMin = levelStart(40) + 50;
+  p.rename("NUEVO");
+  Pet q;
+  q.begin();  // no se migra otra vez
+  CHECK_EQ(q.growMin, levelStart(40) + 50);
+  // WIPE: borra la NVS y reinicia
+  q.factoryReset();
+  Pet r;
+  r.begin();
+  CHECK(hasKey("gcv"));
+  r.chooseStarter(1);
+  r.eggTap();
+  r.eggTap();
+  r.eggTap();
+  r.growMin = levelStart(30) + 7;
+  r.rename("OTRO");
+  Pet t;
+  t.begin();
+  CHECK_EQ(t.growMin, levelStart(30) + 7);
+}
+
+TEST(growth_pet, un_guardado_de_la_curva_v1_conserva_el_nivel) {
+  Pet a;
+  freshPet(a, 8);
+  a.growMin = levelStartV1(40) + 36;  // Lv 40 al 25 % en la curva v1
+  a.ageMinutes = 5000;
+  a.rename("TORTI");
+  dropGcv();
+  Pet b;
+  b.begin();
+  CHECK_EQ(b.level(), (uint16_t)40);
+  CHECK_EQ(b.levelMinutesInto(), (uint16_t)24);  // 36 de 144 -> 24 de 98
+  CHECK_EQ(b.levelMinutesCost(), (uint16_t)98);
+  CHECK_EQ(b.ageMinutes, (uint32_t)5000);  // la edad no cambia
+  CHECK(hasKey("gcv"));
+  CHECK(!hasKey("gmig"));
+  // ya escrito: otro arranque no lo convierte otra vez
+  Pet c;
+  c.begin();
+  CHECK_EQ(c.growMin, b.growMin);
+  CHECK_EQ(c.level(), (uint16_t)40);
+}
+
+TEST(growth_pet, un_guardado_sin_grow_ni_gcv_solo_migra_la_edad) {
+  Pet a;
+  freshPet(a, 8);
+  a.ageMinutes = 30 * 60 + 42;
+  a.rename("TORTI");
+  {
+    Preferences raw;
+    raw.begin("tamapoke", false);
+    raw.remove("grow");
+    raw.remove("gcv");
+    raw.end();
+  }
+  Pet b;
+  b.begin();
+  CHECK_EQ(b.level(), (uint16_t)31);
+  CHECK_EQ(b.levelMinutesInto(), (uint16_t)(42 * 89 / 60));
+  CHECK(hasKey("gcv"));
+}
+
+// la caja: cada hueco bueno y un despertar a medias ("boxT") pasan a la curva v2; uno danado no
+TEST(growth_pet, la_caja_y_boxT_pasan_a_la_curva_v2) {
+  Pet a;
+  freshPet(a, 4);
+  a.items[IT_EGG] = ITEM_MAX;
+  a.growMin = levelStartV1(25) + 100;  // Lv 25 en la curva v1 (119 min)
+  a.rename("CAJA");
+  CHECK(a.store(0));  // a la caja; a casa, un huevo de la mochila
+  a.eggTap();
+  a.eggTap();
+  a.eggTap();
+  a.growMin = levelStartV1(40) + 36;  // el activo, Lv 40
+  a.rename("ACT");
+  PetRecord ra = a.toRecord();
+  // un intercambio cortado: el activo ya en el hueco 1, B solo en "boxT"
+  PetRecord rb = ra;
+  rb.uid = ra.uid + 1;
+  rb.speciesId = 7;
+  rb.growMin = levelStartV1(95) + 90;
+  recordSeal(rb);
+  uint8_t junk[sizeof(PetRecord)];
+  memset(junk, 0x5A, sizeof(junk));
+  {
+    Preferences raw;
+    raw.begin("tamapoke", false);
+    raw.putBytes("box1", &ra, sizeof(ra));
+    raw.putBytes("box2", junk, sizeof(junk));  // danado
+    raw.putBytes("boxT", &rb, sizeof(rb));
+    raw.remove("gcv");
+    raw.end();
+  }
+  Pet q;
+  q.begin();
+  CHECK_EQ(q.uid, rb.uid);  // boxBoot termino el despertar con B, ya migrado
+  CHECK_EQ(q.level(), (uint16_t)95);
+  CHECK_EQ(q.levelMinutesInto(), (uint16_t)60);
+  CHECK_EQ(q.boxState(0), (uint8_t)BOX_OK);
+  CHECK_EQ(levelFor(q.boxRecord(0).growMin), (uint16_t)25);
+  CHECK_EQ(q.boxRecord(0).growMin, levelStart(25) + 100 * 82 / 119);
+  CHECK_EQ(q.boxState(1), (uint8_t)BOX_OK);
+  CHECK_EQ(q.boxRecord(1).uid, ra.uid);
+  CHECK_EQ(levelFor(q.boxRecord(1).growMin), (uint16_t)40);
+  CHECK_EQ(q.boxRecord(1).growMin, levelStart(40) + 24);
+  CHECK_EQ(q.boxState(2), (uint8_t)BOX_DAMAGED);
+  {
+    Preferences raw;
+    raw.begin("tamapoke", false);
+    uint8_t back[sizeof(PetRecord)];
+    CHECK_EQ(raw.getBytes("box2", back, sizeof(back)), sizeof(back));
+    CHECK(memcmp(back, junk, sizeof(junk)) == 0);  // ni lo toca
+    raw.end();
+  }
+}
+
+// un corte de luz en cualquier escritura de la migracion: el siguiente arranque llega al mismo
+// sitio y nunca convierte dos veces (el nivel subiria)
+TEST(growth_pet, un_corte_en_la_migracion_no_convierte_dos_veces) {
+  Pet a;
+  freshPet(a, 4);
+  a.items[IT_EGG] = ITEM_MAX;
+  a.growMin = levelStartV1(60) + 120;
+  a.rename("UNO");
+  CHECK(a.store(0));
+  a.eggTap();
+  a.eggTap();
+  a.eggTap();
+  a.growMin = levelStartV1(33) + 70;
+  a.rename("DOS");
+  dropGcv();
+  mockNvsSnapshot();
+  uint32_t wantAct, wantBox;
+  long total;
+  {
+    Pet p;
+    long w0 = mockNvsWrites();
+    p.begin();
+    total = mockNvsWrites() - w0;
+    wantAct = p.growMin;
+    wantBox = p.boxRecord(0).growMin;
+  }
+  CHECK_EQ(levelFor(wantAct), (uint16_t)33);
+  CHECK_EQ(levelFor(wantBox), (uint16_t)60);
+  CHECK(total >= 4);
+  for (long n = 0; n <= total; n++) {
+    mockNvsRestore();
+    {
+      Pet p;
+      mockNvsCutAfter(n);
+      p.begin();
+      mockNvsCutAfter(-1);
+    }
+    Pet q;
+    q.begin();
+    CHECK_MSG(q.growMin == wantAct, "activo, corte tras " + std::to_string(n));
+    CHECK_MSG(q.boxState(0) == BOX_OK && q.boxRecord(0).growMin == wantBox, "caja, corte tras " + std::to_string(n));
+    CHECK_MSG(hasKey("gcv") && !hasKey("gmig"), "terminado, corte tras " + std::to_string(n));
+  }
 }

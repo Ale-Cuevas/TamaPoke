@@ -444,6 +444,7 @@ private:
   uint8_t boxSt[BOX_SLOTS] = { 0 };
   bool eggHeldFlag = false;         // "eggH": el huevo de la incubadora espera a que vuelva su turno
   void boxBoot();                   // al arrancar: lee la caja y arregla un movimiento cortado
+  void migrateGrowthCurve();        // crecimiento de la curva v1 a la v2 (clave "gcv")
   void readSlot(uint8_t k);
   bool writeSlot(uint8_t k, PetRecord r);
   bool clearSlot(uint8_t k);
