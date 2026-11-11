@@ -136,6 +136,11 @@ static const Note N_OOPS[]    = {{392, 90}, {330, 160}};
 // cortas que las del arpegio de subida de nivel, y por encima de el (hasta 2093)
 static const Note N_STORE[]   = {{2093, 35}, {1568, 35}, {1047, 35}, {784, 35}, {523, 90}};
 static const Note N_WAKE[]    = {{523, 35}, {784, 35}, {1047, 35}, {1568, 35}, {2093, 90}};
+// avisos (v1.50) que tienen que notarse aunque nadie mire la pantalla: la caca cae como un "plop"
+// (grave, sin el zumbido de DENY), y una necesidad a 0 son tres pitidos agudos iguales, que no se
+// parecen a ningun otro efecto (DENY y OOPS caen; este repite la misma nota alta)
+static const Note N_POOP[]    = {{392, 40}, {262, 40}, {196, 90}};
+static const Note N_ALERT[]   = {{1568, 70}, {0, 70}, {1568, 70}, {0, 70}, {1568, 70}};
 
 struct SfxDef { const Note *n; uint8_t len; };
 #define SFX_ENTRY(n) { n, (uint8_t)(sizeof(n) / sizeof(n[0])) }
@@ -147,6 +152,7 @@ static const SfxDef SFX[] = {
   SFX_ENTRY(N_EVOLVE), SFX_ENTRY(N_MEDAL), SFX_ENTRY(N_DENY), SFX_ENTRY(N_BYE), SFX_ENTRY(N_LEVEL),
   SFX_ENTRY(N_BATTLE), SFX_ENTRY(N_HIT), SFX_ENTRY(N_CRIT), SFX_ENTRY(N_SPECIAL), SFX_ENTRY(N_WIN),
   SFX_ENTRY(N_LOSE), SFX_ENTRY(N_LEVELUP), SFX_ENTRY(N_OOPS), SFX_ENTRY(N_STORE), SFX_ENTRY(N_WAKE),
+  SFX_ENTRY(N_POOP), SFX_ENTRY(N_ALERT),
 };
 static_assert(sizeof(SFX) / sizeof(SFX[0]) == SFX_COUNT, "SFX[] tiene que tener un efecto por cada Sfx");
 

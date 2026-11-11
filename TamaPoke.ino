@@ -292,6 +292,11 @@ bool gFaceDown = false;
 FxQueue fxq;
 FxOverlays fxo;
 FxWatch fxLevelW, fxBondW, fxMistakeW, fxTrainW[3];
+// avisos sonoros (v1.50): una caca nueva y una necesidad que se vacia (comida, higiene, felicidad,
+// energia, en el orden de fxNeedW). Suenan tambien con la pantalla atenuada, en el salvapantallas o
+// apagada: son para enterarse sin mirar
+FxWatch fxPoopW;
+FxZeroWatch fxNeedW[4];
 FxGate fxBondGate;
 FxTween fxBar[4];                 // barras de necesidades que se deslizan
 bool fxWasEgg = false;            // para ver la eclosion
@@ -853,6 +858,21 @@ void handleSerial() {
     }
     Serial.printf("bri=%u/%u value=%u now=%u\n", gBright, BRIGHT_LEVELS - 1, brightLevelValue(gBright),
                   brightnessFor(powerCtx(millis())));
+    Serial.println("DONE");
+  } else if (line == "POOP") {  // una caca mas (tope 3), como en tick(): suena SFX_POOP (v1.50)
+    if (!pet.isEgg() && pet.poops < 3) pet.poops++;
+    Serial.printf("poops=%u sleep=%d\n", pet.poops, pet.sleeping ? 1 : 0);
+    Serial.println("DONE");
+  } else if (line.startsWith("NEED ")) {  // NEED <i> <v>: i = 0 comida, 1 higiene, 2 felicidad, 3 energia
+    int sp = line.indexOf(' ', 5);
+    int i = line.substring(5, sp < 0 ? line.length() : sp).toInt();
+    int v = sp < 0 ? 0 : line.substring(sp + 1).toInt();  // sin valor: 0 (suena SFX_ALERT, v1.50)
+    if (v < 0) v = 0;
+    if (v > 100) v = 100;
+    uint8_t *need[4] = { &pet.fullness, &pet.hygiene, &pet.joy, &pet.energy };
+    if (i >= 0 && i < 4 && !pet.isEgg()) *need[i] = (uint8_t)v;
+    Serial.printf("com=%u lim=%u fel=%u ene=%u sleep=%d\n", pet.fullness, pet.hygiene, pet.joy, pet.energy,
+                  pet.sleeping ? 1 : 0);
     Serial.println("DONE");
   } else if (line.startsWith("VOL")) {  // VOL: nivel de volumen; VOL <n>: lo fija (como la pildora)
     if (line.length() > 4) {
@@ -3620,6 +3640,10 @@ void fxArmWatches() {
   fxTrainW[0].reset(pet.trAtk);
   fxTrainW[1].reset(pet.trDef);
   fxTrainW[2].reset(pet.trSpe);
+  // los avisos sonoros se desarman en vez de apuntar el valor: la primera vuelta del loop solo lo
+  // apunta, asi las cacas y los vacios del tiempo apagado (o del bicho que sale de la caja) no suenan
+  fxPoopW.disarm();
+  for (auto &w : fxNeedW) w.disarm();
   fxWasEgg = pet.isEgg();
 }
 
@@ -3641,6 +3665,8 @@ void fxCollect(uint32_t now) {
     fxBondW.disarm();
     fxMistakeW.disarm();
     for (auto &w : fxTrainW) w.disarm();
+    fxPoopW.disarm();
+    for (auto &w : fxNeedW) w.disarm();
   } else {
     uint32_t from = 0;
     if (fxLevelW.rose(pet.level(), &from)) {
@@ -3657,6 +3683,17 @@ void fxCollect(uint32_t now) {
     const uint8_t tr[3] = { pet.trAtk, pet.trDef, pet.trSpe };
     for (uint8_t i = 0; i < 3; i++)
       if (fxTrainW[i].rose(tr[i], &from)) fxo.push(FXO_TRAIN, i, (int16_t)(tr[i] - from), now);
+    // avisos sonoros (v1.50), sin mirar `awake`: tambien a oscuras. Dormido no suena nada (y ni
+    // ensucia ni se vacia: las necesidades tienen suelo), pero los vigilantes siguen al dia
+    bool poop = fxPoopW.rose(pet.poops);
+    const uint8_t need[4] = { pet.fullness, pet.hygiene, pet.joy, pet.energy };
+    bool empty = false;
+    for (uint8_t i = 0; i < 4; i++)
+      if (fxNeedW[i].hitZero(need[i])) empty = true;  // sin cortar: los cuatro se apuntan
+    if (!pet.sleeping) {
+      if (poop) sfxPlay(SFX_POOP);
+      if (empty) sfxPlay(SFX_ALERT);  // uno solo aunque se vacien varias a la vez
+    }
   }
   uint16_t m = pet.takeMedal();
   for (uint8_t i = 0; i < MED_COUNT; i++)

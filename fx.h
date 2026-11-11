@@ -257,6 +257,30 @@ struct FxWatch {
   }
 };
 
+// vigilante de una necesidad (comida, higiene, felicidad, energia) que se vacia (v1.50): true solo
+// en la lectura en que pasa de >0 a 0. Quedarse en 0 no repite el aviso; tiene que volver a subir
+// y caer otra vez. Como FxWatch, la primera lectura (o tras disarm) solo se apunta: un bicho que
+// arranca ya a 0, o el que despierta de la caja, no avisa.
+struct FxZeroWatch {
+  uint32_t last = 0;
+  bool armed = false;
+
+  void disarm() { armed = false; }
+  void reset(uint32_t v) {
+    last = v;
+    armed = true;
+  }
+  bool hitZero(uint32_t v) {
+    if (!armed) {
+      reset(v);
+      return false;
+    }
+    bool hit = last > 0 && v == 0;
+    last = v;
+    return hit;
+  }
+};
+
 // como mucho un evento cada `gap` ms (el corazon de vinculo, al caminar con la pantalla encendida)
 struct FxGate {
   uint32_t last = 0;
