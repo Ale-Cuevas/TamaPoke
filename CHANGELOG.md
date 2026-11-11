@@ -8,6 +8,40 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.52] - 2026-11-11
+
+### Changed
+
+- **Volume in four steps.** The sound switch on the clock/settings screen is now a volume pill
+  (speaker and three bars): off, low, medium (the old volume) and high. Tap it to cycle; the tap
+  plays at the new volume. The brightness pill moved to the middle and is a little narrower. A saved
+  "sound off" stays off, "sound on" becomes medium. Serial: `VOL [n]`.
+
+### Added
+
+- **Sounds you notice without looking.** A falling "plop" when the pet poops, and three short high
+  beeps when food, hygiene, happiness or energy runs out. Both play with the screen dimmed, in the
+  screensaver or off, but not while it sleeps or for what happened while the board was off.
+  Serial: `POOP`, `NEED <0-3> [v]`.
+
+## [1.51] - 2026-11-11
+
+### Changed
+
+- **Faster levels.** Lv 11–89 now take 20 → 120 min per level (was 20 → 180), and from Lv 90 each
+  level takes 2 h instead of 3 h. Lv 1–10 stay at 20 min. Lv 36 comes in about 34 h (was 47 h), Lv 90
+  in 5.5 days (was 8.1). Your pet, and the ones in the Box, keep their level and how full the bar is:
+  the save is converted once on the first boot, safely against a power cut.
+
+## [1.50] - 2026-11-11
+
+### Changed
+
+- **Screensaver sooner, at your brightness.** It now comes after 2 minutes untouched instead of 5,
+  and uses the brightness level you picked (BOOT or the sun pill) instead of a fixed 40, still capped
+  on low battery. The slower frame rate and CPU light sleep also start at 2 minutes. Dimming at 90 s
+  and face-down are unchanged.
+
 ## [1.49] - 2026-11-07
 
 ### Added

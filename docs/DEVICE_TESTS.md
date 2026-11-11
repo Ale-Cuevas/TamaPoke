@@ -106,7 +106,7 @@ yellow label to `/imu/` on the SD card, USER picks the label, a 1 s USER hold sw
 - [x] The four buttons along the bottom arc (feed, play, light, bath) respond when tapped in their centre and edges.
 - [x] Tap the pet: hearts. Long-press it 3 s: the release dialog; YES and NO work.
 - [x] Swipe left/right: Pokedex pages; swipe up: the stat card (4 pages); swipe down: settings. Try one swipe that starts in the black border.
-- [ ] Settings: hour/minute +/-, sound on/off, language pill and OK all land where drawn.
+- [ ] Settings: hour/minute +/-, the sound pill (cycles off, low, mid, high), language pill and OK all land where drawn.
 - [x] Rename keyboard (tap the name on the card): every key, backspace and OK.
 - [x] Minigame: tapping the ball bounces it; tapping the top quits.
 - [ ] A two-finger touch does nothing odd (no crash, no stuck touch).
@@ -118,12 +118,12 @@ yellow label to `/imu/` on the SD card, USER picks the label, a 1 s USER hold sw
 - [x] PWR short press turns the screen off and on; holding it 4 s powers the board off and the RTC keeps the time.
 - [ ] v1.32 PWR cycle (`PWR` over serial does the same press): from the game, press once → the screensaver at
   once (pet and clock drifting on black); twice → off; three times → the game again, as it was left. The same
-  with the pet asleep. From the 5-min screensaver one press turns it off; from a dimmed screen (90 s) one press
+  with the pet asleep. From the 2-min screensaver one press turns it off; from a dimmed screen (90 s) one press
   gives the screensaver. A touch, USER, BOOT or a shake wakes the PWR screensaver (the first touch does nothing
   else). Feed the pet and press PWR while it eats: the screensaver stays. In a battle one press quits it (no
   reward). Holding PWR 4 s still powers off.
-- [ ] After 90 s untouched the screen dims, after 5 min it is almost off; a touch wakes it (the waking touch does nothing else). (90 s dim and touch wake ✓; 5 min not tried)
-- [ ] v1.28 screensaver: after 5 min untouched (or `SAVER` over serial) the screen goes black with the pet and the
+- [ ] After 90 s untouched the screen dims, after 2 min (v1.50; was 5) the screensaver; a touch wakes it (the waking touch does nothing else). (90 s dim and touch wake ✓; 5 min not tried)
+- [ ] v1.28 screensaver: after 2 min untouched (5 min before v1.50) (or `SAVER` over serial) the screen goes black with the pet and the
   clock drifting slowly; the clock reads the right time. A touch (it does nothing else), USER, BOOT and a shake each
   bring back what was open (home, a card page, the clock screen). Face-down (`FACEDOWN`) gives the old dark screen
   instead. (Serial on the board 2026-11-05: `SAVER` → brightness 16 with the pet asleep, `BACK` → 25, `FACEDOWN`
@@ -133,6 +133,9 @@ yellow label to `/imu/` on the SD card, USER picks the label, a 1 s USER hold sw
   and `ORBIT 2` (down-right). `ORBIT` alone goes back to the clock. (Serial: origin 10,10 and 2,2 ✓)
 - [ ] v1.28 a day on battery with the screensaver against the v1.21 day (~20 h, light use): ____
 - [ ] On battery with the screen off, it still wakes on a touch (light sleep).
+- [ ] v1.50 screensaver at your brightness: for each level (`BRIGHT 0`..`BRIGHT 3`, then `SAVER`), `BRIGHT`
+  prints `now=` equal to `value=` (50/100/150/220); on battery below 20 % it's at most 100, below 10 % at most 60.
+  Face-down still 8. Leave it untouched: the screensaver comes at 2 min (dim at 90 s unchanged). A day on battery: ____
 - [x] USER = back. A press (or `BACK` over serial) closes: gallery detail → grid → home; the stat card from any page; the rename keyboard (the name is not saved, back on the card); the clock screen (time not applied); the minigame and the bag (no reward); the feed menu and the release, evolve and farewell dialogs (the evolve/farewell button stays). On the home screen and during the starter choice or a farewell it does nothing.
 - [ ] USER on a dim screen (90 s) only wakes it. On battery with the screen off (PWR), a short USER press wakes it too (light sleep).
 - [ ] v1.23 BOOT = brightness: each press steps 4 levels (the toast shows sun + dots for 1.5 s), the 4th press goes
@@ -142,8 +145,8 @@ yellow label to `/imu/` on the SD card, USER picks the label, a 1 s USER hold sw
 - [ ] v1.23 the sun pill on the clock screen (swipe down) cycles the same level; after a restart (re-upload) the
   level is kept. At level 0 (dimmest) the 90 s dim doesn't get brighter.
 - [ ] v1.31 sleep brightness: put the pet to sleep (LIGHT). The screen stays as bright as awake (`BRIGHT`
-  prints `now=` equal to `value=`); after 90 s it dims to 60 and after 5 min (or `SAVER`) the screensaver shows
-  at 40 with the clock in the usual gray. Wake the pet: nothing changes. Next night on battery: note the drain.
+  prints `now=` equal to `value=`); after 90 s it dims to 60 and after 2 min (or `SAVER`) the screensaver shows
+  at the level's brightness (v1.50; it was 40) with the clock in the usual gray. Wake the pet: nothing changes. Next night on battery: note the drain.
 - [ ] Battery percentage close to the bring-up `[pmu]` reading; the charging bolt shows within a few seconds of plugging USB in.
 
 ### Save, time, sound, SD
@@ -151,6 +154,15 @@ yellow label to `/imu/` on the SD card, USER picks the label, a 1 s USER hold sw
 - [ ] Set the clock, restart: still right (from the RTC). Power off for N minutes: the pet aged about N minutes. (restart ✓; power-off aging not tried)
 - [x] Sound: the boot jingle, taps and eating; no hiss when the pet sleeps (amplifier off).
 - [ ] Volume at -10 dB (DAC register 0x32 = 0xAB in `audio.cpp`): about half as loud as before, still clear. Too quiet or loud: change it in steps of 2 (1 dB).
+- [ ] v1.52 volume pill (settings, EN and ES): speaker + 3 bars, tapping cycles off → low → mid → high → off and
+  the tap plays at the new level. Low (-18 dB) and high (-2 dB) are clearly quieter / louder than mid (-10 dB,
+  the old volume); off is silent. `VOL` prints `vol=N/3 reg=0x..`; the level survives a restart. A v1.49 save
+  with sound on boots at mid, with sound off boots silent. If a level is off, tune `volDacReg` in `volume.h`.
+- [ ] v1.52 alert sounds: `POOP` with the pet awake gives a falling "plop", also in the screensaver and with the
+  screen off (PWR); silent while it sleeps. `NEED 0` (food to 0) gives three short high beeps, also with the
+  screen dark; sending it again doesn't repeat; `NEED 0 50` then `NEED 0` beeps again. Booting after hours off
+  with new poops or an empty need: no sound at boot. Real use: a poop or an empty need is noticed from across
+  the room: ____
 - [ ] Sprites load from the card (`cargado /mons/p025.bin` in the log); `python3 tools/send_sd.py` and the web installer's "Load sprites" can write to the card over USB. (loading ✓: `cargado /mons/ps007.bin`, 151 thumbnails; writing over USB not tried)
 - [ ] Without a card, the nine built-in sprites still work.
 
@@ -356,7 +368,8 @@ gives the board back, `DASH?` prints speed, position, steer, roll, baseline, sco
 ### Levels (v1.35)
 ([GAMEPLAY_TUNING.md, #5 CURVE](GAMEPLAY_TUNING.md#5-curve-the-level-pace-follows-how-hard-the-pet-is-to-raise).)
 `STATS` prints `grow=… lv=… into=…/… age=…`: the growth minutes, the level, the minutes done of the current
-level and what it costs (20 up to Lv 10, then 45, 60, … up to 180 from Lv 89), and the age. On a board with a
+level and what it costs (20 up to Lv 10, then 36, 45, … up to 120 from Lv 89; before v1.51 45, 60, … up to
+180), and the age. On a board with a
 real pet don't use `LVL`: it moves the level.
 - [ ] Before flashing v1.35, `STATS` on the old firmware: note `nv=`. After flashing, `STATS`: the same level on
   `lv=`, `age=` unchanged, `into` about (old minutes into the hour) × cost / 60.
@@ -375,6 +388,10 @@ real pet don't use `LVL`: it moves the level.
   before, `age=` not pushed. The level-up plays, then the goal banner with "+1 Lv". The same at 6000 (+1) and
   10000 (+2, no Rare Candy in the Backpack, the Marathon medal the first time).
 - [ ] A goal crossed while the pet sleeps: the banner when it wakes has no "+N Lv", and the level didn't move.
+- [ ] v1.51 faster curve: back up the NVS, `STATS` and `BOX` on v1.49 (note `lv`/`into` of the pet and each
+  slot), flash, `STATS` and `BOX` again: the same levels everywhere, the bar about as full (e.g. 36/144 →
+  24/98), the cost ≤ 120. A restart changes nothing again. The progress card (EN and ES) shows the same level
+  and a shorter "N min to Lv.X".
 
 ### Eggs (v1.39)
 (Limited eggs, found by walking.) `EGG` prints the eggs in the Backpack, the steps to the next one and whether
