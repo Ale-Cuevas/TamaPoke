@@ -351,7 +351,7 @@ static const std::vector<Scene> &scenes() {
     // the swaying tall-grass meadow (v1.26): mid-gust, at dusk
     { "home-gust", [] { pokemon(19, 11); gHostMillis = 114000; } },  // wind.h: the gust is mid-screen at 6 s of 12
     { "home-meadow-dusk", [] { pokemon(19, 19); } },
-    // burn-in (v1.28): the screensaver after 5 min idle, and the picture moved by the orbit
+    // burn-in (v1.28): the screensaver after 2 min idle, and the picture moved by the orbit
     { "saver", [] { pokemon(25, 13); dimStage = DIM_OFF; }, 2 },
     // v1.31: asleep the clock keeps its usual gray (it was a darker one)
     { "saver-sleep", [] { pokemon(25, 2); pet.sleeping = true; dimStage = DIM_OFF; }, 2 },

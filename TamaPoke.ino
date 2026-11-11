@@ -266,7 +266,7 @@ uint32_t lastRender = 0;
 uint32_t sdEpoch = 0;  // +1 cada vez que se recarga la SD (las miniaturas cambian)
 // proteccion del AMOLED: atenuado por inactividad
 uint32_t lastInteract = 0;
-uint8_t dimStage = 0;        // 0 despierto, 1 atenuado (90s), 2 casi apagado (5min)
+uint8_t dimStage = 0;        // 0 despierto, 1 atenuado (90s), 2 salvapantallas o casi apagado (2min)
 // nivel de brillo del jugador (power.h, v1.23): tecla BOOT o la pildora del reloj.
 // Se guarda en "bri" unos segundos despues del ultimo cambio (varias pulsaciones seguidas
 // = una sola escritura en la NVS)
@@ -574,7 +574,7 @@ void onFaceDown(bool down) {
   if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen()) return;
   int h = sceneHour();
   if ((h >= 20 || h < 6) && !pet.isEgg() && !pet.sleeping) pet.sleepDeferred();
-  lastInteract = millis() - POWER_DIM2_MS - 1;  // casi apagada, como tras 5 min sin tocar
+  lastInteract = millis() - POWER_DIM2_MS - 1;  // casi apagada, como tras 2 min sin tocar
   gFaceDown = true;  // y sin salvapantallas: nadie la mira
 }
 
@@ -608,7 +608,7 @@ void wakeUI() {
 }
 
 // Pulsacion corta del PWR (v1.32, power.h): pasa a la siguiente vista y la devuelve.
-//  - salvapantallas: el mismo truco que el comando SAVER (como tras 5 min sin tocar), asi que
+//  - salvapantallas: el mismo truco que el comando SAVER (como tras 2 min sin tocar), asi que
 //    su brillo, su ritmo, el light sleep y el amplificador apagado salen solos; y fijado, para
 //    que comer o el corazon no lo quiten al instante (updateBrightness).
 //  - apagada: como siempre.
@@ -662,7 +662,7 @@ void updateBrightness(uint32_t now) {
 }
 
 // Pausa de un pase del bucle que no ha dibujado. Con la pantalla apagada, o encendida pero casi
-// apagada (5 min sin tocar), y sin USB se duerme la CPU (light sleep) hasta el proximo frame o
+// apagada (2 min sin tocar), y sin USB se duerme la CPU (light sleep) hasta el proximo frame o
 // 200 ms: despierta por el temporizador o por un toque (el INT del tactil baja). Con USB no, para
 // no perder el puerto serie de la tarjeta SD: se mira sin cache, por si se acaba de enchufar.
 void idleWait(PowerCtx c) {
@@ -825,7 +825,7 @@ void handleSerial() {
     Serial.printf("pwr view=%s off=%d saver=%d pinned=%d bri=%u\n", PWR_VIEW_NAME[v], screenOff ? 1 : 0,
                   saverOn() ? 1 : 0, saverPinned ? 1 : 0, brightnessFor(powerCtx(millis())));
     Serial.println("DONE");
-  } else if (line == "SAVER") {  // como tras 5 min sin tocar: salvapantallas
+  } else if (line == "SAVER") {  // como tras 2 min sin tocar: salvapantallas
     lastInteract = millis() - POWER_DIM2_MS - 1;
     gFaceDown = false;
     Serial.println("DONE");
@@ -1556,7 +1556,7 @@ uint8_t homeBiome() {
   return pet.isEgg() ? 0 : DEX_TBL[pet.speciesId].biome;
 }
 
-// salvapantallas (v1.28): a los 5 min sin tocar, salvo boca abajo o apagada con PWR
+// salvapantallas (v1.28): a los 2 min sin tocar, salvo boca abajo o apagada con PWR
 bool saverOn() { return !screenOff && !gFaceDown && dimStage == DIM_OFF; }
 
 void perfNote(uint32_t us) {
@@ -2120,7 +2120,7 @@ bool render() {
   if (itemConfirm && !timeLeft(itemConfirmUntil)) itemConfirm = 0;  // antes de la clave: asi se repinta
   if (boxAsk && !timeLeft(boxAskUntil)) boxAsk = 0;                  // (lo mismo, el dialogo de la caja)
   foundShown = false;  // lo vuelve a poner drawWalkNews() si el hallazgo sigue en pantalla
-  if (saverOn()) {  // 5 min sin tocar: salvapantallas, encima de cualquier pantalla
+  if (saverOn()) {  // 2 min sin tocar: salvapantallas, encima de cualquier pantalla
     screenKeyValid = false;  // al despertar, la pantalla de debajo se vuelve a pintar entera
     renderScreensaver();
     return true;
