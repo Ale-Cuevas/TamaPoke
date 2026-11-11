@@ -23,11 +23,12 @@ bool usbPresentNow() { return false; }
 void pwrSetup() {}
 bool pwrShortPressed() { return false; }
 
-static bool gSound = true;
+uint8_t gStubVol = 2;  // VOL_DEFAULT; render.cpp's scenes set it
 void audioBegin() {}
 void sfxPlay(uint8_t) {}
-void audioSetEnabled(bool on) { gSound = on; }
-bool audioEnabled() { return gSound; }
+void audioSetLevel(uint8_t l) { gStubVol = l; }
+uint8_t audioLevel() { return gStubVol; }
+bool audioEnabled() { return gStubVol > 0; }
 void audioSetSleeping(bool) {}
 bool audioBusy() { return false; }
 void audioSetIdle(bool) {}

@@ -34,6 +34,7 @@
 #include "audio.h"
 #include "blit.h"
 #include "power.h"
+#include "volume.h" // volumen del altavoz: 4 niveles con el apagado (logica pura)
 #include "button.h"
 #include "imu.h"    // pasos y trucos de movimiento (QMI8658); SensorLib queda en imu.cpp
 #include "steps.h"  // STEP_FLUSH_MS
@@ -852,6 +853,16 @@ void handleSerial() {
     }
     Serial.printf("bri=%u/%u value=%u now=%u\n", gBright, BRIGHT_LEVELS - 1, brightLevelValue(gBright),
                   brightnessFor(powerCtx(millis())));
+    Serial.println("DONE");
+  } else if (line.startsWith("VOL")) {  // VOL: nivel de volumen; VOL <n>: lo fija (como la pildora)
+    if (line.length() > 4) {
+      int lv = line.substring(4).toInt();
+      if (lv >= 0 && lv < VOL_LEVELS) {
+        audioSetLevel((uint8_t)lv);
+        sfxPlay(SFX_TAP);
+      }
+    }
+    Serial.printf("vol=%u/%u reg=0x%02X\n", audioLevel(), VOL_LEVELS - 1, audioLevel() ? volDacReg(audioLevel()) : 0);
     Serial.println("DONE");
   } else if (line == "HEALTH") {
     Serial.printf("up=%lus heap=%u min=%u sd=%d mon=%d\n",
@@ -2091,7 +2102,7 @@ static uint32_t screenKey() {
     for (int i = 0; i < nameLen; i++) h = mixKey(h, (uint8_t)nameBuf[i]);
   } else if (clockOpen) {
     h = mixKey(h, clockH * 60 + clockM);
-    h = mixKey(h, audioEnabled());
+    h = mixKey(h, audioLevel());
     h = mixKey(h, gLang);
   } else if (cardOpen) {
     // growMin: el nivel y su barra (v1.35); un Caramelo Raro o una meta lo saltan sin tocar la edad
@@ -3415,9 +3426,12 @@ void drawClockBtn(int x, int y, const char *l) {
 #define LANG_PILL_W 96
 static const char *const LANG_CODES[LANG_COUNT] = { "ES", "EN", "FR", "DE", "IT", "PT", "JA", "KO" };
 
-// pildora de brillo, en el hueco entre la de sonido y la de idioma (v1.23)
-#define BRI_PILL_X 146
-#define BRI_PILL_W 174
+// pildora de volumen a la izquierda (v1.50: 4 niveles con el apagado, antes SON ON/OFF) y la de
+// brillo en el hueco hasta la de idioma (v1.23). Las dos sin texto: iguales en todos los idiomas
+#define SND_PILL_X 33
+#define SND_PILL_W 140
+#define BRI_PILL_X 185
+#define BRI_PILL_W 140
 
 // sol: disco y 8 rayos cortos (sin texto: igual en todos los idiomas)
 void drawSunIcon(int x, int y, int r, uint16_t col) {
@@ -3427,6 +3441,28 @@ void drawSunIcon(int x, int y, int r, uint16_t col) {
   for (auto &v : dir) {
     int k = (v[0] && v[1]) ? e : d;
     gfx->fillCircle(x + v[0] * k, y + v[1] * k, r > 6 ? 2 : 1, col);
+  }
+}
+
+// altavoz: cuerpo y cono, de x a x+14, centrado en y. Silenciado (off), una X al lado
+void drawSpeakerIcon(int x, int y, uint16_t col, bool off) {
+  gfx->fillRect(x, y - 4, 6, 9, col);
+  gfx->fillTriangle(x + 4, y, x + 14, y - 10, x + 14, y + 10, col);
+  if (off) {
+    gfx->drawLine(x + 19, y - 4, x + 27, y + 4, UI_BAR_BAD);
+    gfx->drawLine(x + 20, y - 4, x + 28, y + 4, UI_BAR_BAD);
+    gfx->drawLine(x + 19, y + 4, x + 27, y - 4, UI_BAR_BAD);
+    gfx->drawLine(x + 20, y + 4, x + 28, y - 4, UI_BAR_BAD);
+  }
+}
+
+// nivel de volumen como VOL_LEVELS-1 barras que crecen, rellenas hasta el nivel (0: todas huecas).
+// x = borde izquierdo de la primera, y = base comun
+void drawVolBars(int x, int y, uint8_t level, uint16_t on, uint16_t off) {
+  for (int i = 0; i < VOL_LEVELS - 1; i++) {
+    int h = 8 + i * 5, bx = x + i * 22;
+    if (i < level) gfx->fillRect(bx, y - h, 12, h, on);
+    else gfx->drawRect(bx, y - h, 12, h, off);
   }
 }
 
@@ -3474,21 +3510,18 @@ void renderClock() {
   setCur(276, 256);
   printT(T(S_MIN));
 
-  // interruptor de sonido (izquierda de la fila de idioma)
-  bool snd = audioEnabled();
-  const char *sl = snd ? T(S_SND_ON) : T(S_SND_OFF);
-  gfx->fillRoundRect(34, LANG_PILL_Y, 96, LANG_PILL_H, 8, snd ? UI_BAR_OK : UI_WHITE);
-  gfx->drawRoundRect(34, LANG_PILL_Y, 96, LANG_PILL_H, 8, UI_INK);
-  gfx->setTextColor(snd ? UI_BG_DAY : UI_INK);
-  setSize(2);
-  setCur(34 + (96 - textW(sl, 2)) / 2, LANG_PILL_Y + 8);
-  printT(sl);
+  // volumen: altavoz y una barra por nivel; cicla al tocar (alto -> apagado)
+  uint8_t vol = audioLevel();
+  gfx->fillRoundRect(SND_PILL_X, LANG_PILL_Y, SND_PILL_W, LANG_PILL_H, 8, UI_WHITE);
+  gfx->drawRoundRect(SND_PILL_X, LANG_PILL_Y, SND_PILL_W, LANG_PILL_H, 8, UI_INK);
+  drawSpeakerIcon(SND_PILL_X + 22, LANG_PILL_Y + LANG_PILL_H / 2, vol ? UI_INK : 0x9492, vol == 0);
+  drawVolBars(SND_PILL_X + 58, LANG_PILL_Y + LANG_PILL_H / 2 + 9, vol, UI_BAR_OK, 0x9492);
 
   // brillo: sol y un punto por nivel; cicla al tocar, como la tecla BOOT
   gfx->fillRoundRect(BRI_PILL_X, LANG_PILL_Y, BRI_PILL_W, LANG_PILL_H, 8, UI_WHITE);
   gfx->drawRoundRect(BRI_PILL_X, LANG_PILL_Y, BRI_PILL_W, LANG_PILL_H, 8, UI_INK);
-  drawSunIcon(BRI_PILL_X + 22, LANG_PILL_Y + LANG_PILL_H / 2, 5, UI_BAR_WARN);
-  drawBrightDots(BRI_PILL_X + 56, LANG_PILL_Y + LANG_PILL_H / 2, 6, 32, UI_BAR_WARN, 0x9492);
+  drawSunIcon(BRI_PILL_X + 20, LANG_PILL_Y + LANG_PILL_H / 2, 5, UI_BAR_WARN);
+  drawBrightDots(BRI_PILL_X + 48, LANG_PILL_Y + LANG_PILL_H / 2, 6, 24, UI_BAR_WARN, 0x9492);
 
   // selector de idioma: una pildora que cicla los 6 idiomas al tocar
   gfx->fillRoundRect(LANG_PILL_X, LANG_PILL_Y, LANG_PILL_W, LANG_PILL_H, 8, UI_WHITE);
@@ -3529,9 +3562,9 @@ void clockTap(int16_t x, int16_t y) {
     return;
   }
   if (y >= LANG_PILL_Y && y <= LANG_PILL_Y + LANG_PILL_H) {
-    if (x >= 34 && x < 130) {                  // interruptor de sonido
-      audioSetEnabled(!audioEnabled());
-      if (audioEnabled()) sfxPlay(SFX_TAP);    // confirma al encender
+    if (x >= SND_PILL_X && x < SND_PILL_X + SND_PILL_W) {  // cicla el volumen
+      audioSetLevel(volNext(audioLevel()));
+      sfxPlay(SFX_TAP);  // se oye al volumen nuevo (apagado, nada: sfxPlay no encola)
       return;
     }
     if (x >= BRI_PILL_X && x < BRI_PILL_X + BRI_PILL_W) {  // cicla el brillo

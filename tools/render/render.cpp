@@ -28,6 +28,7 @@ SDMMCFS SD_MMC;
 extern bool gStubImuPresent;  // stubs.cpp: el IMU de mentira
 extern int8_t gStubTiltSide;
 extern bool gStubTiltSlide;
+extern uint8_t gStubVol;      // stubs.cpp: el volumen (volume.h)
 
 // ---- PNG -------------------------------------------------------------------
 
@@ -172,6 +173,7 @@ static void resetUi() {
   gStubImuPresent = true;
   gStubTiltSide = 0;
   gStubTiltSlide = false;
+  gStubVol = VOL_DEFAULT;
   gBright = BRIGHT_DEFAULT;
   gFaceDown = false;
   dimStage = DIM_AWAKE;
@@ -466,6 +468,11 @@ static const std::vector<Scene> &scenes() {
     { "card-progress", [] { pokemon(25, 13); cardOpen = true; cardPage = 3; } },
     { "settings", [] { pokemon(25, 13); openClock(); } },
     { "settings-bright-max", [] { pokemon(25, 13); openClock(); gBright = BRIGHT_LEVELS - 1; } },
+    // volume pill: 4 levels including off (v1.50)
+    { "settings-es", [] { pokemon(25, 13); setLang(LANG_ES); applyLangFont(); openClock(); } },
+    { "settings-vol-off", [] { pokemon(25, 13); openClock(); gStubVol = 0; gBright = 0; } },
+    { "settings-vol-low-es", [] { pokemon(25, 13); setLang(LANG_ES); applyLangFont(); openClock(); gStubVol = 1; } },
+    { "settings-vol-max", [] { pokemon(25, 13); openClock(); gStubVol = VOL_LEVELS - 1; gBright = BRIGHT_LEVELS - 1; } },
     // brightness toast after a BOOT press (v1.23)
     { "bright-toast", [] { pokemon(25, 13); gBright = 0; cycleBright(); } },
     { "keyboard", [] { pokemon(25, 13); openKeyboard(); } },
