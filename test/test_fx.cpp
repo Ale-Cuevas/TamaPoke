@@ -243,6 +243,35 @@ TEST(fx, desarmado_no_confunde_un_huevo_que_eclosiona_con_un_nivel) {
   CHECK(lv.rose(2));
 }
 
+TEST(fx, el_vigilante_de_cero_avisa_al_vaciarse) {
+  FxZeroWatch w;
+  CHECK(!w.hitZero(5));  // la primera lectura solo se apunta
+  CHECK(!w.hitZero(3));
+  CHECK(!w.hitZero(1));
+  CHECK(w.hitZero(0));   // de >0 a 0: aviso
+  CHECK(!w.hitZero(0));  // sigue vacia: no se repite
+  CHECK(!w.hitZero(0));
+  CHECK(!w.hitZero(10)); // comer no es un evento...
+  CHECK(w.hitZero(0));   // ...pero volver a vaciarse si
+}
+
+TEST(fx, el_vigilante_de_cero_no_avisa_si_ya_estaba_vacia) {
+  FxZeroWatch w;
+  CHECK(!w.hitZero(0));  // arranca a 0 (bicho descuidado al encender): sin aviso
+  CHECK(!w.hitZero(0));
+  w.reset(0);            // despierta de la caja ya a 0
+  CHECK(!w.hitZero(0));
+}
+
+TEST(fx, el_vigilante_de_cero_desarmado_solo_se_apunta) {
+  FxZeroWatch w;
+  w.reset(40);
+  w.disarm();            // huevo o ceremonia
+  CHECK(!w.hitZero(0));  // la lectura de vuelta solo se apunta
+  CHECK(!w.hitZero(20));
+  CHECK(w.hitZero(0));
+}
+
 TEST(fx, la_puerta_deja_pasar_uno_cada_tanto) {
   FxGate g;
   CHECK(g.allow(1000, FX_BOND_GAP_MS));

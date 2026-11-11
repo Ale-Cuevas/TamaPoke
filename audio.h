@@ -24,13 +24,16 @@ enum Sfx : uint8_t {
   SFX_OOPS,     // descuido (v1.30): dos notas que caen, mas suave que SFX_DENY
   SFX_STORE,    // caja (v1.37): la luz entra en su hueco (destello que baja)
   SFX_WAKE,     // caja: sale de el (destello que sube)
+  SFX_POOP,     // ha hecho caca (v1.50): "plop" que cae
+  SFX_ALERT,    // una necesidad llego a 0 (v1.50): tres pitidos agudos y cortos
   SFX_COUNT
 };
 
 void audioBegin();          // init ES8311 + I2S + amplificador + tarea de audio
 void sfxPlay(uint8_t id);   // encola un efecto (no bloquea el loop)
-void audioSetEnabled(bool on);
-bool audioEnabled();
+void audioSetLevel(uint8_t level);  // volumen 0..VOL_LEVELS-1 (volume.h; 0 = apagado): lo aplica y lo guarda
+uint8_t audioLevel();
+bool audioEnabled();                // audioLevel() > 0
 void audioSetSleeping(bool sleeping);  // dormida: amplificador apagado
 bool audioBusy();                      // un efecto pedido en reposo aun puede estar sonando: no dormir la CPU
 void audioSetIdle(bool idle);          // sin uso reciente: amplificador apagado (un efecto lo enciende 4 s)

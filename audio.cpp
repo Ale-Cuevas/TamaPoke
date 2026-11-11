@@ -1,5 +1,6 @@
 #include "audio.h"
 #include "board_amoled_216.h"
+#include "volume.h"
 #include <Arduino.h>
 #include <Wire.h>
 #include <ESP_I2S.h>
@@ -18,7 +19,7 @@
 
 static I2SClass i2s;
 static bool gReady = false;
-static bool gOn = true;
+static uint8_t gVol = VOL_DEFAULT;  // nivel de volumen (volume.h); 0 = sonido apagado
 static bool gSleeping = false;
 static bool gIdle = false;          // sin interaccion reciente (ver power.h): el amplificador consume en reposo
 static uint32_t gAmpHoldUntil = 0;  // un efecto pedido en reposo mantiene el amplificador encendido hasta aqui
@@ -37,7 +38,7 @@ static void updateAmplifierPower() {
   if (gAmpHold && (int32_t)(gAmpHoldUntil - millis()) <= 0) gAmpHold = false;
   bool idleOff = gIdle && !gAmpHold;
   static int last = -1;  // solo se escribe el pin si cambia
-  int want = (gReady && gOn && !gSleeping && !idleOff) ? HIGH : LOW;
+  int want = (gReady && gVol && !gSleeping && !idleOff) ? HIGH : LOW;
   if (want != last) {
     last = want;
     if (want == HIGH) gAmpOnAt = millis();
@@ -64,7 +65,7 @@ static uint8_t esR(uint8_t reg) {
 // Waveshare 1.75). Clave: reloj DERIVADO DEL BCLK (reg01=0xBF, sin MCLK externo)
 // y referencia interna que alimenta el DAC (reg44=0x58); sin esos dos el codec
 // respondia por I2C pero no salia audio. 16kHz, 16-bit, esclavo I2S.
-static bool es8311Init() {
+static bool es8311Init(uint8_t vol) {
   Wire.beginTransmission(ES8311_ADDR);
   if (Wire.endTransmission() != 0) return false;
 
@@ -94,9 +95,9 @@ static bool es8311Init() {
   esW(0x0D, 0x01); esW(0x15, 0x40); esW(0x37, 0x08); esW(0x45, 0x00);
 
   // volumen + unmute
-  // volumen DAC: pasos de 0.5 dB, 0xBF = 0 dB. 0xAB = -10 dB (la mitad de fuerte
-  // al oido); para ajustarlo, cada 2 unidades es 1 dB
-  esW(0x32, 0xAB);
+  // volumen DAC: pasos de 0.5 dB, 0xBF = 0 dB; cada 2 unidades es 1 dB. Sale del nivel
+  // guardado (volume.h): el de por defecto es 0xAB = -10 dB, el fijo hasta la v1.49
+  esW(0x32, volDacReg(vol ? vol : VOL_DEFAULT));
   { uint8_t r = esR(0x31); r &= 0x9F; esW(0x31, r); }  // unmute
   return true;
 }
@@ -135,6 +136,11 @@ static const Note N_OOPS[]    = {{392, 90}, {330, 160}};
 // cortas que las del arpegio de subida de nivel, y por encima de el (hasta 2093)
 static const Note N_STORE[]   = {{2093, 35}, {1568, 35}, {1047, 35}, {784, 35}, {523, 90}};
 static const Note N_WAKE[]    = {{523, 35}, {784, 35}, {1047, 35}, {1568, 35}, {2093, 90}};
+// avisos (v1.50) que tienen que notarse aunque nadie mire la pantalla: la caca cae como un "plop"
+// (grave, sin el zumbido de DENY), y una necesidad a 0 son tres pitidos agudos iguales, que no se
+// parecen a ningun otro efecto (DENY y OOPS caen; este repite la misma nota alta)
+static const Note N_POOP[]    = {{392, 40}, {262, 40}, {196, 90}};
+static const Note N_ALERT[]   = {{1568, 70}, {0, 70}, {1568, 70}, {0, 70}, {1568, 70}};
 
 struct SfxDef { const Note *n; uint8_t len; };
 #define SFX_ENTRY(n) { n, (uint8_t)(sizeof(n) / sizeof(n[0])) }
@@ -146,6 +152,7 @@ static const SfxDef SFX[] = {
   SFX_ENTRY(N_EVOLVE), SFX_ENTRY(N_MEDAL), SFX_ENTRY(N_DENY), SFX_ENTRY(N_BYE), SFX_ENTRY(N_LEVEL),
   SFX_ENTRY(N_BATTLE), SFX_ENTRY(N_HIT), SFX_ENTRY(N_CRIT), SFX_ENTRY(N_SPECIAL), SFX_ENTRY(N_WIN),
   SFX_ENTRY(N_LOSE), SFX_ENTRY(N_LEVELUP), SFX_ENTRY(N_OOPS), SFX_ENTRY(N_STORE), SFX_ENTRY(N_WAKE),
+  SFX_ENTRY(N_POOP), SFX_ENTRY(N_ALERT),
 };
 static_assert(sizeof(SFX) / sizeof(SFX[0]) == SFX_COUNT, "SFX[] tiene que tener un efecto por cada Sfx");
 
@@ -179,7 +186,7 @@ static void playTone(uint16_t f, uint16_t ms) {
 static void audioTask(void *) {
   uint8_t id;
   for (;;) {
-    if (xQueueReceive(gQ, &id, portMAX_DELAY) && gOn && !gSleeping && gReady &&
+    if (xQueueReceive(gQ, &id, portMAX_DELAY) && gVol && !gSleeping && gReady &&
         id < SFX_COUNT) {
       const SfxDef &d = SFX[id];
       // el NS4150B tarda mas de 8 ms en estabilizarse: si se acaba de encender, el efecto espera
@@ -201,12 +208,15 @@ void audioBegin() {
     Serial.println("I2S begin fallo");
     return;
   }
-  if (!es8311Init()) { Serial.println("ES8311 no responde (audio off)"); return; }
-
+  // el volumen antes del init del codec, que lo escribe en el DAC. "vol" desde la v1.50; antes
+  // solo habia "snd" (encendido = el volumen de siempre)
   Preferences p;
   p.begin("tamapoke", true);
-  gOn = p.getBool("snd", true);
+  bool hasVol = p.isKey("vol");
+  gVol = volFromStored(hasVol, p.getUChar("vol", VOL_DEFAULT), p.getBool("snd", true));
   p.end();
+
+  if (!es8311Init(gVol)) { Serial.println("ES8311 no responde (audio off)"); return; }
 
   gReady = true;
   updateAmplifierPower();
@@ -218,7 +228,7 @@ void audioBegin() {
 bool audioBusy() { return gAmpHold && (int32_t)(gAmpHoldUntil - millis()) > 0; }
 
 void sfxPlay(uint8_t id) {
-  if (gReady && gOn && gQ) {
+  if (gReady && gVol && gQ) {
     if (gIdle) {  // un aviso en reposo (p. ej. "listo para evolucionar") tiene que oirse
       gAmpHoldUntil = millis() + 4000;
       gAmpHold = true;
@@ -228,15 +238,22 @@ void sfxPlay(uint8_t id) {
   }
 }
 
-void audioSetEnabled(bool on) {
-  gOn = on;
+// Lo llama el loop principal (pildora de los ajustes, comando VOL), que tambien es el dueno del
+// bus I2C (Wire): la escritura en el codec no se cruza con el tactil ni el RTC.
+void audioSetLevel(uint8_t level) {
+  level = volClamp(level);
+  // apagado no toca el registro: el amplificador se apaga y no se encola nada, y al volver se
+  // escribe el nivel nuevo
+  if (gReady && level) esW(0x32, volDacReg(level));
+  gVol = level;
   updateAmplifierPower();
   Preferences p;
   p.begin("tamapoke", false);
-  p.putBool("snd", on);
+  p.putUChar("vol", level);
   p.end();
 }
-bool audioEnabled() { return gOn; }
+uint8_t audioLevel() { return gVol; }
+bool audioEnabled() { return gVol > 0; }
 
 void audioSetSleeping(bool sleeping) {
   if (gSleeping == sleeping) return;
