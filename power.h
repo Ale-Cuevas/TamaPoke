@@ -11,7 +11,7 @@
 // Escalones de inactividad (ms desde el ultimo toque o evento visible)
 #define POWER_CALM_MS 60000UL   // pasado este tiempo, se dibuja algo menos
 #define POWER_DIM1_MS 90000UL   // pantalla atenuada
-#define POWER_DIM2_MS 300000UL  // pantalla casi apagada
+#define POWER_DIM2_MS 120000UL  // salvapantallas (o casi apagada boca abajo); 5 min hasta la v1.49
 
 enum DimStage : uint8_t { DIM_AWAKE = 0, DIM_LOW = 1, DIM_OFF = 2 };
 
@@ -53,18 +53,18 @@ inline uint8_t dimStageFor(uint32_t idleMs) {
 }
 
 // bateria baja: se ahorra mas (solo si de verdad depende de la bateria)
-// Salvapantallas (v1.28, burnin.h): a los 5 min sin tocar (DIM_OFF) la pantalla ya no es la
-// escena entera a brillo 8 sino un fondo negro con el bicho y la hora, que se ven mejor algo
-// mas brillantes. Casi todo es negro (pixeles apagados), asi que gasta poco igualmente.
+// Salvapantallas (v1.28, burnin.h): a los 2 min sin tocar (DIM_OFF; 5 min hasta la v1.49) la
+// pantalla ya no es la escena entera a brillo 8 sino un fondo negro con el bicho y la hora.
+// Su brillo es el del nivel elegido (antes fijo a 40), con los topes de bateria baja. Casi todo
+// es negro (pixeles apagados), asi que gasta poco igualmente.
 // v1.31: el mismo brillo con el bicho dormido (antes 16, y no se veia bien).
-#define SAVER_BRIGHT 40
 inline bool saverActive(const PowerCtx &c) {
   return !c.screenOff && !c.faceDown && dimStageFor(c.idleMs) == DIM_OFF;
 }
 
 // Boton PWR, pulsacion corta (v1.32): recorre tres vistas, juego -> salvapantallas -> apagada
 // -> juego. Hasta la v1.31 solo encendia y apagaba. La vista sale del estado de siempre: apagada
-// con PWR, salvapantallas (el de los 5 min o el puesto con PWR) o el juego (tambien atenuado a
+// con PWR, salvapantallas (el de los 2 min o el puesto con PWR) o el juego (tambien atenuado a
 // los 90 s o boca abajo, que no son el salvapantallas).
 enum PwrView : uint8_t { VIEW_ON = 0, VIEW_SAVER, VIEW_OFF };
 inline PwrView pwrViewOf(const PowerCtx &c) {
@@ -73,7 +73,7 @@ inline PwrView pwrViewOf(const PowerCtx &c) {
 inline PwrView pwrNext(PwrView v) {
   return v == VIEW_ON ? VIEW_SAVER : v == VIEW_SAVER ? VIEW_OFF : VIEW_ON;
 }
-// inactividad que pone el salvapantallas en el acto (como tras 5 min sin tocar)
+// inactividad que pone el salvapantallas en el acto (como tras 2 min sin tocar)
 #define POWER_SAVER_IDLE_MS (POWER_DIM2_MS + 1)
 
 inline bool batteryLow(const PowerCtx &c) { return c.batPct >= 0 && c.batPct < 20 && !c.charging && !c.usb; }
@@ -88,7 +88,8 @@ inline uint8_t brightnessFor(const PowerCtx &c) {
   uint8_t lv = brightLevelValue(c.brightLevel);
   uint8_t t = lv;
   if (stage == DIM_LOW) t = 60;
-  else if (stage == DIM_OFF) t = saverActive(c) ? SAVER_BRIGHT : 8;
+  else if (stage == DIM_OFF && !saverActive(c)) t = 8;  // boca abajo: casi apagada
+  // salvapantallas: el nivel elegido tal cual (solo los topes de bateria de abajo)
   if (t > lv) t = lv;
   if (batteryCritical(c) && t > 60) t = 60;
   else if (batteryLow(c) && t > 100) t = 100;
@@ -119,7 +120,7 @@ inline bool amplifierWanted(const PowerCtx &c) {
 // pausa del bucle principal en un pase que no dibuja
 inline uint32_t idleDelayMs(const PowerCtx &c) { return c.screenOff ? 20 : 1; }
 
-// con la pantalla apagada, o casi apagada (5 min sin tocar), y sin USB se duerme la CPU (light
+// con la pantalla apagada, o casi apagada (2 min sin tocar), y sin USB se duerme la CPU (light
 // sleep) entre frames y sondeos; con USB no: se perderia el puerto serie de la tarjeta SD
 inline bool lightSleepAllowed(const PowerCtx &c) {
   return !c.usb && (c.screenOff || dimStageFor(c.idleMs) == DIM_OFF);

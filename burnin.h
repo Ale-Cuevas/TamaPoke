@@ -9,7 +9,7 @@
 //    3x3 posiciones alrededor de la de siempre, asi ningun borde fijo (la cabecera, las
 //    barras, los botones, el horizonte) cae siempre en los mismos pixeles. Los pasos son
 //    pares porque el CO5300 solo acepta ventanas que empiezan en pixel par (ui_frame.h).
-// 2. Salvapantallas: a los 5 min sin tocar (DIM_OFF, power.h) en vez de la escena entera a
+// 2. Salvapantallas: a los 2 min sin tocar (DIM_OFF, power.h) en vez de la escena entera a
 //    brillo 8 se pinta un fondo negro con el bicho pequeno y la hora, que van recorriendo
 //    la pantalla despacio (saverPos).
 
