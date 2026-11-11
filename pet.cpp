@@ -7,10 +7,14 @@
 void Pet::begin() {
   prefs.begin("tamapoke", false);
   if (!prefs.getBool("init", false)) {
+    // partida nueva (o tras WIPE): su crecimiento ya es de la curva v2. "gcv" va antes
+    // que "init", asi nunca se migra un contador que ya es de la curva nueva
+    prefs.putUChar("gcv", GROW_CURVE_VER);
     prefs.putBool("init", true);
     newEgg();
   } else {
     load();
+    migrateGrowthCurve();  // los contadores de la curva v1 (3 h) pasan a la nueva (2 h)
   }
   boxBoot();  // la caja (v1.37): la lee y termina o deshace un movimiento que corto la luz
   // guardado anterior a la caja: el bicho de ahora recibe su identidad (FR-BOX.11)
@@ -1191,6 +1195,84 @@ static void slotKey(char *key, uint8_t k) {
   key[2] = 'x';
   key[3] = (char)('0' + k);
   key[4] = 0;
+}
+
+// ---------- curva de niveles v2 (growth.h, tras la v1.49) ----------
+//
+// Un guardado sin "gcv" cuenta el crecimiento con la curva v1 (v1.35-v1.49, hasta 3 h por nivel).
+// Cada contador (el del activo, el de cada hueco de la caja y el de un despertar a medias en
+// "boxT") pasa a la curva nueva con el mismo nivel y la barra igual de llena (growthFromCurveV1).
+// Convertir dos veces subiria el nivel, asi que primero se calculan todos los valores nuevos y se
+// escriben juntos en "gmig"; despues se aplican y al final "gcv". Un corte de luz a mitad repite
+// la aplicacion desde "gmig" con los mismos valores (absolutos), nunca convierte otra vez.
+// Un guardado sin "grow" (anterior a la v1.35) ya sale de load() en la curva nueva.
+
+struct __attribute__((packed)) GrowMig {
+  uint32_t grow;                 // el activo (si hasGrow)
+  uint32_t slotUid[BOX_SLOTS];   // 0 = hueco sin migrar (vacio o danado)
+  uint32_t slotGrow[BOX_SLOTS];
+  uint32_t tUid, tGrow;          // "boxT" (tUid 0 = no habia)
+  uint8_t hasGrow;
+};
+
+void Pet::migrateGrowthCurve() {
+  if (prefs.isKey("gcv")) {
+    if (prefs.isKey("gmig")) prefs.remove("gmig");  // un corte justo despues de "gcv"
+    return;
+  }
+  char key[6];
+  PetRecord r;
+  GrowMig m;
+  memset(&m, 0, sizeof(m));
+  if (!(prefs.isKey("gmig") && prefs.getBytes("gmig", &m, sizeof(m)) == sizeof(m))) {
+    // 1. los valores nuevos, todos a la vez
+    memset(&m, 0, sizeof(m));
+    bool any = false;
+    if (prefs.isKey("grow")) {
+      m.hasGrow = 1;
+      m.grow = growthFromCurveV1(prefs.getUInt("grow", 0));
+      any = true;
+    }
+    for (uint8_t k = 0; k < BOX_SLOTS; k++) {
+      slotKey(key, k);
+      if (prefs.isKey(key) && prefs.getBytes(key, &r, sizeof(r)) == sizeof(r) && recordValid(r)) {
+        m.slotUid[k] = r.uid;
+        m.slotGrow[k] = growthFromCurveV1(r.growMin);
+        any = true;
+      }
+    }
+    if (prefs.isKey("boxT") && prefs.getBytes("boxT", &r, sizeof(r)) == sizeof(r) && recordValid(r)) {
+      m.tUid = r.uid;
+      m.tGrow = growthFromCurveV1(r.growMin);
+      any = true;
+    }
+    // sin sitio para "gmig" se aplica igual: solo se pierde la proteccion frente a un corte
+    if (any) prefs.putBytes("gmig", &m, sizeof(m));
+  }
+  // 2. aplicarlos (repetible)
+  if (m.hasGrow) {
+    growMin = m.grow;
+    prefs.putUInt("grow", growMin);
+  }
+  for (uint8_t k = 0; k < BOX_SLOTS; k++) {
+    if (!m.slotUid[k]) continue;
+    slotKey(key, k);
+    if (prefs.getBytes(key, &r, sizeof(r)) == sizeof(r) && recordValid(r) && r.uid == m.slotUid[k] &&
+        r.growMin != m.slotGrow[k]) {
+      r.growMin = m.slotGrow[k];
+      recordSeal(r);
+      prefs.putBytes(key, &r, sizeof(r));
+    }
+  }
+  if (m.tUid && prefs.isKey("boxT") && prefs.getBytes("boxT", &r, sizeof(r)) == sizeof(r) && recordValid(r) &&
+      r.uid == m.tUid && r.growMin != m.tGrow) {
+    r.growMin = m.tGrow;
+    recordSeal(r);
+    prefs.putBytes("boxT", &r, sizeof(r));
+  }
+  // 3. hecho
+  prefs.putUChar("gcv", GROW_CURVE_VER);
+  if (prefs.isKey("gmig")) prefs.remove("gmig");
 }
 
 PetRecord Pet::toRecord() const {

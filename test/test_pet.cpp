@@ -1517,11 +1517,11 @@ TEST(steps, las_tres_metas_saltan_una_vez_al_dia_y_en_orden) {
 TEST(steps, los_niveles_de_las_metas_no_tiran_el_progreso_ni_envejecen) {
   Pet p;
   makeWalker(p);
-  p.growMin = levelStart(31) + 65;  // nivel 31 a medio camino (131 min)
+  p.growMin = levelStart(31) + 44;  // nivel 31 a medio camino (89 min)
   uint32_t age = p.ageMinutes;
   p.addSteps(3000, DIA);
   CHECK_EQ(p.level(), (uint16_t)32);
-  CHECK_EQ(p.levelMinutesInto(), (uint16_t)(65 * levelCost(32) / levelCost(31)));
+  CHECK_EQ(p.levelMinutesInto(), (uint16_t)(44 * levelCost(32) / levelCost(31)));
   CHECK_EQ(p.ageMinutes, age);
 }
 
@@ -1581,7 +1581,7 @@ TEST(items, el_caramelo_raro_sube_un_nivel_y_abre_la_evolucion) {
   Pet p;
   makePet(p, 4);  // Charmander: evoluciona a Charmeleon a nivel 16
   setStats(p, 80, 80, 80, 80);
-  p.growMin = levelStart(15) + 40;  // nivel 15 (79 min), a poco mas de medio camino del 16
+  p.growMin = levelStart(15) + 40;  // nivel 15 (57 min), a dos tercios del 16
   uint32_t age = p.ageMinutes;
   CHECK_EQ(p.level(), (uint16_t)15);
   CHECK(!p.canEvolveNow());
