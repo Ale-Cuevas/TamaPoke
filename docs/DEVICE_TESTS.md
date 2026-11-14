@@ -361,6 +361,14 @@ Backpack at 326 390; the Care menu's slots are at about 200 320 (sleep / wake) a
 - [ ] `GIFTS` after a restart: the same list.
 - [ ] A real walk: a find shows up as a gift (no popup), and opening it adds it to the Backpack.
 
+### Battle loot (v1.56)
+`BATTLE [dex]` starts a practice battle; the `battle:` line at the end prints the loot item (8 = none) and how
+many came today. Magikarp (`BATTLE 129`) is an easy win.
+- [ ] A win with loot: "A gift at home!" / "Regalo en casa!" with a gift box under the title; back home, a gift on
+  the floor. A loss or a draw never shows it.
+- [ ] About 7 wins in 10 bring loot; after the 5th of the day, wins bring none (the line says `5 hoy`).
+- [ ] Opening the gift shows the item (often a cake).
+
 ### Waterfall (v1.43)
 ([NEW_GAMES.md, Task ZEN](NEW_GAMES.md#task-zen-meditate-under-the-waterfall).) `ZEN [s]` opens a session with no
 reward (from second s if given), `HOLD 1` / `HOLD 0` fake the finger, `HOLD OFF` gives it back, `ZEN?` prints

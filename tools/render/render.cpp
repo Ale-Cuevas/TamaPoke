@@ -749,6 +749,23 @@ static const std::vector<Scene> &scenes() {
        battleUntil([] { return bt.phase == BT_END; });
        gHostMillis += BT_END_LOCK_MS;
      }, 1 },
+    // v1.56: a win that brought a gift home (what it is shows when it's opened)
+    { "battle-result-gift", [] {
+       pokemon(25, 13);
+       startPractice(129);
+       battleUntil([] { return bt.phase == BT_END; });
+       bt.drop = IT_CAKE;
+       gHostMillis += BT_END_LOCK_MS;
+     }, 1 },
+    { "battle-result-gift-es", [] {
+       pokemon(25, 13);
+       startPractice(129);
+       battleUntil([] { return bt.phase == BT_END; });
+       bt.drop = IT_CAKE;
+       gHostMillis += BT_END_LOCK_MS;
+       setLang(LANG_ES);
+       applyLangFont();
+     }, 1 },
     { "battle-draw", [] {
        pokemon(19, 20);
        startPractice(92);  // Rattata vs Gastly: neither can touch the other

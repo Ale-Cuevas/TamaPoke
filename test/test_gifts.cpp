@@ -183,3 +183,72 @@ TEST(gifts, lo_que_no_cabe_sigue_envuelto_al_desenvolver) {
   CHECK_EQ(p.giftCount(), (uint8_t)2);
   CHECK_EQ(p.giftItem(0), (uint8_t)IT_GOLDEN);
 }
+
+// ---------------------------------------------------------------- botin de combate (v1.56)
+TEST(battle_drop, solo_al_ganar) {
+  Pet p;
+  gBorn(p);
+  mockForceRandom(0);  // siempre toca (0 < 70), y la tabla da tarta
+  CHECK_EQ(p.battleDrop(false), (uint8_t)IT_COUNT);
+  CHECK_EQ(p.giftCount(), (uint8_t)0);
+  CHECK_EQ(p.battleDrop(true), (uint8_t)IT_CAKE);
+  CHECK_EQ(p.giftCount(), (uint8_t)1);  // envuelto, en casa
+  CHECK_EQ(p.giftItem(0), (uint8_t)IT_CAKE);
+  CHECK_EQ(p.items[IT_CAKE], (uint8_t)0);
+}
+
+TEST(battle_drop, setenta_por_ciento) {
+  Pet p;
+  gBorn(p);
+  mockForceRandom(BATTLE_DROP_ODDS);  // 70: ya no toca
+  CHECK_EQ(p.battleDrop(true), (uint8_t)IT_COUNT);
+  CHECK_EQ(p.battleDropsToday(), (uint8_t)0);  // lo que no trae nada no gasta el tope
+  mockForceRandom(BATTLE_DROP_ODDS - 1);
+  CHECK(p.battleDrop(true) != IT_COUNT);
+}
+
+TEST(battle_drop, cinco_al_dia_y_al_dia_siguiente_otra_vez) {
+  Pet p;
+  gBorn(p);
+  mockForceRandom(0);
+  for (int i = 0; i < BATTLE_DROPS_PER_DAY; i++) CHECK_EQ(p.battleDrop(true), (uint8_t)IT_CAKE);
+  CHECK_EQ(p.battleDropsToday(), (uint8_t)BATTLE_DROPS_PER_DAY);
+  CHECK_EQ(p.battleDrop(true), (uint8_t)IT_COUNT);  // la sexta victoria del dia, nada
+  CHECK_EQ(p.giftCount(), (uint8_t)BATTLE_DROPS_PER_DAY);
+  Pet q;  // el tope sobrevive a un reinicio
+  q.begin();
+  q.setClock(GDAY * 86400 + 11 * 3600);  // el reloj, como lo pone el arranque con el RTC
+  CHECK_EQ(q.battleDropsToday(), (uint8_t)BATTLE_DROPS_PER_DAY);
+  CHECK_EQ(q.battleDrop(true), (uint8_t)IT_COUNT);
+  q.setClock((GDAY + 1) * 86400 + 10 * 3600);  // otro dia
+  CHECK_EQ(q.battleDropsToday(), (uint8_t)0);
+  CHECK_EQ(q.battleDrop(true), (uint8_t)IT_CAKE);
+}
+
+TEST(battle_drop, la_tabla_y_el_huevo_es_lo_mas_raro) {
+  Pet p;
+  gBorn(p);
+  mockClearForcedRandom();
+  randomSeed(7);
+  const int N = 100000;
+  int n[IT_COUNT] = { 0 };
+  for (int i = 0; i < N; i++) n[p.rollBattleItem()]++;
+  auto pct = [&](int c) { return 100.0 * c / N; };
+  CHECK_MSG(pct(n[IT_CAKE]) > 39 && pct(n[IT_CAKE]) < 41, "tarta " + std::to_string(pct(n[IT_CAKE])));
+  CHECK_MSG(pct(n[IT_GOLDEN]) > 24 && pct(n[IT_GOLDEN]) < 26, "baya " + std::to_string(pct(n[IT_GOLDEN])));
+  int vit = n[IT_PROTEIN] + n[IT_IRON] + n[IT_CARBOS];
+  CHECK_MSG(pct(vit) > 20 && pct(vit) < 22, "vitaminas " + std::to_string(pct(vit)));
+  CHECK(n[IT_PROTEIN] > 0 && n[IT_IRON] > 0 && n[IT_CARBOS] > 0);
+  CHECK_MSG(pct(n[IT_RARECANDY]) > 6.5 && pct(n[IT_RARECANDY]) < 7.5, "caramelo " + std::to_string(pct(n[IT_RARECANDY])));
+  CHECK_MSG(pct(n[IT_CHARM]) > 3.5 && pct(n[IT_CHARM]) < 4.5, "amuleto " + std::to_string(pct(n[IT_CHARM])));
+  CHECK_MSG(pct(n[IT_EGG]) > 2.6 && pct(n[IT_EGG]) < 3.4, "huevo " + std::to_string(pct(n[IT_EGG])));
+  for (uint8_t it = 0; it < IT_COUNT; it++)  // el huevo es lo que menos sale de todo lo que sale
+    if (it != IT_EGG && n[it]) CHECK(n[IT_EGG] < n[it]);
+  p.items[IT_CHARM] = 1;  // con un amuleto ya, el que tocaria es una tarta
+  mockForceRandom(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY);
+  CHECK_EQ(p.rollBattleItem(), (uint8_t)IT_CAKE);
+  p.items[IT_CHARM] = 0;
+  CHECK_EQ(p.rollBattleItem(), (uint8_t)IT_CHARM);
+  mockForceRandom(99);
+  CHECK_EQ(p.rollBattleItem(), (uint8_t)IT_EGG);
+}

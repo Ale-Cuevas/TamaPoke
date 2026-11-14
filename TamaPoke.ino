@@ -48,7 +48,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.55"
+#define FW_VERSION "1.56"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -6143,6 +6143,7 @@ struct {
   uint16_t hpBefore[2] = { 0, 0 };
   int16_t foeDex = 1;
   uint8_t joy = 0;       // premio dado al acabar
+  uint8_t drop = IT_COUNT;  // botin de la victoria (v1.56), envuelto en casa; IT_COUNT = ninguno
 } bt;
 
 bool battleOpen() { return bt.phase != BT_OFF; }
@@ -6224,10 +6225,11 @@ void battleStep(uint32_t now) {
       bt.phase = BT_END;
       bt.t0 = now;
       bt.joy = pet.practiceDone();  // gane quien gane; como mucho una vez por hora
+      bt.drop = pet.battleDrop(bt.eng.result == BR_WIN_A);  // ganar: 70 %, hasta 5 al dia (v1.56)
       sfxPlay(bt.eng.result == BR_WIN_A ? SFX_WIN : bt.eng.result == BR_WIN_B ? SFX_LOSE : SFX_LEVEL);
-      Serial.printf("battle: %s en %u ataques, +%u felicidad\n",
+      Serial.printf("battle: %s en %u ataques, +%u felicidad, botin %u (%u hoy)\n",
                     bt.eng.result == BR_WIN_A ? "gana" : bt.eng.result == BR_WIN_B ? "pierde" : "empate",
-                    bt.eng.attacks, bt.joy);
+                    bt.eng.attacks, bt.joy, bt.drop, pet.battleDropsToday());
     }
   }
 }
@@ -6578,6 +6580,19 @@ void drawBattleResult(uint32_t now) {
   setSize(2);
   setCur(centerX(r, 2), 342);
   printT(r);
+  // botin (v1.56): una pildora bajo el titulo con la cajita y "Regalo en casa!" (lo que es se ve al
+  // abrirlo); ahi no tapa al ganador ni se sale de la pantalla redonda
+  if (bt.drop < IT_COUNT) {
+    const char *g = T(S_BATTLE_GIFT);
+    setSize(2);
+    int w = 32 + 8 + textW(g, 2), gx = CX - w / 2;
+    gfx->fillRoundRect(gx - 12, 106, w + 24, 42, 14, UI_WHITE);
+    gfx->drawRoundRect(gx - 12, 106, w + 24, 42, 14, UI_INK);
+    drawMap(SPR_GIFT, 16, gx, 111, 2, false);
+    gfx->setTextColor(UI_BAR_BAD);
+    setCur(gx + 40, 121);
+    printT(g);
+  }
   if (t >= BT_END_LOCK_MS) {  // ya se puede cerrar con un toque (v1.38)
     gfx->setTextColor(UI_TRACK);
     setCur(centerX(T(S_BACK), 2), 368);

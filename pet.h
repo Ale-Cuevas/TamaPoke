@@ -122,6 +122,19 @@ enum : uint8_t { EMOTE_NONE = 0, EMOTE_ANGRY, EMOTE_DIZZY, EMOTE_WOBBLE };
 // --- combate de practica (Tarea 3a)
 #define PRACTICE_JOY 3                 // premio del combate de practica...
 #define PRACTICE_EVERY_MS 3600000UL    // ...como mucho una vez por hora
+// botin de combate (v1.56): cada victoria tiene un 70 % de traer un objeto, envuelto en casa, hasta 5 al
+// dia (se pueden repetir combates sin fin). Tabla (%): tarta 40, baya dorada 25, vitaminas 21 (7 cada
+// una), Caramelo Raro 7, amuleto 4 (con uno ya, tarta), huevo 3: el mas raro
+#define BATTLE_DROP_ODDS 70
+#define BATTLE_DROPS_PER_DAY 5
+#define BDROP_CAKE 40
+#define BDROP_GOLDEN 25
+#define BDROP_VITAMIN 21
+#define BDROP_RARECANDY 7
+#define BDROP_CHARM 4
+#define BDROP_EGG 3
+static_assert(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDROP_CHARM + BDROP_EGG == 100,
+              "el botin suma 100");
 
 // medallas del individuo (bitmask)
 enum : uint16_t {
@@ -359,6 +372,11 @@ public:
   // No cuenta en ningun historial de victorias.
   uint8_t practiceDone();
   bool practiceRewardReady() const;  // el proximo combate de practica dara premio
+  // botin (v1.56): tras un combate; solo si se gano, 70 %, hasta 5 al dia. Devuelve el objeto, que
+  // llega envuelto a casa, o IT_COUNT si no hubo
+  uint8_t battleDrop(bool won);
+  uint8_t rollBattleItem();  // la tabla del botin (publica para las pruebas)
+  uint8_t battleDropsToday() const { return bdropDay == today() ? bdropToday : 0; }
 
   // --- trucos del IMU (Tarea 2): sin guardado inmediato
   void wakeGrumpy();     // agitar con el bicho dormido: se despierta de mal humor
@@ -432,6 +450,8 @@ private:
   bool foundFull[FOUND_QUEUE];
   bool foundGift[FOUND_QUEUE];
   uint8_t foundN = 0;
+  uint32_t bdropDay = 0;       // botin de combate (v1.56): dia de bdropToday...
+  uint8_t bdropToday = 0;      // ...y objetos ganados ese dia (tope BATTLE_DROPS_PER_DAY)
   uint8_t gifts[GIFT_MAX] = { 0 };  // regalos sin abrir (v1.55), en orden de llegada
   uint8_t giftN = 0;
   void giveGift(uint8_t it);   // envuelto; con la cola llena, a la mochila con aviso (giveFound)

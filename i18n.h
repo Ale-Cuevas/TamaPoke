@@ -91,6 +91,8 @@ enum StrId : uint8_t {
   S_BAG_HINT, S_BAG_ASLEEP,
   // v1.54: la tarta: lleno durante 3 h, y tocarla sin ninguna
   S_SO_FULL, S_NO_CAKE,
+  // v1.56: el botin de un combate ganado, que espera envuelto en casa
+  S_BATTLE_GIFT,
   STR_COUNT
 };
 

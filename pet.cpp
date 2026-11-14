@@ -1044,6 +1044,34 @@ bool Pet::practiceRewardReady() const {
   return !practiceRewarded || millis() - lastPracticeReward >= PRACTICE_EVERY_MS;
 }
 
+uint8_t Pet::rollBattleItem() {
+  long r = random(100);
+  uint8_t it;
+  if (r < BDROP_CAKE) it = IT_CAKE;
+  else if ((r -= BDROP_CAKE) < BDROP_GOLDEN) it = IT_GOLDEN;
+  else if ((r -= BDROP_GOLDEN) < BDROP_VITAMIN) it = IT_PROTEIN + random(3);
+  else if ((r -= BDROP_VITAMIN) < BDROP_RARECANDY) it = IT_RARECANDY;
+  else if ((r -= BDROP_RARECANDY) < BDROP_CHARM) it = IT_CHARM;
+  else it = IT_EGG;
+  if (it == IT_CHARM && items[IT_CHARM]) it = IT_CAKE;  // solo se lleva un amuleto
+  return it;
+}
+
+uint8_t Pet::battleDrop(bool won) {
+  if (!won || isEgg() || ceremony != CER_NONE) return IT_COUNT;
+  uint32_t day = today();
+  if (bdropDay != day) {
+    bdropDay = day;
+    bdropToday = 0;
+  }
+  if (bdropToday >= BATTLE_DROPS_PER_DAY || random(100) >= BATTLE_DROP_ODDS) return IT_COUNT;
+  uint8_t it = rollBattleItem();
+  bdropToday++;
+  giveGift(it);
+  save();  // fin de una pantalla de juego: se guarda ya
+  return it;
+}
+
 uint8_t Pet::practiceDone() {
   if (isEgg() || ceremony != CER_NONE || !practiceRewardReady()) return 0;
   practiceRewarded = true;
@@ -1129,6 +1157,8 @@ void Pet::save() {
   prefs.putUShort("eAt", eggAt);
   prefs.putUInt("bondD", bondDay);
   prefs.putUChar("bondT", bondToday);
+  prefs.putUInt("bdD", bdropDay);    // botin de combate de hoy (v1.56)
+  prefs.putUChar("bdN", bdropToday);
   prefs.putBool("vac", vacant);
   // caja (v1.37). El uid va el ULTIMO: la NVS escribe en orden, asi que si un corte de luz
   // deja el uid nuevo, todo lo demas del bicho ya esta escrito. boxBoot() se fia de eso para
@@ -1239,6 +1269,8 @@ void Pet::load() {
   }
   bondDay = prefs.getUInt("bondD", 0);
   bondToday = prefs.getUChar("bondT", 0);
+  bdropDay = prefs.getUInt("bdD", 0);
+  bdropToday = prefs.getUChar("bdN", 0);
   // crecimiento (v1.35). Un guardado anterior no trae "grow": el nivel salia de la edad
   // (1 nivel por hora). Se traduce a la curva nueva con el mismo nivel y la barra igual de
   // llena, para que nadie suba ni baje de nivel al actualizar. Va despues de speciesId.

@@ -64,6 +64,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Toca un objeto para usarlo", "Duerme: solo mirar",
     // v1.54: la tarta: lleno durante 3 h, y tocarla sin ninguna
     "Est\240 lleno!", "Sin tarta: camina o combate",
+    // v1.56: el botin de un combate ganado, que espera envuelto en casa
+    "Regalo en casa!",
   },
   // ---------------- EN ----------------
   {
@@ -122,6 +124,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Tap an item to use it", "Asleep: just looking",
     // v1.54: la tarta: lleno durante 3 h, y tocarla sin ninguna
     "So full!", "No cake: walk or battle",
+    // v1.56: el botin de un combate ganado, que espera envuelto en casa
+    "A gift at home!",
   },
   // ---------------- FR ----------------
   {
@@ -180,6 +184,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Touche un objet pour l'utiliser", "Il dort : on regarde",
     // v1.54: la tarta: lleno durante 3 h, y tocarla sin ninguna
     "Bien rempli !", "Pas de g\203teau: marche",
+    // v1.56: el botin de un combate ganado, que espera envuelto en casa
+    "Cadeau \205 la maison!",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -243,6 +249,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Tippe ein Item zum Benutzen", "Es schl\204ft: nur ansehen",
     // v1.54: la tarta: lleno durante 3 h, y tocarla sin ninguna
     "Pappsatt!", "Kein Kuchen: lauf oder k\204mpf",
+    // v1.56: el botin de un combate ganado, que espera envuelto en casa
+    "Geschenk daheim!",
   },
   // ---------------- IT ----------------
   {
@@ -301,6 +309,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Tocca un oggetto per usarlo", "Dorme: solo guardare",
     // v1.54: la tarta: lleno durante 3 h, y tocarla sin ninguna
     "Che sazio!", "Niente torta: cammina",
+    // v1.56: el botin de un combate ganado, que espera envuelto en casa
+    "Regalo a casa!",
   },
   // ---------------- PT ----------------
   {
@@ -359,6 +369,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Toque um item para usar", "Dormindo: s\242 olhar",
     // v1.54: la tarta: lleno durante 3 h, y tocarla sin ninguna
     "T\240 cheio!", "Sem bolo: ande ou lute",
+    // v1.56: el botin de un combate ganado, que espera envuelto en casa
+    "Presente em casa!",
   },
   // ---------------- JA ----------------
   {
@@ -439,6 +451,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "タッチして つかう", "ねてる: みるだけ",
     // v1.54: la tarta: lleno durante 3 h, y tocarla sin ninguna
     "おなか いっぱい!", "ケーキなし: あるこう",
+    // v1.56: el botin de un combate ganado, que espera envuelto en casa
+    "いえに プレゼント!",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -502,6 +516,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "눌러서 사용", "자는 중: 보기만",
     // v1.54: la tarta: lleno durante 3 h, y tocarla sin ninguna
     "배불러!", "케이크 없음: 걷기",
+    // v1.56: el botin de un combate ganado, que espera envuelto en casa
+    "집에 선물!",
   },
 };
 

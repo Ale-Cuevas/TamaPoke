@@ -8,6 +8,18 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.56] - 2026-11-14
+
+### Added
+
+- **Battle loot.** Winning a practice battle has a 70 % chance of bringing an item home, at most 5 a
+  day (the count survives a restart and starts again at midnight). It arrives as a gift on the home
+  floor; the result shows "A gift at home!" with a gift box under "YOU WIN!". The loot table:
+  cake 40 %, Golden Berry 25 %, Protein / Iron / Carbos 7 % each, Rare Candy 7 % (the only way to get
+  one again since v1.36), Shiny Charm 4 % (a cake if you already hold one) and egg 3 %, the rarest.
+  Losing or a draw gives no loot. The +3 JOY once an hour is unchanged.
+- Serial: the `battle:` line after a battle prints the loot and today's count.
+
 ## [1.55] - 2026-11-14
 
 ### Changed

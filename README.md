@@ -142,7 +142,8 @@ While **awake**, per minute:
   tap says where to find one.
 - ⚽ **Play:** a menu with all the games: the **ball minigame** (+JOY, −ENE; trains **SPEED** and
   burns weight; the ball keeps speeding up as you score: twice as fast at 80 as at 1, up to 3×),
-  a **practice battle** (+3 JOY, at most once an hour; see Battles below), the training bag, the
+  a **practice battle** (+3 JOY, at most once an hour, and a win can bring an item home; see Battles
+  below), the training bag, the
   sled run and the waterfall.
 - 🥊 **Training bag** (third slot of the Play menu): trains **STRENGTH** (~4 hits = 1 pt, cap
   +18/session), tires it.
@@ -283,7 +284,18 @@ attacking until one faints, in 10–20 s after a 3 s VS card and jingle.
   a shake). After a special the meter rests for 2 normal attacks. The opponent
   charges its own.
 - **Reward:** +3 JOY whether you win or lose, at most once an hour. Practice
-  isn't counted in any win/loss record. The USER key, or PWR (to the screensaver
+  isn't counted in any win/loss record.
+- **Loot (v1.56):** a **win** has a **70 %** chance of an item, at most **5 a day**. It waits at
+  home as a gift ("A gift at home!" under the title); open it to see what it is.
+
+  | Loot | Odds |
+  |---|---|
+  | Cake | 40 % |
+  | Golden Berry | 25 % |
+  | Protein / Iron / Carbos | 21 % (7 % each) |
+  | Rare Candy | 7 % |
+  | Shiny Charm | 4 % (a cake if you already hold one) |
+  | Egg | 3 %, the rarest | The USER key, or PWR (to the screensaver
   or off), quits with no reward. The result ignores taps for its first 1.8 s
   (v1.38), so the taps that charged the special don't close it unseen.
 - Battles between two boards over the air are next (see the roadmap).
