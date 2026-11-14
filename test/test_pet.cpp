@@ -148,15 +148,132 @@ TEST(feed, baya_favorita_sube_mas_y_da_corazon) {
   CHECK(p.eating());
 }
 
-TEST(feed, chuche_engorda) {
+// v1.54: la tarta sustituye a la chuche. Es limitada, llena del todo y engorda como ella
+TEST(cake, llena_alegra_y_engorda) {
   Pet p;
   makePet(p, 4);
   p.fullness = 50;
   p.joy = 50;
-  p.feedCandy();
-  CHECK_EQ(p.fullness, (uint8_t)60);
-  CHECK_EQ(p.joy, (uint8_t)62);
-  CHECK_EQ(p.weight, (uint8_t)12);
+  CHECK_MSG(!p.eatCake(), "sin tarta en la mochila no hay tarta");
+  CHECK_EQ(p.fullness, (uint8_t)50);
+  p.items[IT_CAKE] = 2;
+  CHECK(p.eatCake());
+  CHECK_EQ(p.items[IT_CAKE], (uint8_t)1);
+  CHECK_EQ(p.fullness, (uint8_t)100);
+  CHECK_EQ(p.joy, (uint8_t)(50 + CAKE_JOY));
+  CHECK_EQ(p.weight, (uint8_t)CAKE_WEIGHT);
+  CHECK(p.eating());
+  CHECK(p.sated());
+  CHECK_EQ(p.satedMinutesLeft(), (uint32_t)CAKE_SATED_MIN);
+}
+
+TEST(cake, la_comida_no_baja_durante_tres_horas) {
+  Pet p;
+  makePet(p, 4);
+  p.items[IT_CAKE] = 1;
+  CHECK(p.eatCake());
+  for (uint32_t m = 0; m < CAKE_SATED_MIN; m++) {
+    p.joy = p.energy = p.hygiene = 100;  // que nada mas cambie: solo mira la comida
+    advance(p, 1);
+    if (p.fullness != 100) break;
+  }
+  CHECK_EQ(p.fullness, (uint8_t)100);
+  CHECK(!p.sated());
+  advance(p, 1);
+  CHECK_EQ(p.fullness, (uint8_t)98);  // despues, -2 al minuto como siempre
+}
+
+TEST(cake, jugar_no_da_hambre_mientras_dura) {
+  Pet p;
+  makePet(p, 4);
+  p.items[IT_CAKE] = 1;
+  CHECK(p.eatCake());
+  p.play();
+  p.dashResult(20);
+  CHECK_EQ(p.fullness, (uint8_t)100);
+}
+
+TEST(cake, apagado_cuenta_lo_que_quedaba) {
+  Pet p;
+  makePet(p, 4);
+  p.items[IT_CAKE] = 1;
+  CHECK(p.eatCake());
+  advance(p, 120);  // le queda 1 h
+  CHECK_EQ(p.fullness, (uint8_t)100);
+  p.setClock(1000u * 86400);
+  p.syncClock(1000u * 86400 + 240 * 60);  // 4 h apagado: 1 h lleno, 3 h bajando (-2/min, suelo 15)
+  CHECK(!p.sated());
+  CHECK_EQ(p.fullness, (uint8_t)15);
+  Pet q;
+  makePet(q, 4);
+  q.items[IT_CAKE] = 1;
+  CHECK(q.eatCake());
+  q.setClock(1000u * 86400);
+  q.syncClock(1000u * 86400 + 30 * 60);  // media hora apagado: sigue lleno
+  CHECK_EQ(q.fullness, (uint8_t)100);
+  CHECK(q.sated());
+  CHECK_EQ(q.satedMinutesLeft(), (uint32_t)(CAKE_SATED_MIN - 30));
+}
+
+TEST(cake, sobrevive_a_un_reinicio_y_no_pasa_al_siguiente) {
+  Pet p;
+  makePet(p, 4);
+  p.items[IT_CAKE] = 1;
+  CHECK(p.eatCake());
+  Pet q;
+  q.begin();
+  CHECK(q.sated());
+  CHECK_EQ(q.satedMinutesLeft(), (uint32_t)CAKE_SATED_MIN);
+  q.startFarewell();  // nace otro: la tarta era del anterior
+  q.release();
+  q.newEgg();
+  q.eggTap();
+  q.eggTap();
+  q.eggTap();
+  CHECK(!q.sated());
+}
+
+TEST(cake, una_mochila_de_siete_carga_sin_tartas) {
+  Pet p;
+  makePet(p, 4);
+  {
+    Preferences raw;  // como la dejaba la v1.53: 7 objetos, sin la tarta ni "cake"
+    raw.begin("tamapoke", false);
+    uint8_t seven[7] = { 2, 1, 0, 3, 1, 4, 2 };
+    raw.putBytes("bpack", seven, sizeof(seven));
+    raw.remove("cake");
+    raw.end();
+  }
+  Pet q;
+  q.begin();
+  CHECK_EQ(q.items[IT_GOLDEN], (uint8_t)2);
+  CHECK_EQ(q.items[IT_RARECANDY], (uint8_t)4);
+  CHECK_EQ(q.items[IT_EGG], (uint8_t)2);
+  CHECK_EQ(q.items[IT_CAKE], (uint8_t)0);
+  CHECK(!q.sated());
+  {
+    Preferences raw;  // y el tope de 9 tambien la cubre al cargar
+    raw.begin("tamapoke", false);
+    uint8_t eight[8] = { 2, 1, 0, 3, 1, 4, 2, ITEM_MAX + 3 };
+    raw.putBytes("bpack", eight, sizeof(eight));
+    raw.end();
+  }
+  Pet r;
+  r.begin();
+  CHECK_EQ(r.items[IT_CAKE], (uint8_t)ITEM_MAX);
+}
+
+TEST(cake, desde_la_mochila_es_la_misma_tarta) {
+  Pet p;
+  makePet(p, 4);
+  p.fullness = 30;
+  CHECK(!p.canUseItem(IT_CAKE));
+  p.items[IT_CAKE] = 1;
+  CHECK(p.canUseItem(IT_CAKE));
+  CHECK(p.useItem(IT_CAKE));
+  CHECK_EQ(p.items[IT_CAKE], (uint8_t)0);
+  CHECK_EQ(p.fullness, (uint8_t)100);
+  CHECK(p.sated());
 }
 
 TEST(feed, dormido_o_huevo_no_come) {
@@ -166,7 +283,9 @@ TEST(feed, dormido_o_huevo_no_come) {
   p.toggleLight();  // a dormir
   CHECK(p.sleeping);
   p.feedBerry(1);
-  p.feedCandy();
+  p.items[IT_CAKE] = 1;
+  CHECK(!p.eatCake());
+  CHECK_EQ(p.items[IT_CAKE], (uint8_t)1);
   CHECK_EQ(p.fullness, (uint8_t)40);
 
   Pet e;
@@ -894,7 +1013,8 @@ TEST(ceremony, durante_la_ceremonia_no_se_puede_interactuar) {
   p.poops = 2;
   p.startRunaway();
   p.feedBerry(0);
-  p.feedCandy();
+  p.items[IT_CAKE] = 1;
+  CHECK(!p.eatCake());
   p.play();
   p.clean();
   p.caress();
@@ -1215,16 +1335,19 @@ TEST(steps, tope_de_hallazgos_al_dia) {
 TEST(steps, probabilidades_de_cada_objeto) {
   Pet p;
   makeWalker(p);
-  mockForceRandom(54);  // < 55: baya
-  p.addSteps(FIND_MIN_STEPS + 54, DIA);
+  mockForceRandom(39);  // < 40: baya (v1.54: eran 55)
+  p.addSteps(FIND_MIN_STEPS + 39, DIA);
   CHECK_EQ(p.items[IT_GOLDEN], (uint8_t)1);
-  mockForceRandom(60);  // 55..89: vitamina (random(3) forzado = 2: carburante)
-  p.addSteps(FIND_MIN_STEPS + 60, DIA);
+  mockForceRandom(50);  // 40..59: tarta (v1.54)
+  p.addSteps(FIND_MIN_STEPS + 50, DIA);
+  CHECK_EQ(p.items[IT_CAKE], (uint8_t)1);
+  mockForceRandom(75);  // 60..89: vitamina (random(3) forzado = 2: carburante)
+  p.addSteps(FIND_MIN_STEPS + 75, DIA);
   CHECK_EQ(p.items[IT_CARBOS], (uint8_t)1);
-  mockForceRandom(95);  // 90..99: amuleto
-  p.addSteps(FIND_MIN_STEPS + 95, DIA);
+  mockForceRandom(95);  // 90..99: amuleto (otro dia: con cuatro hallazgos se cruzaria la meta de 3000)
+  p.addSteps(FIND_MIN_STEPS + 95, DIA + 1);
   CHECK_EQ(p.items[IT_CHARM], (uint8_t)1);
-  p.addSteps(FIND_MIN_STEPS + 95, DIA + 1);  // el segundo amuleto se vuelve baya (otro dia: sin la meta)
+  p.addSteps(FIND_MIN_STEPS + 95, DIA + 2);  // el segundo amuleto se vuelve baya (otro dia: sin la meta)
   CHECK_EQ(p.items[IT_CHARM], (uint8_t)1);
   CHECK_EQ(p.items[IT_GOLDEN], (uint8_t)2);
 }

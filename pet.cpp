@@ -176,6 +176,7 @@ void Pet::syncClock(uint32_t nowEpoch) {
   if (mins > 14UL * 24 * 60) mins = 14UL * 24 * 60;  // tope: 2 semanas
 
   for (uint32_t i = 0; i < mins; i++) {
+    bool full = sated();  // la tarta (v1.54) tambien cuenta apagado
     ageMinutes++;
     if (isEgg()) {
       if (ageMinutes >= 3) hatch();  // eclosiona en tu ausencia
@@ -185,13 +186,13 @@ void Pet::syncClock(uint32_t nowEpoch) {
     if (sleeping) {  // descanso: baja lento y con suelo, igual que en vivo
       energy = clamp100(energy + 6);
       if (ageMinutes % 2 == 0) {
-        fullness = dropTo(fullness, 1, 30);
+        if (!full) fullness = dropTo(fullness, 1, 30);
         joy = dropTo(joy, 1, 35);
       }
       if (ageMinutes % 3 == 0) hygiene = dropTo(hygiene, 1, 45);
       continue;
     }
-    fullness = dropTo(fullness, 2, 15);
+    if (!full) fullness = dropTo(fullness, 2, 15);
     energy = dropTo(energy, 1, 15);
     hygiene = dropTo(hygiene, 1, 15);
     joy = dropTo(joy, 1, 15);
@@ -227,6 +228,7 @@ void Pet::tick() {
                             // tiempo corriera aqui, el huevo eclosionaria solo a
                             // los 3 min con la especie sorteada y se perderia la
                             // eleccion del jugador
+  bool full = sated();  // la tarta (v1.54): este minuto la comida no baja
   ageMinutes++;
 
   if (isEgg()) {
@@ -243,7 +245,7 @@ void Pet::tick() {
     energy = clamp100(energy + 6);
     if (weight > 0 && ageMinutes % WEIGHT_BURN_SLEEP_MIN == 0) weight--;
     if (ageMinutes % 2 == 0) {                 // ~4x mas lento que despierto
-      fullness = dropTo(fullness, 1, 30);
+      if (!full) fullness = dropTo(fullness, 1, 30);
       joy = dropTo(joy, 1, 35);
     }
     if (ageMinutes % 3 == 0) hygiene = dropTo(hygiene, 1, 45);
@@ -255,7 +257,7 @@ void Pet::tick() {
   // la subida de nivel ya no suena aqui: la detecta la UI (fx.h) por cualquier via (minuto,
   // tiempo apagado, Caramelo Raro, LVL) y la anuncia con su propio sonido
 
-  fullness = clamp100(fullness - 2);
+  if (!full) fullness = clamp100(fullness - 2);
   energy = clamp100(energy - 1);
   if (fullness > 40 && poops < 3 && random(100) < 15) poops++;
 
@@ -530,6 +532,7 @@ void Pet::hatch() {
   geneSpe = 90 + random(21);
   trAtk = trDef = trSpe = 0;
   berryKnown = false;
+  satedUntil = 0;    // la tarta es del individuo: la edad vuelve a empezar
   bond = 0;          // vinculo, medallas y nombre son del individuo
   bondToday = 0;
   bondDay = today();
@@ -596,15 +599,18 @@ void Pet::feedBerry(uint8_t color) {
   save();
 }
 
-void Pet::feedCandy() {
-  if (ceremony != CER_NONE) return;
-  if (isEgg() || sleeping) return;
-  fullness = clamp100(fullness + 10);
-  joy = clamp100(joy + 12);
-  weight = clamp100(weight + 12);  // las chuches pasan factura
+bool Pet::eatCake() {
+  if (!canUseItem(IT_CAKE)) return false;
+  items[IT_CAKE]--;
+  fullness = 100;
+  satedUntil = ageMinutes + CAKE_SATED_MIN;  // lleno 3 h (tambien apagado: syncClock)
+  joy = clamp100(joy + CAKE_JOY);
+  weight = clamp100(weight + CAKE_WEIGHT);  // como la chuche a la que sustituye, pasa factura
   eatUntil = millis() + EAT_ANIM_MS;
+  heartUntil = millis() + HEART_MS;
   registerCare();
   save();
+  return true;
 }
 
 void Pet::playResult(uint8_t score) {
@@ -613,7 +619,7 @@ void Pet::playResult(uint8_t score) {
   trSpe = v > 100 ? 100 : v;
   joy = clamp100(joy + 5 + (score > 15 ? 30 : score * 2));
   energy = dropTo(energy, 10 + score / 2, 5);
-  fullness = dropTo(fullness, 5, 5);
+  if (!sated()) fullness = dropTo(fullness, 5, 5);  // con tarta (v1.54) jugar no da hambre
   int burn = (int)weight - score / GAME_WEIGHT_DIV;  // el ejercicio quema peso
   weight = burn > 0 ? burn : 0;
   if (score >= 5) heartUntil = millis() + HEART_MS;
@@ -634,7 +640,7 @@ uint8_t Pet::trainStrength(uint16_t hits) {
   gain = trAtk - antes;             // lo que de verdad entro: al topar en 100 la
                                     // pantalla anunciaba +18 aunque cupieran menos
   energy = dropTo(energy, 12, 5);   // cansa
-  fullness = dropTo(fullness, 5, 5);
+  if (!sated()) fullness = dropTo(fullness, 5, 5);  // con tarta (v1.54) jugar no da hambre
   int burn = (int)weight - hits / TRAIN_WEIGHT_DIV;  // tambien quema peso
   weight = burn > 0 ? burn : 0;
   joy = clamp100(joy + 6);
@@ -656,7 +662,7 @@ uint8_t Pet::zenResult(uint16_t focusTenths, uint16_t driftTenths) {
   trDef = v > 100 ? 100 : (uint8_t)v;
   uint8_t gain = trDef - antes;
   energy = dropTo(energy, 8, 5);
-  fullness = dropTo(fullness, 3, 5);
+  if (!sated()) fullness = dropTo(fullness, 3, 5);
   joy = clamp100(joy + 6);
   hygiene = clamp100(hygiene + ZEN_WASH);  // la cascada lava (decidido 2026-11-07)
   if (focusTenths >= 200) heartUntil = millis() + HEART_MS;
@@ -676,7 +682,7 @@ uint8_t Pet::dashResult(uint16_t dodged) {
   trSpe = v > 100 ? 100 : (uint8_t)v;
   uint8_t gain = trSpe - antes;
   energy = dropTo(energy, 12, 5);
-  fullness = dropTo(fullness, 5, 5);
+  if (!sated()) fullness = dropTo(fullness, 5, 5);  // con tarta (v1.54) jugar no da hambre
   int burn = (int)weight - dodged / DASH_WEIGHT_DIV;
   weight = burn > 0 ? burn : 0;
   joy = clamp100(joy + 5 + (dodged > 15 ? 15 : dodged) * 2);
@@ -693,7 +699,7 @@ void Pet::play() {
   if (isEgg() || sleeping) return;
   joy = clamp100(joy + 25);
   energy = clamp100(energy - 10);
-  fullness = clamp100(fullness - 5);
+  if (!sated()) fullness = clamp100(fullness - 5);
   heartUntil = millis() + HEART_MS;
   addBond(2);
   registerCare();
@@ -858,7 +864,8 @@ void Pet::findItem() {
   long r = random(100);
   uint8_t it;
   if (r < ODDS_BERRY) it = IT_GOLDEN;
-  else if (r < ODDS_BERRY + ODDS_VITAMIN) it = IT_PROTEIN + random(3);
+  else if (r < ODDS_BERRY + ODDS_CAKE) it = IT_CAKE;
+  else if (r < ODDS_BERRY + ODDS_CAKE + ODDS_VITAMIN) it = IT_PROTEIN + random(3);
   else it = IT_CHARM;
   if (it == IT_CHARM && items[IT_CHARM]) it = IT_GOLDEN;  // solo se lleva un amuleto
   giveFound(it);
@@ -910,6 +917,7 @@ bool Pet::canUseItem(uint8_t it) const {
 
 bool Pet::useItem(uint8_t it) {
   if (!canUseItem(it)) return false;
+  if (it == IT_CAKE) return eatCake();  // la misma tarta que la del menu de comida
   items[it]--;
   if (it == IT_GOLDEN) {
     fullness = clamp100(fullness + GOLDEN_FOOD);
@@ -1014,6 +1022,7 @@ void Pet::save() {
   prefs.putUChar("hyg", hygiene);
   prefs.putUChar("poop", poops);
   prefs.putUChar("wgt", weight);
+  prefs.putUInt("cake", satedUntil);
   prefs.putUChar("gatk", geneAtk);
   prefs.putUChar("gdef", geneDef);
   prefs.putUChar("gspe", geneSpe);
@@ -1086,6 +1095,7 @@ void Pet::load() {
   hygiene = prefs.getUChar("hyg", 100);
   poops = prefs.getUChar("poop", 0);
   weight = prefs.getUChar("wgt", 0);
+  satedUntil = prefs.getUInt("cake", 0);
   geneAtk = prefs.getUChar("gatk", 0);
   geneDef = prefs.getUChar("gdef", 0);
   geneSpe = prefs.getUChar("gspe", 0);
@@ -1328,6 +1338,7 @@ void Pet::fromRecord(const PetRecord &r) {
   hygiene = r.hygiene;
   poops = r.poops > 3 ? 3 : r.poops;
   weight = r.weight;
+  satedUntil = 0;  // la tarta no viaja en la caja (v1.54): quien sale de ella no esta lleno
   geneAtk = r.geneAtk;
   geneDef = r.geneDef;
   geneSpe = r.geneSpe;

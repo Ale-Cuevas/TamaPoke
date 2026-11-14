@@ -153,6 +153,8 @@ static void resetUi() {
   // paseo e IMU (v1.20)
   itemConfirm = 0;
   foundShown = false;
+  cakeHintUntil = 0;
+  pet.satedUntil = 0;  // la tarta (v1.54) no pasa de una escena a otra
   while (pet.hasFound()) pet.popFound();
   pet.takeGoalBanner();
   pet.takeMedal();       // (v1.30) las celebraciones pendientes no pasan de una escena a otra
@@ -378,7 +380,15 @@ static const std::vector<Scene> &scenes() {
     // v1.53: the Care button (sleep | clean) and the Backpack screen
     { "care-menu", [] { pokemon(133, 12); pet.poops = 2; menuKind = MENU_CARE; menuUntil = millis() + 6000; } },
     { "care-menu-asleep", [] { pokemon(133, 23); pet.sleeping = true; menuKind = MENU_CARE; menuUntil = millis() + 6000; } },
-    { "bag", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 1, 1, 2 }); openBag(); } },
+    { "bag", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 1, 1, 2, 3 }); openBag(); } },
+    // v1.54: the cake in the food menu (with how many are left, grey with none), the pink FOOD bar while
+    // it lasts, and a tap on it with none
+    { "feed-cake", [] { pokemon(133, 12); pet.items[IT_CAKE] = 3; menuKind = MENU_FEED; menuUntil = millis() + 6000; } },
+    { "home-sated", [] { pokemon(133, 12); pet.items[IT_CAKE] = 1; pet.eatCake(); gHostMillis += EAT_ANIM_MS + 100; }, 2 },
+    { "home-sated-es", [] { pokemon(133, 12); pet.items[IT_CAKE] = 1; pet.eatCake(); gHostMillis += EAT_ANIM_MS + 100;
+                            setLang(LANG_ES); applyLangFont(); }, 2 },
+    { "no-cake", [] { pokemon(133, 12); gHostMillis += 3000; /* past an earlier scene's heart */ cakeHintUntil = millis() + 2500; fxo.push(FXO_DENY, 0, 0, millis()); } },
+    { "no-cake-es", [] { pokemon(133, 12); gHostMillis += 3000; cakeHintUntil = millis() + 2500; setLang(LANG_ES); applyLangFont(); } },
     { "bag-es", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 0, 1, 0 }); openBag(); setLang(LANG_ES); applyLangFont(); } },
     { "bag-empty", [] { pokemon(25, 13); openBag(); } },
     { "bag-empty-es", [] { pokemon(25, 13); openBag(); setLang(LANG_ES); applyLangFont(); } },

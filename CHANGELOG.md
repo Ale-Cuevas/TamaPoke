@@ -8,6 +8,20 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.54] - 2026-11-14
+
+### Changed
+
+- **The cake replaces the candy.** The food menu's 4th slot was a candy nobody could make out. It is
+  now a **cake**, and cakes are limited: you find them walking (20 % of finds; the Golden Berry goes
+  from 55 % to 40 %, vitamins from 35 % to 30 %) and, from v1.56, in battles. A cake fills FOOD to
+  100 and keeps it there for **3 hours**: the bar turns pink, the status says "So full!", games
+  don't cost food, and the time also counts while the board is off. It adds +12 JOY and +12 weight,
+  as the candy did. The slot shows a red badge with how many you have; with none it's grey, and a tap
+  shakes FOOD and says "No cake: walk or battle". Cakes can also be eaten from the Backpack.
+- A pet stored in the Box comes back without the cake's effect; a new pet never inherits it.
+- Serial: `STATS` prints `cake=` (in the Backpack) and `sated=` (minutes left).
+
 ## [1.53] - 2026-11-14
 
 ### Changed

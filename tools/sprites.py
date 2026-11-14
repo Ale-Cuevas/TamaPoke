@@ -483,18 +483,6 @@ def icon_berry_green():
     return g.rows()
 
 
-def icon_candy():
-    g = G(16)
-    g.disk(8, 8, 4.4, 3.6, 'p', 'P')
-    # envoltorio: picos a los lados
-    g.px(2, 6, 'p'); g.px(2, 8, 'p'); g.px(2, 10, 'p'); g.rect(3, 7, 3, 9, 'p')
-    g.px(13, 6, 'p'); g.px(13, 8, 'p'); g.px(13, 10, 'p'); g.rect(12, 7, 12, 9, 'p')
-    g.outline()
-    g.px(7, 6, 'w'); g.px(6, 7, 'w')
-    g.px(8, 8, 'P'); g.px(9, 9, 'P')
-    return g.rows()
-
-
 def icon_clean():
     g = G(16)
     g.disk(7, 10, 4.6, 4.4, 'b', 'B')
@@ -841,7 +829,6 @@ SPRITES = {
     "ICON_CLEAN": icon_clean(),
     "ICON_BERRY_B": icon_berry_blue(),
     "ICON_BERRY_G": icon_berry_green(),
-    "ICON_CANDY": icon_candy(),
     "ICON_EGG": icon_egg(),
     "ICON_GOLDEN": icon_golden(),
     "ICON_PROTEIN": icon_protein(),

@@ -135,7 +135,11 @@ While **awake**, per minute:
 ### Actions
 - 🍎 **Berry** (3 flavors): +25 FOOD. Each species has a **hidden favorite flavor**
   → +35 FOOD, +10 JOY, ♥, bond, and it gets revealed.
-- 🍬 **Candy:** +10 FOOD, +12 JOY, but **+12 weight** (fattening).
+- 🍰 **Cake** (v1.54, the food menu's 4th slot, replacing the candy): **limited**, found on walks
+  (and won in battles). It fills FOOD to 100 and **keeps it full for 3 hours** (the bar turns pink and
+  the status says "So full!"; games don't make it hungry either, and the time counts while the board
+  is off), +12 JOY, but **+12 weight**. The slot shows how many you have; with none it's grey and a
+  tap says where to find one.
 - ⚽ **Play:** a menu with all the games: the **ball minigame** (+JOY, −ENE; trains **SPEED** and
   burns weight; the ball keeps speeding up as you score: twice as fast at 80 as at 1, up to 3×),
   a **practice battle** (+3 JOY, at most once an hour; see Battles below), the training bag, the
@@ -316,8 +320,9 @@ waving it around doesn't farm anything.
 
   | Item | Odds | Use |
   |---|---|---|
-  | Golden Berry | 55 % | +50 FOOD, +15 JOY, a heart |
-  | Protein / Iron / Carbos | 35 % (1/3 each) | +3 ATK / DEF / SPD training (cap 100) |
+  | Golden Berry | 40 % | +50 FOOD, +15 JOY, a heart |
+  | Cake (v1.54) | 20 % | FOOD full for 3 h, +12 JOY, +12 weight (food menu or Backpack) |
+  | Protein / Iron / Carbos | 30 % (1/3 each) | +3 ATK / DEF / SPD training (cap 100) |
   | Shiny Charm | 10 % | Held, not used: the **next egg** gets ×3 shiny odds (never better than 1/8). One at a time; a second one becomes a Golden Berry. |
   | Rare Candy | the 10000 goal, v1.25–v1.35 (it now gives +2 levels directly) | **+1 level**, keeping how full the level bar was, without ageing the pet (it can make the pet ready to evolve). Candies already in the Backpack still work. |
   | Egg | every 8000–15000 steps (v1.39), apart from the finds above and their daily cap | Not used by hand: it comes home by itself when home is free (an ending, or the pet stored in the Box). |
@@ -488,7 +493,7 @@ If one bottoms out it counts as a *slip-up*.
 
 **Buttons (bottom arc, icons):**
 - 🍎 **Feed** → food menu: 3 berries (each species has a hidden favourite that
-  gives a bonus) and a candy (+happiness but it fattens; weight makes it sluggish).
+  gives a bonus) and the cake (limited: full for 3 h, but it fattens; weight makes it sluggish).
 - ⚽ **Play** → a menu with every game: the pokeball minigame (trains SPEED), a practice
   battle (crossed swords) or the training bag (red bag, trains STRENGTH).
 - 💗 **Care** (v1.53) → a menu with two choices:
@@ -581,8 +586,8 @@ hatch) + level + **training**:
 - STRENGTH ← the training bag (whacking)
 
 Shown on the Battle page of the stat card. Weight is extra fat (0 = fit): it goes
-up +12 per candy and burns off slowly, −1 every 15 min awake (30 asleep), a little
-with training and the minigame, and −1 per 1000 steps. A candy lasts about 3 h.
+up +12 per cake (the candy before v1.54) and burns off slowly, −1 every 15 min awake (30 asleep), a
+little with training and the minigame, and −1 per 1000 steps. A cake's weight lasts about 3 h.
 
 ## Retention: streak, bond, medals, name
 

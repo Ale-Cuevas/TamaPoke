@@ -48,7 +48,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.53"
+#define FW_VERSION "1.54"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -119,7 +119,8 @@ bool bagOpen = false;         // mochila (v1.53): su boton en la fila de abajo, 
 uint8_t itemConfirm = 0;      // mochila: objeto a confirmar + 1 (0 = ninguno)
 uint32_t itemConfirmUntil = 0;
 bool foundShown = false;      // el ultimo frame enseno un hallazgo: un toque lo cierra
-static_assert(S_IT_EGG - S_IT_GOLDEN == IT_EGG - IT_GOLDEN && IT_EGG + 1 == IT_COUNT, "nombres de objeto en el orden de IT_*");
+uint32_t cakeHintUntil = 0;   // tocar la tarta sin ninguna (v1.54): la cabecera dice donde se encuentra
+static_assert(S_IT_CAKE - S_IT_GOLDEN == IT_CAKE - IT_GOLDEN && IT_CAKE + 1 == IT_COUNT, "nombres de objeto en el orden de IT_*");
 bool clockOpen = false;       // pantalla de ajuste de hora (deslizar abajo)
 int clockH = 12, clockM = 0;  // hora en edicion
 
@@ -1089,11 +1090,12 @@ void handleSerial() {
     // crecimiento (v1.35, growth.h): de el sale el nivel; la edad va aparte
     Serial.printf("grow=%lu lv=%u into=%u/%u age=%lu\n", (unsigned long)pet.growMin, pet.level(),
                   pet.levelMinutesInto(), pet.levelMinutesCost(), (unsigned long)pet.ageMinutes);
-    Serial.printf("steps=%lu/%lu finds=%u bonus=%u goal=%u bpack=%u/%u/%u/%u charm=%u candy=%u imu=%d\n",
+    Serial.printf("steps=%lu/%lu finds=%u bonus=%u goal=%u bpack=%u/%u/%u/%u charm=%u candy=%u cake=%u sated=%lu imu=%d\n",
                   (unsigned long)pet.stepsToday, (unsigned long)pet.stepsTotal, pet.findsToday,
                   pet.bonusFindsToday, pet.goalTierOn(pet.dayNumber()), pet.items[IT_GOLDEN],
                   pet.items[IT_PROTEIN], pet.items[IT_IRON], pet.items[IT_CARBOS], pet.items[IT_CHARM],
-                  pet.items[IT_RARECANDY], imuPresent() ? 1 : 0);
+                  pet.items[IT_RARECANDY], pet.items[IT_CAKE], (unsigned long)pet.satedMinutesLeft(),
+                  imuPresent() ? 1 : 0);
     // efectos (v1.30): celebraciones en cola y la que se ve, y por que podria estar esperando
     Serial.printf("fx queue=%u showing=%d kind=%d busy=%d sleep=%d dim=%u off=%d saver=%d\n", fxq.n,
                   fxq.active ? 1 : 0, fxq.active ? fxq.cur.kind : -1, fxScreenBusy() ? 1 : 0, pet.sleeping ? 1 : 0,
@@ -1452,8 +1454,16 @@ void onTap(int16_t x, int16_t y) {
     if (kind == MENU_FEED && x >= 101 && x <= 365) {
       int item = (x - 101) / 66;
       FxNeedSnap ns = fxSnap();
-      if (item == 3) pet.feedCandy();
-      else pet.feedBerry(item);
+      if (item == 3) {  // la tarta (v1.54): limitada; sin ninguna, tiembla COMER
+        if (!pet.eatCake()) {
+          sfxPlay(SFX_DENY);
+          fxo.push(FXO_DENY, 0, 0, millis());
+          cakeHintUntil = millis() + 2500;
+          return;
+        }
+      } else {
+        pet.feedBerry(item);
+      }
       fxNeeds(ns);  // "+25" sobre la barra de comida
       sfxPlay(SFX_EAT);
     } else if (kind == MENU_PLAY && x >= PLAY_MENU_X && x < PLAY_MENU_X + PLAY_MENU_W) {
@@ -2363,7 +2373,19 @@ bool render() {
       drawMap(SPR_ICON_FOOD, 16, 110, 296, 3, false);
       drawMap(SPR_ICON_BERRY_B, 16, 176, 296, 3, false);
       drawMap(SPR_ICON_BERRY_G, 16, 242, 296, 3, false);
-      drawMap(SPR_ICON_CANDY, 16, 308, 296, 3, false);
+      // la tarta (v1.54), con cuantas quedan; sin ninguna, en gris
+      uint8_t cakes = pet.items[IT_CAKE];
+      if (cakes) drawMap(SPR_ICON_CAKE, 16, 308, 296, 3, false);
+      else drawMapTint(SPR_ICON_CAKE, 16, 308, 296, 3, UI_TRACK);
+      if (cakes) {  // cuantas quedan, en una chapa en la esquina (como un aviso)
+        char cn[4];
+        snprintf(cn, sizeof(cn), "%u", cakes);
+        gfx->fillCircle(354, 300, 10, UI_BAR_BAD);
+        setSize(2);
+        gfx->setTextColor(UI_WHITE);
+        setCur(354 - textW(cn, 2) / 2 + 1, 293);
+        printT(cn);
+      }
     }
   }
 
@@ -3644,6 +3666,7 @@ void clockTap(int16_t x, int16_t y) {
 // iconos de la mochila, en el orden de IT_* (pet.h)
 static const char *const *const ITEM_ICON[IT_COUNT] = {
   SPR_ICON_GOLDEN, SPR_ICON_PROTEIN, SPR_ICON_IRON, SPR_ICON_CARBOS, SPR_ICON_CHARM, SPR_ICON_RARECANDY, SPR_ICON_EGG,
+  SPR_ICON_CAKE,
 };
 
 // llama + numero de racha arriba a la izquierda
@@ -4425,7 +4448,7 @@ void renderCardWalk() {
 #define BAG_X (CX - (BAG_COLS * BAG_SLOT_W + (BAG_COLS - 1) * BAG_GAP) / 2)
 #define BAG_Y 108
 // orden en pantalla: lo que se come, las vitaminas, el caramelo y lo que no se usa a mano
-static const uint8_t BAG_ORDER[] = { IT_GOLDEN, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_RARECANDY, IT_CHARM, IT_EGG };
+static const uint8_t BAG_ORDER[] = { IT_GOLDEN, IT_CAKE, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_RARECANDY, IT_CHARM, IT_EGG };
 #define BAG_SLOTS (sizeof(BAG_ORDER) / sizeof(BAG_ORDER[0]))
 static_assert(BAG_SLOTS == IT_COUNT, "cada objeto tiene su casilla en la mochila");
 
@@ -4515,7 +4538,7 @@ void bagTap(int16_t x, int16_t y) {
       FxNeedSnap ns = fxSnap();
       if (pet.useItem(it)) {
         fxNeeds(ns);
-        sfxPlay(it == IT_GOLDEN ? SFX_EAT : SFX_LEVEL);
+        sfxPlay(it == IT_GOLDEN || it == IT_CAKE ? SFX_EAT : SFX_LEVEL);
         // a la pantalla principal a verlo: comer, subir de nivel o entrenar (v1.30, "ATK +3")
         bagOpen = false;
       } else {
@@ -5887,10 +5910,10 @@ void drawBars() {
   uint32_t now = millis();
   const uint8_t v[4] = { pet.fullness, pet.joy, pet.energy, pet.hygiene };
   for (int i = 0; i < 4; i++) fxBar[i].target(v[i], now);
-  drawBar(78, 318, T(S_BAR_FOOD), (uint8_t)fxBar[0].value(now));
-  drawBar(244, 318, T(S_BAR_JOY), (uint8_t)fxBar[1].value(now));
-  drawBar(78, 346, T(S_BAR_ENE), (uint8_t)fxBar[2].value(now));
-  drawBar(244, 346, T(S_BAR_HYG), (uint8_t)fxBar[3].value(now));
+  drawBar(78, 318, T(S_BAR_FOOD), (uint8_t)fxBar[0].value(now), pet.sated());
+  drawBar(244, 318, T(S_BAR_JOY), (uint8_t)fxBar[1].value(now), false);
+  drawBar(78, 346, T(S_BAR_ENE), (uint8_t)fxBar[2].value(now), false);
+  drawBar(244, 346, T(S_BAR_HYG), (uint8_t)fxBar[3].value(now), false);
 }
 
 // Separacion entre la etiqueta y su barra en la fila de necesidades. Estaba fija
@@ -5911,7 +5934,9 @@ static int barLabelGap() {
   return ancho <= 48 ? 48 : ancho + 8;
 }
 
-void drawBar(int x, int y, const char *label, uint8_t val) {
+#define UI_BAR_SATED 0xF474  // #f08ca0, el rosa de la tarta: la comida esta llena y no baja (v1.54)
+
+void drawBar(int x, int y, const char *label, uint8_t val, bool sated) {
   gfx->setTextColor(inkColor());
   setSize(2);
   setCur(x, y);
@@ -5922,7 +5947,7 @@ void drawBar(int x, int y, const char *label, uint8_t val) {
   int bw = 232 - (78 + gap);
   if (bw > 100) bw = 100;   // con etiquetas latinas sale 100, como estaba
   int bx = x + gap, bh = 15;
-  uint16_t fill = (val >= 50) ? UI_BAR_OK : (val >= 25) ? UI_BAR_WARN : UI_BAR_BAD;
+  uint16_t fill = sated ? UI_BAR_SATED : (val >= 50) ? UI_BAR_OK : (val >= 25) ? UI_BAR_WARN : UI_BAR_BAD;
   gfx->fillRoundRect(bx, y, bw, bh, 4, UI_TRACK);
   int fw = (bw - 4) * val / 100;
   if (fw > 0) gfx->fillRoundRect(bx + 2, y + 2, fw, bh - 4, 3, fill);
@@ -5995,6 +6020,7 @@ const char *eggMsg() {
 
 const char *statusMsg() {
   if (pet.evolving()) return T(S_EVOLVING);
+  if (timeLeft(cakeHintUntil)) return T(S_NO_CAKE);  // tocar la tarta sin ninguna (v1.54)
   if (bathUntil) return "Splish splash!";  // onomatopeya universal
   if (pet.emote() == EMOTE_ANGRY) return T(S_GRUMPY);
   if (pet.emote() == EMOTE_DIZZY) return T(S_DIZZY);
@@ -6005,6 +6031,7 @@ const char *statusMsg() {
   if (pet.hygiene < 25) return T(S_NEEDS_BATH);
   if (pet.energy < 25) return T(S_EXHAUSTED);
   if (pet.joy < 25) return T(S_SAD);
+  if (pet.sated()) return T(S_SO_FULL);  // la tarta (v1.54): la barra rosa, lleno 3 h
   if (pet.weight > 60) return T(S_CHUBBY);
   if (pet.shiny && pet.ageMinutes < 15) return T(S_IS_SHINY);
   return T(S_HAPPY);

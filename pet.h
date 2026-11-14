@@ -71,14 +71,22 @@ static const uint8_t STEP_GOAL_LEVELS[STEP_GOAL_TIERS] = { 1, 1, 2 };
 #define FIND_MIN_STEPS 800        // pasos premiados entre dos hallazgos (al azar entre MIN y MAX)
 #define FIND_MAX_STEPS 1200
 #define FINDS_PER_DAY 5           // tope de hallazgos al azar al dia (los regalos de las metas van aparte)
-#define ODDS_BERRY 55             // probabilidad de cada objeto (%)
-#define ODDS_VITAMIN 35
+// probabilidad de cada objeto (%). v1.54: entra la tarta (le quita 15 a la baya y 5 a las vitaminas)
+#define ODDS_BERRY 40
+#define ODDS_CAKE 20
+#define ODDS_VITAMIN 30
 #define ODDS_CHARM 10
+static_assert(ODDS_BERRY + ODDS_CAKE + ODDS_VITAMIN + ODDS_CHARM == 100, "los hallazgos suman 100");
 #define ITEM_MAX 9                // tope de cada objeto en la mochila
 #define GOLDEN_FOOD 50            // baya dorada
 #define GOLDEN_JOY 15
 #define VITAMIN_TRAIN 3           // vitaminas: +3 de entrenamiento
 #define CHARM_SHINY_MULT 3        // amuleto: el siguiente huevo, x3 de probabilidad shiny
+// tarta (v1.54): sustituye a la chuche del menu de comida, pero es limitada (se encuentra caminando o
+// combatiendo). Llena la comida y la deja llena CAKE_SATED_MIN minutos; engorda como la chuche.
+#define CAKE_SATED_MIN 180
+#define CAKE_JOY 12
+#define CAKE_WEIGHT 12
 #define FOUND_QUEUE (FINDS_PER_DAY + STEP_GOAL_TIERS)  // hallazgos que esperan a que se encienda la pantalla: los de un dia entero (8)
 // huevos (v1.39): ya no son gratis. Solo se encuentran caminando, uno cada EGG_MIN..EGG_MAX pasos
 // sorteados (media 11500): quien camina 5000 pasos al dia encuentra ~3 a la semana (35000 / 11500),
@@ -90,9 +98,10 @@ static const uint8_t STEP_GOAL_LEVELS[STEP_GOAL_TIERS] = { 1, 1, 2 };
 #define EGG_MAX_STEPS 15000
 
 // objetos de la mochila (del jugador). El amuleto no se usa a mano: se lleva.
-// IT_RARECANDY y IT_EGG van al final: la mochila se guarda por posicion ("bpack") y un guardado
-// anterior trae solo las 5 (o 6) primeras. El huevo (v1.39) tampoco se usa a mano: va a casa solo.
-enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_RARECANDY, IT_EGG, IT_COUNT };
+// IT_RARECANDY, IT_EGG e IT_CAKE van al final: la mochila se guarda por posicion ("bpack") y un
+// guardado anterior trae solo las 5 (6, 7) primeras. El huevo (v1.39) tampoco se usa a mano: va a
+// casa solo. La tarta (v1.54) se come desde el menu de comida o desde la mochila.
+enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_RARECANDY, IT_EGG, IT_CAKE, IT_COUNT };
 
 // --- trucos del IMU (Tarea 2)
 #define GRUMPY_JOY 5                 // despertarlo agitando: -5 felicidad...
@@ -173,6 +182,7 @@ public:
   uint32_t goalDay = 0;      // ultimo dia en que se alcanzo una meta
   uint8_t goalTier = 0;      // metas alcanzadas ese dia (0..STEP_GOAL_TIERS)
   uint8_t items[IT_COUNT] = { 0 };  // mochila; items[IT_CHARM] es 0 o 1
+  uint32_t satedUntil = 0;   // tarta (v1.54): lleno hasta esta edad en minutos (del individuo)
   // identidad del individuo (v1.37): se sortea al nacer, nunca 0; el huevo tiene 0. Con ella se
   // sabe, tras un corte de luz a mitad de un movimiento de la caja, quien es quien (y la podra
   // usar la lista de amigos del Link, docs/FEATURES.md FR-3.11)
@@ -184,7 +194,10 @@ public:
   // Acciones (botones tactiles)
   void feed();              // baya roja (compatibilidad)
   void feedBerry(uint8_t color);  // 0 roja, 1 azul, 2 verde
-  void feedCandy();
+  bool eatCake();  // una tarta de la mochila (v1.54): false si no hay o no puede comer
+  // la tarta lo tiene lleno: la comida no baja (ni con el tiempo ni jugando) hasta satedUntil
+  bool sated() const { return !isEgg() && ageMinutes < satedUntil; }
+  uint32_t satedMinutesLeft() const { return sated() ? satedUntil - ageMinutes : 0; }
   bool lovesBerry(uint8_t color) const {
     return !isEgg() && (speciesId % 3) == color;  // gusto oculto por especie
   }

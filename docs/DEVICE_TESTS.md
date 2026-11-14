@@ -341,6 +341,15 @@ Backpack at 326 390; the Care menu's slots are at about 200 320 (sleep / wake) a
 - [ ] Asleep the Backpack opens with "Asleep: just looking" / "Duerme: solo mirar" and every item refuses.
 - [ ] The WALK page of the stat card no longer has the item row; the eggs hint stays when you have eggs.
 
+### Cake (v1.54)
+`STATS` prints `cake=` (cakes in the Backpack) and `sated=` (minutes of full FOOD left).
+- [ ] The food menu's 4th slot is a cake: grey with none (a tap shakes FOOD, plays the deny sound and the status
+  says "No cake: walk or battle" / "Sin tarta: camina o combate" for 2.5 s); with cakes, a red badge with the count.
+- [ ] Eating one: FOOD jumps to 100, the bar turns pink, "So full!" / "Está lleno!", the badge counts down.
+- [ ] `STATS` a few minutes later: FOOD still 100, `sated=` counting down from 180; a game doesn't lower FOOD.
+- [ ] After 3 h (or a power-off that covers it) the bar is green again and FOOD drops as usual.
+- [ ] The Backpack shows the cake second; using it there does the same.
+
 ### Waterfall (v1.43)
 ([NEW_GAMES.md, Task ZEN](NEW_GAMES.md#task-zen-meditate-under-the-waterfall).) `ZEN [s]` opens a session with no
 reward (from second s if given), `HOLD 1` / `HOLD 0` fake the finger, `HOLD OFF` gives it back, `ZEN?` prints
