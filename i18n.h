@@ -63,7 +63,7 @@ enum StrId : uint8_t {
   S_GOAL_DONE, S_FOUND, S_BACKPACK_FULL, S_USE_FMT, S_CHARM_HELD, S_BACKPACK_EMPTY,
   S_GRUMPY, S_DIZZY,
   // nombres de los objetos, en el orden de IT_* (pet.h)
-  S_IT_GOLDEN, S_IT_PROTEIN, S_IT_IRON, S_IT_CARBOS, S_IT_CHARM, S_IT_RARECANDY, S_IT_EGG,
+  S_IT_GOLDEN, S_IT_PROTEIN, S_IT_IRON, S_IT_CARBOS, S_IT_CHARM, S_IT_RARECANDY, S_IT_EGG, S_IT_CAKE,
   // combate de practica (v1.24): tarjeta VS, rotulos de cada golpe, resultado
   S_PRACTICE, S_SUPER_EFF, S_NOT_EFF, S_NO_EFFECT, S_CRITICAL, S_SPECIAL, S_TAP_CHARGE,
   S_WIN, S_LOSE, S_DRAW, S_PRACTICE_JOY_FMT, S_PRACTICE_NONE,
@@ -87,6 +87,14 @@ enum StrId : uint8_t {
   S_ZEN_BONUS_FMT, S_ATK_MAX, S_DEF_MAX, S_SPE_MAX,
   // v1.49: leyenda de la barra fina de entrenamiento en la ficha de combate
   S_TRAIN_LEGEND,
+  // v1.53: la mochila con su boton: como se usa y dormido solo se mira
+  S_BAG_HINT, S_BAG_ASLEEP,
+  // v1.54: la tarta: lleno durante 3 h, y tocarla sin ninguna
+  S_SO_FULL, S_NO_CAKE,
+  // v1.56: el botin de un combate ganado, que espera envuelto en casa
+  S_BATTLE_GIFT,
+  // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
+  S_TASTES,
   STR_COUNT
 };
 

@@ -71,14 +71,22 @@ static const uint8_t STEP_GOAL_LEVELS[STEP_GOAL_TIERS] = { 1, 1, 2 };
 #define FIND_MIN_STEPS 800        // pasos premiados entre dos hallazgos (al azar entre MIN y MAX)
 #define FIND_MAX_STEPS 1200
 #define FINDS_PER_DAY 5           // tope de hallazgos al azar al dia (los regalos de las metas van aparte)
-#define ODDS_BERRY 55             // probabilidad de cada objeto (%)
-#define ODDS_VITAMIN 35
+// probabilidad de cada objeto (%). v1.54: entra la tarta (le quita 15 a la baya y 5 a las vitaminas)
+#define ODDS_BERRY 40
+#define ODDS_CAKE 20
+#define ODDS_VITAMIN 30
 #define ODDS_CHARM 10
+static_assert(ODDS_BERRY + ODDS_CAKE + ODDS_VITAMIN + ODDS_CHARM == 100, "los hallazgos suman 100");
 #define ITEM_MAX 9                // tope de cada objeto en la mochila
 #define GOLDEN_FOOD 50            // baya dorada
 #define GOLDEN_JOY 15
 #define VITAMIN_TRAIN 3           // vitaminas: +3 de entrenamiento
 #define CHARM_SHINY_MULT 3        // amuleto: el siguiente huevo, x3 de probabilidad shiny
+// tarta (v1.54): sustituye a la chuche del menu de comida, pero es limitada (se encuentra caminando o
+// combatiendo). Llena la comida y la deja llena CAKE_SATED_MIN minutos; engorda como la chuche.
+#define CAKE_SATED_MIN 180
+#define CAKE_JOY 12
+#define CAKE_WEIGHT 12
 #define FOUND_QUEUE (FINDS_PER_DAY + STEP_GOAL_TIERS)  // hallazgos que esperan a que se encienda la pantalla: los de un dia entero (8)
 // huevos (v1.39): ya no son gratis. Solo se encuentran caminando, uno cada EGG_MIN..EGG_MAX pasos
 // sorteados (media 11500): quien camina 5000 pasos al dia encuentra ~3 a la semana (35000 / 11500),
@@ -86,13 +94,19 @@ static const uint8_t STEP_GOAL_LEVELS[STEP_GOAL_TIERS] = { 1, 1, 2 };
 // vacia), aparte de los hallazgos y su tope diario. Van a la mochila (IT_EGG, hasta ITEM_MAX) y
 // pasan a casa en cuanto queda libre: una despedida, escapada o liberacion, o guardar al bicho en la
 // caja. Sin ninguno, la casa se queda vacia hasta encontrar uno (o despertar a alguien de la caja).
+// regalos (v1.55): lo que se encuentra caminando ya no salta en un aviso ni va derecho a la mochila.
+// Llega envuelto, como una cajita en el suelo de casa, y entra en la mochila al abrirlo (un toque con
+// el bicho despierto, que se alegra). Se guardan en la NVS ("gifts"), hasta GIFT_MAX sin abrir; con
+// la cola llena, lo nuevo va derecho a la mochila con el aviso de siempre (nada se pierde).
+#define GIFT_MAX 8
 #define EGG_MIN_STEPS 8000
 #define EGG_MAX_STEPS 15000
 
 // objetos de la mochila (del jugador). El amuleto no se usa a mano: se lleva.
-// IT_RARECANDY y IT_EGG van al final: la mochila se guarda por posicion ("bpack") y un guardado
-// anterior trae solo las 5 (o 6) primeras. El huevo (v1.39) tampoco se usa a mano: va a casa solo.
-enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_RARECANDY, IT_EGG, IT_COUNT };
+// IT_RARECANDY, IT_EGG e IT_CAKE van al final: la mochila se guarda por posicion ("bpack") y un
+// guardado anterior trae solo las 5 (6, 7) primeras. El huevo (v1.39) tampoco se usa a mano: va a
+// casa solo. La tarta (v1.54) se come desde el menu de comida o desde la mochila.
+enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_RARECANDY, IT_EGG, IT_CAKE, IT_COUNT };
 
 // --- trucos del IMU (Tarea 2)
 #define GRUMPY_JOY 5                 // despertarlo agitando: -5 felicidad...
@@ -108,6 +122,19 @@ enum : uint8_t { EMOTE_NONE = 0, EMOTE_ANGRY, EMOTE_DIZZY, EMOTE_WOBBLE };
 // --- combate de practica (Tarea 3a)
 #define PRACTICE_JOY 3                 // premio del combate de practica...
 #define PRACTICE_EVERY_MS 3600000UL    // ...como mucho una vez por hora
+// botin de combate (v1.56): cada victoria tiene un 70 % de traer un objeto, envuelto en casa, hasta 5 al
+// dia (se pueden repetir combates sin fin). Tabla (%): tarta 40, baya dorada 25, vitaminas 21 (7 cada
+// una), Caramelo Raro 7, amuleto 4 (con uno ya, tarta), huevo 3: el mas raro
+#define BATTLE_DROP_ODDS 70
+#define BATTLE_DROPS_PER_DAY 5
+#define BDROP_CAKE 40
+#define BDROP_GOLDEN 25
+#define BDROP_VITAMIN 21
+#define BDROP_RARECANDY 7
+#define BDROP_CHARM 4
+#define BDROP_EGG 3
+static_assert(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDROP_CHARM + BDROP_EGG == 100,
+              "el botin suma 100");
 
 // medallas del individuo (bitmask)
 enum : uint16_t {
@@ -173,6 +200,7 @@ public:
   uint32_t goalDay = 0;      // ultimo dia en que se alcanzo una meta
   uint8_t goalTier = 0;      // metas alcanzadas ese dia (0..STEP_GOAL_TIERS)
   uint8_t items[IT_COUNT] = { 0 };  // mochila; items[IT_CHARM] es 0 o 1
+  uint32_t satedUntil = 0;   // tarta (v1.54): lleno hasta esta edad en minutos (del individuo)
   // identidad del individuo (v1.37): se sortea al nacer, nunca 0; el huevo tiene 0. Con ella se
   // sabe, tras un corte de luz a mitad de un movimiento de la caja, quien es quien (y la podra
   // usar la lista de amigos del Link, docs/FEATURES.md FR-3.11)
@@ -184,7 +212,10 @@ public:
   // Acciones (botones tactiles)
   void feed();              // baya roja (compatibilidad)
   void feedBerry(uint8_t color);  // 0 roja, 1 azul, 2 verde
-  void feedCandy();
+  bool eatCake();  // una tarta de la mochila (v1.54): false si no hay o no puede comer
+  // la tarta lo tiene lleno: la comida no baja (ni con el tiempo ni jugando) hasta satedUntil
+  bool sated() const { return !isEgg() && ageMinutes < satedUntil; }
+  uint32_t satedMinutesLeft() const { return sated() ? satedUntil - ageMinutes : 0; }
   bool lovesBerry(uint8_t color) const {
     return !isEgg() && (speciesId % 3) == color;  // gusto oculto por especie
   }
@@ -220,7 +251,17 @@ public:
   uint8_t eggsOwned() const { return items[IT_EGG] + (eggHeldFlag ? 1 : 0); }
   bool boxHasPets() const;  // algun hueco con un bicho que se pueda despertar
   // al soltar sin huevos: false = solo la casa vacia, true = ademas un huevo de regalo a la mochila
-  bool releaseGivesEgg() const { return !eggsOwned() && !boxHasPets(); }
+  // (v1.55: un huevo envuelto tambien cuenta: al quedar la casa libre se desenvuelve, unwrapGifts)
+  bool releaseGivesEgg() const { return !eggsOwned() && !giftEggs() && !boxHasPets(); }
+  // regalos sin abrir (v1.55), el primero es el que se abre
+  uint8_t giftCount() const { return giftN; }
+  uint8_t giftItem(uint8_t i) const { return i < giftN ? gifts[i] : (uint8_t)IT_COUNT; }
+  uint8_t giftEggs() const;
+  bool canOpenGift() const { return giftN && !isEgg() && !sleeping && ceremony == CER_NONE && !starterPick; }
+  // abre el primero: a la mochila, el bicho se alegra (corazon) y sale el aviso "REGALO!". Devuelve el
+  // objeto (IT_COUNT si no se pudo abrir). *full: no cabia en la mochila y el regalo sigue ahi
+  uint8_t openGift(bool *full = nullptr);
+  bool addGift(uint8_t it);  // un regalo nuevo (serie GIFT y pruebas); false = cola llena
   bool hatchFromBag();  // casa vacia: el boton "Abrir un huevo" (uno de la mochila a casa)
   uint8_t eggCracks() const { return eggTaps; }
   bool eating() const { return timeLeft(eatUntil) > 0; }
@@ -243,6 +284,7 @@ public:
   void chooseStarter(int16_t dex) { eggTarget = dex; starterPick = false; save(); }
   void factoryReset() { prefs.clear(); }  // borra la NVS (test: comando serie WIPE)
   void dbgSetAge(uint32_t m) { ageMinutes = m; save(); }  // serie AGE (pruebas)
+  void dbgClearGifts() { giftN = 0; }  // renderizador: cada escena empieza sin regalos
   void dbgRunawayReady() { fullness = joy = energy = hygiene = 0; neglectTicks = RUNAWAY_TICKS; }  // test
   // uint16_t, no uint8_t: un uint8_t daba la vuelta a 0 en el nivel 256, y eso se
   // alcanza jugando, porque "quedaros juntos" permite posponer la despedida
@@ -330,6 +372,11 @@ public:
   // No cuenta en ningun historial de victorias.
   uint8_t practiceDone();
   bool practiceRewardReady() const;  // el proximo combate de practica dara premio
+  // botin (v1.56): tras un combate; solo si se gano, 70 %, hasta 5 al dia. Devuelve el objeto, que
+  // llega envuelto a casa, o IT_COUNT si no hubo
+  uint8_t battleDrop(bool won);
+  uint8_t rollBattleItem();  // la tabla del botin (publica para las pruebas)
+  uint8_t battleDropsToday() const { return bdropDay == today() ? bdropToday : 0; }
 
   // --- trucos del IMU (Tarea 2): sin guardado inmediato
   void wakeGrumpy();     // agitar con el bicho dormido: se despierta de mal humor
@@ -403,6 +450,12 @@ private:
   bool foundFull[FOUND_QUEUE];
   bool foundGift[FOUND_QUEUE];
   uint8_t foundN = 0;
+  uint32_t bdropDay = 0;       // botin de combate (v1.56): dia de bdropToday...
+  uint8_t bdropToday = 0;      // ...y objetos ganados ese dia (tope BATTLE_DROPS_PER_DAY)
+  uint8_t gifts[GIFT_MAX] = { 0 };  // regalos sin abrir (v1.55), en orden de llegada
+  uint8_t giftN = 0;
+  void giveGift(uint8_t it);   // envuelto; con la cola llena, a la mochila con aviso (giveFound)
+  void unwrapGifts();          // la casa queda libre: los regalos entran solos en la mochila
   uint16_t eggRem = 0;         // pasos hacia el siguiente huevo (v1.39)...
   uint16_t eggAt = 0;          // ...y a cuantos toca (EGG_MIN..EGG_MAX; 0 = sin sortear)
   uint8_t goalBanner = 0;     // meta del banner pendiente (0 = ninguno)

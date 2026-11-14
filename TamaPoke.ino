@@ -48,7 +48,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.52"
+#define FW_VERSION "1.57"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -115,10 +115,13 @@ char nameBuf[12] = "";
 uint8_t nameLen = 0;
 uint8_t cardPage = 0;         // 0 perfil, 1 combate, 2 medallas, 3 progreso, 4 paseo
 #define CARD_PAGES 5
-uint8_t itemConfirm = 0;      // pagina de paseo: objeto de la mochila a confirmar + 1 (0 = ninguno)
+bool bagOpen = false;         // mochila (v1.53): su boton en la fila de abajo, antes la pagina de paseo de la ficha
+uint8_t itemConfirm = 0;      // mochila: objeto a confirmar + 1 (0 = ninguno)
 uint32_t itemConfirmUntil = 0;
 bool foundShown = false;      // el ultimo frame enseno un hallazgo: un toque lo cierra
-static_assert(S_IT_EGG - S_IT_GOLDEN == IT_EGG - IT_GOLDEN && IT_EGG + 1 == IT_COUNT, "nombres de objeto en el orden de IT_*");
+uint32_t cakeHintUntil = 0;
+uint32_t tastesMsgUntil = 0;  // la baya favorita cambio al evolucionar (v1.57): "Sus gustos cambiaron!"   // tocar la tarta sin ninguna (v1.54): la cabecera dice donde se encuentra
+static_assert(S_IT_CAKE - S_IT_GOLDEN == IT_CAKE - IT_GOLDEN && IT_CAKE + 1 == IT_COUNT, "nombres de objeto en el orden de IT_*");
 bool clockOpen = false;       // pantalla de ajuste de hora (deslizar abajo)
 int clockH = 12, clockM = 0;  // hora en edicion
 
@@ -126,8 +129,9 @@ int clockH = 12, clockM = 0;  // hora en edicion
 uint32_t bathUntil = 0;
 bool bathPending = false;
 struct { int16_t x, y; uint8_t r, ph; } bubbles[14];
-// menu emergente sobre la fila de botones: comida (COMER) o juego/combate (JUGAR)
-enum : uint8_t { MENU_NONE = 0, MENU_FEED, MENU_PLAY };
+// menu emergente sobre la fila de botones: comida (COMER), juego/combate (JUGAR) o cuidados
+// (v1.53: dormir y banar, que antes eran dos botones; su hueco es ahora el de la mochila)
+enum : uint8_t { MENU_NONE = 0, MENU_FEED, MENU_PLAY, MENU_CARE };
 uint8_t menuKind = MENU_NONE;
 uint32_t menuUntil = 0;       // se cierra solo a este millis
 // menu de JUGAR: pelota | combate | saco de entrenamiento (v1.34) | carrera | cascada (v1.43),
@@ -137,6 +141,10 @@ uint32_t menuUntil = 0;       // se cierra solo a este millis
 #define PLAY_MENU_SLOT 66
 #define PLAY_MENU_W (PLAY_MENU_SLOTS * PLAY_MENU_SLOT)
 #define PLAY_MENU_X (CX - PLAY_MENU_W / 2)
+// menu de cuidados (v1.53): luz (luna, o sol para despertar) | bano, centrado como los otros
+#define CARE_MENU_SLOTS 2
+#define CARE_MENU_W (CARE_MENU_SLOTS * PLAY_MENU_SLOT)
+#define CARE_MENU_X (CX - CARE_MENU_W / 2)
 
 // minijuego "toques": mantener la pokeball en el aire
 bool gameOpen = false;
@@ -221,9 +229,11 @@ struct Btn {
 Btn buttons[4] = {
   { 140, 390, SPR_ICON_FOOD },   // comer
   { 202, 404, SPR_ICON_PLAY },   // jugar
-  { 264, 404, SPR_ICON_LIGHT },  // luz
-  { 326, 390, SPR_ICON_CLEAN },  // bano
+  { 264, 404, SPR_ICON_CARE },   // cuidados: dormir y banar (v1.53, eran dos botones)
+  { 326, 390, SPR_ICON_BAG },    // mochila (v1.53)
 };
+#define BTN_CARE 2  // dormido solo funcionan cuidados (para despertarlo) y la mochila (para mirar)
+#define BTN_BAG 3
 #define BTN_HALF 26  // boton de 52x52
 #define BTN_HIT 36   // radio tactil (un poco mas generoso)
 
@@ -567,7 +577,7 @@ void onShake() {
   if (dimStage > 0) { wakeUI(); return; }
   wakeUI();
   if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen()) return;
-  if (galleryOpen || boxOpen || cardOpen || kbOpen || clockOpen) return;  // el bicho no esta en pantalla
+  if (galleryOpen || boxOpen || cardOpen || bagOpen || kbOpen || clockOpen) return;  // el bicho no esta en pantalla
   if (pet.sleeping) pet.wakeGrumpy();
   else pet.shaken();  // tambien el huevo: se tambalea
 }
@@ -1000,6 +1010,17 @@ void handleSerial() {
     }
     eggReport();
     Serial.println("DONE");
+  } else if (line == "GIFTS" || line.startsWith("GIFT ")) {  // regalos (v1.55); GIFT <objeto>: uno mas
+    if (line.startsWith("GIFT ")) {
+      long it = line.substring(5).toInt();
+      bool ok = it >= 0 && it < IT_COUNT && pet.addGift((uint8_t)it);
+      Serial.println(ok ? "gift added" : "gift refused (item 0-7, at most 8)");
+      pet.flushSave();
+    }
+    Serial.printf("gifts n=%u:", pet.giftCount());
+    for (uint8_t i = 0; i < pet.giftCount(); i++) Serial.printf(" %u", pet.giftItem(i));
+    Serial.printf(" canOpen=%d\n", pet.canOpenGift() ? 1 : 0);
+    Serial.println("DONE");
   } else if (line.startsWith("TAP ")) {  // TAP <x> <y>: un toque como el de un dedo (pruebas por serie)
     String a = line.substring(4);
     a.trim();
@@ -1081,11 +1102,12 @@ void handleSerial() {
     // crecimiento (v1.35, growth.h): de el sale el nivel; la edad va aparte
     Serial.printf("grow=%lu lv=%u into=%u/%u age=%lu\n", (unsigned long)pet.growMin, pet.level(),
                   pet.levelMinutesInto(), pet.levelMinutesCost(), (unsigned long)pet.ageMinutes);
-    Serial.printf("steps=%lu/%lu finds=%u bonus=%u goal=%u bpack=%u/%u/%u/%u charm=%u candy=%u imu=%d\n",
+    Serial.printf("steps=%lu/%lu finds=%u bonus=%u goal=%u bpack=%u/%u/%u/%u charm=%u candy=%u cake=%u sated=%lu imu=%d\n",
                   (unsigned long)pet.stepsToday, (unsigned long)pet.stepsTotal, pet.findsToday,
                   pet.bonusFindsToday, pet.goalTierOn(pet.dayNumber()), pet.items[IT_GOLDEN],
                   pet.items[IT_PROTEIN], pet.items[IT_IRON], pet.items[IT_CARBOS], pet.items[IT_CHARM],
-                  pet.items[IT_RARECANDY], imuPresent() ? 1 : 0);
+                  pet.items[IT_RARECANDY], pet.items[IT_CAKE], (unsigned long)pet.satedMinutesLeft(),
+                  imuPresent() ? 1 : 0);
     // efectos (v1.30): celebraciones en cola y la que se ve, y por que podria estar esperando
     Serial.printf("fx queue=%u showing=%d kind=%d busy=%d sleep=%d dim=%u off=%d saver=%d\n", fxq.n,
                   fxq.active ? 1 : 0, fxq.active ? fxq.cur.kind : -1, fxScreenBusy() ? 1 : 0, pet.sleeping ? 1 : 0,
@@ -1205,7 +1227,7 @@ void handleTouch() {
     tXl = x;
     tYl = y;
     // pulsacion larga sin moverse sobre el bicho -> dialogo de soltar
-    if (!holdFired && !swallowGesture && !galleryOpen && !boxOpen && !cardOpen && !kbOpen && !clockOpen && !menuKind && millis() - tStart > 3000 &&
+    if (!holdFired && !swallowGesture && !galleryOpen && !boxOpen && !cardOpen && !bagOpen && !kbOpen && !clockOpen && !menuKind && millis() - tStart > 3000 &&
         abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && inPetZone(tX0, tY0) &&
         !pet.isEgg() && !confirmUntil && !pet.ceremony) {
       confirmUntil = millis() + 10000;
@@ -1229,10 +1251,10 @@ void openClock();  // prototipo
 
 void onSwipeV(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (gameOpen || galleryOpen || boxOpen || kbOpen || sackOpen || zenOpen || dashOpen || battleOpen() || pet.ceremony) return;
+  if (gameOpen || galleryOpen || boxOpen || bagOpen || kbOpen || sackOpen || zenOpen || dashOpen || battleOpen() || pet.ceremony) return;
   if (clockOpen) { clockOpen = false; return; }
   if (cardOpen) {
-    if (dir < 0) { cardOpen = false; itemConfirm = 0; }  // arriba cierra la ficha
+    if (dir < 0) cardOpen = false;  // arriba cierra la ficha
     return;
   }
   if (dir > 0) {                    // deslizar abajo: ajustar hora
@@ -1246,11 +1268,10 @@ void onSwipeV(int dir) {
 // deslizar: dir +1 = hacia la derecha
 void onSwipe(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (gameOpen || sackOpen || zenOpen || dashOpen || kbOpen || clockOpen || battleOpen()) return;
+  if (gameOpen || sackOpen || zenOpen || dashOpen || bagOpen || kbOpen || clockOpen || battleOpen()) return;
   if (cardOpen) {  // dentro de la ficha: cambiar entre las CARD_PAGES paginas
     int p = (int)cardPage + (dir > 0 ? -1 : 1);  // izquierda avanza
     cardPage = p < 0 ? 0 : (p > CARD_PAGES - 1 ? CARD_PAGES - 1 : p);
-    itemConfirm = 0;
     return;
   }
   if (boxOpen) {  // la caja es una sola pagina: a la izquierda vuelve a casa, a la derecha nada
@@ -1364,7 +1385,8 @@ void onBack() {
   if (kbOpen) { kbOpen = false; return; }        // descarta el nombre y vuelve a la ficha
   if (clockOpen) { clockOpen = false; return; }  // sin aplicar la hora, como al deslizar
   if (pet.ceremony) return;                      // durante la despedida no hay vuelta atras
-  if (cardOpen && itemConfirm) { itemConfirm = 0; return; }  // "usar objeto?": NO
+  if (bagOpen && itemConfirm) { itemConfirm = 0; return; }  // "usar objeto?": NO
+  if (bagOpen) { bagOpen = false; return; }
   if (cardOpen) { cardOpen = false; return; }
   if (gameOpen) { gameOpen = false; return; }    // abandona sin premio, como tocar la cabecera
   if (choiceKind) { choiceKind = 0; return; }    // ni evoluciona ni rechaza: el boton sigue ahi
@@ -1402,9 +1424,12 @@ void onTap(int16_t x, int16_t y) {
     clockTap(x, y);
     return;
   }
+  if (bagOpen) {
+    bagTap(x, y);
+    return;
+  }
   if (pet.ceremony) return;  // durante la despedida no hay botones
   if (cardOpen) {
-    if (cardPage == 4) { walkTap(x, y); return; }  // paseo: mochila
     if (cardPage == 0 && y < 84) openKeyboard();  // tocar el nombre = renombrar
     else cardOpen = false;
     return;
@@ -1417,7 +1442,14 @@ void onTap(int16_t x, int16_t y) {
     bool b1 = (x >= 93 && x <= 373 && y >= 206 && y <= 258);  // accion
     bool b2 = (x >= 93 && x <= 373 && y >= 268 && y <= 320);  // mantener / quedaros
     if (choiceKind == 1) {                 // evolucion
-      if (b1) { int16_t old = pet.speciesId; pet.evolve(); evoPmd.load(old, pet.shiny); }
+      if (b1) {
+        int16_t old = pet.speciesId;
+        bool knew = pet.berryKnown;
+        pet.evolve();
+        evoPmd.load(old, pet.shiny);
+        // la baya favorita cambio con la especie (v1.57): se dice al acabar la animacion
+        if (knew && !pet.berryKnown) tastesMsgUntil = millis() + EVOLVE_ANIM_MS + 6000;
+      }
       else if (b2) pet.declineEvolve();
     } else if (choiceKind == 2) {          // despedida
       if (b1) pet.startFarewell();
@@ -1438,11 +1470,19 @@ void onTap(int16_t x, int16_t y) {
     bool live = timeLeft(menuUntil);
     menuKind = MENU_NONE;
     if (!live || y < 288 || y > 352) return;
-    if (kind == MENU_FEED && x >= 101 && x <= 365) {
+    if (kind == MENU_FEED && x >= 101 && x < 365) {  // (x = 365 daba el objeto 4)
       int item = (x - 101) / 66;
       FxNeedSnap ns = fxSnap();
-      if (item == 3) pet.feedCandy();
-      else pet.feedBerry(item);
+      if (item == 3) {  // la tarta (v1.54): limitada; sin ninguna, tiembla COMER
+        if (!pet.eatCake()) {
+          sfxPlay(SFX_DENY);
+          fxo.push(FXO_DENY, 0, 0, millis());
+          if (!pet.items[IT_CAKE]) cakeHintUntil = millis() + 2500;  // (con tartas: dormido, o en una ceremonia)
+          return;
+        }
+      } else {
+        pet.feedBerry(item);
+      }
       fxNeeds(ns);  // "+25" sobre la barra de comida
       sfxPlay(SFX_EAT);
     } else if (kind == MENU_PLAY && x >= PLAY_MENU_X && x < PLAY_MENU_X + PLAY_MENU_W) {
@@ -1462,6 +1502,18 @@ void onTap(int16_t x, int16_t y) {
       else {
         sfxPlay(SFX_DENY);
         fxo.push(FXO_DENY, 1, 0, millis());  // tiembla JUGAR, debajo del menu ya cerrado
+      }
+    } else if (kind == MENU_CARE && x >= CARE_MENU_X && x < CARE_MENU_X + CARE_MENU_W) {
+      int slot = (x - CARE_MENU_X) / PLAY_MENU_SLOT;  // luz | bano
+      if (slot == 0) {
+        sfxPlay(SFX_TAP);
+        pet.toggleLight();
+      } else if (pet.sleeping || bathUntil) {  // dormido no se bana, y el bano no se repite a medias
+        sfxPlay(SFX_DENY);
+        fxo.push(FXO_DENY, BTN_CARE, 0, millis());
+      } else {
+        sfxPlay(SFX_TAP);
+        startBath();
       }
     }
     return;
@@ -1505,8 +1557,8 @@ void onTap(int16_t x, int16_t y) {
     if (dx * dx + dy * dy <= BTN_HIT * BTN_HIT) {
       Serial.printf("BTN %d\n", i);
       fxo.push(FXO_PRESS, i, 0, millis());
-      // dormido solo funciona LUZ, y el bano no se repite a medias: el boton tiembla (fx.h)
-      if ((pet.sleeping && i != 2) || (i == 3 && bathUntil)) {
+      // dormido solo funcionan cuidados (despertarlo) y la mochila (mirar): el boton tiembla (fx.h)
+      if (pet.sleeping && i != BTN_CARE && i != BTN_BAG) {
         sfxPlay(SFX_DENY);
         fxo.push(FXO_DENY, i, 0, millis());
         return;
@@ -1516,13 +1568,17 @@ void onTap(int16_t x, int16_t y) {
         if (!pet.sleeping) { menuKind = MENU_FEED; menuUntil = millis() + 6000; }
       } else if (i == 1) {     // jugar: pelota o combate de practica
         if (!pet.isEgg() && !pet.sleeping && !pet.ceremony) { menuKind = MENU_PLAY; menuUntil = millis() + 6000; }
-      } else if (i == 2) {
-        pet.toggleLight();
+      } else if (i == BTN_CARE) {  // dormir / despertar y banar (v1.53)
+        if (!pet.ceremony) { menuKind = MENU_CARE; menuUntil = millis() + 6000; }
       } else {
-        startBath();
+        openBag();
       }
       return;
     }
+  }
+  if (inGiftZone(x, y)) {  // un regalo envuelto (v1.55)
+    openGiftTap();
+    return;
   }
   // tocar al bicho = caricia
   if (inPetZone(x, y)) {
@@ -2095,14 +2151,14 @@ static bool staticScreen() {
   if (pet.awaitingStarter()) return true;
   if (galleryOpen || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen()) return false;  // la galeria gestiona su propio repintado
   if (boxOpen) return !boxMove && !timeLeft(boxShakeUntil);  // la caja, quieta salvo la luz o un hueco que tiembla
-  if (kbOpen || clockOpen) return true;
+  if (kbOpen || clockOpen || bagOpen) return true;
   return cardOpen && cardPage != 0;  // la pagina 0 tiene el retrato animado
 }
 uint32_t walkStepsToday();
 static uint32_t mixKey(uint32_t h, uint32_t v) { return (h ^ v) * 16777619u; }
 static uint32_t screenKey() {
   uint32_t h = 2166136261u;
-  h = mixKey(h, pet.awaitingStarter() ? 1 : boxOpen ? 20 : kbOpen ? 2 : clockOpen ? 3 : 4 + cardPage);
+  h = mixKey(h, pet.awaitingStarter() ? 1 : boxOpen ? 20 : kbOpen ? 2 : clockOpen ? 3 : bagOpen ? 21 : 4 + cardPage);
   h = mixKey(h, sdEpoch);
   h = mixKey(h, gBright);                      // el aviso de brillo va encima de todo
   h = mixKey(h, timeLeft(briToastUntil) > 0);  // y al irse tiene que repintarse
@@ -2117,6 +2173,10 @@ static uint32_t screenKey() {
                         (uint32_t)pet.canBoxMove(), (uint32_t)boxAsk, (uint32_t)gLang })
       h = mixKey(h, v);
     for (const char *c = pet.nick; *c; c++) h = mixKey(h, (uint8_t)*c);
+  } else if (bagOpen) {
+    for (uint8_t n : pet.items) h = mixKey(h, n);
+    for (uint32_t v : { (uint32_t)pet.eggsOwned(), (uint32_t)itemConfirm, (uint32_t)pet.sleeping, (uint32_t)gLang })
+      h = mixKey(h, v);
   } else if (kbOpen) {
     h = mixKey(h, nameLen);
     for (int i = 0; i < nameLen; i++) h = mixKey(h, (uint8_t)nameBuf[i]);
@@ -2136,9 +2196,8 @@ static uint32_t screenKey() {
     // pagina de paseo: sin estos campos no se repintaria al llegar pasos
     for (uint32_t v : { walkStepsToday(), pet.stepsTotal, (uint32_t)pet.findsToday, pet.stepDay, pet.goalDay,
                         (uint32_t)pet.goalTier, (uint32_t)pet.bonusFindsToday,
-                        (uint32_t)imuPresent(), (uint32_t)itemConfirm, pet.dayNumber() })
+                        (uint32_t)imuPresent(), pet.dayNumber() })
       h = mixKey(h, v);
-    for (uint8_t n : pet.items) h = mixKey(h, n);
     for (const char *c = pet.nick; *c; c++) h = mixKey(h, (uint8_t)*c);
   }
   return h;
@@ -2211,6 +2270,10 @@ bool render() {
     renderCard();
     return true;
   }
+  if (bagOpen) {
+    renderBag();
+    return true;
+  }
   int h = sceneHour();
   gNight = pet.sleeping || h < 6 || h >= 20;
   // drawScene cubre los 466x466 completos: sin fillScreen(NEGRO) previo para
@@ -2275,6 +2338,7 @@ bool render() {
     drawSceneFront(homeBiome(), millis(), gNight);  // hierba delante de los pies
     drawBath();
     drawPoops();
+    drawGifts();  // regalos sin abrir (v1.55)
     drawBoxAppear(millis());  // recien guardado o despertado (caja): sale de una luz
     // panel inferior: base limpia para barras y botones sobre el paisaje
     gfx->fillRect(0, 312, 466, 154, gNight ? UI_BG_NIGHT : UI_BG_DAY);
@@ -2305,7 +2369,8 @@ bool render() {
   fxPerfNote(fxUs + (micros() - fxT0));
   drawWalkNews();
 
-  // menus emergentes: comida (4 opciones) o juego (pelota | combate | saco | carrera | cascada)
+  // menus emergentes: comida (4 opciones), juego (pelota | combate | saco | carrera | cascada) o
+  // cuidados (luz | bano)
   if (menuKind && !timeLeft(menuUntil)) menuKind = MENU_NONE;
   if (menuKind == MENU_PLAY) {
     gfx->fillRoundRect(PLAY_MENU_X, 288, PLAY_MENU_W, 64, 14, UI_WHITE);
@@ -2317,6 +2382,14 @@ bool render() {
     else drawMapTint(SPR_ICON_DASH, 16, PLAY_MENU_X + 3 * PLAY_MENU_SLOT + 9, 296, 3, UI_TRACK);  // sin IMU: en gris
     drawMap(SPR_ICON_ZEN, 16, PLAY_MENU_X + 4 * PLAY_MENU_SLOT + 9, 296, 3, false);
   }
+  if (menuKind == MENU_CARE) {
+    gfx->fillRoundRect(CARE_MENU_X, 288, CARE_MENU_W, 64, 14, UI_WHITE);
+    gfx->drawRoundRect(CARE_MENU_X, 288, CARE_MENU_W, 64, 14, inkColor());
+    // dormido: el sol lo despierta, y el bano espera (en gris)
+    drawMap(pet.sleeping ? SPR_ICON_SUN : SPR_ICON_LIGHT, 16, CARE_MENU_X + 9, 296, 3, false);
+    if (pet.sleeping || bathUntil) drawMapTint(SPR_ICON_CLEAN, 16, CARE_MENU_X + PLAY_MENU_SLOT + 9, 296, 3, UI_TRACK);
+    else drawMap(SPR_ICON_CLEAN, 16, CARE_MENU_X + PLAY_MENU_SLOT + 9, 296, 3, false);
+  }
   if (menuKind == MENU_FEED) {
     {
       gfx->fillRoundRect(101, 288, 264, 64, 14, UI_WHITE);
@@ -2324,7 +2397,29 @@ bool render() {
       drawMap(SPR_ICON_FOOD, 16, 110, 296, 3, false);
       drawMap(SPR_ICON_BERRY_B, 16, 176, 296, 3, false);
       drawMap(SPR_ICON_BERRY_G, 16, 242, 296, 3, false);
-      drawMap(SPR_ICON_CANDY, 16, 308, 296, 3, false);
+      // la favorita, ya descubierta (v1.57): una estrella en su esquina, para no tener que recordarla
+      // con un marco dorado alrededor, que a 16 px la estrella sola apenas se ve en la placa
+      if (pet.berryKnown)
+        for (uint8_t c = 0; c < 3; c++)
+          if (pet.lovesBerry(c)) {
+            int fx = 110 + 66 * c;
+            gfx->drawRoundRect(fx - 5, 292, 58, 56, 10, UI_BAR_WARN);
+            gfx->drawRoundRect(fx - 4, 293, 56, 54, 9, UI_BAR_WARN);
+            drawMap(SPR_STAR, 16, fx + 38, 286, 1, false);
+          }
+      // la tarta (v1.54), con cuantas quedan; sin ninguna, en gris
+      uint8_t cakes = pet.items[IT_CAKE];
+      if (cakes) drawMap(SPR_ICON_CAKE, 16, 308, 296, 3, false);
+      else drawMapTint(SPR_ICON_CAKE, 16, 308, 296, 3, UI_TRACK);
+      if (cakes) {  // cuantas quedan, en una chapa en la esquina (como un aviso)
+        char cn[4];
+        snprintf(cn, sizeof(cn), "%u", cakes);
+        gfx->fillCircle(354, 300, 10, UI_BAR_BAD);
+        setSize(2);
+        gfx->setTextColor(UI_WHITE);
+        setCur(354 - textW(cn, 2) / 2 + 1, 293);
+        printT(cn);
+      }
     }
   }
 
@@ -2343,7 +2438,7 @@ bool render() {
       snprintf(q, sizeof(q), T(S_RELEASE_FMT), dexName(pet.speciesId));
       // sin huevos (v1.39), la nota dice que pasara: casa vacia o, sin nadie en la caja, un huevo de
       // regalo a la mochila (v1.40). Con huevos no hay nota: la casa vacia tiene su boton.
-      bool empty = !pet.eggsOwned();
+      bool empty = !pet.eggsOwned() && !pet.giftEggs();  // v1.55: un huevo envuelto tambien cuenta
       gfx->setTextColor(UI_INK);
       setSize(2);
       setCur(centerX(q, 2), empty ? 186 : 196);
@@ -3605,6 +3700,7 @@ void clockTap(int16_t x, int16_t y) {
 // iconos de la mochila, en el orden de IT_* (pet.h)
 static const char *const *const ITEM_ICON[IT_COUNT] = {
   SPR_ICON_GOLDEN, SPR_ICON_PROTEIN, SPR_ICON_IRON, SPR_ICON_CARBOS, SPR_ICON_CHARM, SPR_ICON_RARECANDY, SPR_ICON_EGG,
+  SPR_ICON_CAKE,
 };
 
 // llama + numero de racha arriba a la izquierda
@@ -4290,15 +4386,10 @@ void renderCardProgress() {
   printT(ms);
 }
 
-// pagina 4: paseo (FR-1.7). Pasos de hoy con un anillo hacia la meta, el total,
-// los hallazgos de hoy y la mochila; tocar un objeto pide confirmacion y lo usa.
+// pagina 4: paseo (FR-1.7). Pasos de hoy con un anillo hacia la meta, el total y los hallazgos
+// de hoy. La mochila tiene su boton desde la v1.53 (renderBag).
 #define WALK_RING_Y 140
 #define WALK_RING_R 60   // radio exterior del anillo (el interior, 13 px menos)
-#define WALK_SLOT_Y 262
-#define WALK_SLOT_W 52   // 7 casillas (v1.39, el huevo); con 6 eran 60 (v1.25) y con 5, 64
-#define WALK_SLOT_H 62
-#define WALK_SLOT_GAP 5
-#define WALK_SLOT_X (CX - (IT_COUNT * WALK_SLOT_W + (IT_COUNT - 1) * WALK_SLOT_GAP) / 2)
 
 // pasos de hoy en pantalla: los del bicho mas los que el IMU aun no le ha pasado
 uint32_t walkStepsToday() { return pet.stepsOn(pet.dayNumber()) + imuStepsPending(); }
@@ -4370,34 +4461,84 @@ void renderCardWalk() {
     printT(fnd);
   }
 
-  // mochila: una casilla por objeto, con su cuenta; el amuleto, enmarcado si se lleva
-  for (int i = 0; i < IT_COUNT; i++) {
-    int x = WALK_SLOT_X + i * (WALK_SLOT_W + WALK_SLOT_GAP), y = WALK_SLOT_Y;
-    // los huevos (v1.40): tambien el que espera en la incubadora, el mismo N que pregunta al soltar
+  // la mochila tiene su propio boton desde la v1.53: aqui solo la pista de los huevos
+  if (pet.eggsOwned()) {
+    gfx->setTextColor(UI_INK);
+    setSize(2);
+    setCur(centerX(T(S_EGG_HINT), 2), 290);
+    printT(T(S_EGG_HINT));
+  }
+}
+
+// ---------- mochila (v1.53) ----------
+// Pantalla propia, desde su boton en la fila de abajo (antes era una fila de la pagina de paseo de
+// la ficha). Una rejilla de 4 x 2 casillas, cada objeto con su cuenta; tocar uno que se pueda usar
+// pide confirmacion y lo usa. Se abre tambien con el bicho dormido, para mirar: canUseItem ya
+// no deja usar nada dormido.
+#define BAG_COLS 4
+#define BAG_SLOT_W 76
+#define BAG_SLOT_H 84
+#define BAG_GAP 10
+#define BAG_X (CX - (BAG_COLS * BAG_SLOT_W + (BAG_COLS - 1) * BAG_GAP) / 2)
+#define BAG_Y 108
+// orden en pantalla: lo que se come, las vitaminas, el caramelo y lo que no se usa a mano
+static const uint8_t BAG_ORDER[] = { IT_GOLDEN, IT_CAKE, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_RARECANDY, IT_CHARM, IT_EGG };
+#define BAG_SLOTS (sizeof(BAG_ORDER) / sizeof(BAG_ORDER[0]))
+static_assert(BAG_SLOTS == IT_COUNT, "cada objeto tiene su casilla en la mochila");
+
+void bagSlotXY(int k, int &x, int &y) {
+  x = BAG_X + (k % BAG_COLS) * (BAG_SLOT_W + BAG_GAP);
+  y = BAG_Y + (k / BAG_COLS) * (BAG_SLOT_H + BAG_GAP);
+}
+
+void openBag() {
+  bagOpen = true;
+  itemConfirm = 0;
+}
+
+void renderBag() {
+  gfx->fillScreen(RGB565_BLACK);
+  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  gfx->setTextColor(UI_INK);
+  setSize(3);
+  setCur(centerX(T(S_BACKPACK), 3), 44);
+  printT(T(S_BACKPACK));
+
+  // una casilla por objeto, con su cuenta; el amuleto, enmarcado si se lleva
+  for (int k = 0; k < (int)BAG_SLOTS; k++) {
+    uint8_t i = BAG_ORDER[k];
+    int x, y;
+    bagSlotXY(k, x, y);
+    // los huevos (v1.40): tambien el que espera en la incubadora
     uint8_t n = (i == IT_EGG) ? pet.eggsOwned() : pet.items[i];
     bool held = (i == IT_CHARM) && n;
-    gfx->fillRoundRect(x, y, WALK_SLOT_W, WALK_SLOT_H, 10, n ? UI_WHITE : UI_BG_DAY);
-    gfx->drawRoundRect(x, y, WALK_SLOT_W, WALK_SLOT_H, 10, held ? UI_BAR_WARN : (n ? UI_INK : UI_TRACK));
-    if (held) gfx->drawRoundRect(x + 1, y + 1, WALK_SLOT_W - 2, WALK_SLOT_H - 2, 9, UI_BAR_WARN);
-    if (n) drawMap(ITEM_ICON[i], 16, x + (WALK_SLOT_W - 32) / 2, y + 6, 2, false);
-    else drawMapTint(ITEM_ICON[i], 16, x + (WALK_SLOT_W - 32) / 2, y + 6, 2, UI_TRACK);
+    gfx->fillRoundRect(x, y, BAG_SLOT_W, BAG_SLOT_H, 12, n ? UI_WHITE : UI_BG_DAY);
+    gfx->drawRoundRect(x, y, BAG_SLOT_W, BAG_SLOT_H, 12, held ? UI_BAR_WARN : (n ? UI_INK : UI_TRACK));
+    if (held) gfx->drawRoundRect(x + 1, y + 1, BAG_SLOT_W - 2, BAG_SLOT_H - 2, 11, UI_BAR_WARN);
+    if (n) drawMap(ITEM_ICON[i], 16, x + (BAG_SLOT_W - 48) / 2, y + 6, 3, false);
+    else drawMapTint(ITEM_ICON[i], 16, x + (BAG_SLOT_W - 48) / 2, y + 6, 3, UI_TRACK);
     char c[6];
     snprintf(c, sizeof(c), "x%u", n);
     gfx->setTextColor(n ? UI_INK : UI_TRACK);
     setSize(2);
-    setCur(x + (WALK_SLOT_W - textW(c, 2)) / 2, y + 42);
+    setCur(x + (BAG_SLOT_W - textW(c, 2)) / 2, y + 60);
     printT(c);
   }
-  // una pista: los huevos (v1.39), el amuleto o la mochila vacia
-  const char *hint = pet.eggsOwned()       ? T(S_EGG_HINT)
+  // una pista: dormido, los huevos (v1.39), el amuleto, la mochila vacia o como se usa
+  int hy = BAG_Y + 2 * BAG_SLOT_H + BAG_GAP + 22;
+  bool empty = pet.itemCount() == 0 && !pet.eggsOwned();
+  const char *hint = empty                 ? T(S_BACKPACK_EMPTY)
+                     : pet.sleeping        ? T(S_BAG_ASLEEP)
+                     : pet.eggsOwned()     ? T(S_EGG_HINT)
                      : pet.items[IT_CHARM] ? T(S_CHARM_HELD)
-                     : (pet.itemCount() == 0 ? T(S_BACKPACK_EMPTY) : nullptr);
-  if (hint) {
-    gfx->setTextColor(pet.itemCount() ? UI_INK : UI_TRACK);
-    setSize(2);
-    setCur(centerX(hint, 2), 336);
-    printT(hint);
-  }
+                                           : T(S_BAG_HINT);
+  gfx->setTextColor(empty ? UI_TRACK : UI_INK);
+  setSize(2);
+  setCur(centerX(hint, 2), hy);
+  printT(hint);
+  gfx->setTextColor(UI_TRACK);
+  setCur(centerX(T(S_BACK), 2), 412);
+  printT(T(S_BACK));
 
   // "usar objeto?" (mismo dialogo que "soltar?")
   if (itemConfirm) {
@@ -4419,10 +4560,11 @@ void renderCardWalk() {
     setCur(248 + (100 - textW(T(S_NO), 2)) / 2, 270);
     printT(T(S_NO));
   }
+  gfx->flush();
 }
 
-// toques en la pagina de paseo: la fila de la mochila no cierra la ficha
-void walkTap(int16_t x, int16_t y) {
+// toques en la mochila: una casilla pide confirmacion; fuera de la rejilla, se cierra
+void bagTap(int16_t x, int16_t y) {
   if (itemConfirm) {
     uint8_t it = itemConfirm - 1;
     itemConfirm = 0;
@@ -4430,30 +4572,30 @@ void walkTap(int16_t x, int16_t y) {
       FxNeedSnap ns = fxSnap();
       if (pet.useItem(it)) {
         fxNeeds(ns);
-        sfxPlay(it == IT_GOLDEN ? SFX_EAT : SFX_LEVEL);
+        sfxPlay(it == IT_GOLDEN || it == IT_CAKE ? SFX_EAT : SFX_LEVEL);
         // a la pantalla principal a verlo: comer, subir de nivel o entrenar (v1.30, "ATK +3")
-        cardOpen = false;
+        bagOpen = false;
       } else {
         sfxPlay(SFX_DENY);
       }
     }
     return;
   }
-  if (y >= WALK_SLOT_Y && y < WALK_SLOT_Y + WALK_SLOT_H) {
-    if (x < WALK_SLOT_X) return;
-    int i = (x - WALK_SLOT_X) / (WALK_SLOT_W + WALK_SLOT_GAP);
-    int xi = (x - WALK_SLOT_X) % (WALK_SLOT_W + WALK_SLOT_GAP);
-    if (i >= IT_COUNT || xi >= WALK_SLOT_W) return;
+  for (int k = 0; k < (int)BAG_SLOTS; k++) {
+    int sx, sy;
+    bagSlotXY(k, sx, sy);
+    if (x < sx || x >= sx + BAG_SLOT_W || y < sy || y >= sy + BAG_SLOT_H) continue;
+    uint8_t i = BAG_ORDER[k];
     if (pet.canUseItem(i)) {
       itemConfirm = i + 1;
       itemConfirmUntil = millis() + 10000;
       sfxPlay(SFX_TAP);
-    } else if (pet.items[i]) {
+    } else if (i == IT_EGG ? pet.eggsOwned() : pet.items[i]) {
       sfxPlay(SFX_DENY);  // el amuleto se lleva y el huevo va solo a casa; o dormido, o entrenamiento al maximo
     }
-    return;
+    return;  // un toque en una casilla nunca cierra la mochila
   }
-  cardOpen = false;
+  bagOpen = false;
 }
 
 void renderCard() {
@@ -4920,7 +5062,8 @@ void drawBoxAsk() {
   } else {
     snprintf(q, sizeof(q), T(S_STORE_Q_FMT), petName());
     // v1.39: sin huevo que esperaba ni en la mochila, la casa se queda vacia
-    if (!pet.eggHeld() && !pet.items[IT_EGG]) snprintf(note, sizeof(note), "%s", T(S_NO_EGG_NOTE));
+    // (v1.55: un huevo envuelto tambien: freeHome lo desenvuelve y llega a casa)
+    if (!pet.eggHeld() && !pet.items[IT_EGG] && !pet.giftEggs()) snprintf(note, sizeof(note), "%s", T(S_NO_EGG_NOTE));
   }
   gfx->fillRoundRect(73, 160, 320, 160, 16, UI_WHITE);
   gfx->drawRoundRect(73, 160, 320, 160, 16, UI_INK);
@@ -5001,7 +5144,7 @@ void renderBox() {
     // esperaba o uno de la mochila; si no hay, la casa queda vacia (v1.39)
     if (boxMove == BOXMV_WAKE) held = !vacant;
     else if (boxMove == BOXMV_STORE) held = false;
-    if (boxMove == BOXMV_STORE) vacant = !pet.eggHeld() && !pet.items[IT_EGG];
+    if (boxMove == BOXMV_STORE) vacant = !pet.eggHeld() && !pet.items[IT_EGG] && !pet.giftEggs();
     else vacant = false;
   }
   bool hideNow = boxMove && !outcome && boxMove != BOXMV_WAKE && t >= 0.3f;
@@ -5791,6 +5934,50 @@ void overlayMouth(const Species &sp, int x, int y, int s, bool open) {
   }
 }
 
+// regalos (v1.55): lo encontrado caminando espera envuelto en el suelo, a la derecha, donde no llegan
+// las cacas (a la izquierda) ni el bicho (su zona tactil acaba en x 356). Hasta 3 cajitas en un
+// monton que se mece un poco; con mas, "+N". Un toque abre la primera (openGiftTap).
+#define GIFT_ZONE_X 358
+#define GIFT_ZONE_Y 236  // por debajo del boton de despedida (176-234)
+#define GIFT_ZONE_H 76
+static const int16_t GIFT_POS[3][2] = { { 368, 270 }, { 404, 266 }, { 386, 238 } };  // esquina, a escala 2
+
+void drawGifts() {
+  uint8_t n = pet.giftCount();
+  if (!n) return;
+  uint32_t now = millis();
+  for (int i = 0; i < n && i < 3; i++) {
+    int bob = (int)lroundf(2.0f * sinf(now * 0.004f + i * 2.1f));
+    drawMap(SPR_GIFT, 16, GIFT_POS[i][0], GIFT_POS[i][1] + bob, 2, false);
+  }
+  if (n > 3) {
+    char m[4];
+    snprintf(m, sizeof(m), "+%u", (unsigned)(n - 3));
+    setSize(2);
+    gfx->setTextColor(inkColor());
+    setCur(424, 240);
+    printT(m);
+  }
+}
+
+bool inGiftZone(int16_t x, int16_t y) {
+  return pet.giftCount() && x >= GIFT_ZONE_X && y >= GIFT_ZONE_Y && y <= GIFT_ZONE_Y + GIFT_ZONE_H;
+}
+
+// tocar un regalo: con el bicho despierto se abre, se alegra y sale el aviso "REGALO!" (drawWalkNews);
+// si no cabe en la mochila el aviso lo dice y sigue envuelto. Dormido, espera
+void openGiftTap() {
+  if (!pet.canOpenGift()) {
+    sfxPlay(SFX_DENY);
+    return;
+  }
+  bool full = false;
+  uint8_t it = pet.openGift(&full);
+  if (it >= IT_COUNT) return;
+  Serial.printf("GIFT open %u%s\n", it, full ? " (full)" : "");
+  if (!full) fxPose(PMD_POSE, millis(), 1200);  // contento con lo que trae
+}
+
 void drawPoops() {
   for (int i = 0; i < pet.poops; i++) {
     drawMap(SPR_POOP, 32, 36 + i * 46, 244, 2, false);
@@ -5802,10 +5989,10 @@ void drawBars() {
   uint32_t now = millis();
   const uint8_t v[4] = { pet.fullness, pet.joy, pet.energy, pet.hygiene };
   for (int i = 0; i < 4; i++) fxBar[i].target(v[i], now);
-  drawBar(78, 318, T(S_BAR_FOOD), (uint8_t)fxBar[0].value(now));
-  drawBar(244, 318, T(S_BAR_JOY), (uint8_t)fxBar[1].value(now));
-  drawBar(78, 346, T(S_BAR_ENE), (uint8_t)fxBar[2].value(now));
-  drawBar(244, 346, T(S_BAR_HYG), (uint8_t)fxBar[3].value(now));
+  drawBar(78, 318, T(S_BAR_FOOD), (uint8_t)fxBar[0].value(now), pet.sated());
+  drawBar(244, 318, T(S_BAR_JOY), (uint8_t)fxBar[1].value(now), false);
+  drawBar(78, 346, T(S_BAR_ENE), (uint8_t)fxBar[2].value(now), false);
+  drawBar(244, 346, T(S_BAR_HYG), (uint8_t)fxBar[3].value(now), false);
 }
 
 // Separacion entre la etiqueta y su barra en la fila de necesidades. Estaba fija
@@ -5826,7 +6013,9 @@ static int barLabelGap() {
   return ancho <= 48 ? 48 : ancho + 8;
 }
 
-void drawBar(int x, int y, const char *label, uint8_t val) {
+#define UI_BAR_SATED 0xF474  // #f08ca0, el rosa de la tarta: la comida esta llena y no baja (v1.54)
+
+void drawBar(int x, int y, const char *label, uint8_t val, bool sated) {
   gfx->setTextColor(inkColor());
   setSize(2);
   setCur(x, y);
@@ -5837,7 +6026,7 @@ void drawBar(int x, int y, const char *label, uint8_t val) {
   int bw = 232 - (78 + gap);
   if (bw > 100) bw = 100;   // con etiquetas latinas sale 100, como estaba
   int bx = x + gap, bh = 15;
-  uint16_t fill = (val >= 50) ? UI_BAR_OK : (val >= 25) ? UI_BAR_WARN : UI_BAR_BAD;
+  uint16_t fill = sated ? UI_BAR_SATED : (val >= 50) ? UI_BAR_OK : (val >= 25) ? UI_BAR_WARN : UI_BAR_BAD;
   gfx->fillRoundRect(bx, y, bw, bh, 4, UI_TRACK);
   int fw = (bw - 4) * val / 100;
   if (fw > 0) gfx->fillRoundRect(bx + 2, y + 2, fw, bh - 4, 3, fill);
@@ -5846,7 +6035,7 @@ void drawBar(int x, int y, const char *label, uint8_t val) {
 void drawButtons() {
   uint32_t now = millis();
   for (int i = 0; i < 4; i++) {
-    bool off = pet.sleeping && i != 2;  // durmiendo solo funciona LUZ
+    bool off = pet.sleeping && i != BTN_CARE && i != BTN_BAG;  // durmiendo: cuidados y mochila
     // efectos (fx.h): el boton tocado se hunde 2 px; si no se puede usar, tiembla de lado
     int ox = 0, oy = 0;
     bool pressed = fxo.find(FXO_PRESS, i) != nullptr;
@@ -5910,6 +6099,8 @@ const char *eggMsg() {
 
 const char *statusMsg() {
   if (pet.evolving()) return T(S_EVOLVING);
+  if (timeLeft(cakeHintUntil)) return T(S_NO_CAKE);  // tocar la tarta sin ninguna (v1.54)
+  if (timeLeft(tastesMsgUntil) && !pet.sleeping) return T(S_TASTES);  // evoluciono y cambio de baya (v1.57)
   if (bathUntil) return "Splish splash!";  // onomatopeya universal
   if (pet.emote() == EMOTE_ANGRY) return T(S_GRUMPY);
   if (pet.emote() == EMOTE_DIZZY) return T(S_DIZZY);
@@ -5920,6 +6111,7 @@ const char *statusMsg() {
   if (pet.hygiene < 25) return T(S_NEEDS_BATH);
   if (pet.energy < 25) return T(S_EXHAUSTED);
   if (pet.joy < 25) return T(S_SAD);
+  if (pet.sated()) return T(S_SO_FULL);  // la tarta (v1.54): la barra rosa, lleno 3 h
   if (pet.weight > 60) return T(S_CHUBBY);
   if (pet.shiny && pet.ageMinutes < 15) return T(S_IS_SHINY);
   return T(S_HAPPY);
@@ -5971,6 +6163,7 @@ struct {
   uint16_t hpBefore[2] = { 0, 0 };
   int16_t foeDex = 1;
   uint8_t joy = 0;       // premio dado al acabar
+  uint8_t drop = IT_COUNT;  // botin de la victoria (v1.56), envuelto en casa; IT_COUNT = ninguno
 } bt;
 
 bool battleOpen() { return bt.phase != BT_OFF; }
@@ -6051,11 +6244,13 @@ void battleStep(uint32_t now) {
     if ((int32_t)(now - endAt) >= 0) {
       bt.phase = BT_END;
       bt.t0 = now;
-      bt.joy = pet.practiceDone();  // gane quien gane; como mucho una vez por hora
+      bt.drop = pet.battleDrop(bt.eng.result == BR_WIN_A);  // ganar: 70 %, hasta 5 al dia (v1.56)
+      bt.joy = pet.practiceDone();  // gane quien gane; como mucho una vez por hora (guarda, botin incluido)
+      pet.flushSave();  // sin premio de felicidad, el botin se guarda aqui: una sola escritura
       sfxPlay(bt.eng.result == BR_WIN_A ? SFX_WIN : bt.eng.result == BR_WIN_B ? SFX_LOSE : SFX_LEVEL);
-      Serial.printf("battle: %s en %u ataques, +%u felicidad\n",
+      Serial.printf("battle: %s en %u ataques, +%u felicidad, botin %u (%u hoy)\n",
                     bt.eng.result == BR_WIN_A ? "gana" : bt.eng.result == BR_WIN_B ? "pierde" : "empate",
-                    bt.eng.attacks, bt.joy);
+                    bt.eng.attacks, bt.joy, bt.drop, pet.battleDropsToday());
     }
   }
 }
@@ -6406,6 +6601,19 @@ void drawBattleResult(uint32_t now) {
   setSize(2);
   setCur(centerX(r, 2), 342);
   printT(r);
+  // botin (v1.56): una pildora bajo el titulo con la cajita y "Regalo en casa!" (lo que es se ve al
+  // abrirlo); ahi no tapa al ganador ni se sale de la pantalla redonda
+  if (bt.drop < IT_COUNT) {
+    const char *g = T(S_BATTLE_GIFT);
+    setSize(2);
+    int w = 32 + 8 + textW(g, 2), gx = CX - w / 2;
+    gfx->fillRoundRect(gx - 12, 106, w + 24, 42, 14, UI_WHITE);
+    gfx->drawRoundRect(gx - 12, 106, w + 24, 42, 14, UI_INK);
+    drawMap(SPR_GIFT, 16, gx, 111, 2, false);
+    gfx->setTextColor(UI_BAR_BAD);
+    setCur(gx + 40, 121);
+    printT(g);
+  }
   if (t >= BT_END_LOCK_MS) {  // ya se puede cerrar con un toque (v1.38)
     gfx->setTextColor(UI_TRACK);
     setCur(centerX(T(S_BACK), 2), 368);

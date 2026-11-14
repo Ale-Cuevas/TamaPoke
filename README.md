@@ -134,11 +134,18 @@ While **awake**, per minute:
 
 ### Actions
 - 🍎 **Berry** (3 flavors): +25 FOOD. Each species has a **hidden favorite flavor**
-  → +35 FOOD, +10 JOY, ♥, bond, and it gets revealed.
-- 🍬 **Candy:** +10 FOOD, +12 JOY, but **+12 weight** (fattening).
+  → +35 FOOD, +10 JOY, ♥, bond, and it gets revealed. Once revealed, the food menu marks it with a
+  gold frame and a star (v1.57). Evolving can change the favourite: then it's a secret again and the
+  status says "Its tastes changed!".
+- 🍰 **Cake** (v1.54, the food menu's 4th slot, replacing the candy): **limited**, found on walks
+  (and won in battles). It fills FOOD to 100 and **keeps it full for 3 hours** (the bar turns pink and
+  the status says "So full!"; games don't make it hungry either, and the time counts while the board
+  is off), +12 JOY, but **+12 weight**. The slot shows how many you have; with none it's grey and a
+  tap says where to find one.
 - ⚽ **Play:** a menu with all the games: the **ball minigame** (+JOY, −ENE; trains **SPEED** and
   burns weight; the ball keeps speeding up as you score: twice as fast at 80 as at 1, up to 3×),
-  a **practice battle** (+3 JOY, at most once an hour; see Battles below), the training bag, the
+  a **practice battle** (+3 JOY, at most once an hour, and a win can bring an item home; see Battles
+  below), the training bag, the
   sled run and the waterfall.
 - 🥊 **Training bag** (third slot of the Play menu): trains **STRENGTH** (~4 hits = 1 pt, cap
   +18/session), tires it.
@@ -279,7 +286,18 @@ attacking until one faints, in 10–20 s after a 3 s VS card and jingle.
   a shake). After a special the meter rests for 2 normal attacks. The opponent
   charges its own.
 - **Reward:** +3 JOY whether you win or lose, at most once an hour. Practice
-  isn't counted in any win/loss record. The USER key, or PWR (to the screensaver
+  isn't counted in any win/loss record.
+- **Loot (v1.56):** a **win** has a **70 %** chance of an item, at most **5 a day**. It waits at
+  home as a gift ("A gift at home!" under the title); open it to see what it is.
+
+  | Loot | Odds |
+  |---|---|
+  | Cake | 40 % |
+  | Golden Berry | 25 % |
+  | Protein / Iron / Carbos | 21 % (7 % each) |
+  | Rare Candy | 7 % |
+  | Shiny Charm | 4 % (a cake if you already hold one) |
+  | Egg | 3 %, the rarest | The USER key, or PWR (to the screensaver
   or off), quits with no reward. The result ignores taps for its first 1.8 s
   (v1.38), so the taps that charged the special don't close it unseen.
 - Battles between two boards over the air are next (see the roadmap).
@@ -311,21 +329,31 @@ waving it around doesn't farm anything.
   bond comes on top of the daily bond cap. Like every walking reward, the levels and the
   rest need the pet awake: a goal crossed while it sleeps only marks the day (and the streak).
 - **Finds:** every 800–1200 rewarded steps the pet finds something (at most 5 a
-  day; the goals' gifts come on top). A popup shows it next time the screen is
-  on; tap to dismiss.
+  day; the goals' gifts come on top). Since v1.55 each find arrives **wrapped**: a small white box
+  with a red ribbon on the floor of the home screen, to the right (up to 3 in a pile, "+N" for
+  more). **Tap a gift** with the pet awake to open it: the pet is happy, "GIFT!" shows what it was,
+  and it goes into the Backpack (tap to dismiss). Asleep, gifts wait. A tap opens the first gift that
+  fits; when none fits, the popup says "Backpack full" and they stay wrapped until there's room. Up to 8 wait unopened (kept across
+  restarts); past that a find goes straight into the Backpack with the popup. When the home is left
+  empty (an ending, or the pet stored in the Box), gifts unwrap themselves into the Backpack, and a
+  wrapped egg counts as one of your eggs.
 
   | Item | Odds | Use |
   |---|---|---|
-  | Golden Berry | 55 % | +50 FOOD, +15 JOY, a heart |
-  | Protein / Iron / Carbos | 35 % (1/3 each) | +3 ATK / DEF / SPD training (cap 100) |
+  | Golden Berry | 40 % | +50 FOOD, +15 JOY, a heart |
+  | Cake (v1.54) | 20 % | FOOD full for 3 h, +12 JOY, +12 weight (food menu or Backpack) |
+  | Protein / Iron / Carbos | 30 % (1/3 each) | +3 ATK / DEF / SPD training (cap 100) |
   | Shiny Charm | 10 % | Held, not used: the **next egg** gets ×3 shiny odds (never better than 1/8). One at a time; a second one becomes a Golden Berry. |
   | Rare Candy | the 10000 goal, v1.25–v1.35 (it now gives +2 levels directly) | **+1 level**, keeping how full the level bar was, without ageing the pet (it can make the pet ready to evolve). Candies already in the Backpack still work. |
-  | Egg | every 8000–15000 steps (v1.39), apart from the finds above and their daily cap | Not used by hand: it comes home by itself when home is free (an ending, or the pet stored in the Box). |
+  | Egg | every 8000–15000 steps (v1.39), apart from the finds above and their daily cap; wrapped as a gift since v1.55 (straight home if the home is empty) | Not used by hand: it comes home by itself when home is free (an ending, or the pet stored in the Box). |
 
-- The **Backpack** holds up to 9 of each item. Open it on the stat card's 5th
-  page, **WALK** (swipe up, then left four times): today's steps with a ring
-  toward the next goal and a flag per goal reached, the total, today's finds
-  (random ones out of 5, "+n" for the goals' gifts), and the items. Tap an item to use it.
+- The **Backpack** holds up to 9 of each item. Since v1.53 it has its own button (the
+  backpack, last on the bottom row): every item with its count, greyed when you have none, and a
+  hint below. Tap an item to use it (a YES / NO dialog); the Charm and eggs aren't used by hand. It
+  opens while the pet sleeps too, just to look.
+- The stat card's 5th page, **WALK** (swipe up, then left four times), shows today's steps with
+  a ring toward the next goal and a flag per goal reached, the total and today's finds (random
+  ones out of 5, "+n" for the goals' gifts).
 
 <details>
 <summary>Secrets (spoilers)</summary>
@@ -485,20 +513,23 @@ If one bottoms out it counts as a *slip-up*.
 
 **Buttons (bottom arc, icons):**
 - 🍎 **Feed** → food menu: 3 berries (each species has a hidden favourite that
-  gives a bonus) and a candy (+happiness but it fattens; weight makes it sluggish).
+  gives a bonus) and the cake (limited: full for 3 h, but it fattens; weight makes it sluggish).
 - ⚽ **Play** → a menu with every game: the pokeball minigame (trains SPEED), a practice
   battle (crossed swords) or the training bag (red bag, trains STRENGTH).
-- 🌙 **Light** → sleep/wake (recovers energy, the scene goes dark). While asleep,
-  needs decay much slower (rest). The screen stays as bright as when it's awake.
-- 🫧 **Bath** → a foam scene that cleans up the poops.
+- 💗 **Care** (v1.53) → a menu with two choices:
+  - 🌙 **Sleep** / ☀️ **wake** (recovers energy, the scene goes dark). While asleep, needs decay
+    much slower (rest). The screen stays as bright as when it's awake. Asleep, Care is the button
+    that still works, and its menu shows the sun.
+  - 🫧 **Bath**: a foam scene that cleans up the poops (greyed while asleep).
+- 🎒 **Backpack** (v1.53) → your items and eggs; tap one to use it.
 
 **Touch gestures:**
 - Tap the creature = pet it (+happiness, bond).
 - Swipe left = open the **Pokédex / gallery** · swipe right = open the **Box** (v1.37,
   see [The Box](#the-box-v137)), from the pet or from the egg.
 - Vertical swipe up = open the **stat card** (5 pages: Profile / Battle / Medals /
-  Progress / Walk; swipe between them; tap the name on Profile to rename; on Walk, tap a
-  Backpack item to use it; the bag moved to the Play menu in v1.34).
+  Progress / Walk; swipe between them; tap the name on Profile to rename; the training bag moved
+  to the Play menu in v1.34, the Backpack to its own button in v1.53).
 - Swipe down = **set the clock** and pick the **language**, sound on/off and
   **brightness** (the sun pill: 4 levels, tap to cycle).
 - Long press (3 s) on the creature = **release** dialog.
@@ -575,8 +606,8 @@ hatch) + level + **training**:
 - STRENGTH ← the training bag (whacking)
 
 Shown on the Battle page of the stat card. Weight is extra fat (0 = fit): it goes
-up +12 per candy and burns off slowly, −1 every 15 min awake (30 asleep), a little
-with training and the minigame, and −1 per 1000 steps. A candy lasts about 3 h.
+up +12 per cake (the candy before v1.54) and burns off slowly, −1 every 15 min awake (30 asleep), a
+little with training and the minigame, and −1 per 1000 steps. A cake's weight lasts about 3 h.
 
 ## Retention: streak, bond, medals, name
 

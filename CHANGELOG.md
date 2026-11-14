@@ -8,6 +8,98 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.57] - 2026-11-14
+
+### Added
+
+- **The favourite berry is marked.** Once you've discovered your pet's favourite berry, the food menu
+  frames it in gold with a small star, so you don't have to remember it for each pet.
+
+### Fixed
+
+- **A favourite "known" after evolving could be the wrong berry.** The favourite comes from the
+  species, so it usually changes when the pet evolves, but the discovered flag stayed. Now, when
+  evolving changes the favourite, it becomes a secret again (the card says "BERRY ???", no star) and
+  the status says "Its tastes changed!" once the animation ends. If the favourite stays the same, it
+  stays known. The Berry medal is kept.
+- A gift that doesn't fit no longer blocks the others: a tap opens the first one that fits (only when
+  none fits does the popup say "Backpack full").
+- The Box's "Store?" dialog and the release dialog counted only the eggs in the Backpack: with a
+  wrapped egg they said "No egg: home stays empty", and then the egg came home. They count it now.
+- The end of a battle writes the save once (loot and joy together) instead of twice; the loot count is
+  written after the gifts, so a power cut can't spend a loot without the gift.
+- No "No cake" hint when the cake is refused for another reason (the pet fell asleep with the menu
+  open). A tap on the food menu's right edge (1 px) no longer fed a berry that doesn't exist.
+- The first boot after updating no longer logs an error for the missing `gifts` key.
+
+### Note
+
+- **Don't downgrade below v1.54 with this save.** The Backpack grew to 8 items (the cake), and older
+  firmware reads the longer Backpack as empty and overwrites it.
+
+## [1.56] - 2026-11-14
+
+### Added
+
+- **Battle loot.** Winning a practice battle has a 70 % chance of bringing an item home, at most 5 a
+  day (the count survives a restart and starts again at midnight). It arrives as a gift on the home
+  floor; the result shows "A gift at home!" with a gift box under "YOU WIN!". The loot table:
+  cake 40 %, Golden Berry 25 %, Protein / Iron / Carbos 7 % each, Rare Candy 7 % (the only way to get
+  one again since v1.36), Shiny Charm 4 % (a cake if you already hold one) and egg 3 %, the rarest.
+  Losing or a draw gives no loot. The +3 JOY once an hour is unchanged.
+- Serial: the `battle:` line after a battle prints the loot and today's count.
+
+## [1.55] - 2026-11-14
+
+### Changed
+
+- **Finds arrive as gifts.** What the pet finds on a walk (and the goals' bonus finds and the eggs
+  found walking) no longer pops up by itself: it waits on the home screen floor, to the right, as a
+  white box with a red ribbon (up to 3 in a pile, "+N" for more, gently bobbing). Tap one with the
+  pet awake: the pet poses with a heart, "GIFT!" shows the item, and it goes into the Backpack.
+  Opening gives no stats, so it can't be farmed.
+  - Asleep, or with an egg at home, gifts wait (a tap plays the deny sound).
+  - A gift that doesn't fit (9 of that item) shows "Backpack full" and **stays wrapped** instead of
+    being lost. A second Shiny Charm still becomes a Golden Berry.
+  - Up to 8 gifts wait unopened and survive a restart (NVS key `gifts`). With 8 waiting, a new find
+    goes straight into the Backpack with the old popup.
+  - When the home is left empty (release, farewell, runaway, storing in the Box) gifts unwrap into
+    the Backpack by themselves. A wrapped egg counts as one of your eggs: the release dialog won't
+    promise a gift egg, and storing a pet brings a wrapped egg home.
+- An egg found with the home empty still goes straight home.
+
+### Added
+
+- Serial: `GIFTS` (the queue) and `GIFT <item>` (add one: 0 Golden Berry, 1 Protein, 2 Iron,
+  3 Carbos, 4 Shiny Charm, 5 Rare Candy, 6 Egg, 7 Cake).
+
+## [1.54] - 2026-11-14
+
+### Changed
+
+- **The cake replaces the candy.** The food menu's 4th slot was a candy nobody could make out. It is
+  now a **cake**, and cakes are limited: you find them walking (20 % of finds; the Golden Berry goes
+  from 55 % to 40 %, vitamins from 35 % to 30 %) and, from v1.56, in battles. A cake fills FOOD to
+  100 and keeps it there for **3 hours**: the bar turns pink, the status says "So full!", games
+  don't cost food, and the time also counts while the board is off. It adds +12 JOY and +12 weight,
+  as the candy did. The slot shows a red badge with how many you have; with none it's grey, and a tap
+  shakes FOOD and says "No cake: walk or battle". Cakes can also be eaten from the Backpack.
+- A pet stored in the Box comes back without the cake's effect; a new pet never inherits it.
+- Serial: `STATS` prints `cake=` (in the Backpack) and `sated=` (minutes left).
+
+## [1.53] - 2026-11-14
+
+### Changed
+
+- **A Backpack button.** The bottom row is now Food, Play, **Care** and **Backpack**. The Backpack
+  opens its own screen: every item with its count (greyed when you have none), the Shiny Charm
+  framed while held, eggs counting the one waiting in the incubator, and a hint. Tap an item to
+  use it, as before. It also opens while the pet sleeps, to look (nothing can be used asleep).
+  The stat card's WALK page keeps the steps, the goals and today's finds, without the item row.
+- **Care holds Sleep and Clean.** The Care button (a heart) opens a two-slot menu like the Play
+  menu: the moon puts the pet to sleep, the bubbles give it a bath. Asleep, Care is the button that
+  still works (as Light did): its menu shows a sun to wake it, and the bath greyed out.
+
 ## [1.52] - 2026-11-11
 
 ### Changed

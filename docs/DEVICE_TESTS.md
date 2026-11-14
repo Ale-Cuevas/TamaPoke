@@ -326,6 +326,56 @@ doesn't touch the record or give rewards.
   the thin ATK bar grows by the "STR +N" the result showed.
 - [ ] USER = back still quits the bag (no reward while the time runs).
 
+### Care menu and Backpack (v1.53)
+The bottom row is Food, Play, Care (heart), Backpack. `TAP x y` reaches every slot: Care is at 264 404, the
+Backpack at 326 390; the Care menu's slots are at about 200 320 (sleep / wake) and 266 320 (bath).
+- [ ] Care opens a two-slot row over the bars: moon | bubbles. The moon puts the pet to sleep; the bubbles
+  start the bath (a second tap during the bath shakes Care with the deny sound).
+- [ ] Asleep, Care and the Backpack keep their icons and the other two buttons are empty. Care shows a sun and a
+  grey bath; the sun wakes the pet, the bath shakes Care.
+- [ ] The menu closes after 6 s, on a tap outside it, and with USER.
+- [ ] The Backpack opens its own screen: "BACKPACK" / "MOCHILA", 7 slots with counts (greyed at 0), the Charm
+  framed, the eggs counting the waiting one, the hint below and "tap: back".
+- [ ] Tap an item: "Use X?" YES uses it and goes back home to show it (eating, "+N", level-up); NO, USER or a
+  tap outside the dialog keeps the Backpack open. A tap outside the grid closes the Backpack.
+- [ ] Asleep the Backpack opens with "Asleep: just looking" / "Duerme: solo mirar" and every item refuses.
+- [ ] The WALK page of the stat card no longer has the item row; the eggs hint stays when you have eggs.
+
+### Cake (v1.54)
+`STATS` prints `cake=` (cakes in the Backpack) and `sated=` (minutes of full FOOD left).
+- [ ] The food menu's 4th slot is a cake: grey with none (a tap shakes FOOD, plays the deny sound and the status
+  says "No cake: walk or battle" / "Sin tarta: camina o combate" for 2.5 s); with cakes, a red badge with the count.
+- [ ] Eating one: FOOD jumps to 100, the bar turns pink, "So full!" / "Está lleno!", the badge counts down.
+- [ ] `STATS` a few minutes later: FOOD still 100, `sated=` counting down from 180; a game doesn't lower FOOD.
+- [ ] After 3 h (or a power-off that covers it) the bar is green again and FOOD drops as usual.
+- [ ] The Backpack shows the cake second; using it there does the same.
+
+### Gifts (v1.55)
+`GIFTS` lists the waiting gifts; `GIFT <item>` adds one (7 = cake). The pile is tapped at about `TAP 400 280`.
+- [ ] `GIFT 7`: a white box with a red ribbon appears on the floor to the right, bobbing; with 3, a pile; with 5,
+  "+2" next to it. It doesn't cover the poops, the pet, the bars or the farewell button.
+- [ ] Tapping it with the pet awake: the pet poses with a heart, "GIFT!" / "REGALO!" with the cake, a jingle; the
+  cake is now in the Backpack. A tap closes the popup.
+- [ ] Asleep: the tap plays the deny sound and the gift stays.
+- [ ] With 9 Golden Berries, a wrapped berry: "Backpack full" in red, and the gift is still there after closing.
+- [ ] `GIFTS` after a restart: the same list.
+- [ ] A real walk: a find shows up as a gift (no popup), and opening it adds it to the Backpack.
+
+### Battle loot (v1.56)
+`BATTLE [dex]` starts a practice battle; the `battle:` line at the end prints the loot item (8 = none) and how
+many came today. Magikarp (`BATTLE 129`) is an easy win.
+- [ ] A win with loot: "A gift at home!" / "Regalo en casa!" with a gift box under the title; back home, a gift on
+  the floor. A loss or a draw never shows it.
+- [ ] About 7 wins in 10 bring loot; after the 5th of the day, wins bring none (the line says `5 hoy`).
+- [ ] Opening the gift shows the item (often a cake).
+
+### Favourite berry star (v1.57)
+- [ ] Before discovering it: the food menu has no frame or star.
+- [ ] Feed the favourite ("It likes it!", heart): the next time the menu opens, that berry has a gold frame and a
+  star at its top-right corner, and the card says its colour.
+- [ ] Evolving a pet that knew its favourite (Charmander → Charmeleon changes it): "Its tastes changed!" /
+  "Sus gustos cambiaron!" after the animation, no star, card "BERRY ???".
+
 ### Waterfall (v1.43)
 ([NEW_GAMES.md, Task ZEN](NEW_GAMES.md#task-zen-meditate-under-the-waterfall).) `ZEN [s]` opens a session with no
 reward (from second s if given), `HOLD 1` / `HOLD 0` fake the finger, `HOLD OFF` gives it back, `ZEN?` prints
