@@ -143,7 +143,7 @@ static void resetUi() {
   galleryDetail = 0;
   galleryPage = 0;
   cardPage = 0;
-  menuUntil = confirmUntil = choiceUntil = bathUntil = 0;
+  menuUntil = confirmUntil = choiceUntil = bathUntil = poopPuffUntil = 0;
   menuKind = MENU_NONE;
   closeBattle();
   bt = decltype(bt){};
@@ -228,7 +228,7 @@ static void pokemon(int16_t dex, int hour, bool shiny = false) {
   pet.joy = 88;
   pet.energy = 64;
   pet.hygiene = 91;
-  pet.poops = 0;
+  pet.dbgSetPoops(0);
   pet.careMistakes = 0;
   pet.lastSeenEpoch = epochAt(hour);
   pet.streak = 5;
@@ -353,7 +353,10 @@ static const std::vector<Scene> &scenes() {
     { "home", [] { pokemon(25, 13); } },
     { "home-dusk", [] { pokemon(7, 19); } },
     { "home-night", [] { pokemon(133, 23); pet.sleeping = true; } },
-    { "home-forest", [] { pokemon(1, 9); pet.poops = 2; pet.fullness = 20; } },
+    { "home-forest", [] { pokemon(1, 9); pet.dbgSetPoops(2); pet.fullness = 20; } },
+    // v1.58: a tap on a poop cleans just that one (the middle one here: sparkles where it was, "+10" HYG)
+    { "poop-tap", [] { pokemon(1, 9); pet.dbgSetPoops(3); pet.hygiene = 40; onTap(116, 282); }, 3 },
+    { "poop-gap", [] { pokemon(1, 9); pet.dbgSetPoops(3); onTap(116, 282); gHostMillis += 2000; } },
     // the swaying tall-grass meadow (v1.26): mid-gust, at dusk
     { "home-gust", [] { pokemon(19, 11); gHostMillis = 114000; } },  // wind.h: the gust is mid-screen at 6 s of 12
     { "home-meadow-dusk", [] { pokemon(19, 19); } },
@@ -380,7 +383,7 @@ static const std::vector<Scene> &scenes() {
     { "feed", [] { pokemon(133, 12); menuKind = MENU_FEED; menuUntil = millis() + 6000; } },
     { "play-menu", [] { pokemon(133, 12); menuKind = MENU_PLAY; menuUntil = millis() + 6000; } },
     // v1.53: the Care button (sleep | clean) and the Backpack screen
-    { "care-menu", [] { pokemon(133, 12); pet.poops = 2; menuKind = MENU_CARE; menuUntil = millis() + 6000; } },
+    { "care-menu", [] { pokemon(133, 12); pet.dbgSetPoops(2); menuKind = MENU_CARE; menuUntil = millis() + 6000; } },
     { "care-menu-asleep", [] { pokemon(133, 23); pet.sleeping = true; menuKind = MENU_CARE; menuUntil = millis() + 6000; } },
     { "bag", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 1, 1, 2, 3 }); openBag(); } },
     // v1.54: the cake in the food menu (with how many are left, grey with none), the pink FOOD bar while
@@ -393,7 +396,7 @@ static const std::vector<Scene> &scenes() {
     { "gifts-1", [] { pokemon(25, 13); pet.addGift(IT_CAKE); } },
     { "gifts-3", [] { pokemon(25, 13); pet.addGift(IT_CAKE); pet.addGift(IT_IRON); pet.addGift(IT_GOLDEN); } },
     { "gifts-5-night", [] { pokemon(133, 22); for (int i = 0; i < 5; i++) pet.addGift(IT_GOLDEN); } },
-    { "gifts-forest", [] { pokemon(1, 9); pet.poops = 3; pet.addGift(IT_EGG); pet.addGift(IT_CAKE); } },
+    { "gifts-forest", [] { pokemon(1, 9); pet.dbgSetPoops(3); pet.addGift(IT_EGG); pet.addGift(IT_CAKE); } },
     { "gift-open", [] { pokemon(25, 13); pet.addGift(IT_CAKE); pet.addGift(IT_IRON); openGiftTap(); }, 6 },
     { "gift-open-es", [] { pokemon(25, 13); pet.addGift(IT_CAKE); openGiftTap(); setLang(LANG_ES); applyLangFont(); }, 6 },
     { "gift-full", [] { pokemon(25, 13); gHostMillis += 3000; pet.items[IT_GOLDEN] = ITEM_MAX; pet.addGift(IT_GOLDEN); openGiftTap(); }, 6 },

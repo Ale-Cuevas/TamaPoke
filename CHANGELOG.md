@@ -8,6 +8,20 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.58] - 2026-11-14
+
+### Added
+
+- **Tap a poop to clean it.** Each poop on the floor goes away with a tap (sparkles where it was, the
+  tap sound, +10 HYG), and the others stay where they are; the next one fills the empty spot. It works
+  with the pet asleep too, and it counts as the day's care for the streak. The bath is still there to
+  clean everything at once (HYG to 100, +1 bond). Serial: `TAP 70 282` / `116 282` / `162 282`.
+
+### Changed
+
+- **The pet poops less.** The chance is 5 % a minute while awake with FOOD above 40 (one every ~20 min);
+  it was 15 % (one every ~7 min). Time off still adds one every 4 hours.
+
 ## [1.57] - 2026-11-14
 
 ### Added

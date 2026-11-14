@@ -15,6 +15,12 @@
 #define CEREMONY_MS 10000UL                // duracion de la despedida en pantalla
 #define FAREWELL_AGE_MIN (3UL * 24 * 60)   // se despide a los 3 dias de juego (en forma final)
 #define RUNAWAY_TICKS 60                   // se escapa tras 1 h con TODO a cero
+// cacas (v1.58): probabilidad (%) por minuto despierto con la comida por encima de 40. Era 15 (una
+// cada ~7 min); con 5, una cada ~20 min. Cada una se limpia tocandola (POOP_TAP_HYG de limpieza)
+// o todas a la vez con el baño
+#define POOP_ODDS 5
+#define POOP_MAX 3
+#define POOP_TAP_HYG 10
 
 // --- ritmo del peso y del vinculo (v1.22). El peso es grasa de mas: 0 = en forma.
 // Antes se quemaba -1 cada 3 min (20 a la hora): una chuche (+12) desaparecia en
@@ -233,6 +239,11 @@ public:
   void play();
   void toggleLight();  // dormir / despertar
   void clean();
+  // cacas (v1.58): huecos ocupados (bit i = la caca i en el suelo). Solo en RAM: el guardado trae la
+  // cuenta (poops) y al cargar se ocupan los primeros huecos. Si alguien cambia poops a mano (caja,
+  // renderizador), los huecos se rehacen desde la cuenta
+  uint8_t poopSlots() const;
+  bool cleanPoop(uint8_t slot);  // tocar una caca: false si no hay o no se puede (ceremonia, huevo)
   void caress();  // tocar al bicho
   void eggTap();  // tocar el huevo: 3 toques y eclosiona
   // un huevo en casa: el que esperaba en la incubadora, o uno nuevo (que se sortea ahora). No mira
@@ -284,7 +295,9 @@ public:
   void chooseStarter(int16_t dex) { eggTarget = dex; starterPick = false; save(); }
   void factoryReset() { prefs.clear(); }  // borra la NVS (test: comando serie WIPE)
   void dbgSetAge(uint32_t m) { ageMinutes = m; save(); }  // serie AGE (pruebas)
-  void dbgClearGifts() { giftN = 0; }  // renderizador: cada escena empieza sin regalos
+  void dbgClearGifts() { giftN = 0; }
+  void dbgAddPoop() { addPoop(); }  // serie POOP y renderizador
+  void dbgSetPoops(uint8_t n) { poops = n > POOP_MAX ? POOP_MAX : n; poopMask = (1 << poops) - 1; }  // renderizador  // renderizador: cada escena empieza sin regalos
   void dbgRunawayReady() { fullness = joy = energy = hygiene = 0; neglectTicks = RUNAWAY_TICKS; }  // test
   // uint16_t, no uint8_t: un uint8_t daba la vuelta a 0 en el nivel 256, y eso se
   // alcanza jugando, porque "quedaros juntos" permite posponer la despedida
@@ -437,6 +450,8 @@ private:
   uint32_t farDeclinedAge = 0;  // "quedaros juntos": no ofrecer despedida hasta esta edad
   bool starterPick = false;     // primera partida: esperando que el jugador elija inicial
   uint8_t neglectTicks = 0;
+  uint8_t poopMask = 0;    // huecos de las cacas (v1.58, ver poopSlots)
+  void addPoop();
   uint16_t goodTicks = 0;  // racha bien cuidado: forja la DEF
   uint32_t ceremonyUntil = 0;
   uint8_t bondToday = 0;       // tope diario de subida de vinculo

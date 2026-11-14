@@ -334,6 +334,11 @@ Backpack at 326 390; the Care menu's slots are at about 200 320 (sleep / wake) a
 - [ ] Asleep, Care and the Backpack keep their icons and the other two buttons are empty. Care shows a sun and a
   grey bath; the sun wakes the pet, the bath shakes Care.
 - [ ] The menu closes after 6 s, on a tap outside it, and with USER.
+
+### Poops by touch (v1.58)
+`POOP` adds one (up to 3); they sit at about 70 282, 116 282 and 162 282.
+- [ ] A tap on a poop removes only that one: sparkles where it was, the tap sound, "+10" over HYG. The others stay.
+- [ ] The next poop fills the empty spot. Asleep a tap still cleans. A long press on a poop doesn't open "Release?".
 - [ ] The Backpack opens its own screen: "BACKPACK" / "MOCHILA", 7 slots with counts (greyed at 0), the Charm
   framed, the eggs counting the waiting one, the hint below and "tap: back".
 - [ ] Tap an item: "Use X?" YES uses it and goes back home to show it (eating, "+N", level-up); NO, USER or a

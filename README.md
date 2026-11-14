@@ -128,7 +128,8 @@ While **awake**, per minute:
 | HYG | −1 | **−4 more per poop** on screen (max 3 poops) |
 | JOY | −1 | **−2 extra** if FOOD < 30, **−2 extra** if HYG < 30 |
 
-- ~**15 %/min** chance to poop (only if FOOD > 40). Poops tank hygiene fast.
+- ~**5 %/min** chance to poop (only if FOOD > 40; about one every 20 min, it was 15 % before v1.58).
+  Poops tank hygiene fast. **Tap a poop** to clean just that one (+10 HYG), awake or asleep.
 - **Care slip-up** = letting any stat hit **≤ 10** (30-min cooldown so it counts once).
   Each slip-up **delays evolution by 1 level** and cools the bond.
 
@@ -157,7 +158,7 @@ While **awake**, per minute:
   +8) and washes the pet (+10 HYG); no weight burn. From 30 s the band drifts slowly up and
   down: time in it then gives **bonus DEF** (1 pt per 4 s, up to +3, so +11 for a perfect
   session).
-- 🫧 **Bath:** clears poops, HYG → 100.
+- 🫧 **Bath:** clears poops, HYG → 100. Or tap the poops one by one (v1.58).
 - 👆 **Pet it:** +5 JOY + bond.
 - 🌙 **Sleep:** rest — ENE **+6/min**, needs drain ~**4× slower** with floors
   (FOOD 30 / JOY 35 / HYG 45). No poops, no slip-ups, can't run away while asleep.
@@ -521,6 +522,8 @@ If one bottoms out it counts as a *slip-up*.
     much slower (rest). The screen stays as bright as when it's awake. Asleep, Care is the button
     that still works, and its menu shows the sun.
   - 🫧 **Bath**: a foam scene that cleans up the poops (greyed while asleep).
+
+**Poops** (v1.58): tap one to clean it (+10 HYG, sparkles where it was). Works asleep too.
 - 🎒 **Backpack** (v1.53) → your items and eggs; tap one to use it.
 
 **Touch gestures:**

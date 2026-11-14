@@ -48,7 +48,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.57"
+#define FW_VERSION "1.58"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -101,6 +101,9 @@ uint8_t boxMove = BOXMV_NONE; // movimiento en marcha: la luz vuela, despues se 
 uint8_t boxMoveSlot = 0;
 uint32_t boxMoveStart = 0;
 bool boxMoveDrawnEnd = false; // ya se vio el ultimo cuadro (como quedara): se puede escribir
+int8_t poopPuffSlot = -1;      // caca recien limpiada (v1.58): destellos en su hueco...
+uint32_t poopPuffUntil = 0;    // ...hasta aqui
+#define POOP_PUFF_MS 450
 int8_t boxShakeSlot = -1;     // hueco que no se puede usar: tiembla (como un boton, fx.h)
 uint32_t boxShakeUntil = 0;
 int boxNowCx = 233;           // centro de la miniatura del activo (de ahi sale o ahi llega la luz)
@@ -870,7 +873,7 @@ void handleSerial() {
                   brightnessFor(powerCtx(millis())));
     Serial.println("DONE");
   } else if (line == "POOP") {  // una caca mas (tope 3), como en tick(): suena SFX_POOP (v1.50)
-    if (!pet.isEgg() && pet.poops < 3) pet.poops++;
+    if (!pet.isEgg()) pet.dbgAddPoop();
     Serial.printf("poops=%u sleep=%d\n", pet.poops, pet.sleeping ? 1 : 0);
     Serial.println("DONE");
   } else if (line.startsWith("NEED ")) {  // NEED <i> <v>: i = 0 comida, 1 higiene, 2 felicidad, 3 energia
@@ -1126,6 +1129,20 @@ bool inPetZone(int16_t x, int16_t y) {
   return x > 110 && x < 356 && y > 95 && y < 310;
 }
 
+// cacas (v1.58): se limpian de una en una tocandolas. Cada una se dibuja a escala 2 en
+// (36 + 46 i, 244); la tinta ocupa ~32x40 px alrededor de (70 + 46 i, 282). Devuelve el hueco
+// tocado o -1. Va antes que la zona del bicho, que pisa las dos primeras
+#define POOP_HIT_R 28
+int poopAt(int16_t x, int16_t y) {
+  uint8_t m = pet.poopSlots();
+  for (int i = 0; i < POOP_MAX; i++) {
+    if (!(m & (1 << i))) continue;
+    int dx = x - (70 + 46 * i), dy = y - 282;
+    if (dx * dx + dy * dy <= POOP_HIT_R * POOP_HIT_R) return i;
+  }
+  return -1;
+}
+
 // el toque se resuelve al LEVANTAR el dedo para distinguir tap de deslizar
 void handleTouch() {
   static uint32_t lastPoll = 0;
@@ -1228,7 +1245,7 @@ void handleTouch() {
     tYl = y;
     // pulsacion larga sin moverse sobre el bicho -> dialogo de soltar
     if (!holdFired && !swallowGesture && !galleryOpen && !boxOpen && !cardOpen && !bagOpen && !kbOpen && !clockOpen && !menuKind && millis() - tStart > 3000 &&
-        abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && inPetZone(tX0, tY0) &&
+        abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && inPetZone(tX0, tY0) && poopAt(tX0, tY0) < 0 &&
         !pet.isEgg() && !confirmUntil && !pet.ceremony) {
       confirmUntil = millis() + 10000;
       holdFired = true;
@@ -1575,6 +1592,20 @@ void onTap(int16_t x, int16_t y) {
       }
       return;
     }
+  }
+  int pp = poopAt(x, y);  // una caca (v1.58): fuera con un toque
+  if (pp >= 0) {
+    FxNeedSnap ns = fxSnap();
+    if (pet.cleanPoop(pp)) {
+      Serial.printf("POOP clean %d\n", pp);
+      sfxPlay(SFX_TAP);
+      fxNeeds(ns);  // "+10" de higiene
+      poopPuffSlot = pp;
+      poopPuffUntil = millis() + POOP_PUFF_MS;
+    } else {
+      sfxPlay(SFX_DENY);
+    }
+    return;
   }
   if (inGiftZone(x, y)) {  // un regalo envuelto (v1.55)
     openGiftTap();
@@ -5979,8 +6010,20 @@ void openGiftTap() {
 }
 
 void drawPoops() {
-  for (int i = 0; i < pet.poops; i++) {
-    drawMap(SPR_POOP, 32, 36 + i * 46, 244, 2, false);
+  uint8_t m = pet.poopSlots();
+  for (int i = 0; i < POOP_MAX; i++) {
+    if (m & (1 << i)) drawMap(SPR_POOP, 32, 36 + i * 46, 244, 2, false);
+  }
+  // la que se acaba de limpiar: destellos donde estaba (como al final del baño)
+  uint32_t left = timeLeft(poopPuffUntil);
+  if (!left || poopPuffSlot < 0) return;
+  int cx = 70 + 46 * poopPuffSlot, cy = 282;
+  int r = 6 + (int)((POOP_PUFF_MS - left) / 25);  // se abren hacia fuera
+  for (int k = 0; k < 4; k++) {
+    int sx = cx + ((k & 1) ? r : -r), sy = cy + ((k & 2) ? r : -r) - 6;
+    uint16_t col = (k % 2) ? UI_BAR_WARN : UI_WHITE;
+    gfx->fillRect(sx - 5, sy - 1, 11, 3, col);
+    gfx->fillRect(sx - 1, sy - 5, 3, 11, col);
   }
 }
 

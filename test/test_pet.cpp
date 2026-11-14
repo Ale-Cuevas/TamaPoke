@@ -756,6 +756,69 @@ TEST(care, limpiar_quita_cacas_y_deja_higiene_a_tope) {
   CHECK_EQ(p.hygiene, (uint8_t)100);
 }
 
+// v1.58: una caca se limpia tocandola; solo esa (las demas siguen en su sitio)
+TEST(care, tocar_una_caca_quita_solo_esa) {
+  Pet p;
+  makePet(p, 4);
+  p.dbgSetPoops(3);
+  p.hygiene = 40;
+  uint8_t bond = p.bond;
+  CHECK(p.cleanPoop(1));
+  CHECK_EQ(p.poops, (uint8_t)2);
+  CHECK_EQ(p.poopSlots(), (uint8_t)0b101);
+  CHECK_EQ(p.hygiene, (uint8_t)(40 + POOP_TAP_HYG));
+  CHECK_EQ(p.bond, bond);  // el vinculo lo da el baño, no cada caca
+  CHECK(!p.cleanPoop(1));  // ya no esta
+  CHECK(p.cleanPoop(0));
+  CHECK(p.cleanPoop(2));
+  CHECK_EQ(p.poops, (uint8_t)0);
+  CHECK(!p.cleanPoop(3));
+}
+
+TEST(care, la_caca_nueva_ocupa_el_hueco_libre) {
+  Pet p;
+  makePet(p, 4);
+  p.dbgSetPoops(3);
+  CHECK(p.cleanPoop(0));
+  p.dbgAddPoop();
+  CHECK_EQ(p.poops, (uint8_t)3);
+  CHECK_EQ(p.poopSlots(), (uint8_t)0b111);
+}
+
+TEST(care, una_caca_se_limpia_dormido_pero_no_en_la_ceremonia) {
+  Pet p;
+  makePet(p, 4);
+  p.dbgSetPoops(2);
+  p.sleeping = true;
+  CHECK(p.cleanPoop(0));
+  p.sleeping = false;
+  p.release();
+  CHECK(!p.cleanPoop(1));
+}
+
+TEST(care, cuenta_de_cacas_cambiada_a_mano_rehace_los_huecos) {
+  Pet p;
+  makePet(p, 4);
+  p.dbgSetPoops(3);
+  CHECK(p.cleanPoop(0));  // huecos 0b110
+  p.poops = 1;            // la caja o el renderizador cambian la cuenta
+  CHECK_EQ(p.poopSlots(), (uint8_t)0b001);
+}
+
+TEST(tick, caca_cada_veinte_minutos_de_media) {
+  Pet p;
+  makePet(p, 4);
+  mockForceRandom(POOP_ODDS);  // justo por encima: nunca
+  setStats(p, 100, 100, 100, 100);
+  advance(p, 5);
+  CHECK_EQ(p.poops, (uint8_t)0);
+  mockForceRandom(POOP_ODDS - 1);  // justo por debajo: cada minuto
+  setStats(p, 100, 100, 100, 100);
+  advance(p, 1);
+  CHECK_EQ(p.poops, (uint8_t)1);
+  mockClearForcedRandom();
+}
+
 TEST(care, mimar_sube_felicidad_y_vinculo) {
   Pet p;
   makePet(p, 4);

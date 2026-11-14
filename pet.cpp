@@ -201,8 +201,7 @@ void Pet::syncClock(uint32_t nowEpoch) {
   }
   if (!isEgg()) {
     if (!sleeping) {  // durmiendo no ensucia
-      uint8_t p = poops + mins / 240;
-      poops = p > 3 ? 3 : p;
+      for (uint32_t n = mins / 240; n && poops < POOP_MAX; n--) addPoop();
     }
     // la evolucion NO se aplica offline: queda lista y la dispara el usuario
     // tocando al bicho cuando vuelve (para que vea la transformacion)
@@ -261,7 +260,7 @@ void Pet::tick() {
 
   if (!full) fullness = clamp100(fullness - 2);
   energy = clamp100(energy - 1);
-  if (fullness > 40 && poops < 3 && random(100) < 15) poops++;
+  if (fullness > 40 && poops < POOP_MAX && random(100) < POOP_ODDS) addPoop();
 
   hygiene = clamp100(hygiene - 1 - 4 * poops);
   // el sobrepeso da pereza: la energia cae el doble
@@ -719,9 +718,39 @@ void Pet::toggleLight() {
   save();
 }
 
+uint8_t Pet::poopSlots() const {
+  uint8_t n = poops > POOP_MAX ? POOP_MAX : poops;
+  uint8_t m = poopMask & ((1 << POOP_MAX) - 1);
+  return __builtin_popcount(m) == n ? m : (uint8_t)((1 << n) - 1);
+}
+
+void Pet::addPoop() {
+  if (poops >= POOP_MAX) return;
+  uint8_t m = poopSlots();
+  uint8_t i = 0;
+  while (m & (1 << i)) i++;  // el primer hueco libre
+  poopMask = m | (1 << i);
+  poops++;
+}
+
+// v1.58: una caca, de una en una. Cuenta como cuidado del dia (racha), pero sin vinculo (el baño da
+// el suyo); no escribe en flash a cada toque
+bool Pet::cleanPoop(uint8_t slot) {
+  if (ceremony != CER_NONE || isEgg() || slot >= POOP_MAX) return false;
+  uint8_t m = poopSlots();
+  if (!(m & (1 << slot))) return false;
+  poopMask = m & ~(1 << slot);
+  poops--;
+  hygiene = clamp100(hygiene + POOP_TAP_HYG);
+  registerCare(false);
+  pendingSave = true;
+  return true;
+}
+
 void Pet::clean() {
   if (ceremony != CER_NONE) return;
   poops = 0;
+  poopMask = 0;
   hygiene = 100;
   addBond(1);
   registerCare();
