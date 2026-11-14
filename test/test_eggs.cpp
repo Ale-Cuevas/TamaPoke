@@ -507,13 +507,17 @@ TEST(eggs, un_corte_durante_la_despedida_no_da_el_premio) {
   CHECK_EQ(q.items[IT_EGG], (uint8_t)0);
 }
 
-TEST(eggs, la_huida_sin_huevos_ni_caja_tambien_da_el_regalo) {
-  Pet p;
-  born(p);
-  p.dbgRunawayReady();
-  p.startRunaway();
+static void dieAndWait(Pet &p) {
+  p.startDying();
+  p.letGo();
   mockAdvanceMillis(CEREMONY_MS + 1);
   p.update(millis());
+}
+
+TEST(eggs, la_muerte_sin_huevos_ni_caja_tambien_da_el_regalo) {
+  Pet p;
+  born(p);
+  dieAndWait(p);
   CHECK(p.isVacant());
   CHECK_EQ(p.items[IT_EGG], (uint8_t)1);
   CHECK(firstNoticeIsGiftEgg(p));
@@ -521,12 +525,48 @@ TEST(eggs, la_huida_sin_huevos_ni_caja_tambien_da_el_regalo) {
   Pet r;  // con alguien en la caja, nada
   born(r);
   boxSomeone(r);
-  r.dbgRunawayReady();
-  r.startRunaway();
-  mockAdvanceMillis(CEREMONY_MS + 1);
-  r.update(millis());
+  dieAndWait(r);
   CHECK(r.isVacant());
   CHECK_EQ(r.items[IT_EGG], (uint8_t)0);
+}
+
+// v1.60: el huevo que deja al morir va a casa; el de la incubadora, a la mochila (con ella llena, se
+// pierde y lo dice)
+TEST(eggs, el_huevo_de_la_muerte_va_a_casa_y_el_que_esperaba_a_la_mochila) {
+  Pet p;
+  born(p, 4);
+  holdAnEgg(p);
+  p.setLevel(DEATH_EGG_LEVEL);
+  mockForceRandom(0);
+  p.startDying();
+  mockClearForcedRandom();
+  int16_t heir = p.deathEggSpecies();
+  CHECK(heir > 0);
+  p.letGo();
+  mockAdvanceMillis(CEREMONY_MS + 1);
+  p.update(millis());
+  CHECK(!p.isVacant());
+  CHECK(!p.eggHeld());
+  CHECK_EQ(p.eggSpecies(), heir);
+  CHECK_EQ(p.items[IT_EGG], (uint8_t)1);
+  CHECK(!p.hasFound());
+
+  Pet q;
+  born(q, 4);
+  holdAnEgg(q);
+  q.setBagEggs(ITEM_MAX);
+  q.setLevel(DEATH_EGG_LEVEL);
+  mockForceRandom(0);
+  q.startDying();
+  mockClearForcedRandom();
+  q.letGo();
+  mockAdvanceMillis(CEREMONY_MS + 1);
+  q.update(millis());
+  CHECK_EQ(q.eggSpecies(), (int16_t)4);
+  CHECK_EQ(q.items[IT_EGG], (uint8_t)ITEM_MAX);
+  bool full = false;
+  CHECK_EQ(q.peekFound(&full), (uint8_t)IT_EGG);
+  CHECK(full);
 }
 
 TEST(eggs, guardar_sigue_trayendo_un_huevo_y_nunca_regalo) {

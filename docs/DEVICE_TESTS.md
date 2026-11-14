@@ -335,6 +335,23 @@ Backpack at 326 390; the Care menu's slots are at about 200 320 (sleep / wake) a
   grey bath; the sun wakes the pet, the bath shakes Care.
 - [ ] The menu closes after 6 s, on a tap outside it, and with USER.
 
+### Neglect and death (v1.60)
+Back up the NVS first ([nvs backup](#save-time-sound-sd)). `ABANDON` sets the four needs to 0; `NEGLECT <min>`
+fast-forwards (29 = the bond almost gone, 59 = one minute from dying); `DIE` jumps to the dialog; `STATS` prints
+`ngl= dth= dying= degg= revive=`. The dialog's buttons: YES about 168 374, NO 298 374, OK 233 374.
+- [ ] With all four at 0 the status says "It feels abandoned..." / "Se siente abandonado..."; `STATS` bond drops
+  10 every 3 min. At bond 0: "It's very weak!" / "Esta muy debil!". Feeding once stops the count (`ngl=0 dth=0`).
+- [ ] At the end: the bye sound (also with the screen dark), and any open screen (Backpack, card, Box, menu)
+  closes. The pet is a dark silhouette in the rain; the dialog sits low with "X is dying..." and "Use a Revive?
+  (N)", EN and ES. Swipes, USER, the buttons and the pet do nothing; only YES / NO count.
+- [ ] YES: "Revived!", the four bars "+50", a pose and a heart; `revive=` one less; the bond stays 0.
+- [ ] NO (or OK with `REVIVES 0`, "No Revives left"): rain, the pet fades out, "It has passed away..." /
+  "Ha muerto...", then the empty home (or a gift egg in the Backpack with no eggs and an empty Box).
+- [ ] `LVL 50` before `DIE`: about 6 in 10 deaths show an egg and "It left an egg..." at the end, and the egg is
+  home (`STATS degg=` is the first form of its line). A restart while the dialog waits keeps it and the same
+  `degg`.
+- [ ] A restart in the middle of the ceremony comes back to the dialog.
+
 ### Revive (v1.59)
 `REVIVES` prints how many; `REVIVES <n>` sets it. `GIFT 8` wraps one. The Revive slot is the bottom right of the
 Backpack, at about 319 314.

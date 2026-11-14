@@ -20,7 +20,7 @@ enum StrId : uint8_t {
   S_EVOLVING, S_EATING, S_LIKES, S_HUNGRY, S_NEEDS_BATH,
   S_EXHAUSTED, S_SAD, S_CHUBBY, S_IS_SHINY, S_HAPPY,
   // ceremonias de despedida
-  S_FAREWELL, S_RUNAWAY, S_GOODBYE,
+  S_FAREWELL, S_DIED, S_GOODBYE,  // la segunda: la muerte por abandono (v1.60, era la escapada)
   // huevo
   S_EGG_HDR, S_EGG_LEGEND, S_EGG_RARE, S_EGG_TOUCH, S_EGG_MOVES, S_EGG_ALMOST,
   // formatos compartidos
@@ -53,7 +53,7 @@ enum StrId : uint8_t {
   S_EVO_READY, S_EVO_BLOCKED, S_EVO_IN_FMT, S_MISTAKES_FMT,
   S_EVO_TAP,        // texto del boton de evolucion
   S_FAREWELL_BTN,   // texto del boton de despedida (lleva el nombre: "%s ...")
-  S_RUNAWAY_BTN,    // texto del boton de escapada por abandono (final triste)
+  S_ABANDONED,      // estado con el vinculo apagandose por abandono (v1.60, era el boton de escapada)
   // dialogos de decision (evolucionar/mantener, despedirse/quedaros)
   S_EVO_Q, S_EVO_KEEP, S_FAR_Q, S_FAR_GO, S_FAR_STAY,
   S_CHOOSE_STARTER,  // titulo de la eleccion del inicial (primera vez)
@@ -97,6 +97,9 @@ enum StrId : uint8_t {
   S_TASTES,
   // v1.59: la pista del Revivir en la mochila (no se usa a mano)
   S_REVIVE_HINT,
+  // v1.60: muerte por abandono: estado sin vinculo, el dialogo (con o sin Revivir), el huevo que deja
+  // y el estado al revivir
+  S_WEAK, S_DYING_FMT, S_USE_REVIVE_FMT, S_NO_REVIVES, S_OK, S_DIED_EGG, S_REVIVED,
   STR_COUNT
 };
 

@@ -48,7 +48,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.59"
+#define FW_VERSION "1.60"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -122,6 +122,7 @@ bool bagOpen = false;         // mochila (v1.53): su boton en la fila de abajo, 
 uint8_t itemConfirm = 0;      // mochila: objeto a confirmar + 1 (0 = ninguno)
 uint32_t itemConfirmUntil = 0;
 uint32_t bagReviveHintUntil = 0;  // la pista del Revivir en la mochila (v1.59)
+uint32_t revivedMsgUntil = 0;     // "Revivido!" en el estado tras usar un Revivir (v1.60)
 bool foundShown = false;      // el ultimo frame enseno un hallazgo: un toque lo cierra
 uint32_t cakeHintUntil = 0;
 uint32_t tastesMsgUntil = 0;  // la baya favorita cambio al evolucionar (v1.57): "Sus gustos cambiaron!"   // tocar la tarta sin ninguna (v1.54): la cabecera dice donde se encuentra
@@ -462,11 +463,12 @@ void loop() {
   bool evoReady = pet.wantEvolveButton();
   if (evoReady && !wasEvoReady) sfxPlay(SFX_MEDAL);
   wasEvoReady = evoReady;
-  // aviso sombrio cuando el bicho esta a punto de escaparse por abandono
-  static bool wasRunReady = false;
-  bool runReady = pet.canRunawayNow();
-  if (runReady && !wasRunReady) sfxPlay(SFX_DENY);
-  wasRunReady = runReady;
+  // se muere de abandono (v1.60): se cierra lo que hubiera abierto para que el dialogo se vea (el
+  // sonido lo pone el bicho al empezar a morirse)
+  static bool wasDying = false;
+  bool dyingNow = pet.isDying();
+  if (dyingNow && !wasDying) closeForDying();
+  wasDying = dyingNow;
 
   handleTouch();
   zenTick(millis());  // cascada: fisica con el dedo de ahora, en cada vuelta
@@ -804,9 +806,6 @@ void handleSerial() {
   } else if (line == "RELEASE") {  // soltar sin el dialogo (v1.40)
     pet.release();
     Serial.println("DONE");
-  } else if (line == "RUN") {
-    pet.startRunaway();
-    Serial.println("DONE");
   } else if (line == "BEEP") {
     sfxPlay(SFX_HATCH);  // prueba de audio
     Serial.println("DONE");
@@ -814,7 +813,16 @@ void handleSerial() {
     onBack();               // como pulsar la tecla USER
     Serial.println("DONE");
   } else if (line == "ABANDON") {
-    pet.dbgRunawayReady();  // fuerza el estado "lista para escaparse" (test del boton)
+    pet.dbgAbandon();  // todo a cero: empieza a apagarse el vinculo (v1.60)
+    Serial.println("DONE");
+  } else if (line.startsWith("NEGLECT ")) {  // v1.60: adelanta la cuenta del abandono (minutos)
+    long m = line.substring(8).toInt();
+    pet.dbgNeglect((uint16_t)(m < 0 ? 0 : (m > 60 ? 60 : m)));
+    Serial.printf("bond=%u ngl=%u dth=%u\n", pet.bond, pet.neglectMinutes(), pet.deathMinutes());
+    Serial.println("DONE");
+  } else if (line == "DIE") {  // v1.60: se muere ya (el dialogo del Revivir)
+    pet.startDying();
+    Serial.printf("dying=%d degg=%d revive=%u\n", pet.isDying() ? 1 : 0, pet.deathEggSpecies(), pet.items[IT_REVIVE]);
     Serial.println("DONE");
   } else if (line == "WIPE") {
     pet.factoryReset();     // borra NVS y reinicia -> partida nueva (eleccion de inicial)
@@ -1109,6 +1117,9 @@ void handleSerial() {
     Serial.printf("shiny=%d streak=%u/%u bond=%u bondT=%u medals=0x%X(%u) nick=%s\n",
                   pet.shiny, pet.streak, pet.bestStreak, pet.bond, pet.bondGainedToday(), pet.medals,
                   pet.totalMedals, pet.nick);
+    // abandono (v1.60): minutos apagando el vinculo, minutos hacia la muerte, el dialogo y su huevo
+    Serial.printf("ngl=%u dth=%u dying=%d degg=%d revive=%u lend=%u\n", pet.neglectMinutes(), pet.deathMinutes(),
+                  pet.isDying() ? 1 : 0, pet.deathEggSpecies(), pet.items[IT_REVIVE], pet.lastEnd);
     Serial.printf("rec ball=%u bag=%u zen=%u.%u dash=%u\n", pet.gameHi, pet.strHi, pet.zenHi / 10, pet.zenHi % 10, pet.dashHi);
     // crecimiento (v1.35, growth.h): de el sale el nivel; la edad va aparte
     Serial.printf("grow=%lu lv=%u into=%u/%u age=%lu\n", (unsigned long)pet.growMin, pet.level(),
@@ -1254,7 +1265,7 @@ void handleTouch() {
     // pulsacion larga sin moverse sobre el bicho -> dialogo de soltar
     if (!holdFired && !swallowGesture && !galleryOpen && !boxOpen && !cardOpen && !bagOpen && !kbOpen && !clockOpen && !menuKind && millis() - tStart > 3000 &&
         abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && inPetZone(tX0, tY0) && poopAt(tX0, tY0) < 0 &&
-        !pet.isEgg() && !confirmUntil && !pet.ceremony) {
+        !pet.isEgg() && !confirmUntil && !pet.busyEnding()) {
       confirmUntil = millis() + 10000;
       holdFired = true;
     }
@@ -1276,7 +1287,7 @@ void openClock();  // prototipo
 
 void onSwipeV(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (gameOpen || galleryOpen || boxOpen || bagOpen || kbOpen || sackOpen || zenOpen || dashOpen || battleOpen() || pet.ceremony) return;
+  if (gameOpen || galleryOpen || boxOpen || bagOpen || kbOpen || sackOpen || zenOpen || dashOpen || battleOpen() || pet.busyEnding()) return;
   if (clockOpen) { clockOpen = false; return; }
   if (cardOpen) {
     if (dir < 0) cardOpen = false;  // arriba cierra la ficha
@@ -1294,6 +1305,7 @@ void onSwipeV(int dir) {
 void onSwipe(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
   if (gameOpen || sackOpen || zenOpen || dashOpen || bagOpen || kbOpen || clockOpen || battleOpen()) return;
+  if (pet.isDying()) return;  // v1.60: el dialogo del Revivir no se esquiva
   if (cardOpen) {  // dentro de la ficha: cambiar entre las CARD_PAGES paginas
     int p = (int)cardPage + (dir > 0 ? -1 : 1);  // izquierda avanza
     cardPage = p < 0 ? 0 : (p > CARD_PAGES - 1 ? CARD_PAGES - 1 : p);
@@ -1375,6 +1387,7 @@ void onBack() {
   }
   wakeUI();
   if (pet.awaitingStarter()) return;  // hay que elegir inicial
+  if (pet.isDying()) return;          // v1.60: el dialogo del Revivir no se cierra con USER
   if (sackOpen) {                     // abandona (sin premio si aun corre el tiempo)
     sackOpen = false;
     return;
@@ -1454,6 +1467,10 @@ void onTap(int16_t x, int16_t y) {
     return;
   }
   if (pet.ceremony) return;  // durante la despedida no hay botones
+  if (pet.isDying()) {       // v1.60: solo cuenta el dialogo del Revivir
+    dyingTap(x, y);
+    return;
+  }
   if (cardOpen) {
     if (cardPage == 0 && y < 84) openKeyboard();  // tocar el nombre = renombrar
     else cardOpen = false;
@@ -1571,10 +1588,9 @@ void onTap(int16_t x, int16_t y) {
     choiceKind = 1; choiceUntil = millis() + 12000;
     return;
   }
-  // botones de final (mismo recuadro): escapada directa; despedida abre dialogo
+  // boton de la despedida: abre su dialogo
   if (x >= FAR_BTN_X && x <= FAR_BTN_X + FAR_BTN_W &&
       y >= FAR_BTN_Y && y <= FAR_BTN_Y + FAR_BTN_H) {
-    if (pet.canRunawayNow()) { pet.startRunaway(); return; }
     if (pet.wantFarewellButton()) { choiceKind = 2; choiceUntil = millis() + 12000; return; }
   }
   for (int i = 0; i < 4; i++) {
@@ -2325,10 +2341,15 @@ bool render() {
   if (pet.ceremony) {
     const DexEntry &d = DEX_TBL[pet.speciesId];
     const char *msg = (pet.ceremony == CER_FAREWELL) ? T(S_FAREWELL)
-                      : (pet.ceremony == CER_RUNAWAY) ? T(S_RUNAWAY)
-                                                      : T(S_GOODBYE);
+                      : (pet.ceremony == CER_DEATH)  ? T(S_DIED)
+                                                     : T(S_GOODBYE);
     drawHeader(dexName(pet.speciesId), d.accent, msg);
     drawCeremony();
+    gfx->flush();
+    return true;
+  }
+  if (pet.isDying()) {  // v1.60: se muere de abandono; el dialogo del Revivir espera
+    drawDyingScreen();
     gfx->flush();
     return true;
   }
@@ -2389,7 +2410,6 @@ bool render() {
     fxUs += micros() - fxT0;
     if (!fxBan) {  // con una celebracion encima, los botones grandes esperan a que acabe
       if (pet.wantEvolveButton()) drawEvolveButton();        // CTA rojo: evolucionar
-      else if (pet.canRunawayNow()) drawRunawayButton();     // CTA sombrio: escapada (abandono)
       else if (pet.wantFarewellButton()) drawFarewellButton();  // CTA dorado: despedida
     }
   }
@@ -3845,7 +3865,7 @@ void fxCollect(uint32_t now) {
 // la pantalla principal no puede empezar una celebracion: nadie la ve, el bicho duerme o hay
 // algo encima (dialogo, menu, bano, evolucion, despedida, eclosion)
 bool fxScreenBusy() {
-  return !fxScreenAwake() || pet.sleeping || pet.ceremony || pet.evolving() || choiceKind || confirmUntil ||
+  return !fxScreenAwake() || pet.sleeping || pet.busyEnding() || pet.evolving() || choiceKind || confirmUntil ||
          menuKind || bathUntil || fxo.find(FXO_HATCH) || fxo.waiting(FXO_HATCH) || fxo.find(FXO_BOX) ||
          fxo.waiting(FXO_BOX);
 }
@@ -4208,7 +4228,7 @@ void drawFxOverlays(uint32_t now) {
 // (FR-1.5). El banner de la meta va en la cola de celebraciones (fx.h) desde la v1.30.
 void drawWalkNews() {
   bool busy = screenOff || dimStage != DIM_AWAKE || choiceKind || confirmUntil || menuKind ||
-              pet.evolving() || bathUntil || fxq.busy();
+              pet.evolving() || bathUntil || fxq.busy() || pet.isDying();
   static bool wasShown = false;
   if (busy || !pet.hasFound()) { wasShown = false; return; }
   bool full = false, gift = false;
@@ -4890,7 +4910,7 @@ const char *petName() { return pet.nick[0] ? pet.nick : dexName(pet.speciesId); 
 
 // la caja se abre desde la casa sin nada encima: ni dialogo, ni menu, ni bano, ni evolucion
 bool boxCanOpen() {
-  return !pet.ceremony && !confirmUntil && !choiceKind && !menuKind && !bathUntil && !pet.evolving();
+  return !pet.busyEnding() && !confirmUntil && !choiceKind && !menuKind && !bathUntil && !pet.evolving();
 }
 
 void openBox() {
@@ -5438,31 +5458,23 @@ void drawCeremony() {
   if (!pmd.loaded) { drawPet(); return; }  // respaldo si no hay sprite PMD
   uint32_t now = millis();
   float t = pet.ceremonyT();               // 0..1 a lo largo de los 10s
-  bool panic = (pet.ceremony == CER_RUNAWAY);
   int x = CX, y = PET_GROUND;
   uint8_t act = PMD_IDLE;
 
-  if (panic) {
-    // final triste: penumbra azulada + lluvia
-    for (int i = 0; i < 46; i++) {
-      int rx = (i * 47 + now / 3) % 466;
-      int ry = (i * 91 + now / 2) % 470;
-      gfx->drawLine(rx, ry, rx - 3, ry + 12, C565(0x6a, 0x84, 0xb0));
-    }
-    bool fade = false;
-    if (t < 0.30f) {                       // cabizbajo, temblando
-      act = pmd.has(PMD_HURT) ? PMD_HURT : PMD_IDLE;
-      x = CX + (int)(4 * sinf(now * 0.04f));
-    } else {                               // se aleja despacio y se desvanece
-      act = pmd.has(PMD_WALKL) ? PMD_WALKL : PMD_IDLE;
-      x = CX - (int)(((t - 0.30f) / 0.70f) * (CX + 120));
-      fade = (t > 0.6f) && ((now / 160) % 2 == 0);  // parpadea hacia la silueta
-    }
-    drawPmdAct(act, x, y, now, true, fade, 5);  // fade=silueta: se difumina al irse
-    // lagrima cayendo del bicho
-    if (t < 0.55f) {
-      int ty = y - 150 + (int)((now / 6) % 40);
-      gfx->fillRect(x + 6, ty, 3, 6, C565(0x9a, 0xc4, 0xe8));
+  if (pet.ceremony == CER_DEATH) {
+    // muerte por abandono (v1.60, en el sitio del final triste de la escapada): penumbra con lluvia,
+    // tendido, se va volviendo silueta y se apaga. Si deja un huevo, aparece donde estaba
+    drawSadRain(now);
+    act = pmd.has(PMD_SLEEP) ? PMD_SLEEP : (pmd.has(PMD_HURT) ? PMD_HURT : PMD_IDLE);
+    bool sil = t > 0.25f;
+    bool gone = t > 0.85f || (t > 0.6f && (now / 160) % 2 == 0);
+    if (!gone) drawPmdAct(act, x, y, now, true, sil, 5);
+    if (pet.deathEggSpecies() && t > 0.7f) {
+      drawMap(SPR_EGG, SPRITE_H, CX - 48, PET_GROUND - 96, 3, false);
+      gfx->setTextColor(UI_WHITE);
+      setSize(2);
+      setCur(centerX(T(S_DIED_EGG), 2), 360);
+      printT(T(S_DIED_EGG));
     }
     return;
   }
@@ -5550,21 +5562,116 @@ void drawFarewellButton() {
   printT(buf);
 }
 
-// boton-CTA sombrio de escapada por abandono: "<nombre> se siente abandonado..."
-// (final triste: azul-gris oscuro, latido lento y apagado)
-void drawRunawayButton() {
+// lluvia de los finales tristes (la muerte por abandono y su dialogo, v1.60; antes la escapada)
+void drawSadRain(uint32_t now) {
+  for (int i = 0; i < 46; i++) {
+    int rx = (i * 47 + now / 3) % 466;
+    int ry = (i * 91 + now / 2) % 470;
+    gfx->drawLine(rx, ry, rx - 3, ry + 12, C565(0x6a, 0x84, 0xb0));
+  }
+}
+
+// ---------- muerte por abandono (v1.60) ----------
+// Se cierra todo lo que tapara la pantalla principal: el dialogo del Revivir tiene que verse al volver
+void closeForDying() {
+  sackOpen = false;
+  zenOpen = false;
+  if (dashOpen) closeDash();
+  if (battleOpen()) closeBattle();
+  gameOpen = false;
+  if (galleryOpen) {
+    galleryOpen = false;
+    galleryDetail = 0;
+    galleryPmd.unload();
+  }
+  if (boxOpen && boxMove == BOXMV_NONE) closeBox();
+  kbOpen = clockOpen = bagOpen = cardOpen = false;
+  itemConfirm = 0;
+  choiceKind = 0;
+  confirmUntil = 0;
+  menuKind = MENU_NONE;
+  bathUntil = 0;
+  bathPending = false;
+}
+
+// dialogo: con Revivir, SI (revive) / NO (se va); sin ninguno, un solo boton (se va). Sin tiempo
+// limite, y un toque fuera de los botones no hace nada: decide si el bicho sigue
+// el cuadro va abajo, en el sitio de las barras y los botones: arriba se ve al bicho apagandose
+#define DIE_BOX_X 94   // 278 x 120: a la altura de su borde de abajo (y 410) el circulo deja x 85..381
+#define DIE_BOX_Y 290
+#define DIE_BOX_W 278
+#define DIE_BOX_H 120
+#define DIE_YES_X 118
+#define DIE_NO_X 248
+#define DIE_OK_X 183
+#define DIE_BTN_Y 352
+#define DIE_BTN_W 100
+#define DIE_BTN_H 44
+void drawDyingScreen() {
   uint32_t now = millis();
-  int p = (int)(3 * sinf(now * 0.003f));
-  int x = FAR_BTN_X - p, y = FAR_BTN_Y - p, w = FAR_BTN_W + 2 * p, h = FAR_BTN_H + 2 * p;
-  gfx->fillRoundRect(x, y, w, h, 16, C565(0x3a, 0x44, 0x5a));
-  gfx->drawRoundRect(x, y, w, h, 16, C565(0x70, 0x80, 0x98));
-  char buf[52];
+  const DexEntry &d = DEX_TBL[pet.speciesId];
   const char *nm = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
-  snprintf(buf, sizeof(buf), T(S_RUNAWAY_BTN), nm);
-  gfx->setTextColor(C565(0xc8, 0xd2, 0xe0));
+  drawHeader(nm, gNight ? UI_INK_NIGHT : d.accent, T(S_WEAK));
+  drawSadRain(now);
+  if (pmd.loaded) drawPmdAct(pmd.has(PMD_SLEEP) ? PMD_SLEEP : PMD_IDLE, CX, PET_GROUND, now, true, true, 5);
+  else drawPet();
+  drawPoops();
+  gfx->fillRect(0, 312, 466, 154, gNight ? UI_BG_NIGHT : UI_BG_DAY);
+
+  uint8_t n = pet.items[IT_REVIVE];
+  gfx->fillRoundRect(DIE_BOX_X, DIE_BOX_Y, DIE_BOX_W, DIE_BOX_H, 16, UI_WHITE);
+  gfx->drawRoundRect(DIE_BOX_X, DIE_BOX_Y, DIE_BOX_W, DIE_BOX_H, 16, UI_INK);
+  char q[48];
+  snprintf(q, sizeof(q), T(S_DYING_FMT), nm);
+  gfx->setTextColor(UI_INK);
   setSize(2);
-  setCur(centerX(buf, 2), y + h / 2 - 8);
-  printT(buf);
+  setCur(centerX(q, 2), DIE_BOX_Y + 14);
+  printT(q);
+  char a[48];
+  if (n) snprintf(a, sizeof(a), T(S_USE_REVIVE_FMT), (unsigned)n);
+  else snprintf(a, sizeof(a), "%s", T(S_NO_REVIVES));
+  gfx->setTextColor(n ? UI_INK : BOX_NOTE_INK);
+  setCur(centerX(a, 2), DIE_BOX_Y + 38);
+  printT(a);
+  if (n) {
+    gfx->fillRoundRect(DIE_YES_X, DIE_BTN_Y, DIE_BTN_W, DIE_BTN_H, 12, UI_BAR_OK);
+    gfx->setTextColor(UI_WHITE);
+    setCur(DIE_YES_X + (DIE_BTN_W - textW(T(S_YES), 2)) / 2, DIE_BTN_Y + 14);
+    printT(T(S_YES));
+    gfx->fillRoundRect(DIE_NO_X, DIE_BTN_Y, DIE_BTN_W, DIE_BTN_H, 12, UI_BAR_BAD);
+    setCur(DIE_NO_X + (DIE_BTN_W - textW(T(S_NO), 2)) / 2, DIE_BTN_Y + 14);
+    printT(T(S_NO));
+  } else {
+    gfx->fillRoundRect(DIE_OK_X, DIE_BTN_Y, DIE_BTN_W, DIE_BTN_H, 12, UI_TRACK);
+    gfx->setTextColor(UI_INK);
+    setCur(DIE_OK_X + (DIE_BTN_W - textW(T(S_OK), 2)) / 2, DIE_BTN_Y + 14);
+    printT(T(S_OK));
+  }
+}
+
+static bool inDieBtn(int16_t x, int16_t y, int bx) {
+  return x >= bx && x <= bx + DIE_BTN_W && y >= DIE_BTN_Y && y <= DIE_BTN_Y + DIE_BTN_H;
+}
+
+void dyingTap(int16_t x, int16_t y) {
+  if (pet.items[IT_REVIVE]) {
+    if (inDieBtn(x, y, DIE_YES_X)) {
+      FxNeedSnap ns = fxSnap();
+      if (pet.revive()) {
+        Serial.printf("REVIVE ok, left=%u\n", pet.items[IT_REVIVE]);
+        fxNeeds(ns);  // "+50" en cada barra
+        sfxPlay(SFX_HATCH);
+        revivedMsgUntil = millis() + 5000;
+        fxPose(PMD_POSE, millis(), 1500);
+      }
+    } else if (inDieBtn(x, y, DIE_NO_X)) {
+      Serial.println("REVIVE no");
+      pet.letGo();
+    }
+  } else if (inDieBtn(x, y, DIE_OK_X)) {
+    Serial.println("REVIVE none");
+    pet.letGo();
+  }
 }
 
 // animacion epica de evolucion: halo radial + rayos giratorios + parpadeo del
@@ -6167,6 +6274,9 @@ const char *statusMsg() {
   if (pet.emote() == EMOTE_ANGRY) return T(S_GRUMPY);
   if (pet.emote() == EMOTE_DIZZY) return T(S_DIZZY);
   if (pet.sleeping) return "Zzz...";
+  if (timeLeft(revivedMsgUntil)) return T(S_REVIVED);  // v1.60
+  // abandono (v1.60): el vinculo se apaga, y ya sin el, se muere en DEATH_MIN minutos
+  if (pet.neglected()) return T(pet.bond > 0 ? S_ABANDONED : S_WEAK);
   if (pet.eating()) return T(S_EATING);
   if (pet.showHeart()) return T(S_LIKES);
   if (pet.fullness < 25) return T(S_HUNGRY);

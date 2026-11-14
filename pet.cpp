@@ -20,6 +20,7 @@ void Pet::begin() {
   }
   boxBoot();  // la caja (v1.37): la lee y termina o deshace un movimiento que corto la luz
   // guardado anterior a la caja: el bicho de ahora recibe su identidad (FR-BOX.11)
+  if (dying && (isEgg() || vacant)) dying = false;  // v1.60: solo se muere un bicho nacido
   if (!isEgg() && !uid) {
     uid = newUid();
     prefs.putUInt("uid", uid);
@@ -32,7 +33,9 @@ void Pet::begin() {
 // lo comun de empezar con un huevo y de quedarse con la casa vacia: nadie, a cero
 void Pet::resetHome() {
   ceremony = CER_NONE;
-  neglectTicks = 0;
+  neglectMin = deathMin = 0;
+  dying = false;
+  deathEgg = 0;
   weight = 0;
   speciesId = -1;
   prevSpeciesId = -1;
@@ -49,7 +52,7 @@ void Pet::resetHome() {
   sleeping = false;
 }
 
-void Pet::newEgg(bool saveNow) {
+void Pet::newEgg(bool saveNow, int16_t heir) {
   resetHome();
   vacant = false;
   if (eggHeldFlag) {
@@ -60,6 +63,7 @@ void Pet::newEgg(bool saveNow) {
     starterPick = false;
   } else {
     eggTarget = pickEggSpecies();  // especie oculta segun rareza y pokedex
+    if (heir > 0) eggTarget = heir;  // el huevo que deja al morir (v1.60): despues del sorteo, como FR-3.15
     starterPick = (registeredCount() == 0);  // primera partida: el jugador elige inicial
     // amuleto shiny de la mochila: lo gasta este huevo. No el inicial, ni
     // pickEggSpecies(), que tambien usa la simulacion de tiradas (comando EGGS).
@@ -98,8 +102,21 @@ void Pet::freeHome() {
 // - Sin huevos y sin nadie en la caja, un huevo de regalo a la mochila: nunca se acaba sin bicho,
 //   sin huevo y sin nadie a quien despertar.
 void Pet::endLife(uint8_t cer) {
+  int16_t heir = (cer == CER_DEATH) ? deathEgg : 0;  // antes de que resetHome lo borre
+  if (cer == CER_DEATH) lastEnd = CER_DEATH;  // aqui y no al elegir: un corte a mitad vuelve al dialogo
   unwrapGifts();  // v1.55: sin bicho no hay quien los abra (un huevo envuelto evita el de regalo)
   if (cer == CER_FAREWELL) giveFound(IT_EGG, true);
+  if (heir > 0) {
+    // muerte con huevo (v1.60): el suyo va derecho a casa. El que esperaba en la incubadora, a la
+    // mochila; si esta llena, se pierde y lo dice (como el premio de la despedida)
+    if (eggHeldFlag) {
+      eggHeldFlag = false;
+      if (items[IT_EGG] < ITEM_MAX) items[IT_EGG]++;
+      else queueFound(IT_EGG, true, false);
+    }
+    newEgg(true, heir);
+    return;
+  }
   if (eggHeldFlag) {
     if (items[IT_EGG] >= ITEM_MAX) {
       newEgg();
@@ -119,7 +136,7 @@ bool Pet::boxHasPets() const {
 }
 
 bool Pet::hatchFromBag() {
-  if (!vacant || !items[IT_EGG] || ceremony != CER_NONE) return false;
+  if (!vacant || !items[IT_EGG] || busyEnding()) return false;
   eggToHome(true);
   return true;
 }
@@ -173,7 +190,7 @@ void Pet::syncClock(uint32_t nowEpoch) {
   lastSeenEpoch = nowEpoch;
   if (nowEpoch == 0) return;
   uint32_t mins = (seen && nowEpoch > seen) ? (nowEpoch - seen) / 60 : 0;
-  if (mins < 2 || ceremony != CER_NONE || starterPick || vacant) {
+  if (mins < 2 || busyEnding() || starterPick || vacant) {
     save();  // primera vez, sin tiempo que aplicar, aun eligiendo inicial o sin nadie en casa
     return;
   }
@@ -225,7 +242,7 @@ void Pet::update(uint32_t nowMs) {
 }
 
 void Pet::tick() {
-  if (ceremony != CER_NONE) return;  // el tiempo se detiene en la despedida
+  if (busyEnding()) return;  // el tiempo se detiene en la despedida
   if (vacant) return;                // casa vacia: nadie que envejezca ni que eclosione
   if (starterPick) return;  // la partida no empieza hasta elegir inicial: si el
                             // tiempo corriera aqui, el huevo eclosionaria solo a
@@ -297,12 +314,19 @@ void Pet::tick() {
 
   checkMedals();  // la evolucion la dispara el usuario (canEvolveNow + tap), no el tick
 
-  // abandono total: con TODO a cero durante una hora queda lista para escaparse;
-  // NO se va sola, la dispara el usuario con el boton (final triste, lo presencia)
+  // abandono (v1.60): con TODO a cero el vinculo se apaga (10 cada 3 min: de 100 a 0 en 30) y, ya a
+  // cero, en DEATH_MIN minutos mas se muere. Un solo cuidado para la cuenta; lo perdido no vuelve
   if (fullness == 0 && joy == 0 && energy == 0 && hygiene == 0) {
-    if (neglectTicks < RUNAWAY_TICKS) neglectTicks++;
+    if (bond > 0) {
+      uint8_t d = (neglectMin % 3 == 0) ? 4 : 3;
+      bond = bond > d ? bond - d : 0;
+      if (neglectMin < 255) neglectMin++;
+    } else if (++deathMin >= DEATH_MIN) {
+      startDying();
+      return;
+    }
   } else {
-    neglectTicks = 0;  // un solo cuidado la salva
+    neglectMin = deathMin = 0;
   }
 
   // ciclo completo (forma final + 7 dias): la despedida NO salta sola; queda
@@ -347,7 +371,7 @@ int16_t Pet::pickEggSpecies() {
   }
 
   uint8_t tier = R_COMUN;
-  if (lastEnd != CER_RUNAWAY) {
+  if (lastEnd != CER_RUNAWAY && lastEnd != CER_DEATH) {  // tras una escapada o una muerte, solo comunes
     bool blessed = (lastEnd == CER_FAREWELL);
     int rare = (blessed ? 45 : 27) + careBonus();
     int leg = (registeredCount() >= 25) ? (blessed ? 10 : 3) + careBonus() / 3 : 0;
@@ -388,7 +412,7 @@ int Pet::careBonus() const {
 // primer cuidado del dia: avanza la racha y afianza el vinculo. saveNow=false
 // para los eventos del IMU (la meta de pasos): marca el guardado y no escribe.
 void Pet::registerCare(bool saveNow) {
-  if (isEgg() || ceremony != CER_NONE) return;
+  if (isEgg() || busyEnding()) return;
   uint32_t d = today();
   if (d == 0 || d == lastCareDay) return;  // sin reloj, o ya conto hoy
   if (lastCareDay == 0 || d == lastCareDay + 1) {
@@ -487,18 +511,12 @@ uint16_t Pet::registeredCount() const {
 // forma final que ya cumplio su ciclo (7 dias): lista para despedirse. La
 // despedida la dispara el usuario con el boton (no salta sola, para que la vea)
 bool Pet::canFarewellNow() const {
-  return !isEgg() && !sleeping && ceremony == CER_NONE &&
+  return !isEgg() && !sleeping && !busyEnding() &&
          DEX_TBL[speciesId].evolvesTo == 0 && ageMinutes >= FAREWELL_AGE_MIN;
 }
 
-// abandono total durante 1h: lista para escaparse. La dispara el usuario con el
-// boton (final triste); cuidarla un solo tick la salva (neglectTicks se resetea)
-bool Pet::canRunawayNow() const {
-  return !isEgg() && !sleeping && ceremony == CER_NONE && neglectTicks >= RUNAWAY_TICKS;
-}
-
 void Pet::startFarewell() {
-  if (isEgg() || ceremony != CER_NONE) return;
+  if (isEgg() || busyEnding()) return;
   lastEnd = CER_FAREWELL;
   ceremony = CER_FAREWELL;
   ceremonyUntil = millis() + CEREMONY_MS;
@@ -507,17 +525,66 @@ void Pet::startFarewell() {
   save();
 }
 
-void Pet::startRunaway() {
-  if (isEgg() || ceremony != CER_NONE) return;
-  lastEnd = CER_RUNAWAY;
-  ceremony = CER_RUNAWAY;
-  ceremonyUntil = millis() + CEREMONY_MS;
+// se muere de abandono (v1.60): el tiempo se para (tick) y la UI pregunta si usar un Revivir. El huevo
+// que deja se sortea ya y se guarda: reiniciar no lo vuelve a tirar. Se guarda al momento: un corte de
+// luz vuelve al dialogo, no al bicho vivo
+void Pet::startDying() {
+  if (isEgg() || busyEnding() || starterPick) return;
+  dying = true;
+  sleeping = false;
+  neglectMin = deathMin = 0;
+  deathEgg = 0;
+  if (level() >= DEATH_EGG_LEVEL && random(100) < DEATH_EGG_ODDS) {
+    uint8_t b = DEX_TBL[speciesId].base;
+    deathEgg = b ? b : speciesId;  // la primera forma de su linea: nace bebe
+  }
   sfxPlay(SFX_BYE);
   save();
 }
 
+// un Revivir lo salva: las necesidades a la mitad, el vinculo sigue a cero (el precio del abandono) y
+// cuenta como un descuido
+bool Pet::revive() {
+  if (!dying || ceremony != CER_NONE || !items[IT_REVIVE]) return false;
+  items[IT_REVIVE]--;
+  dying = false;
+  deathEgg = 0;
+  neglectMin = deathMin = 0;
+  fullness = joy = energy = hygiene = REVIVE_NEEDS;
+  if (careMistakes < 255) careMistakes++;
+  mistakeCooldown = 60;
+  heartUntil = millis() + HEART_MS;
+  save();
+  return true;
+}
+
+// sin Revivir (o sin querer usarlo): la ceremonia del final. dying sigue hasta endLife: un corte de
+// luz durante la ceremonia (que no se guarda) vuelve al dialogo
+void Pet::letGo() {
+  if (!dying || ceremony != CER_NONE) return;
+  ceremony = CER_DEATH;
+  ceremonyUntil = millis() + CEREMONY_MS;
+  sfxPlay(SFX_BYE);
+}
+
+void Pet::dbgNeglect(uint16_t m) {
+  if (isEgg() || busyEnding()) return;
+  fullness = joy = energy = hygiene = 0;
+  if (m <= BOND_FADE_MIN) {
+    neglectMin = m;
+    deathMin = 0;
+    uint16_t lost = (m / 3) * 10 + ((m % 3) ? 4 : 0) + ((m % 3) == 2 ? 3 : 0);
+    bond = 100 > lost ? 100 - lost : 0;
+  } else {
+    neglectMin = BOND_FADE_MIN;
+    bond = 0;
+    deathMin = (m - BOND_FADE_MIN) > DEATH_MIN ? DEATH_MIN : m - BOND_FADE_MIN;
+  }
+  save();
+}
+
 void Pet::release() {
-  if (isEgg() || ceremony != CER_NONE) return;
+  if (isEgg() || busyEnding()) return;
   lastEnd = CER_RELEASE;
   ceremony = CER_RELEASE;
   ceremonyUntil = millis() + CEREMONY_MS;
@@ -555,7 +622,7 @@ void Pet::hatch() {
 // (ninguna estadistica por debajo de 40). NO evoluciona sola: la dispara el
 // usuario tocando al bicho (evolve()), para que vea la transformacion.
 bool Pet::canEvolveNow() const {
-  if (isEgg() || sleeping || ceremony != CER_NONE) return false;
+  if (isEgg() || sleeping || busyEnding()) return false;
   const DexEntry &d = DEX_TBL[speciesId];
   if (d.evolvesTo == 0) return false;
   return level() >= (uint16_t)d.evolveLevel + careMistakes && lowestStat() >= 40;
@@ -590,7 +657,7 @@ void Pet::feed() {
 }
 
 void Pet::feedBerry(uint8_t color) {
-  if (ceremony != CER_NONE) return;
+  if (busyEnding()) return;
   if (isEgg() || sleeping) return;
   if (lovesBerry(color)) {
     fullness = clamp100(fullness + 35);
@@ -621,7 +688,7 @@ bool Pet::eatCake() {
 }
 
 void Pet::playResult(uint8_t score) {
-  if (ceremony != CER_NONE || isEgg()) return;
+  if (busyEnding() || isEgg()) return;
   uint8_t v = trSpe + score / 5;  // jugar entrena la velocidad
   trSpe = v > 100 ? 100 : v;
   joy = clamp100(joy + 5 + (score > 15 ? 30 : score * 2));
@@ -638,7 +705,7 @@ void Pet::playResult(uint8_t score) {
 
 // saco de entrenamiento: los golpes entrenan la fuerza. Devuelve la subida.
 uint8_t Pet::trainStrength(uint16_t hits) {
-  if (ceremony != CER_NONE || isEgg()) return 0;
+  if (busyEnding() || isEgg()) return 0;
   uint8_t gain = hits / 4;          // ~4 golpes = 1 punto de entrenamiento
   if (gain > 18) gain = 18;         // tope por sesion: la FUE se forja a fuego lento
   uint8_t antes = trAtk;
@@ -663,7 +730,7 @@ uint8_t Pet::trainStrength(uint16_t hits) {
 // no da nada). La concentracion entrena la defensa y el agua lava al bicho. Sentado no quema
 // peso. Devuelve los puntos de DEF que de verdad entraron.
 uint8_t Pet::zenResult(uint16_t focusTenths, uint16_t driftTenths) {
-  if (ceremony != CER_NONE || isEgg()) return 0;
+  if (busyEnding() || isEgg()) return 0;
   uint8_t antes = trDef;
   uint16_t v = (uint16_t)trDef + zenTotalGain(focusTenths, driftTenths);
   trDef = v > 100 ? 100 : (uint8_t)v;
@@ -683,7 +750,7 @@ uint8_t Pet::zenResult(uint16_t focusTenths, uint16_t driftTenths) {
 // carrera en trineo (DASH, docs/NEW_GAMES.md FR-DASH.17): las filas esquivadas entrenan la
 // velocidad (con el tope del saco) y queman algo de peso. Devuelve los puntos que de verdad entraron.
 uint8_t Pet::dashResult(uint16_t dodged) {
-  if (ceremony != CER_NONE || isEgg()) return 0;
+  if (busyEnding() || isEgg()) return 0;
   uint8_t antes = trSpe;
   uint16_t v = (uint16_t)trSpe + dashGain(dodged);
   trSpe = v > 100 ? 100 : (uint8_t)v;
@@ -702,7 +769,7 @@ uint8_t Pet::dashResult(uint16_t dodged) {
 }
 
 void Pet::play() {
-  if (ceremony != CER_NONE) return;
+  if (busyEnding()) return;
   if (isEgg() || sleeping) return;
   joy = clamp100(joy + 25);
   energy = clamp100(energy - 10);
@@ -714,7 +781,7 @@ void Pet::play() {
 }
 
 void Pet::toggleLight() {
-  if (ceremony != CER_NONE) return;
+  if (busyEnding()) return;
   if (isEgg()) return;
   sleeping = !sleeping;
   save();
@@ -738,7 +805,7 @@ void Pet::addPoop() {
 // v1.58: una caca, de una en una. Cuenta como cuidado del dia (racha), pero sin vinculo (el baño da
 // el suyo); no escribe en flash a cada toque
 bool Pet::cleanPoop(uint8_t slot) {
-  if (ceremony != CER_NONE || isEgg() || slot >= POOP_MAX) return false;
+  if (busyEnding() || isEgg() || slot >= POOP_MAX) return false;
   uint8_t m = poopSlots();
   if (!(m & (1 << slot))) return false;
   poopMask = m & ~(1 << slot);
@@ -750,7 +817,7 @@ bool Pet::cleanPoop(uint8_t slot) {
 }
 
 void Pet::clean() {
-  if (ceremony != CER_NONE) return;
+  if (busyEnding()) return;
   poops = 0;
   poopMask = 0;
   hygiene = 100;
@@ -760,7 +827,7 @@ void Pet::clean() {
 }
 
 void Pet::caress() {
-  if (ceremony != CER_NONE) return;
+  if (busyEnding()) return;
   if (isEgg() || sleeping) return;
   joy = clamp100(joy + 5);
   heartUntil = millis() + HEART_MS;
@@ -805,7 +872,7 @@ void Pet::addSteps(uint32_t n, uint32_t day) {
   stepsTotal += n;
   pendingSave = true;  // nunca save(): la escritura a flash congela ~1 s
 
-  bool rewarded = !isEgg() && !sleeping && ceremony == CER_NONE && !starterPick;
+  bool rewarded = !isEgg() && !sleeping && !busyEnding() && !starterPick;
   if (rewarded) {
     uint32_t j = joyRem + n;
     joyRem = j % STEPS_PER_JOY;
@@ -1009,7 +1076,7 @@ bool Pet::canUseItem(uint8_t it) const {
   // el amuleto, el huevo y el Revivir no se usan a mano: uno se lleva, otro va a casa cuando queda
   // libre, y el Revivir se ofrece cuando el bicho se muere (v1.59)
   if (it >= IT_COUNT || it == IT_CHARM || it == IT_EGG || it == IT_REVIVE || !items[it]) return false;
-  if (isEgg() || sleeping || ceremony != CER_NONE) return false;
+  if (isEgg() || sleeping || busyEnding()) return false;
   if (it == IT_PROTEIN) return trAtk < 100;
   if (it == IT_IRON) return trDef < 100;
   if (it == IT_CARBOS) return trSpe < 100;
@@ -1046,7 +1113,7 @@ bool Pet::useItem(uint8_t it) {
 // agitarlo dormido con la pantalla encendida: se despierta de mal humor. Sin
 // credito de cuidado; un segundo despertar en menos de 60 s no resta mas.
 void Pet::wakeGrumpy() {
-  if (isEgg() || !sleeping || ceremony != CER_NONE) return;
+  if (isEgg() || !sleeping || busyEnding()) return;
   sleeping = false;
   uint32_t now = millis();
   if (!grumpied || now - lastGrumpy >= GRUMPY_COOLDOWN_MS) {
@@ -1062,7 +1129,7 @@ void Pet::wakeGrumpy() {
 // agitarlo despierto: se marea. 3 sacudidas en 2 min restan felicidad, como
 // mucho una vez cada 10 min. El huevo solo se tambalea.
 void Pet::shaken() {
-  if (ceremony != CER_NONE) return;
+  if (busyEnding()) return;
   if (isEgg()) {
     if (!vacant) startEmote(EMOTE_WOBBLE);
     return;
@@ -1106,7 +1173,7 @@ uint8_t Pet::rollBattleItem() {
 }
 
 uint8_t Pet::battleDrop(bool won) {
-  if (!won || isEgg() || ceremony != CER_NONE) return IT_COUNT;
+  if (!won || isEgg() || busyEnding()) return IT_COUNT;
   uint32_t day = today();
   if (bdropDay != day) {
     bdropDay = day;
@@ -1121,7 +1188,7 @@ uint8_t Pet::battleDrop(bool won) {
 }
 
 uint8_t Pet::practiceDone() {
-  if (isEgg() || ceremony != CER_NONE || !practiceRewardReady()) return 0;
+  if (isEgg() || busyEnding() || !practiceRewardReady()) return 0;
   practiceRewarded = true;
   lastPracticeReward = millis();
   uint8_t before = joy;
@@ -1132,7 +1199,7 @@ uint8_t Pet::practiceDone() {
 
 // boca abajo de noche: a dormir, como el boton de luz pero sin escribir ya en flash
 void Pet::sleepDeferred() {
-  if (ceremony != CER_NONE || isEgg() || sleeping) return;
+  if (busyEnding() || isEgg() || sleeping) return;
   sleeping = true;
   pendingSave = true;
 }
@@ -1173,6 +1240,11 @@ void Pet::save() {
   prefs.putUChar("mist", careMistakes);
   prefs.putBool("sleep", sleeping);
   prefs.putUChar("lend", lastEnd);
+  // abandono (v1.60): la cuenta y el dialogo de la muerte sobreviven a un reinicio
+  prefs.putUChar("ngl", neglectMin);
+  prefs.putUChar("dth", deathMin);
+  prefs.putBool("dying", dying);
+  prefs.putShort("degg", deathEgg);
   if (lastSeenEpoch) prefs.putUInt("seen", lastSeenEpoch);
   prefs.putBytes("dexreg", dexReg, sizeof(dexReg));
   prefs.putUShort("strk", streak);
@@ -1268,6 +1340,12 @@ void Pet::load() {
   careMistakes = prefs.getUChar("mist", 0);
   sleeping = prefs.getBool("sleep", false);
   lastEnd = prefs.getUChar("lend", CER_NONE);
+  neglectMin = prefs.getUChar("ngl", 0);
+  deathMin = prefs.getUChar("dth", 0);
+  if (deathMin > DEATH_MIN) deathMin = DEATH_MIN;
+  dying = prefs.getBool("dying", false);
+  deathEgg = prefs.getShort("degg", 0);
+  if (deathEgg < 0 || deathEgg > 151) deathEgg = 0;
   prefs.getBytes("dexreg", dexReg, sizeof(dexReg));
   streak = prefs.getUShort("strk", 0);
   bestStreak = prefs.getUShort("bstrk", 0);
@@ -1510,7 +1588,9 @@ void Pet::fromRecord(const PetRecord &r) {
   medals = r.medals;
   ceremony = CER_NONE;
   mistakeCooldown = 0;
-  neglectTicks = 0;
+  neglectMin = deathMin = 0;
+  dying = false;
+  deathEgg = 0;
   goodTicks = 0;
   petBondUntil = 0;
   evoDeclinedLv = 0;

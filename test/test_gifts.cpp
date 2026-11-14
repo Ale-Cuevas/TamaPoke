@@ -58,7 +58,7 @@ TEST(gifts, dormido_huevo_o_ceremonia_no_se_abren) {
   CHECK_EQ(p.openGift(), (uint8_t)IT_COUNT);
   CHECK_EQ(p.giftCount(), (uint8_t)1);
   p.toggleLight();
-  p.startRunaway();
+  p.startDying();  // v1.60 (era la escapada)
   CHECK(!p.canOpenGift());
 
   Pet e;  // un huevo en casa

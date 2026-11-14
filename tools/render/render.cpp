@@ -150,6 +150,8 @@ static void resetUi() {
   choiceKind = 0;
   pet.sleeping = false;
   pet.ceremony = CER_NONE;
+  pet.dbgClearDying();  // v1.60: nadie empieza muriendose
+  revivedMsgUntil = bagReviveHintUntil = 0;
   // paseo e IMU (v1.20)
   itemConfirm = 0;
   foundShown = false;
@@ -356,6 +358,27 @@ static const std::vector<Scene> &scenes() {
     { "home-forest", [] { pokemon(1, 9); pet.dbgSetPoops(2); pet.fullness = 20; } },
     // v1.58: a tap on a poop cleans just that one (the middle one here: sparkles where it was, "+10" HYG)
     { "poop-tap", [] { pokemon(1, 9); pet.dbgSetPoops(3); pet.hygiene = 40; onTap(116, 282); }, 3 },
+    // v1.60: neglect. The bond fades with all four needs at 0, then "very weak", then the Revive dialog
+    { "abandoned", [] { pokemon(4, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.bond = 60; } },
+    { "abandoned-es", [] { pokemon(4, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.bond = 60;
+                           setLang(LANG_ES); applyLangFont(); } },
+    { "weak", [] { pokemon(4, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.bond = 0; } },
+    { "dying-revive", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.dbgSetPoops(2);
+                           pet.items[IT_REVIVE] = 3; pet.startDying(); }, 2 },
+    { "dying-revive-es", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.items[IT_REVIVE] = 3;
+                              pet.startDying(); setLang(LANG_ES); applyLangFont(); }, 2 },
+    { "dying-none", [] { pokemon(25, 21); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.startDying(); }, 2 },
+    { "dying-none-es", [] { pokemon(25, 21); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.startDying();
+                            setLang(LANG_ES); applyLangFont(); }, 2 },
+    { "revived", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.items[IT_REVIVE] = 3;
+                      pet.startDying(); onTap(DIE_YES_X + 50, DIE_BTN_Y + 20); }, 3 },
+    { "death-ceremony", [] { pokemon(25, 13); pet.startDying(); pet.letGo(); gHostMillis += 4000; }, 2 },
+    { "death-egg", [] { pokemon(6, 13); pet.setLevel(DEATH_EGG_LEVEL);
+                        for (int i = 0; i < 50 && !pet.deathEggSpecies(); i++) { pet.dbgClearDying(); pet.startDying(); }
+                        pet.letGo(); gHostMillis += 8200; }, 2 },
+    { "death-egg-es", [] { pokemon(6, 13); pet.setLevel(DEATH_EGG_LEVEL);
+                           for (int i = 0; i < 50 && !pet.deathEggSpecies(); i++) { pet.dbgClearDying(); pet.startDying(); }
+                           pet.letGo(); gHostMillis += 8200; setLang(LANG_ES); applyLangFont(); }, 2 },
     { "poop-gap", [] { pokemon(1, 9); pet.dbgSetPoops(3); onTap(116, 282); gHostMillis += 2000; } },
     // the swaying tall-grass meadow (v1.26): mid-gust, at dusk
     { "home-gust", [] { pokemon(19, 11); gHostMillis = 114000; } },  // wind.h: the gust is mid-screen at 6 s of 12

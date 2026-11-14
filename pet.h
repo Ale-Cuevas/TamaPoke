@@ -14,7 +14,16 @@
 #define EVOLVE_ANIM_MS 5200UL              // animacion de evolucion (mas larga = mas epica)
 #define CEREMONY_MS 10000UL                // duracion de la despedida en pantalla
 #define FAREWELL_AGE_MIN (3UL * 24 * 60)   // se despide a los 3 dias de juego (en forma final)
-#define RUNAWAY_TICKS 60                   // se escapa tras 1 h con TODO a cero
+// abandono (v1.60, sustituye a la escapada): con las cuatro necesidades a cero (despierto y con la
+// placa encendida), el vinculo se apaga del todo en BOND_FADE_MIN minutos (-4, -3, -3...: 10 cada 3).
+// Ya a cero, DEATH_MIN minutos mas y se muere: un dialogo ofrece un Revivir. Un solo cuidado (cualquier
+// necesidad por encima de 0) para la cuenta; el vinculo perdido no vuelve. Desde el nivel
+// DEATH_EGG_LEVEL deja un huevo de su linea con un DEATH_EGG_ODDS %.
+#define BOND_FADE_MIN 30
+#define DEATH_MIN 30
+#define DEATH_EGG_LEVEL 50
+#define DEATH_EGG_ODDS 60
+#define REVIVE_NEEDS 50                    // revivido: comida, felicidad, energia y limpieza a 50
 // cacas (v1.58): probabilidad (%) por minuto despierto con la comida por encima de 40. Era 15 (una
 // cada ~7 min); con 5, una cada ~20 min. Cada una se limpia tocandola (POOP_TAP_HYG de limpieza)
 // o todas a la vez con el baño
@@ -50,7 +59,8 @@ static inline uint32_t timeLeft(uint32_t deadline) {
 }
 
 // ceremonias de fin de ciclo
-enum : uint8_t { CER_NONE = 0, CER_FAREWELL, CER_RUNAWAY, CER_RELEASE };
+// CER_RUNAWAY ya no se usa (v1.60, la muerte la sustituye), pero un guardado puede traerlo en "lend"
+enum : uint8_t { CER_NONE = 0, CER_FAREWELL, CER_RUNAWAY, CER_RELEASE, CER_DEATH };
 
 enum PetMood : uint8_t { MOOD_HAPPY, MOOD_SAD, MOOD_EATING, MOOD_SLEEPING };
 
@@ -254,12 +264,27 @@ public:
   void eggTap();  // tocar el huevo: 3 toques y eclosiona
   // un huevo en casa: el que esperaba en la incubadora, o uno nuevo (que se sortea ahora). No mira
   // la mochila: quien libera la casa usa freeHome(). saveNow=false solo marca el guardado (pasos)
-  void newEgg(bool saveNow = true);
+  // heir (v1.60): la especie del huevo que deja un bicho al morir (0 = la que salga en el sorteo)
+  void newEgg(bool saveNow = true, int16_t heir = 0);
   void release();  // soltar (pulsacion larga + confirmar)
   void syncClock(uint32_t nowEpoch);  // aplica el tiempo transcurrido apagado
   void setClock(uint32_t nowEpoch);   // fija la hora sin aplicar progresion
   void startFarewell();  // tambien usable desde la consola serie (BYE)
-  void startRunaway();   // tambien usable desde la consola serie (RUN)
+  // muerte por abandono (v1.60). startDying: se esta muriendo (tambien serie DIE); el tiempo se
+  // para y la UI pregunta. revive gasta un Revivir; letGo empieza la ceremonia del final
+  void startDying();
+  bool revive();
+  void letGo();
+  bool isDying() const { return dying; }
+  // ni ceremonia ni muriendose: lo que exige un bicho que pueda hacer cosas
+  bool busyEnding() const { return ceremony != CER_NONE || dying; }
+  // las cuatro necesidades a cero, despierto: el vinculo se apaga (y luego se muere)
+  bool neglected() const {
+    return !isEgg() && !sleeping && !busyEnding() && fullness == 0 && joy == 0 && energy == 0 && hygiene == 0;
+  }
+  uint8_t neglectMinutes() const { return neglectMin; }  // con el vinculo apagandose
+  uint8_t deathMinutes() const { return deathMin; }      // ya sin vinculo, hacia DEATH_MIN
+  int16_t deathEggSpecies() const { return deathEgg; }   // 0 = no deja huevo
 
   // sin bicho nacido: un huevo O la casa vacia (v1.39; isVacant() distingue)
   bool isEgg() const { return speciesId < 0; }
@@ -274,7 +299,7 @@ public:
   uint8_t giftCount() const { return giftN; }
   uint8_t giftItem(uint8_t i) const { return i < giftN ? gifts[i] : (uint8_t)IT_COUNT; }
   uint8_t giftEggs() const;
-  bool canOpenGift() const { return giftN && !isEgg() && !sleeping && ceremony == CER_NONE && !starterPick; }
+  bool canOpenGift() const { return giftN && !isEgg() && !sleeping && !busyEnding() && !starterPick; }
   // abre el primero: a la mochila, el bicho se alegra (corazon) y sale el aviso "REGALO!". Devuelve el
   // objeto (IT_COUNT si no se pudo abrir). *full: no cabia en la mochila y el regalo sigue ahi
   uint8_t openGift(bool *full = nullptr);
@@ -290,7 +315,6 @@ public:
   bool canEvolveNow() const;  // condiciones de evolucion cumplidas (lista)
   void evolve();              // dispara la transformacion (la llama un toque del usuario)
   bool canFarewellNow() const;  // forma final + 7 dias: lista para despedirse (boton)
-  bool canRunawayNow() const;   // abandono total 1h: lista para escaparse (boton triste)
   // el usuario decide en un dialogo; "mantener/quedaros" pospone y re-ofrece luego
   bool wantEvolveButton() const { return canEvolveNow() && level() > evoDeclinedLv; }
   bool wantFarewellButton() const { return canFarewellNow() && ageMinutes >= farDeclinedAge; }
@@ -304,7 +328,11 @@ public:
   void dbgClearGifts() { giftN = 0; }
   void dbgAddPoop() { addPoop(); }  // serie POOP y renderizador
   void dbgSetPoops(uint8_t n) { poops = n > POOP_MAX ? POOP_MAX : n; poopMask = (1 << poops) - 1; }  // renderizador  // renderizador: cada escena empieza sin regalos
-  void dbgRunawayReady() { fullness = joy = energy = hygiene = 0; neglectTicks = RUNAWAY_TICKS; }  // test
+  void dbgAbandon() { fullness = joy = energy = hygiene = 0; }  // serie ABANDON: empieza la cuenta
+  void dbgClearDying() { dying = false; deathEgg = 0; neglectMin = deathMin = 0; }  // renderizador
+  // serie NEGLECT <min>: adelanta la cuenta. Hasta BOND_FADE_MIN, el vinculo como si llevara m minutos
+  // apagandose; por encima, vinculo 0 y m - BOND_FADE_MIN minutos hacia la muerte
+  void dbgNeglect(uint16_t m);
   // uint16_t, no uint8_t: un uint8_t daba la vuelta a 0 en el nivel 256, y eso se
   // alcanza jugando, porque "quedaros juntos" permite posponer la despedida
   // indefinidamente. Se topa en LEVEL_MAX (999) en vez de desbordar.
@@ -386,7 +414,7 @@ public:
 
   // --- combate de practica (Tarea 3a)
   // puede combatir: nacido, despierto, sin ceremonia ni evolucion en curso
-  bool canBattle() const { return !isEgg() && !sleeping && ceremony == CER_NONE && !evolving() && !starterPick; }
+  bool canBattle() const { return !isEgg() && !sleeping && !busyEnding() && !evolving() && !starterPick; }
   // fin de un combate de practica (gane quien gane): +PRACTICE_JOY de felicidad
   // como mucho una vez por hora. Devuelve la felicidad dada (0 si no tocaba).
   // No cuenta en ningun historial de victorias.
@@ -422,7 +450,7 @@ public:
   const PetRecord &boxRecord(uint8_t k) const { return boxRec[k < BOX_SLOTS ? k : 0]; }  // solo si BOX_OK
   uint8_t boxUsed() const;   // huecos ocupados (danados incluidos)
   // se puede mover algo: sin despedida, evolucion ni eleccion de inicial
-  bool canBoxMove() const { return ceremony == CER_NONE && !evolving() && !starterPick; }
+  bool canBoxMove() const { return !busyEnding() && !evolving() && !starterPick; }
   bool canStore(uint8_t k) const { return boxState(k) == BOX_EMPTY && k < BOX_SLOTS && !isEgg() && canBoxMove(); }
   bool canWake(uint8_t k) const { return boxState(k) == BOX_OK && canBoxMove(); }
   // guarda al bicho en el hueco k (vacio) y deja en su sitio el huevo guardado, o uno nuevo
@@ -456,7 +484,11 @@ private:
   uint16_t evoDeclinedLv = 0;   // "mantener forma": no ofrecer evolucion hasta subir de nivel
   uint32_t farDeclinedAge = 0;  // "quedaros juntos": no ofrecer despedida hasta esta edad
   bool starterPick = false;     // primera partida: esperando que el jugador elija inicial
-  uint8_t neglectTicks = 0;
+  // abandono (v1.60): minutos con todo a cero apagando el vinculo, y ya sin el, hacia la muerte.
+  // Se guardan ("ngl", "dth"): un reinicio no los pone a cero
+  uint8_t neglectMin = 0, deathMin = 0;
+  bool dying = false;          // "dying": se esta muriendo, el dialogo espera
+  int16_t deathEgg = 0;        // "degg": sorteado al empezar a morirse (un reinicio no lo repite)
   uint8_t poopMask = 0;    // huecos de las cacas (v1.58, ver poopSlots)
   void addPoop();
   uint16_t goodTicks = 0;  // racha bien cuidado: forja la DEF

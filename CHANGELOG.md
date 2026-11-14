@@ -8,6 +8,36 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.60] - 2026-11-14
+
+### Changed
+
+- **Neglect can kill the pet; the runaway is gone.** With all four needs at 0 (awake, board on), the
+  status says "It feels abandoned..." and the **bond drains from full to 0 in 30 minutes** (10 every
+  3 min; a lower bond empties sooner). With the bond at 0 ("It's very weak!"), **30 more minutes** and
+  the pet is dying. Feeding, playing or anything that lifts a need above 0 stops the count, but the
+  bond lost stays lost. Asleep or with the board off it never counts (the needs don't reach 0 there),
+  and the count survives a restart.
+- **The Revive dialog.** When the pet is dying the bye sound plays, any open screen closes, and the
+  home shows the pet as a dark silhouette in the rain with a dialog: "X is dying..." and "Use a Revive?
+  (N)". It has no time limit and nothing else works until you answer (USER doesn't close it).
+  - **YES** spends a Revive: FOOD, JOY, ENE and HYG come back to 50, "Revived!", the bond stays at 0
+    and it counts as a slip-up.
+  - **NO**, or **OK** when there are no Revives left, is the end: rain, the pet fades out, "It has passed
+    away...". Then the home is empty, as after any ending (a gift egg with no eggs and nobody in the Box).
+  - A restart while the dialog waits, or in the middle of the ending, comes back to the dialog.
+- **An egg of its line.** From level 50 a death has a 60 % chance of leaving an egg of the pet's
+  first form, which goes straight home ("It left an egg..."). The roll happens when the pet starts
+  dying, so restarting doesn't change it. An egg that was waiting in the incubator goes to the Backpack.
+- A death curses the next random egg (only commons), as the runaway did.
+
+### Removed
+
+- The runaway button ("X feels abandoned...") and its ending. A save that ended in a runaway still
+  gets the commons-only egg.
+- Serial `RUN`. `ABANDON` now just sets the four needs to 0. New: `NEGLECT <min>` (fast-forward the
+  count, 0-60), `DIE` (the dialog now); `STATS` prints `ngl= dth= dying= degg= revive=`.
+
 ## [1.59] - 2026-11-14
 
 ### Added
