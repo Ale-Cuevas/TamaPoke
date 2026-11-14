@@ -1256,6 +1256,34 @@ TEST(death, revivir_gasta_uno_y_devuelve_la_mitad) {
   CHECK_EQ(b.items[IT_REVIVE], (uint8_t)(REVIVE_START - 1));
 }
 
+// revision v1.60: un Revivir que aun esperaba envuelto tambien lo salva (muriendose no se abren)
+TEST(death, un_revivir_envuelto_tambien_vale) {
+  Pet p;
+  makePet(p, 4);
+  p.setRevives(0);
+  CHECK(p.addGift(IT_CAKE));
+  CHECK(p.addGift(IT_REVIVE));
+  p.startDying();
+  CHECK_EQ(p.revivesOwned(), (uint8_t)1);
+  CHECK(p.revive());
+  CHECK(!p.isDying());
+  CHECK_EQ(p.giftCount(), (uint8_t)1);
+  CHECK_EQ(p.giftItem(0), (uint8_t)IT_CAKE);
+  CHECK_EQ(p.revivesOwned(), (uint8_t)0);
+}
+
+TEST(care, las_cacas_de_un_bicho_nuevo_empiezan_por_la_izquierda) {
+  Pet p;
+  makePet(p, 4);
+  p.dbgSetPoops(3);
+  CHECK(p.cleanPoop(0));
+  CHECK(p.cleanPoop(1));  // queda la del hueco 2
+  PetRecord r = p.toRecord();
+  r.poops = 1;
+  p.fromRecord(r);
+  CHECK_EQ(p.poopSlots(), (uint8_t)0b001);
+}
+
 TEST(death, sin_revivir_no_hay_salvacion) {
   Pet p;
   makePet(p, 4);

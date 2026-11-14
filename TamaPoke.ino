@@ -468,6 +468,7 @@ void loop() {
   static bool wasDying = false;
   bool dyingNow = pet.isDying();
   if (dyingNow && !wasDying) closeForDying();
+  if (dyingNow && boxOpen && boxMove == BOXMV_NONE) closeBox();  // empezo a morirse en mitad de un movimiento
   wasDying = dyingNow;
 
   handleTouch();
@@ -1150,7 +1151,7 @@ bool inPetZone(int16_t x, int16_t y) {
 
 // cacas (v1.58): se limpian de una en una tocandolas. Cada una se dibuja a escala 2 en
 // (36 + 46 i, 244); la tinta ocupa ~32x40 px alrededor de (70 + 46 i, 282). Devuelve el hueco
-// tocado o -1. Va antes que la zona del bicho, que pisa las dos primeras
+// tocado o -1. Va antes que la zona del bicho, que pisa las de los huecos 1 y 2
 #define POOP_HIT_R 28
 int poopAt(int16_t x, int16_t y) {
   uint8_t m = pet.poopSlots();
@@ -5618,7 +5619,7 @@ void drawDyingScreen() {
   drawPoops();
   gfx->fillRect(0, 312, 466, 154, gNight ? UI_BG_NIGHT : UI_BG_DAY);
 
-  uint8_t n = pet.items[IT_REVIVE];
+  uint8_t n = pet.revivesOwned();  // tambien los que esperan envueltos
   gfx->fillRoundRect(DIE_BOX_X, DIE_BOX_Y, DIE_BOX_W, DIE_BOX_H, 16, UI_WHITE);
   gfx->drawRoundRect(DIE_BOX_X, DIE_BOX_Y, DIE_BOX_W, DIE_BOX_H, 16, UI_INK);
   char q[48];
@@ -5654,12 +5655,13 @@ static bool inDieBtn(int16_t x, int16_t y, int bx) {
 }
 
 void dyingTap(int16_t x, int16_t y) {
-  if (pet.items[IT_REVIVE]) {
+  if (pet.revivesOwned()) {
     if (inDieBtn(x, y, DIE_YES_X)) {
       FxNeedSnap ns = fxSnap();
       if (pet.revive()) {
         Serial.printf("REVIVE ok, left=%u\n", pet.items[IT_REVIVE]);
         fxNeeds(ns);  // "+50" en cada barra
+        fxMistakeW.reset(pet.careMistakes);  // el descuido que cuenta revivir no salta como "!"
         sfxPlay(SFX_HATCH);
         revivedMsgUntil = millis() + 5000;
         fxPose(PMD_POSE, millis(), 1500);

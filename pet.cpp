@@ -36,6 +36,7 @@ void Pet::resetHome() {
   neglectMin = deathMin = 0;
   dying = false;
   deathEgg = 0;
+  poopMask = 0;
   weight = 0;
   speciesId = -1;
   prevSpeciesId = -1;
@@ -545,8 +546,9 @@ void Pet::startDying() {
 // un Revivir lo salva: las necesidades a la mitad, el vinculo sigue a cero (el precio del abandono) y
 // cuenta como un descuido
 bool Pet::revive() {
-  if (!dying || ceremony != CER_NONE || !items[IT_REVIVE]) return false;
-  items[IT_REVIVE]--;
+  if (!dying || ceremony != CER_NONE) return false;
+  if (items[IT_REVIVE]) items[IT_REVIVE]--;
+  else if (!takeGift(IT_REVIVE)) return false;  // uno que aun esperaba envuelto tambien vale
   dying = false;
   deathEgg = 0;
   neglectMin = deathMin = 0;
@@ -989,6 +991,22 @@ bool Pet::addGift(uint8_t it) {
   gifts[giftN++] = it;
   pendingSave = true;  // como los pasos: el loop guarda con la pantalla atenuada
   return true;
+}
+
+uint8_t Pet::revivesOwned() const {
+  uint8_t n = items[IT_REVIVE];
+  for (uint8_t i = 0; i < giftN; i++) n += gifts[i] == IT_REVIVE;
+  return n;
+}
+
+bool Pet::takeGift(uint8_t it) {
+  for (uint8_t i = 0; i < giftN; i++) {
+    if (gifts[i] != it) continue;
+    for (uint8_t j = i + 1; j < giftN; j++) gifts[j - 1] = gifts[j];
+    giftN--;
+    return true;
+  }
+  return false;
 }
 
 uint8_t Pet::giftEggs() const {
@@ -1573,6 +1591,7 @@ void Pet::fromRecord(const PetRecord &r) {
   energy = r.energy;
   hygiene = r.hygiene;
   poops = r.poops > 3 ? 3 : r.poops;
+  poopMask = (1 << poops) - 1;  // sus cacas, en los primeros huecos
   weight = r.weight;
   satedUntil = 0;  // la tarta no viaja en la caja (v1.54): quien sale de ella no esta lleno
   geneAtk = r.geneAtk;

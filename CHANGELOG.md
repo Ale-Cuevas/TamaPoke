@@ -22,7 +22,8 @@ keeps your Pokémon.
   home shows the pet as a dark silhouette in the rain with a dialog: "X is dying..." and "Use a Revive?
   (N)". It has no time limit and nothing else works until you answer (USER doesn't close it).
   - **YES** spends a Revive: FOOD, JOY, ENE and HYG come back to 50, "Revived!", the bond stays at 0
-    and it counts as a slip-up.
+    and it counts as a slip-up. A Revive still wrapped as a gift on the floor counts too (gifts can't
+    be opened while it's dying).
   - **NO**, or **OK** when there are no Revives left, is the end: rain, the pet fades out, "It has passed
     away...". Then the home is empty, as after any ending (a gift egg with no eggs and nobody in the Box).
   - A restart while the dialog waits, or in the middle of the ending, comes back to the dialog.

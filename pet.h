@@ -276,6 +276,8 @@ public:
   bool revive();
   void letGo();
   bool isDying() const { return dying; }
+  // Revivir a mano: los de la mochila y los que aun esperan envueltos (muriendose no se abren regalos)
+  uint8_t revivesOwned() const;
   // ni ceremonia ni muriendose: lo que exige un bicho que pueda hacer cosas
   bool busyEnding() const { return ceremony != CER_NONE || dying; }
   // las cuatro necesidades a cero, despierto: el vinculo se apaga (y luego se muere)
@@ -508,6 +510,7 @@ private:
   uint8_t bdropToday = 0;      // ...y objetos ganados ese dia (tope BATTLE_DROPS_PER_DAY)
   uint8_t gifts[GIFT_MAX] = { 0 };  // regalos sin abrir (v1.55), en orden de llegada
   uint8_t giftN = 0;
+  bool takeGift(uint8_t it);   // quita un regalo de ese objeto sin abrirlo (el Revivir, v1.60)
   void giveGift(uint8_t it);   // envuelto; con la cola llena, a la mochila con aviso (giveFound)
   void unwrapGifts();          // la casa queda libre: los regalos entran solos en la mochila
   uint16_t eggRem = 0;         // pasos hacia el siguiente huevo (v1.39)...
