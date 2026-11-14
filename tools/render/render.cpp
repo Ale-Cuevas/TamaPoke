@@ -385,7 +385,11 @@ static const std::vector<Scene> &scenes() {
     // v1.53: the Care button (sleep | clean) and the Backpack screen
     { "care-menu", [] { pokemon(133, 12); pet.dbgSetPoops(2); menuKind = MENU_CARE; menuUntil = millis() + 6000; } },
     { "care-menu-asleep", [] { pokemon(133, 23); pet.sleeping = true; menuKind = MENU_CARE; menuUntil = millis() + 6000; } },
-    { "bag", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 1, 1, 2, 3 }); openBag(); } },
+    { "bag", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 1, 1, 2, 3, 3 }); openBag(); } },
+    // v1.59: the Revive (9th slot, 3x3 grid); a tap on it says what it's for (it isn't used by hand)
+    { "bag-revive-hint", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 1, 1, 2, 3, 3 }); openBag(); bagTap(CX + 86, 94 + 2 * 90 + 40); } },
+    { "bag-revive-hint-es", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 1, 1, 2, 3, 3 }); openBag(); bagTap(CX + 86, 94 + 2 * 90 + 40);
+                                 setLang(LANG_ES); applyLangFont(); } },
     // v1.54: the cake in the food menu (with how many are left, grey with none), the pink FOOD bar while
     // it lasts, and a tap on it with none
     { "feed-cake", [] { pokemon(133, 12); pet.items[IT_CAKE] = 3; menuKind = MENU_FEED; menuUntil = millis() + 6000; } },

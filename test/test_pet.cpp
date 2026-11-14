@@ -1438,25 +1438,29 @@ TEST(steps, tope_de_hallazgos_al_dia) {
 TEST(steps, probabilidades_de_cada_objeto) {
   Pet p;
   makeWalker(p);
-  mockForceRandom(39);  // < 40: baya (v1.54: eran 55)
-  p.addSteps(FIND_MIN_STEPS + 39, DIA);
+  mockForceRandom(34);  // < 35: baya (v1.54: eran 55; v1.59: 40)
+  p.addSteps(FIND_MIN_STEPS + 34, DIA);
   CHECK_EQ(p.giftItem(0), (uint8_t)IT_GOLDEN);
-  mockForceRandom(50);  // 40..59: tarta (v1.54)
+  mockForceRandom(50);  // 35..54: tarta (v1.54)
   p.addSteps(FIND_MIN_STEPS + 50, DIA);
   CHECK_EQ(p.giftItem(1), (uint8_t)IT_CAKE);
-  mockForceRandom(75);  // 60..89: vitamina (random(3) forzado = 2: carburante)
+  mockForceRandom(75);  // 55..84: vitamina (random(3) forzado = 2: carburante)
   p.addSteps(FIND_MIN_STEPS + 75, DIA);
   CHECK_EQ(p.giftItem(2), (uint8_t)IT_CARBOS);
-  mockForceRandom(95);  // 90..99: amuleto (otro dia: con cuatro hallazgos se cruzaria la meta de 3000)
-  p.addSteps(FIND_MIN_STEPS + 95, DIA + 1);
+  mockForceRandom(90);  // 85..94: amuleto (otro dia: con cuatro hallazgos se cruzaria la meta de 3000)
+  p.addSteps(FIND_MIN_STEPS + 90, DIA + 1);
   CHECK_EQ(p.giftItem(3), (uint8_t)IT_CHARM);
-  p.addSteps(FIND_MIN_STEPS + 95, DIA + 2);  // otro amuleto: envuelto aun no se sabe que ya hay uno
+  p.addSteps(FIND_MIN_STEPS + 90, DIA + 2);  // otro amuleto: envuelto aun no se sabe que ya hay uno
   CHECK_EQ(p.giftItem(4), (uint8_t)IT_CHARM);
+  mockForceRandom(97);  // 95..99: Revivir (v1.59)
+  p.addSteps(FIND_MIN_STEPS + 97, DIA + 3);
+  CHECK_EQ(p.giftItem(5), (uint8_t)IT_REVIVE);
   while (p.giftCount()) p.openGift();  // al abrirlo, el segundo amuleto se vuelve baya
   CHECK_EQ(p.items[IT_CHARM], (uint8_t)1);
   CHECK_EQ(p.items[IT_GOLDEN], (uint8_t)2);
   CHECK_EQ(p.items[IT_CAKE], (uint8_t)1);
   CHECK_EQ(p.items[IT_CARBOS], (uint8_t)1);
+  CHECK_EQ(p.items[IT_REVIVE], (uint8_t)(REVIVE_START + 1));
 }
 
 TEST(steps, las_tres_vitaminas_salen_con_el_azar_real) {
@@ -1522,7 +1526,7 @@ TEST(items, baya_dorada_y_vitaminas) {
   CHECK_EQ(p.trAtk, (uint8_t)(a + VITAMIN_TRAIN));
   CHECK_EQ(p.trDef, (uint8_t)(d + VITAMIN_TRAIN));
   CHECK_EQ(p.trSpe, (uint8_t)(s + VITAMIN_TRAIN));
-  CHECK_EQ(p.itemCount(), (uint8_t)0);
+  CHECK_EQ(p.itemCount(), (uint8_t)REVIVE_START);  // solo quedan los Revivir de la partida nueva
 }
 
 TEST(items, topes_y_cuando_no_se_pueden_usar) {
@@ -1640,7 +1644,70 @@ TEST(steps, un_guardado_antiguo_carga_con_todo_a_cero) {
   b.begin();
   CHECK_EQ(b.stepsToday, (uint32_t)0);
   CHECK_EQ(b.stepsTotal, (uint32_t)0);
-  CHECK_EQ(b.itemCount(), (uint8_t)0);
+  CHECK_EQ(b.itemCount(), (uint8_t)REVIVE_START);  // nada mas que los Revivir de la partida nueva (v1.59)
+}
+
+// ---------------------------------------------------------------- Revivir (v1.59)
+TEST(revive, una_partida_nueva_empieza_con_tres) {
+  Pet p;
+  makePet(p, 4);
+  CHECK_EQ(p.items[IT_REVIVE], (uint8_t)REVIVE_START);
+  Pet b;  // un reinicio no da mas
+  b.begin();
+  CHECK_EQ(b.items[IT_REVIVE], (uint8_t)REVIVE_START);
+}
+
+TEST(revive, un_guardado_de_antes_recibe_tres_una_vez) {
+  Pet a;
+  makePet(a, 4);
+  {
+    Preferences raw;  // como lo dejaba la v1.58: sin "rvg" y la mochila de 8
+    raw.begin("tamapoke");
+    raw.remove("rvg");
+    uint8_t eight[8] = { 2, 0, 0, 0, 0, 1, 0, 3 };
+    raw.putBytes("bpack", eight, sizeof(eight));
+  }
+  Pet b;
+  b.begin();
+  CHECK_EQ(b.items[IT_GOLDEN], (uint8_t)2);
+  CHECK_EQ(b.items[IT_CAKE], (uint8_t)3);
+  CHECK_EQ(b.items[IT_REVIVE], (uint8_t)REVIVE_START);
+  b.flushSave();
+  Pet c;  // el siguiente arranque ya no los da
+  c.begin();
+  CHECK_EQ(c.items[IT_REVIVE], (uint8_t)REVIVE_START);
+}
+
+TEST(revive, el_regalo_de_la_actualizacion_respeta_el_tope) {
+  Pet a;
+  makePet(a, 4);
+  {
+    Preferences raw;
+    raw.begin("tamapoke");
+    raw.remove("rvg");
+    uint8_t nine[9] = { 0, 0, 0, 0, 0, 0, 0, 0, 8 };
+    raw.putBytes("bpack", nine, sizeof(nine));
+  }
+  Pet b;
+  b.begin();
+  CHECK_EQ(b.items[IT_REVIVE], (uint8_t)ITEM_MAX);
+}
+
+TEST(revive, no_se_usa_a_mano) {
+  Pet p;
+  makePet(p, 4);
+  CHECK(p.items[IT_REVIVE] > 0);
+  CHECK(!p.canUseItem(IT_REVIVE));
+  CHECK(!p.useItem(IT_REVIVE));
+  CHECK_EQ(p.items[IT_REVIVE], (uint8_t)REVIVE_START);
+}
+
+TEST(revive, se_puede_regalar_y_abrir) {
+  Pet p;
+  makePet(p, 4);
+  CHECK(p.addGift(IT_REVIVE));
+  CHECK_EQ(p.openGift(), (uint8_t)IT_REVIVE);
+  CHECK_EQ(p.items[IT_REVIVE], (uint8_t)(REVIVE_START + 1));
 }
 
 TEST(care, el_tope_diario_de_vinculo_vuelve_a_cero_a_medianoche) {

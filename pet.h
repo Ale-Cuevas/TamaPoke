@@ -77,12 +77,15 @@ static const uint8_t STEP_GOAL_LEVELS[STEP_GOAL_TIERS] = { 1, 1, 2 };
 #define FIND_MIN_STEPS 800        // pasos premiados entre dos hallazgos (al azar entre MIN y MAX)
 #define FIND_MAX_STEPS 1200
 #define FINDS_PER_DAY 5           // tope de hallazgos al azar al dia (los regalos de las metas van aparte)
-// probabilidad de cada objeto (%). v1.54: entra la tarta (le quita 15 a la baya y 5 a las vitaminas)
-#define ODDS_BERRY 40
+// probabilidad de cada objeto (%). v1.54: entra la tarta (le quita 15 a la baya y 5 a las vitaminas).
+// v1.59: entra el Revivir (le quita 5 a la baya)
+#define ODDS_BERRY 35
 #define ODDS_CAKE 20
 #define ODDS_VITAMIN 30
 #define ODDS_CHARM 10
-static_assert(ODDS_BERRY + ODDS_CAKE + ODDS_VITAMIN + ODDS_CHARM == 100, "los hallazgos suman 100");
+#define ODDS_REVIVE 5
+static_assert(ODDS_BERRY + ODDS_CAKE + ODDS_VITAMIN + ODDS_CHARM + ODDS_REVIVE == 100, "los hallazgos suman 100");
+#define REVIVE_START 3            // Revivir con los que empieza una partida (y una vez, un guardado de antes de v1.59)
 #define ITEM_MAX 9                // tope de cada objeto en la mochila
 #define GOLDEN_FOOD 50            // baya dorada
 #define GOLDEN_JOY 15
@@ -109,10 +112,11 @@ static_assert(ODDS_BERRY + ODDS_CAKE + ODDS_VITAMIN + ODDS_CHARM == 100, "los ha
 #define EGG_MAX_STEPS 15000
 
 // objetos de la mochila (del jugador). El amuleto no se usa a mano: se lleva.
-// IT_RARECANDY, IT_EGG e IT_CAKE van al final: la mochila se guarda por posicion ("bpack") y un
-// guardado anterior trae solo las 5 (6, 7) primeras. El huevo (v1.39) tampoco se usa a mano: va a
-// casa solo. La tarta (v1.54) se come desde el menu de comida o desde la mochila.
-enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_RARECANDY, IT_EGG, IT_CAKE, IT_COUNT };
+// IT_RARECANDY, IT_EGG, IT_CAKE e IT_REVIVE van al final: la mochila se guarda por posicion ("bpack") y
+// un guardado anterior trae solo las 5 (6, 7, 8) primeras. El huevo (v1.39) tampoco se usa a mano: va a
+// casa solo. La tarta (v1.54) se come desde el menu de comida o desde la mochila. El Revivir (v1.59)
+// tampoco se usa a mano: se ofrece cuando el bicho se muere de abandono.
+enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_RARECANDY, IT_EGG, IT_CAKE, IT_REVIVE, IT_COUNT };
 
 // --- trucos del IMU (Tarea 2)
 #define GRUMPY_JOY 5                 // despertarlo agitando: -5 felicidad...
@@ -129,17 +133,19 @@ enum : uint8_t { EMOTE_NONE = 0, EMOTE_ANGRY, EMOTE_DIZZY, EMOTE_WOBBLE };
 #define PRACTICE_JOY 3                 // premio del combate de practica...
 #define PRACTICE_EVERY_MS 3600000UL    // ...como mucho una vez por hora
 // botin de combate (v1.56): cada victoria tiene un 70 % de traer un objeto, envuelto en casa, hasta 5 al
-// dia (se pueden repetir combates sin fin). Tabla (%): tarta 40, baya dorada 25, vitaminas 21 (7 cada
-// una), Caramelo Raro 7, amuleto 4 (con uno ya, tarta), huevo 3: el mas raro
+// dia (se pueden repetir combates sin fin). Tabla (%): tarta 35, baya dorada 25, vitaminas 21 (7 cada
+// una), Caramelo Raro 7, Revivir 5 (v1.59, le quita 5 a la tarta), amuleto 4 (con uno ya, tarta),
+// huevo 3: el mas raro
 #define BATTLE_DROP_ODDS 70
 #define BATTLE_DROPS_PER_DAY 5
-#define BDROP_CAKE 40
+#define BDROP_CAKE 35
 #define BDROP_GOLDEN 25
 #define BDROP_VITAMIN 21
 #define BDROP_RARECANDY 7
 #define BDROP_CHARM 4
+#define BDROP_REVIVE 5
 #define BDROP_EGG 3
-static_assert(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDROP_CHARM + BDROP_EGG == 100,
+static_assert(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDROP_CHARM + BDROP_REVIVE + BDROP_EGG == 100,
               "el botin suma 100");
 
 // medallas del individuo (bitmask)
@@ -351,6 +357,7 @@ public:
   uint16_t eggStepsAt() const { return eggAt; }
   // EGG <n> por serie (pruebas): n huevos en la mochila; con la casa vacia, uno pasa a casa
   void setBagEggs(uint8_t n);
+  void setRevives(uint8_t n) { items[IT_REVIVE] = n > ITEM_MAX ? ITEM_MAX : n; save(); }  // serie REVIVES (v1.59)
   // efecto de usar un objeto de la mochila (false = no se pudo: dormido, huevo, no hay)
   bool canUseItem(uint8_t it) const;
   bool useItem(uint8_t it);

@@ -812,6 +812,25 @@ static const char* const SPR_ICON_CAKE[16] = {  // 16x16
   "................",
 };
 
+static const char* const SPR_ICON_REVIVE[16] = {  // 16x16
+  "................",
+  "...........kkk..",
+  ".........kkfffk.",
+  "........kffffYk.",
+  ".......kfffffYk.",
+  "......kffwffYk..",
+  ".....kffwffYYk..",
+  "....kffwffYYk...",
+  "....kfwffYYk....",
+  "...kfwffYYk.....",
+  "...kwffYYk......",
+  "..kfffYkk.......",
+  "..kfYkk.........",
+  ".kOk............",
+  "kOk.............",
+  "kk..............",
+};
+
 static const char* const SPR_EGG[32] = {  // 32x32
   "................................",
   "................................",

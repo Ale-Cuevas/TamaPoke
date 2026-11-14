@@ -48,7 +48,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.58"
+#define FW_VERSION "1.59"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -121,10 +121,11 @@ uint8_t cardPage = 0;         // 0 perfil, 1 combate, 2 medallas, 3 progreso, 4 
 bool bagOpen = false;         // mochila (v1.53): su boton en la fila de abajo, antes la pagina de paseo de la ficha
 uint8_t itemConfirm = 0;      // mochila: objeto a confirmar + 1 (0 = ninguno)
 uint32_t itemConfirmUntil = 0;
+uint32_t bagReviveHintUntil = 0;  // la pista del Revivir en la mochila (v1.59)
 bool foundShown = false;      // el ultimo frame enseno un hallazgo: un toque lo cierra
 uint32_t cakeHintUntil = 0;
 uint32_t tastesMsgUntil = 0;  // la baya favorita cambio al evolucionar (v1.57): "Sus gustos cambiaron!"   // tocar la tarta sin ninguna (v1.54): la cabecera dice donde se encuentra
-static_assert(S_IT_CAKE - S_IT_GOLDEN == IT_CAKE - IT_GOLDEN && IT_CAKE + 1 == IT_COUNT, "nombres de objeto en el orden de IT_*");
+static_assert(S_IT_REVIVE - S_IT_GOLDEN == IT_REVIVE - IT_GOLDEN && IT_REVIVE + 1 == IT_COUNT, "nombres de objeto en el orden de IT_*");
 bool clockOpen = false;       // pantalla de ajuste de hora (deslizar abajo)
 int clockH = 12, clockM = 0;  // hora en edicion
 
@@ -1013,11 +1014,18 @@ void handleSerial() {
     }
     eggReport();
     Serial.println("DONE");
+  } else if (line == "REVIVES" || line.startsWith("REVIVES ")) {  // Revivir (v1.59); REVIVES <n>: n en la mochila
+    if (line.length() > 8) {
+      long n = line.substring(8).toInt();
+      pet.setRevives((uint8_t)(n < 0 ? 0 : n));
+    }
+    Serial.printf("revive=%u\n", pet.items[IT_REVIVE]);
+    Serial.println("DONE");
   } else if (line == "GIFTS" || line.startsWith("GIFT ")) {  // regalos (v1.55); GIFT <objeto>: uno mas
     if (line.startsWith("GIFT ")) {
       long it = line.substring(5).toInt();
       bool ok = it >= 0 && it < IT_COUNT && pet.addGift((uint8_t)it);
-      Serial.println(ok ? "gift added" : "gift refused (item 0-7, at most 8)");
+      Serial.println(ok ? "gift added" : "gift refused (item 0-8, at most 8)");
       pet.flushSave();
     }
     Serial.printf("gifts n=%u:", pet.giftCount());
@@ -1105,11 +1113,11 @@ void handleSerial() {
     // crecimiento (v1.35, growth.h): de el sale el nivel; la edad va aparte
     Serial.printf("grow=%lu lv=%u into=%u/%u age=%lu\n", (unsigned long)pet.growMin, pet.level(),
                   pet.levelMinutesInto(), pet.levelMinutesCost(), (unsigned long)pet.ageMinutes);
-    Serial.printf("steps=%lu/%lu finds=%u bonus=%u goal=%u bpack=%u/%u/%u/%u charm=%u candy=%u cake=%u sated=%lu imu=%d\n",
+    Serial.printf("steps=%lu/%lu finds=%u bonus=%u goal=%u bpack=%u/%u/%u/%u charm=%u candy=%u cake=%u revive=%u sated=%lu imu=%d\n",
                   (unsigned long)pet.stepsToday, (unsigned long)pet.stepsTotal, pet.findsToday,
                   pet.bonusFindsToday, pet.goalTierOn(pet.dayNumber()), pet.items[IT_GOLDEN],
                   pet.items[IT_PROTEIN], pet.items[IT_IRON], pet.items[IT_CARBOS], pet.items[IT_CHARM],
-                  pet.items[IT_RARECANDY], pet.items[IT_CAKE], (unsigned long)pet.satedMinutesLeft(),
+                  pet.items[IT_RARECANDY], pet.items[IT_CAKE], pet.items[IT_REVIVE], (unsigned long)pet.satedMinutesLeft(),
                   imuPresent() ? 1 : 0);
     // efectos (v1.30): celebraciones en cola y la que se ve, y por que podria estar esperando
     Serial.printf("fx queue=%u showing=%d kind=%d busy=%d sleep=%d dim=%u off=%d saver=%d\n", fxq.n,
@@ -2206,7 +2214,8 @@ static uint32_t screenKey() {
     for (const char *c = pet.nick; *c; c++) h = mixKey(h, (uint8_t)*c);
   } else if (bagOpen) {
     for (uint8_t n : pet.items) h = mixKey(h, n);
-    for (uint32_t v : { (uint32_t)pet.eggsOwned(), (uint32_t)itemConfirm, (uint32_t)pet.sleeping, (uint32_t)gLang })
+    for (uint32_t v : { (uint32_t)pet.eggsOwned(), (uint32_t)itemConfirm, (uint32_t)pet.sleeping, (uint32_t)gLang,
+                        (uint32_t)(timeLeft(bagReviveHintUntil) > 0) })
       h = mixKey(h, v);
   } else if (kbOpen) {
     h = mixKey(h, nameLen);
@@ -3731,7 +3740,7 @@ void clockTap(int16_t x, int16_t y) {
 // iconos de la mochila, en el orden de IT_* (pet.h)
 static const char *const *const ITEM_ICON[IT_COUNT] = {
   SPR_ICON_GOLDEN, SPR_ICON_PROTEIN, SPR_ICON_IRON, SPR_ICON_CARBOS, SPR_ICON_CHARM, SPR_ICON_RARECANDY, SPR_ICON_EGG,
-  SPR_ICON_CAKE,
+  SPR_ICON_CAKE, SPR_ICON_REVIVE,
 };
 
 // llama + numero de racha arriba a la izquierda
@@ -4503,17 +4512,20 @@ void renderCardWalk() {
 
 // ---------- mochila (v1.53) ----------
 // Pantalla propia, desde su boton en la fila de abajo (antes era una fila de la pagina de paseo de
-// la ficha). Una rejilla de 4 x 2 casillas, cada objeto con su cuenta; tocar uno que se pueda usar
-// pide confirmacion y lo usa. Se abre tambien con el bicho dormido, para mirar: canUseItem ya
-// no deja usar nada dormido.
-#define BAG_COLS 4
+// la ficha). Una rejilla de 3 x 3 casillas (v1.59, era 4 x 2: entra el Revivir), cada objeto con su
+// cuenta; tocar uno que se pueda usar pide confirmacion y lo usa. Se abre tambien con el bicho
+// dormido, para mirar: canUseItem ya no deja usar nada dormido.
+#define BAG_COLS 3
+#define BAG_ROWS 3
 #define BAG_SLOT_W 76
-#define BAG_SLOT_H 84
+#define BAG_SLOT_H 80
 #define BAG_GAP 10
 #define BAG_X (CX - (BAG_COLS * BAG_SLOT_W + (BAG_COLS - 1) * BAG_GAP) / 2)
-#define BAG_Y 108
+#define BAG_Y 94
+#define BAG_REVIVE_HINT_MS 3000UL  // tocar el Revivir: dice para que sirve (no se usa a mano)
 // orden en pantalla: lo que se come, las vitaminas, el caramelo y lo que no se usa a mano
-static const uint8_t BAG_ORDER[] = { IT_GOLDEN, IT_CAKE, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_RARECANDY, IT_CHARM, IT_EGG };
+static const uint8_t BAG_ORDER[] = { IT_GOLDEN, IT_CAKE, IT_RARECANDY, IT_PROTEIN, IT_IRON, IT_CARBOS,
+                                     IT_CHARM, IT_EGG, IT_REVIVE };
 #define BAG_SLOTS (sizeof(BAG_ORDER) / sizeof(BAG_ORDER[0]))
 static_assert(BAG_SLOTS == IT_COUNT, "cada objeto tiene su casilla en la mochila");
 
@@ -4525,6 +4537,7 @@ void bagSlotXY(int k, int &x, int &y) {
 void openBag() {
   bagOpen = true;
   itemConfirm = 0;
+  bagReviveHintUntil = 0;
 }
 
 void renderBag() {
@@ -4552,13 +4565,16 @@ void renderBag() {
     snprintf(c, sizeof(c), "x%u", n);
     gfx->setTextColor(n ? UI_INK : UI_TRACK);
     setSize(2);
-    setCur(x + (BAG_SLOT_W - textW(c, 2)) / 2, y + 60);
+    setCur(x + (BAG_SLOT_W - textW(c, 2)) / 2, y + 58);
     printT(c);
   }
-  // una pista: dormido, los huevos (v1.39), el amuleto, la mochila vacia o como se usa
-  int hy = BAG_Y + 2 * BAG_SLOT_H + BAG_GAP + 22;
+  // una pista: el Revivir recien tocado, dormido, los huevos (v1.39), el amuleto, la mochila vacia o
+  // como se usa
+  int hy = BAG_Y + BAG_ROWS * BAG_SLOT_H + (BAG_ROWS - 1) * BAG_GAP + 18;
   bool empty = pet.itemCount() == 0 && !pet.eggsOwned();
-  const char *hint = empty                 ? T(S_BACKPACK_EMPTY)
+  bool reviveHint = timeLeft(bagReviveHintUntil) > 0;
+  const char *hint = reviveHint            ? T(S_REVIVE_HINT)
+                     : empty               ? T(S_BACKPACK_EMPTY)
                      : pet.sleeping        ? T(S_BAG_ASLEEP)
                      : pet.eggsOwned()     ? T(S_EGG_HINT)
                      : pet.items[IT_CHARM] ? T(S_CHARM_HELD)
@@ -4620,6 +4636,9 @@ void bagTap(int16_t x, int16_t y) {
     if (pet.canUseItem(i)) {
       itemConfirm = i + 1;
       itemConfirmUntil = millis() + 10000;
+      sfxPlay(SFX_TAP);
+    } else if (i == IT_REVIVE && pet.items[i]) {
+      bagReviveHintUntil = millis() + BAG_REVIVE_HINT_MS;  // se guarda para cuando se muera (v1.59)
       sfxPlay(SFX_TAP);
     } else if (i == IT_EGG ? pet.eggsOwned() : pet.items[i]) {
       sfxPlay(SFX_DENY);  // el amuleto se lleva y el huevo va solo a casa; o dormido, o entrenamiento al maximo

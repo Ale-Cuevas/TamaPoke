@@ -273,7 +273,7 @@ already does. The extra current must be measured; the device test compares an
 | `RARE_CANDY_LEVELS` | 1 | Levels from a Rare Candy |
 | `FIND_MIN_STEPS` / `FIND_MAX_STEPS` | 800 / 1200 | Distance between finds |
 | `FINDS_PER_DAY` | 5 | Random find cap (goal gifts on top) |
-| `ODDS_BERRY` / `ODDS_VITAMIN` / `ODDS_CHARM` | 55 / 35 / 10 | Item odds (%) |
+| `ODDS_BERRY` / `ODDS_CAKE` / `ODDS_VITAMIN` / `ODDS_CHARM` / `ODDS_REVIVE` | 35 / 20 / 30 / 10 / 5 (v1.59; 55 / – / 35 / 10 / – at first) | Item odds (%) |
 | `ITEM_MAX` | 9 | Backpack cap per item |
 | `GOLDEN_FOOD` / `GOLDEN_JOY` | 50 / 15 | Golden Berry |
 | `VITAMIN_TRAIN` | 3 | Vitamin effect |

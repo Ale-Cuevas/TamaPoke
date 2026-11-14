@@ -293,10 +293,11 @@ attacking until one faints, in 10–20 s after a 3 s VS card and jingle.
 
   | Loot | Odds |
   |---|---|
-  | Cake | 40 % |
+  | Cake | 35 % |
   | Golden Berry | 25 % |
   | Protein / Iron / Carbos | 21 % (7 % each) |
   | Rare Candy | 7 % |
+  | Revive (v1.59) | 5 % |
   | Shiny Charm | 4 % (a cake if you already hold one) |
   | Egg | 3 %, the rarest | The USER key, or PWR (to the screensaver
   or off), quits with no reward. The result ignores taps for its first 1.8 s
@@ -341,17 +342,19 @@ waving it around doesn't farm anything.
 
   | Item | Odds | Use |
   |---|---|---|
-  | Golden Berry | 40 % | +50 FOOD, +15 JOY, a heart |
+  | Golden Berry | 35 % | +50 FOOD, +15 JOY, a heart |
   | Cake (v1.54) | 20 % | FOOD full for 3 h, +12 JOY, +12 weight (food menu or Backpack) |
   | Protein / Iron / Carbos | 30 % (1/3 each) | +3 ATK / DEF / SPD training (cap 100) |
   | Shiny Charm | 10 % | Held, not used: the **next egg** gets ×3 shiny odds (never better than 1/8). One at a time; a second one becomes a Golden Berry. |
+  | Revive (v1.59) | 5 % | Not used by hand: when a neglected pet is dying, a dialog offers it to save the pet. A new game starts with **3**. |
   | Rare Candy | the 10000 goal, v1.25–v1.35 (it now gives +2 levels directly) | **+1 level**, keeping how full the level bar was, without ageing the pet (it can make the pet ready to evolve). Candies already in the Backpack still work. |
   | Egg | every 8000–15000 steps (v1.39), apart from the finds above and their daily cap; wrapped as a gift since v1.55 (straight home if the home is empty) | Not used by hand: it comes home by itself when home is free (an ending, or the pet stored in the Box). |
 
 - The **Backpack** holds up to 9 of each item. Since v1.53 it has its own button (the
-  backpack, last on the bottom row): every item with its count, greyed when you have none, and a
-  hint below. Tap an item to use it (a YES / NO dialog); the Charm and eggs aren't used by hand. It
-  opens while the pet sleeps too, just to look.
+  backpack, last on the bottom row): every item with its count (a 3 × 3 grid since v1.59), greyed
+  when you have none, and a hint below. Tap an item to use it (a YES / NO dialog); the Charm, eggs
+  and the Revive aren't used by hand (a tap on the Revive says what it's for). It opens while the
+  pet sleeps too, just to look.
 - The stat card's 5th page, **WALK** (swipe up, then left four times), shows today's steps with
   a ring toward the next goal and a flag per goal reached, the total and today's finds (random
   ones out of 5, "+n" for the goals' gifts).
@@ -759,7 +762,7 @@ waiting egg) · `STORE <k>` / `WAKE <k>` (store into / wake from slot k = 0–5,
 without the light) · `BOXFILL` (made-up pets in the empty slots, for tests and screenshots) ·
 `BOXCLR <k>` (empty slot k, also a damaged one) · `NVS` (used and free NVS entries) ·
 `EGG` (eggs in the Backpack, the waiting egg, steps to the next one, empty home or not) · `EGG <n>` (set the
-Backpack to n eggs, for tests) · `RELEASE` (release without the dialog) · `AGE <min>` (the pet's age in game minutes, for tests: 4320 on a final
+Backpack to n eggs, for tests) · `REVIVES [n]` (Revives in the Backpack; with n, set it, v1.59) · `RELEASE` (release without the dialog) · `AGE <min>` (the pet's age in game minutes, for tests: 4320 on a final
 form shows the farewell button) · `TAP <x> <y>` (a tap at
 canvas coordinates, through the same path as a finger; prints the battle phase).
 

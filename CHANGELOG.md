@@ -8,6 +8,28 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.59] - 2026-11-14
+
+### Added
+
+- **The Revive** (a golden feather), a new Backpack item. It isn't used by hand: from v1.60 it's
+  offered when a neglected pet is dying, to save it. A tap on it in the Backpack says "Saves a dying
+  pet". A new game starts with **3**, and a save from before v1.59 gets its 3 once, the first boot
+  after updating. Up to 9, like the other items.
+- Where to find more: walk finds and the step goals' bonus finds (5 %; the Golden Berry goes from 40 %
+  to 35 %) and battle loot (5 %; the cake goes from 40 % to 35 %). Gifts take it as item 8.
+- Serial: `REVIVES [n]` (how many, or set n), `STATS` prints `revive=`, `GIFT 8` wraps one.
+
+### Changed
+
+- **The Backpack is a 3 × 3 grid** (it was 4 × 2) to fit the Revive: berry, cake, Rare Candy /
+  Protein, Iron, Carbos / Shiny Charm, egg, Revive.
+
+### Note
+
+- **Don't downgrade below v1.59 with this save.** The Backpack grew to 9 items, and older firmware
+  reads it as empty and overwrites it.
+
 ## [1.58] - 2026-11-14
 
 ### Added

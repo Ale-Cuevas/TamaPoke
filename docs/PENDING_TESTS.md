@@ -61,6 +61,7 @@ Write the result on each line: a tick, or what you saw.
 | 52 | v1.56 battle loot: "A gift at home!" under "YOU WIN!", ~7 wins in 10, at most 5 a day, none on a loss | [Battle loot](DEVICE_TESTS.md#battle-loot-v156) | serial ✓ (2026-11-14): 12 battles vs Magikarp, 11 wins: loot 0/7/3/0/7 on wins (5 of 9 before the cap), nothing on the loss, nothing after the 5th of the day. The pill's look: pending |
 | 53 | v1.57 favourite berry: gold frame + star in the food menu once known; "Its tastes changed!" after an evolution that changes it | [Favourite berry star](DEVICE_TESTS.md#favourite-berry-star-v157) | renders ✓; on the board: pending |
 | 54 | v1.58 poops by touch: a tap removes only that poop (sparkles, "+10" HYG), the next one fills the gap, works asleep, a long press on one doesn't open "Release?"; poops come about every 20 min | [Poops by touch](DEVICE_TESTS.md#poops-by-touch-v158) | |
+| 55 | v1.59 Revive: 3 on the update (once), the 3 × 3 Backpack with the golden feather, a tap says what it's for; EN and ES | [Revive](DEVICE_TESTS.md#revive-v159) | |
 
 Questions only the board can answer:
 - Where is the USB-C port relative to the screen's top? Bottom edge (buttons on top).

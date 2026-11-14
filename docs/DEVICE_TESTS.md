@@ -335,11 +335,21 @@ Backpack at 326 390; the Care menu's slots are at about 200 320 (sleep / wake) a
   grey bath; the sun wakes the pet, the bath shakes Care.
 - [ ] The menu closes after 6 s, on a tap outside it, and with USER.
 
+### Revive (v1.59)
+`REVIVES` prints how many; `REVIVES <n>` sets it. `GIFT 8` wraps one. The Revive slot is the bottom right of the
+Backpack, at about 319 314.
+- [ ] Flashing v1.59 over an older save shows `revive=3` in `STATS`; a restart doesn't add more. The rest of the
+  Backpack is unchanged.
+- [ ] The Backpack is a 3 × 3 grid inside the circle: berry, cake, candy / protein, iron, carbos / charm, egg,
+  Revive (a golden feather). The hint and "tap: back" fit below it, EN and ES.
+- [ ] A tap on the Revive (with one or more) plays the tap sound and the hint says "Saves a dying pet" /
+  "Salva a un bicho moribundo" for 3 s. It never asks "Use?".
+
 ### Poops by touch (v1.58)
 `POOP` adds one (up to 3); they sit at about 70 282, 116 282 and 162 282.
 - [ ] A tap on a poop removes only that one: sparkles where it was, the tap sound, "+10" over HYG. The others stay.
 - [ ] The next poop fills the empty spot. Asleep a tap still cleans. A long press on a poop doesn't open "Release?".
-- [ ] The Backpack opens its own screen: "BACKPACK" / "MOCHILA", 7 slots with counts (greyed at 0), the Charm
+- [ ] The Backpack opens its own screen: "BACKPACK" / "MOCHILA", 9 slots in a 3 × 3 grid since v1.59 with counts (greyed at 0), the Charm
   framed, the eggs counting the waiting one, the hint below and "tap: back".
 - [ ] Tap an item: "Use X?" YES uses it and goes back home to show it (eating, "+N", level-up); NO, USER or a
   tap outside the dialog keeps the Backpack open. A tap outside the grid closes the Backpack.

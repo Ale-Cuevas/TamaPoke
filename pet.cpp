@@ -11,7 +11,9 @@ void Pet::begin() {
     // que "init", asi nunca se migra un contador que ya es de la curva nueva
     prefs.putUChar("gcv", GROW_CURVE_VER);
     prefs.putBool("init", true);
+    items[IT_REVIVE] = REVIVE_START;  // v1.59: una partida nueva trae 3 Revivir (newEgg guarda la mochila)
     newEgg();
+    prefs.putBool("rvg", true);       // despues: un corte antes deja la partida sin "rvg" y los da load()
   } else {
     load();
     migrateGrowthCurve();  // los contadores de la curva v1 (3 h) pasan a la nueva (2 h)
@@ -901,7 +903,8 @@ void Pet::findItem() {
   if (r < ODDS_BERRY) it = IT_GOLDEN;
   else if (r < ODDS_BERRY + ODDS_CAKE) it = IT_CAKE;
   else if (r < ODDS_BERRY + ODDS_CAKE + ODDS_VITAMIN) it = IT_PROTEIN + random(3);
-  else it = IT_CHARM;
+  else if (r < ODDS_BERRY + ODDS_CAKE + ODDS_VITAMIN + ODDS_CHARM) it = IT_CHARM;
+  else it = IT_REVIVE;
   if (it == IT_CHARM && items[IT_CHARM]) it = IT_GOLDEN;  // solo se lleva un amuleto
   giveGift(it);  // v1.55: llega envuelto, se abre en casa
 }
@@ -1003,8 +1006,9 @@ uint8_t Pet::itemCount() const {
 }
 
 bool Pet::canUseItem(uint8_t it) const {
-  // el amuleto y el huevo no se usan a mano: uno se lleva, el otro va a casa cuando queda libre
-  if (it >= IT_COUNT || it == IT_CHARM || it == IT_EGG || !items[it]) return false;
+  // el amuleto, el huevo y el Revivir no se usan a mano: uno se lleva, otro va a casa cuando queda
+  // libre, y el Revivir se ofrece cuando el bicho se muere (v1.59)
+  if (it >= IT_COUNT || it == IT_CHARM || it == IT_EGG || it == IT_REVIVE || !items[it]) return false;
   if (isEgg() || sleeping || ceremony != CER_NONE) return false;
   if (it == IT_PROTEIN) return trAtk < 100;
   if (it == IT_IRON) return trDef < 100;
@@ -1095,6 +1099,7 @@ uint8_t Pet::rollBattleItem() {
   else if ((r -= BDROP_GOLDEN) < BDROP_VITAMIN) it = IT_PROTEIN + random(3);
   else if ((r -= BDROP_VITAMIN) < BDROP_RARECANDY) it = IT_RARECANDY;
   else if ((r -= BDROP_RARECANDY) < BDROP_CHARM) it = IT_CHARM;
+  else if ((r -= BDROP_CHARM) < BDROP_REVIVE) it = IT_REVIVE;
   else it = IT_EGG;
   if (it == IT_CHARM && items[IT_CHARM]) it = IT_CAKE;  // solo se lleva un amuleto
   return it;
@@ -1312,6 +1317,14 @@ void Pet::load() {
   for (uint8_t i = 0; i < IT_COUNT; i++) {
     uint8_t cap = (i == IT_CHARM) ? 1 : ITEM_MAX;
     if (items[i] > cap) items[i] = cap;
+  }
+  // v1.59: una partida de antes del Revivir recibe los 3 de una partida nueva, una sola vez. La mochila
+  // se escribe antes que "rvg": un corte entre las dos los da otra vez, nunca se quedan sin darse
+  if (!prefs.isKey("rvg")) {
+    uint16_t n = items[IT_REVIVE] + REVIVE_START;
+    items[IT_REVIVE] = n > ITEM_MAX ? ITEM_MAX : n;
+    prefs.putBytes("bpack", items, sizeof(items));
+    prefs.putBool("rvg", true);
   }
   bondDay = prefs.getUInt("bondD", 0);
   bondToday = prefs.getUChar("bondT", 0);
