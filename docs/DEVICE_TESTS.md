@@ -350,6 +350,17 @@ Backpack at 326 390; the Care menu's slots are at about 200 320 (sleep / wake) a
 - [ ] After 3 h (or a power-off that covers it) the bar is green again and FOOD drops as usual.
 - [ ] The Backpack shows the cake second; using it there does the same.
 
+### Gifts (v1.55)
+`GIFTS` lists the waiting gifts; `GIFT <item>` adds one (7 = cake). The pile is tapped at about `TAP 400 280`.
+- [ ] `GIFT 7`: a white box with a red ribbon appears on the floor to the right, bobbing; with 3, a pile; with 5,
+  "+2" next to it. It doesn't cover the poops, the pet, the bars or the farewell button.
+- [ ] Tapping it with the pet awake: the pet poses with a heart, "GIFT!" / "REGALO!" with the cake, a jingle; the
+  cake is now in the Backpack. A tap closes the popup.
+- [ ] Asleep: the tap plays the deny sound and the gift stays.
+- [ ] With 9 Golden Berries, a wrapped berry: "Backpack full" in red, and the gift is still there after closing.
+- [ ] `GIFTS` after a restart: the same list.
+- [ ] A real walk: a find shows up as a gift (no popup), and opening it adds it to the Backpack.
+
 ### Waterfall (v1.43)
 ([NEW_GAMES.md, Task ZEN](NEW_GAMES.md#task-zen-meditate-under-the-waterfall).) `ZEN [s]` opens a session with no
 reward (from second s if given), `HOLD 1` / `HOLD 0` fake the finger, `HOLD OFF` gives it back, `ZEN?` prints

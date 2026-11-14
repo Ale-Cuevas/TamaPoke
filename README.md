@@ -315,8 +315,14 @@ waving it around doesn't farm anything.
   bond comes on top of the daily bond cap. Like every walking reward, the levels and the
   rest need the pet awake: a goal crossed while it sleeps only marks the day (and the streak).
 - **Finds:** every 800–1200 rewarded steps the pet finds something (at most 5 a
-  day; the goals' gifts come on top). A popup shows it next time the screen is
-  on; tap to dismiss.
+  day; the goals' gifts come on top). Since v1.55 each find arrives **wrapped**: a small white box
+  with a red ribbon on the floor of the home screen, to the right (up to 3 in a pile, "+N" for
+  more). **Tap a gift** with the pet awake to open it: the pet is happy, "GIFT!" shows what it was,
+  and it goes into the Backpack (tap to dismiss). Asleep, gifts wait. With a full Backpack the popup
+  says so and the gift stays wrapped until there's room. Up to 8 wait unopened (kept across
+  restarts); past that a find goes straight into the Backpack with the popup. When the home is left
+  empty (an ending, or the pet stored in the Box), gifts unwrap themselves into the Backpack, and a
+  wrapped egg counts as one of your eggs.
 
   | Item | Odds | Use |
   |---|---|---|
@@ -325,7 +331,7 @@ waving it around doesn't farm anything.
   | Protein / Iron / Carbos | 30 % (1/3 each) | +3 ATK / DEF / SPD training (cap 100) |
   | Shiny Charm | 10 % | Held, not used: the **next egg** gets ×3 shiny odds (never better than 1/8). One at a time; a second one becomes a Golden Berry. |
   | Rare Candy | the 10000 goal, v1.25–v1.35 (it now gives +2 levels directly) | **+1 level**, keeping how full the level bar was, without ageing the pet (it can make the pet ready to evolve). Candies already in the Backpack still work. |
-  | Egg | every 8000–15000 steps (v1.39), apart from the finds above and their daily cap | Not used by hand: it comes home by itself when home is free (an ending, or the pet stored in the Box). |
+  | Egg | every 8000–15000 steps (v1.39), apart from the finds above and their daily cap; wrapped as a gift since v1.55 (straight home if the home is empty) | Not used by hand: it comes home by itself when home is free (an ending, or the pet stored in the Box). |
 
 - The **Backpack** holds up to 9 of each item. Since v1.53 it has its own button (the
   backpack, last on the bottom row): every item with its count, greyed when you have none, and a

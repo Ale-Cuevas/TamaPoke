@@ -8,6 +8,30 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.55] - 2026-11-14
+
+### Changed
+
+- **Finds arrive as gifts.** What the pet finds on a walk (and the goals' bonus finds and the eggs
+  found walking) no longer pops up by itself: it waits on the home screen floor, to the right, as a
+  white box with a red ribbon (up to 3 in a pile, "+N" for more, gently bobbing). Tap one with the
+  pet awake: the pet poses with a heart, "GIFT!" shows the item, and it goes into the Backpack.
+  Opening gives no stats, so it can't be farmed.
+  - Asleep, or with an egg at home, gifts wait (a tap plays the deny sound).
+  - A gift that doesn't fit (9 of that item) shows "Backpack full" and **stays wrapped** instead of
+    being lost. A second Shiny Charm still becomes a Golden Berry.
+  - Up to 8 gifts wait unopened and survive a restart (NVS key `gifts`). With 8 waiting, a new find
+    goes straight into the Backpack with the old popup.
+  - When the home is left empty (release, farewell, runaway, storing in the Box) gifts unwrap into
+    the Backpack by themselves. A wrapped egg counts as one of your eggs: the release dialog won't
+    promise a gift egg, and storing a pet brings a wrapped egg home.
+- An egg found with the home empty still goes straight home.
+
+### Added
+
+- Serial: `GIFTS` (the queue) and `GIFT <item>` (add one: 0 Golden Berry, 1 Protein, 2 Iron,
+  3 Carbos, 4 Shiny Charm, 5 Rare Candy, 6 Egg, 7 Cake).
+
 ## [1.54] - 2026-11-14
 
 ### Changed

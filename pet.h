@@ -94,6 +94,11 @@ static_assert(ODDS_BERRY + ODDS_CAKE + ODDS_VITAMIN + ODDS_CHARM == 100, "los ha
 // vacia), aparte de los hallazgos y su tope diario. Van a la mochila (IT_EGG, hasta ITEM_MAX) y
 // pasan a casa en cuanto queda libre: una despedida, escapada o liberacion, o guardar al bicho en la
 // caja. Sin ninguno, la casa se queda vacia hasta encontrar uno (o despertar a alguien de la caja).
+// regalos (v1.55): lo que se encuentra caminando ya no salta en un aviso ni va derecho a la mochila.
+// Llega envuelto, como una cajita en el suelo de casa, y entra en la mochila al abrirlo (un toque con
+// el bicho despierto, que se alegra). Se guardan en la NVS ("gifts"), hasta GIFT_MAX sin abrir; con
+// la cola llena, lo nuevo va derecho a la mochila con el aviso de siempre (nada se pierde).
+#define GIFT_MAX 8
 #define EGG_MIN_STEPS 8000
 #define EGG_MAX_STEPS 15000
 
@@ -233,7 +238,17 @@ public:
   uint8_t eggsOwned() const { return items[IT_EGG] + (eggHeldFlag ? 1 : 0); }
   bool boxHasPets() const;  // algun hueco con un bicho que se pueda despertar
   // al soltar sin huevos: false = solo la casa vacia, true = ademas un huevo de regalo a la mochila
-  bool releaseGivesEgg() const { return !eggsOwned() && !boxHasPets(); }
+  // (v1.55: un huevo envuelto tambien cuenta: al quedar la casa libre se desenvuelve, unwrapGifts)
+  bool releaseGivesEgg() const { return !eggsOwned() && !giftEggs() && !boxHasPets(); }
+  // regalos sin abrir (v1.55), el primero es el que se abre
+  uint8_t giftCount() const { return giftN; }
+  uint8_t giftItem(uint8_t i) const { return i < giftN ? gifts[i] : (uint8_t)IT_COUNT; }
+  uint8_t giftEggs() const;
+  bool canOpenGift() const { return giftN && !isEgg() && !sleeping && ceremony == CER_NONE && !starterPick; }
+  // abre el primero: a la mochila, el bicho se alegra (corazon) y sale el aviso "REGALO!". Devuelve el
+  // objeto (IT_COUNT si no se pudo abrir). *full: no cabia en la mochila y el regalo sigue ahi
+  uint8_t openGift(bool *full = nullptr);
+  bool addGift(uint8_t it);  // un regalo nuevo (serie GIFT y pruebas); false = cola llena
   bool hatchFromBag();  // casa vacia: el boton "Abrir un huevo" (uno de la mochila a casa)
   uint8_t eggCracks() const { return eggTaps; }
   bool eating() const { return timeLeft(eatUntil) > 0; }
@@ -256,6 +271,7 @@ public:
   void chooseStarter(int16_t dex) { eggTarget = dex; starterPick = false; save(); }
   void factoryReset() { prefs.clear(); }  // borra la NVS (test: comando serie WIPE)
   void dbgSetAge(uint32_t m) { ageMinutes = m; save(); }  // serie AGE (pruebas)
+  void dbgClearGifts() { giftN = 0; }  // renderizador: cada escena empieza sin regalos
   void dbgRunawayReady() { fullness = joy = energy = hygiene = 0; neglectTicks = RUNAWAY_TICKS; }  // test
   // uint16_t, no uint8_t: un uint8_t daba la vuelta a 0 en el nivel 256, y eso se
   // alcanza jugando, porque "quedaros juntos" permite posponer la despedida
@@ -416,6 +432,10 @@ private:
   bool foundFull[FOUND_QUEUE];
   bool foundGift[FOUND_QUEUE];
   uint8_t foundN = 0;
+  uint8_t gifts[GIFT_MAX] = { 0 };  // regalos sin abrir (v1.55), en orden de llegada
+  uint8_t giftN = 0;
+  void giveGift(uint8_t it);   // envuelto; con la cola llena, a la mochila con aviso (giveFound)
+  void unwrapGifts();          // la casa queda libre: los regalos entran solos en la mochila
   uint16_t eggRem = 0;         // pasos hacia el siguiente huevo (v1.39)...
   uint16_t eggAt = 0;          // ...y a cuantos toca (EGG_MIN..EGG_MAX; 0 = sin sortear)
   uint8_t goalBanner = 0;     // meta del banner pendiente (0 = ninguno)

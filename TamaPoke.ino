@@ -48,7 +48,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.54"
+#define FW_VERSION "1.55"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -1009,6 +1009,17 @@ void handleSerial() {
     }
     eggReport();
     Serial.println("DONE");
+  } else if (line == "GIFTS" || line.startsWith("GIFT ")) {  // regalos (v1.55); GIFT <objeto>: uno mas
+    if (line.startsWith("GIFT ")) {
+      long it = line.substring(5).toInt();
+      bool ok = it >= 0 && it < IT_COUNT && pet.addGift((uint8_t)it);
+      Serial.println(ok ? "gift added" : "gift refused (item 0-7, at most 8)");
+      pet.flushSave();
+    }
+    Serial.printf("gifts n=%u:", pet.giftCount());
+    for (uint8_t i = 0; i < pet.giftCount(); i++) Serial.printf(" %u", pet.giftItem(i));
+    Serial.printf(" canOpen=%d\n", pet.canOpenGift() ? 1 : 0);
+    Serial.println("DONE");
   } else if (line.startsWith("TAP ")) {  // TAP <x> <y>: un toque como el de un dedo (pruebas por serie)
     String a = line.substring(4);
     a.trim();
@@ -1556,6 +1567,10 @@ void onTap(int16_t x, int16_t y) {
       }
       return;
     }
+  }
+  if (inGiftZone(x, y)) {  // un regalo envuelto (v1.55)
+    openGiftTap();
+    return;
   }
   // tocar al bicho = caricia
   if (inPetZone(x, y)) {
@@ -2315,6 +2330,7 @@ bool render() {
     drawSceneFront(homeBiome(), millis(), gNight);  // hierba delante de los pies
     drawBath();
     drawPoops();
+    drawGifts();  // regalos sin abrir (v1.55)
     drawBoxAppear(millis());  // recien guardado o despertado (caja): sale de una luz
     // panel inferior: base limpia para barras y botones sobre el paisaje
     gfx->fillRect(0, 312, 466, 154, gNight ? UI_BG_NIGHT : UI_BG_DAY);
@@ -5897,6 +5913,50 @@ void overlayMouth(const Species &sp, int x, int y, int s, bool open) {
     gfx->fillRect(x + (mc - 3) * s, y + (mr + 1) * s, s, s, INK_K);
     gfx->fillRect(x + (mc + 3) * s, y + (mr + 1) * s, s, s, INK_K);
   }
+}
+
+// regalos (v1.55): lo encontrado caminando espera envuelto en el suelo, a la derecha, donde no llegan
+// las cacas (a la izquierda) ni el bicho (su zona tactil acaba en x 356). Hasta 3 cajitas en un
+// monton que se mece un poco; con mas, "+N". Un toque abre la primera (openGiftTap).
+#define GIFT_ZONE_X 358
+#define GIFT_ZONE_Y 236  // por debajo del boton de despedida (176-234)
+#define GIFT_ZONE_H 76
+static const int16_t GIFT_POS[3][2] = { { 368, 270 }, { 404, 266 }, { 386, 238 } };  // esquina, a escala 2
+
+void drawGifts() {
+  uint8_t n = pet.giftCount();
+  if (!n) return;
+  uint32_t now = millis();
+  for (int i = 0; i < n && i < 3; i++) {
+    int bob = (int)lroundf(2.0f * sinf(now * 0.004f + i * 2.1f));
+    drawMap(SPR_GIFT, 16, GIFT_POS[i][0], GIFT_POS[i][1] + bob, 2, false);
+  }
+  if (n > 3) {
+    char m[4];
+    snprintf(m, sizeof(m), "+%u", (unsigned)(n - 3));
+    setSize(2);
+    gfx->setTextColor(inkColor());
+    setCur(424, 240);
+    printT(m);
+  }
+}
+
+bool inGiftZone(int16_t x, int16_t y) {
+  return pet.giftCount() && x >= GIFT_ZONE_X && y >= GIFT_ZONE_Y && y <= GIFT_ZONE_Y + GIFT_ZONE_H;
+}
+
+// tocar un regalo: con el bicho despierto se abre, se alegra y sale el aviso "REGALO!" (drawWalkNews);
+// si no cabe en la mochila el aviso lo dice y sigue envuelto. Dormido, espera
+void openGiftTap() {
+  if (!pet.canOpenGift()) {
+    sfxPlay(SFX_DENY);
+    return;
+  }
+  bool full = false;
+  uint8_t it = pet.openGift(&full);
+  if (it >= IT_COUNT) return;
+  Serial.printf("GIFT open %u%s\n", it, full ? " (full)" : "");
+  if (!full) fxPose(PMD_POSE, millis(), 1200);  // contento con lo que trae
 }
 
 void drawPoops() {

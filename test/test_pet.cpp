@@ -1296,22 +1296,16 @@ TEST(steps, hallazgo_al_umbral_sorteado) {
   makeWalker(p);
   mockForceRandom(0);  // umbral 800, baya dorada
   p.addSteps(799, DIA);
-  CHECK(!p.hasFound());
+  CHECK_EQ(p.giftCount(), (uint8_t)0);
   p.addSteps(1, DIA);
-  CHECK(p.hasFound());
-  bool full = true;
-  CHECK_EQ(p.peekFound(&full), (uint8_t)IT_GOLDEN);
-  CHECK(!full);
-  CHECK_EQ(p.items[IT_GOLDEN], (uint8_t)1);
-  p.popFound();
+  // v1.55: llega envuelto, sin aviso, y no entra en la mochila hasta abrirlo
+  CHECK_EQ(p.giftCount(), (uint8_t)1);
+  CHECK_EQ(p.giftItem(0), (uint8_t)IT_GOLDEN);
   CHECK(!p.hasFound());
+  CHECK_EQ(p.items[IT_GOLDEN], (uint8_t)0);
   p.addSteps(1600, DIA);  // dos mas en una sola lectura: se encolan
   CHECK_EQ(p.findsToday, (uint8_t)3);
-  CHECK(p.hasFound());
-  p.popFound();
-  CHECK(p.hasFound());
-  p.popFound();
-  CHECK(!p.hasFound());
+  CHECK_EQ(p.giftCount(), (uint8_t)3);
 }
 
 TEST(steps, tope_de_hallazgos_al_dia) {
@@ -1323,13 +1317,22 @@ TEST(steps, tope_de_hallazgos_al_dia) {
   CHECK_EQ(p.randomFindsToday(), (uint8_t)FINDS_PER_DAY);
   CHECK_EQ(p.bonusFindsToday, (uint8_t)(STEP_GOAL_TIERS - 1));  // v1.36: la de 10000 da niveles, no objeto
   CHECK_EQ(p.findsToday, (uint8_t)(FINDS_PER_DAY + STEP_GOAL_TIERS - 1));
-  CHECK_EQ(p.items[IT_GOLDEN], (uint8_t)ITEM_MAX);  // azar 0: todo bayas (3 + 5 + 2, tope 9)
+  // azar 0: todo bayas (3 + 5 + 2). v1.55: 8 envueltas (GIFT_MAX) y las 2 que no caben en la cola
+  // de regalos van derechas a la mochila, con su aviso de siempre
+  CHECK_EQ(p.giftCount(), (uint8_t)GIFT_MAX);
+  CHECK_EQ(p.items[IT_GOLDEN], (uint8_t)2);
   CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)0);
-  // la cola guarda los ultimos FOUND_QUEUE avisos: los 7 de hoy caben enteros (se pierden
-  // los mas antiguos, de ayer)
-  uint8_t n = 0;
-  while (p.hasFound()) { n++; p.popFound(); }
-  CHECK_EQ(n, (uint8_t)FOUND_QUEUE);
+  uint8_t n = 0;  // (los 20000 pasos tambien encuentran algun huevo: con la cola llena, otro aviso)
+  while (p.hasFound()) { n += p.peekFound() == IT_GOLDEN; p.popFound(); }
+  CHECK_EQ(n, (uint8_t)2);
+  // al abrirlas, la mochila llega a 9 y la ultima se queda envuelta
+  bool full = false;
+  for (int i = 0; i < 7; i++) CHECK_EQ(p.openGift(&full), (uint8_t)IT_GOLDEN);
+  CHECK(!full);
+  CHECK_EQ(p.items[IT_GOLDEN], (uint8_t)ITEM_MAX);
+  CHECK_EQ(p.openGift(&full), (uint8_t)IT_GOLDEN);
+  CHECK(full);
+  CHECK_EQ(p.giftCount(), (uint8_t)1);
 }
 
 TEST(steps, probabilidades_de_cada_objeto) {
@@ -1337,19 +1340,23 @@ TEST(steps, probabilidades_de_cada_objeto) {
   makeWalker(p);
   mockForceRandom(39);  // < 40: baya (v1.54: eran 55)
   p.addSteps(FIND_MIN_STEPS + 39, DIA);
-  CHECK_EQ(p.items[IT_GOLDEN], (uint8_t)1);
+  CHECK_EQ(p.giftItem(0), (uint8_t)IT_GOLDEN);
   mockForceRandom(50);  // 40..59: tarta (v1.54)
   p.addSteps(FIND_MIN_STEPS + 50, DIA);
-  CHECK_EQ(p.items[IT_CAKE], (uint8_t)1);
+  CHECK_EQ(p.giftItem(1), (uint8_t)IT_CAKE);
   mockForceRandom(75);  // 60..89: vitamina (random(3) forzado = 2: carburante)
   p.addSteps(FIND_MIN_STEPS + 75, DIA);
-  CHECK_EQ(p.items[IT_CARBOS], (uint8_t)1);
+  CHECK_EQ(p.giftItem(2), (uint8_t)IT_CARBOS);
   mockForceRandom(95);  // 90..99: amuleto (otro dia: con cuatro hallazgos se cruzaria la meta de 3000)
   p.addSteps(FIND_MIN_STEPS + 95, DIA + 1);
-  CHECK_EQ(p.items[IT_CHARM], (uint8_t)1);
-  p.addSteps(FIND_MIN_STEPS + 95, DIA + 2);  // el segundo amuleto se vuelve baya (otro dia: sin la meta)
+  CHECK_EQ(p.giftItem(3), (uint8_t)IT_CHARM);
+  p.addSteps(FIND_MIN_STEPS + 95, DIA + 2);  // otro amuleto: envuelto aun no se sabe que ya hay uno
+  CHECK_EQ(p.giftItem(4), (uint8_t)IT_CHARM);
+  while (p.giftCount()) p.openGift();  // al abrirlo, el segundo amuleto se vuelve baya
   CHECK_EQ(p.items[IT_CHARM], (uint8_t)1);
   CHECK_EQ(p.items[IT_GOLDEN], (uint8_t)2);
+  CHECK_EQ(p.items[IT_CAKE], (uint8_t)1);
+  CHECK_EQ(p.items[IT_CARBOS], (uint8_t)1);
 }
 
 TEST(steps, las_tres_vitaminas_salen_con_el_azar_real) {
@@ -1368,9 +1375,18 @@ TEST(steps, la_mochila_tiene_tope_por_objeto) {
   mockForceRandom(0);
   p.addSteps(800, DIA);
   CHECK_EQ(p.items[IT_GOLDEN], (uint8_t)ITEM_MAX);
+  // v1.55: al abrirlo no cabe; se ve lo que es ("mochila llena") y se queda envuelto
   bool full = false;
+  CHECK_EQ(p.openGift(&full), (uint8_t)IT_GOLDEN);
+  CHECK(full);
+  CHECK_EQ(p.giftCount(), (uint8_t)1);
   CHECK_EQ(p.peekFound(&full), (uint8_t)IT_GOLDEN);
   CHECK(full);
+  p.items[IT_GOLDEN]--;  // con sitio, ya se abre
+  CHECK_EQ(p.openGift(&full), (uint8_t)IT_GOLDEN);
+  CHECK(!full);
+  CHECK_EQ(p.giftCount(), (uint8_t)0);
+  CHECK_EQ(p.items[IT_GOLDEN], (uint8_t)ITEM_MAX);
 }
 
 TEST(steps, addSteps_nunca_escribe_en_flash) {
@@ -1491,7 +1507,8 @@ TEST(steps, mochila_y_pasos_sobreviven_a_un_reinicio_y_a_un_huevo_nuevo) {
   CHECK_EQ(b.stepsTotal, (uint32_t)1234);
   CHECK_EQ(b.stepDay, DIA);
   CHECK_EQ(b.findsToday, (uint8_t)1);
-  CHECK_EQ(b.items[IT_GOLDEN], (uint8_t)1);
+  CHECK_EQ(b.giftCount(), (uint8_t)1);  // v1.55: envuelto, tambien tras un reinicio
+  CHECK_EQ(b.giftItem(0), (uint8_t)IT_GOLDEN);
   CHECK_EQ(b.items[IT_IRON], (uint8_t)4);
   b.release();
   mockAdvanceMillis(CEREMONY_MS + 1);

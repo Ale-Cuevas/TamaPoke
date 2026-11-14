@@ -73,6 +73,7 @@ void Pet::newEgg(bool saveNow) {
 // incubadora; si no, sale uno de la mochila (y se sortea ahora, con el amuleto si lo hay); si
 // tampoco, la casa se queda vacia.
 void Pet::freeHome() {
+  unwrapGifts();  // v1.55: sin bicho no hay quien los abra, y un huevo envuelto cuenta para la casa
   if (eggHeldFlag) {
     newEgg();
   } else if (items[IT_EGG]) {
@@ -95,6 +96,7 @@ void Pet::freeHome() {
 // - Sin huevos y sin nadie en la caja, un huevo de regalo a la mochila: nunca se acaba sin bicho,
 //   sin huevo y sin nadie a quien despertar.
 void Pet::endLife(uint8_t cer) {
+  unwrapGifts();  // v1.55: sin bicho no hay quien los abra (un huevo envuelto evita el de regalo)
   if (cer == CER_FAREWELL) giveFound(IT_EGG, true);
   if (eggHeldFlag) {
     if (items[IT_EGG] >= ITEM_MAX) {
@@ -810,7 +812,7 @@ void Pet::addSteps(uint32_t n, uint32_t day) {
       queueFound(IT_EGG, false, false);
       newEgg(false);
     } else {
-      giveFound(IT_EGG);  // a la mochila (o "mochila llena") y al aviso de hallazgo
+      giveGift(IT_EGG);  // envuelto en casa (v1.55); con la cola llena, a la mochila con aviso
     }
   }
   eggRem = (uint16_t)e;
@@ -868,7 +870,60 @@ void Pet::findItem() {
   else if (r < ODDS_BERRY + ODDS_CAKE + ODDS_VITAMIN) it = IT_PROTEIN + random(3);
   else it = IT_CHARM;
   if (it == IT_CHARM && items[IT_CHARM]) it = IT_GOLDEN;  // solo se lleva un amuleto
-  giveFound(it);
+  giveGift(it);  // v1.55: llega envuelto, se abre en casa
+}
+
+// ---------- regalos (v1.55) ----------
+void Pet::giveGift(uint8_t it) {
+  if (!addGift(it)) {
+    Serial.printf("regalo %u: cola llena, a la mochila\n", it);
+    giveFound(it);
+  }
+}
+
+bool Pet::addGift(uint8_t it) {
+  if (it >= IT_COUNT || giftN >= GIFT_MAX) return false;
+  gifts[giftN++] = it;
+  pendingSave = true;  // como los pasos: el loop guarda con la pantalla atenuada
+  return true;
+}
+
+uint8_t Pet::giftEggs() const {
+  uint8_t n = 0;
+  for (uint8_t i = 0; i < giftN; i++) n += gifts[i] == IT_EGG;
+  return n;
+}
+
+uint8_t Pet::openGift(bool *full) {
+  if (full) *full = false;
+  if (!canOpenGift()) return IT_COUNT;
+  uint8_t it = gifts[0];
+  if (it == IT_CHARM && items[IT_CHARM]) it = IT_GOLDEN;  // dos amuletos envueltos: solo se lleva uno
+  uint8_t cap = (it == IT_CHARM) ? 1 : ITEM_MAX;
+  if (items[it] >= cap) {  // no cabe: se ve lo que es y se queda envuelto hasta que haya sitio
+    if (full) *full = true;
+    queueFound(it, true, true);
+    return it;
+  }
+  items[it]++;
+  for (uint8_t i = 1; i < giftN; i++) gifts[i - 1] = gifts[i];
+  giftN--;
+  heartUntil = millis() + HEART_MS;  // se alegra (sin premio: abrir no sube nada)
+  queueFound(it, false, true);
+  save();  // un toque: se guarda ya. La mochila va antes que "gifts": un corte deja uno de mas, nunca de menos
+  return it;
+}
+
+void Pet::unwrapGifts() {
+  uint8_t k = 0;
+  for (uint8_t i = 0; i < giftN; i++) {
+    uint8_t it = gifts[i];
+    if (it == IT_CHARM && items[IT_CHARM]) it = IT_GOLDEN;
+    uint8_t cap = (it == IT_CHARM) ? 1 : ITEM_MAX;
+    if (items[it] < cap) items[it]++;
+    else gifts[k++] = gifts[i];  // no cabe: sigue envuelto
+  }
+  giftN = k;
 }
 
 void Pet::giveFound(uint8_t it, bool gift) {
@@ -1085,6 +1140,11 @@ void Pet::save() {
   // nunca uno perdido.
   prefs.putUInt("uid", uid);
   prefs.putBytes("bpack", items, sizeof(items));
+  {  // regalos (v1.55), despues de la mochila: [cuantos, objetos...]
+    uint8_t g[GIFT_MAX + 1] = { giftN };
+    memcpy(g + 1, gifts, giftN);
+    prefs.putBytes("gifts", g, sizeof(g));
+  }
   prefs.putBool("eggH", eggHeldFlag);
 }
 
@@ -1166,6 +1226,13 @@ void Pet::load() {
   if (eggAt && eggRem >= eggAt) eggRem = eggAt - 1;
   memset(items, 0, sizeof(items));
   prefs.getBytes("bpack", items, sizeof(items));
+  {
+    uint8_t g[GIFT_MAX + 1] = { 0 };
+    giftN = 0;
+    if (prefs.getBytes("gifts", g, sizeof(g)) == sizeof(g))
+      for (uint8_t i = 0; i < g[0] && i < GIFT_MAX; i++)
+        if (g[1 + i] < IT_COUNT) gifts[giftN++] = g[1 + i];
+  }
   for (uint8_t i = 0; i < IT_COUNT; i++) {
     uint8_t cap = (i == IT_CHARM) ? 1 : ITEM_MAX;
     if (items[i] > cap) items[i] = cap;

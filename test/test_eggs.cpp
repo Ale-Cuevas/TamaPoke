@@ -108,7 +108,7 @@ TEST(eggs, nunca_antes_de_8000_pasos_ni_despues_de_15000) {
     born(p);
     randomSeed(seed * 101);
     uint32_t steps = 0;
-    while (!p.items[IT_EGG] && steps < EGG_MAX_STEPS + 10) {
+    while (!p.items[IT_EGG] && !p.giftEggs() && steps < EGG_MAX_STEPS + 10) {
       p.addSteps(1, DAY);
       steps++;
     }
@@ -123,16 +123,18 @@ TEST(eggs, cuentan_dormido_y_con_un_huevo_en_casa) {
   p.toggleLight();  // dormido: los hallazgos y la felicidad no, los huevos si
   CHECK(p.sleeping);
   p.addSteps(EGG_MAX_STEPS, DAY);
-  CHECK_EQ(p.items[IT_EGG], (uint8_t)1);
+  CHECK_EQ(p.giftEggs(), (uint8_t)1);  // v1.55: envuelto, espera a que despierte
   CHECK_EQ(p.findsToday, (uint8_t)0);
+  CHECK(!p.canOpenGift());
 
-  Pet q;  // un huevo en casa, sin tocar: el que se encuentra va a la mochila
+  Pet q;  // un huevo en casa, sin tocar: el que se encuentra llega envuelto (v1.55)
   mockNvsReset();
   q.begin();
   q.chooseStarter(1);
   q.addSteps(EGG_MAX_STEPS, DAY);
   CHECK(q.isEgg() && !q.isVacant());
-  CHECK_EQ(q.items[IT_EGG], (uint8_t)1);
+  CHECK_EQ(q.giftEggs(), (uint8_t)1);
+  CHECK(!q.canOpenGift());  // con un huevo en casa no hay quien lo abra
 }
 
 TEST(eggs, el_contador_sigue_tras_un_reinicio) {
@@ -148,22 +150,19 @@ TEST(eggs, el_contador_sigue_tras_un_reinicio) {
   CHECK_EQ(q.eggStepsAt(), p.eggStepsAt());
 }
 
-TEST(eggs, con_la_mochila_llena_se_pierde_y_lo_dice) {
+// v1.55: ya no se pierde: se queda envuelto en casa hasta que haya sitio
+TEST(eggs, con_la_mochila_llena_espera_envuelto) {
   Pet p;
   born(p);
   p.items[IT_EGG] = ITEM_MAX;
   p.addSteps(EGG_MAX_STEPS, DAY);
   CHECK_EQ(p.items[IT_EGG], (uint8_t)ITEM_MAX);
+  CHECK_EQ(p.giftEggs(), (uint8_t)1);
   bool full = false;
-  bool sawEgg = false;
-  while (p.hasFound()) {
-    if (p.peekFound(&full) == IT_EGG) {
-      sawEgg = true;
-      CHECK(full);
-    }
-    p.popFound();
-  }
-  CHECK(sawEgg);
+  while (p.giftItem(0) != IT_EGG) p.openGift();  // lo encontrado antes por el camino
+  CHECK_EQ(p.openGift(&full), (uint8_t)IT_EGG);
+  CHECK(full);
+  CHECK_EQ(p.giftEggs(), (uint8_t)1);
 }
 
 TEST(eggs, el_huevo_no_se_usa_a_mano) {
