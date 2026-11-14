@@ -156,6 +156,7 @@ static void resetUi() {
   cakeHintUntil = 0;
   pet.satedUntil = 0;  // la tarta (v1.54) no pasa de una escena a otra
   pet.dbgClearGifts();  // ni los regalos (v1.55)
+  tastesMsgUntil = 0;
   while (pet.hasFound()) pet.popFound();
   pet.takeGoalBanner();
   pet.takeMedal();       // (v1.30) las celebraciones pendientes no pasan de una escena a otra
@@ -397,6 +398,12 @@ static const std::vector<Scene> &scenes() {
     { "gift-open-es", [] { pokemon(25, 13); pet.addGift(IT_CAKE); openGiftTap(); setLang(LANG_ES); applyLangFont(); }, 6 },
     { "gift-full", [] { pokemon(25, 13); gHostMillis += 3000; pet.items[IT_GOLDEN] = ITEM_MAX; pet.addGift(IT_GOLDEN); openGiftTap(); }, 6 },
     { "gifts-farewell-btn", [] { pokemon(55, 15); pet.dbgSetAge(FAREWELL_AGE_MIN + 60); pet.addGift(IT_CAKE); pet.addGift(IT_CAKE); pet.addGift(IT_CAKE); } },
+    // v1.57: a star on the favourite berry once it's known; "Its tastes changed!" after an evolution that changed it
+    { "feed-star", [] { pokemon(133, 12); pet.berryKnown = true; pet.items[IT_CAKE] = 2; menuKind = MENU_FEED; menuUntil = millis() + 6000; } },
+    { "feed-star-red", [] { pokemon(25, 12); pet.berryKnown = true; menuKind = MENU_FEED; menuUntil = millis() + 6000; } },
+    { "feed-star-night", [] { pokemon(7, 21); pet.berryKnown = true; menuKind = MENU_FEED; menuUntil = millis() + 6000; } },
+    { "tastes-changed", [] { pokemon(5, 12); tastesMsgUntil = millis() + 6000; } },
+    { "tastes-changed-es", [] { pokemon(5, 12); tastesMsgUntil = millis() + 6000; setLang(LANG_ES); applyLangFont(); } },
     { "no-cake", [] { pokemon(133, 12); gHostMillis += 3000; /* past an earlier scene's heart */ cakeHintUntil = millis() + 2500; fxo.push(FXO_DENY, 0, 0, millis()); } },
     { "no-cake-es", [] { pokemon(133, 12); gHostMillis += 3000; cakeHintUntil = millis() + 2500; setLang(LANG_ES); applyLangFont(); } },
     { "bag-es", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 0, 1, 0 }); openBag(); setLang(LANG_ES); applyLangFont(); } },

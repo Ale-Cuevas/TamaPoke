@@ -478,6 +478,43 @@ TEST(evolve, transforma_registra_y_anima) {
   CHECK(!p.evolving());
 }
 
+// v1.57: la baya favorita sale de la especie; si al evolucionar cambia, vuelve a ser un secreto (la
+// estrella del menu de comida no puede senalar la de antes)
+TEST(evolve, si_cambia_la_baya_favorita_se_olvida) {
+  Pet p;
+  makePet(p, 4);  // Charmander: azul (4 % 3); Charmeleon, verde
+  p.feedBerry(1);
+  CHECK(p.berryKnown);
+  p.setLevel(21);
+  setStats(p, 80, 80, 80, 80);
+  p.evolve();
+  CHECK_EQ(p.speciesId, (int16_t)5);
+  CHECK(!p.berryKnown);
+  p.feedBerry(2);
+  CHECK(p.berryKnown);
+}
+
+TEST(evolve, si_no_cambia_se_recuerda) {
+  bool tried = false;
+  for (int seed = 1; seed <= 60 && !tried; seed++) {  // Eevee (133) -> Flareon (136): el mismo gusto (% 3)
+    randomSeed(seed);
+    Pet p;
+    makePet(p, DEX_EEVEE);
+    p.feedBerry(DEX_EEVEE % 3);
+    CHECK(p.berryKnown);
+    p.setLevel(41);
+    setStats(p, 80, 80, 80, 80);
+    p.evolve();
+    if (p.speciesId % 3 == DEX_EEVEE % 3) {
+      tried = true;
+      CHECK(p.berryKnown);
+    } else {
+      CHECK(!p.berryKnown);
+    }
+  }
+  CHECK(tried);
+}
+
 TEST(evolve, forma_final_no_evoluciona) {
   Pet p;
   makePet(p, 6);  // CHARIZARD

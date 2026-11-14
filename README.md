@@ -134,7 +134,9 @@ While **awake**, per minute:
 
 ### Actions
 - 🍎 **Berry** (3 flavors): +25 FOOD. Each species has a **hidden favorite flavor**
-  → +35 FOOD, +10 JOY, ♥, bond, and it gets revealed.
+  → +35 FOOD, +10 JOY, ♥, bond, and it gets revealed. Once revealed, the food menu marks it with a
+  gold frame and a star (v1.57). Evolving can change the favourite: then it's a secret again and the
+  status says "Its tastes changed!".
 - 🍰 **Cake** (v1.54, the food menu's 4th slot, replacing the candy): **limited**, found on walks
   (and won in battles). It fills FOOD to 100 and **keeps it full for 3 hours** (the bar turns pink and
   the status says "So full!"; games don't make it hungry either, and the time counts while the board

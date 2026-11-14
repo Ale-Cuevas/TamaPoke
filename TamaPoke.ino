@@ -48,7 +48,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.56"
+#define FW_VERSION "1.57"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -119,7 +119,8 @@ bool bagOpen = false;         // mochila (v1.53): su boton en la fila de abajo, 
 uint8_t itemConfirm = 0;      // mochila: objeto a confirmar + 1 (0 = ninguno)
 uint32_t itemConfirmUntil = 0;
 bool foundShown = false;      // el ultimo frame enseno un hallazgo: un toque lo cierra
-uint32_t cakeHintUntil = 0;   // tocar la tarta sin ninguna (v1.54): la cabecera dice donde se encuentra
+uint32_t cakeHintUntil = 0;
+uint32_t tastesMsgUntil = 0;  // la baya favorita cambio al evolucionar (v1.57): "Sus gustos cambiaron!"   // tocar la tarta sin ninguna (v1.54): la cabecera dice donde se encuentra
 static_assert(S_IT_CAKE - S_IT_GOLDEN == IT_CAKE - IT_GOLDEN && IT_CAKE + 1 == IT_COUNT, "nombres de objeto en el orden de IT_*");
 bool clockOpen = false;       // pantalla de ajuste de hora (deslizar abajo)
 int clockH = 12, clockM = 0;  // hora en edicion
@@ -1441,7 +1442,14 @@ void onTap(int16_t x, int16_t y) {
     bool b1 = (x >= 93 && x <= 373 && y >= 206 && y <= 258);  // accion
     bool b2 = (x >= 93 && x <= 373 && y >= 268 && y <= 320);  // mantener / quedaros
     if (choiceKind == 1) {                 // evolucion
-      if (b1) { int16_t old = pet.speciesId; pet.evolve(); evoPmd.load(old, pet.shiny); }
+      if (b1) {
+        int16_t old = pet.speciesId;
+        bool knew = pet.berryKnown;
+        pet.evolve();
+        evoPmd.load(old, pet.shiny);
+        // la baya favorita cambio con la especie (v1.57): se dice al acabar la animacion
+        if (knew && !pet.berryKnown) tastesMsgUntil = millis() + EVOLVE_ANIM_MS + 6000;
+      }
       else if (b2) pet.declineEvolve();
     } else if (choiceKind == 2) {          // despedida
       if (b1) pet.startFarewell();
@@ -2389,6 +2397,16 @@ bool render() {
       drawMap(SPR_ICON_FOOD, 16, 110, 296, 3, false);
       drawMap(SPR_ICON_BERRY_B, 16, 176, 296, 3, false);
       drawMap(SPR_ICON_BERRY_G, 16, 242, 296, 3, false);
+      // la favorita, ya descubierta (v1.57): una estrella en su esquina, para no tener que recordarla
+      // con un marco dorado alrededor, que a 16 px la estrella sola apenas se ve en la placa
+      if (pet.berryKnown)
+        for (uint8_t c = 0; c < 3; c++)
+          if (pet.lovesBerry(c)) {
+            int fx = 110 + 66 * c;
+            gfx->drawRoundRect(fx - 5, 292, 58, 56, 10, UI_BAR_WARN);
+            gfx->drawRoundRect(fx - 4, 293, 56, 54, 9, UI_BAR_WARN);
+            drawMap(SPR_STAR, 16, fx + 38, 286, 1, false);
+          }
       // la tarta (v1.54), con cuantas quedan; sin ninguna, en gris
       uint8_t cakes = pet.items[IT_CAKE];
       if (cakes) drawMap(SPR_ICON_CAKE, 16, 308, 296, 3, false);
@@ -6081,6 +6099,7 @@ const char *eggMsg() {
 const char *statusMsg() {
   if (pet.evolving()) return T(S_EVOLVING);
   if (timeLeft(cakeHintUntil)) return T(S_NO_CAKE);  // tocar la tarta sin ninguna (v1.54)
+  if (timeLeft(tastesMsgUntil) && !pet.sleeping) return T(S_TASTES);  // evoluciono y cambio de baya (v1.57)
   if (bathUntil) return "Splish splash!";  // onomatopeya universal
   if (pet.emote() == EMOTE_ANGRY) return T(S_GRUMPY);
   if (pet.emote() == EMOTE_DIZZY) return T(S_DIZZY);

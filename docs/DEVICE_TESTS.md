@@ -369,6 +369,13 @@ many came today. Magikarp (`BATTLE 129`) is an easy win.
 - [ ] About 7 wins in 10 bring loot; after the 5th of the day, wins bring none (the line says `5 hoy`).
 - [ ] Opening the gift shows the item (often a cake).
 
+### Favourite berry star (v1.57)
+- [ ] Before discovering it: the food menu has no frame or star.
+- [ ] Feed the favourite ("It likes it!", heart): the next time the menu opens, that berry has a gold frame and a
+  star at its top-right corner, and the card says its colour.
+- [ ] Evolving a pet that knew its favourite (Charmander → Charmeleon changes it): "Its tastes changed!" /
+  "Sus gustos cambiaron!" after the animation, no star, card "BERRY ???".
+
 ### Waterfall (v1.43)
 ([NEW_GAMES.md, Task ZEN](NEW_GAMES.md#task-zen-meditate-under-the-waterfall).) `ZEN [s]` opens a session with no
 reward (from second s if given), `HOLD 1` / `HOLD 0` fake the finger, `HOLD OFF` gives it back, `ZEN?` prints

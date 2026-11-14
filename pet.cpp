@@ -573,7 +573,11 @@ void Pet::evolve() {
       if (!isRegistered(b)) opts[n++] = b;
     next = n > 0 ? opts[random(n)] : (int16_t)(134 + random(3));
   }
+  int16_t before = speciesId;
   speciesId = next;
+  // el gusto sale de la especie (lovesBerry): si al evolucionar cambia, la baya favorita vuelve a ser
+  // un secreto (v1.57). Si no, la estrella del menu de comida senalaria la baya de antes
+  if (berryKnown && (before % 3) != (speciesId % 3)) berryKnown = false;
   registerSpecies(speciesId);
   sfxPlay(SFX_EVOLVE);
   evolveUntil = millis() + EVOLVE_ANIM_MS;

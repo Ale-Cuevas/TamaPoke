@@ -93,6 +93,8 @@ enum StrId : uint8_t {
   S_SO_FULL, S_NO_CAKE,
   // v1.56: el botin de un combate ganado, que espera envuelto en casa
   S_BATTLE_GIFT,
+  // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
+  S_TASTES,
   STR_COUNT
 };
 

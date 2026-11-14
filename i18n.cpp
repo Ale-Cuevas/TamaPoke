@@ -66,6 +66,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Est\240 lleno!", "Sin tarta: camina o combate",
     // v1.56: el botin de un combate ganado, que espera envuelto en casa
     "Regalo en casa!",
+    // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
+    "Sus gustos cambiaron!",
   },
   // ---------------- EN ----------------
   {
@@ -126,6 +128,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "So full!", "No cake: walk or battle",
     // v1.56: el botin de un combate ganado, que espera envuelto en casa
     "A gift at home!",
+    // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
+    "Its tastes changed!",
   },
   // ---------------- FR ----------------
   {
@@ -186,6 +190,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Bien rempli !", "Pas de g\203teau: marche",
     // v1.56: el botin de un combate ganado, que espera envuelto en casa
     "Cadeau \205 la maison!",
+    // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
+    "Ses go\226ts ont chang\202!",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -251,6 +257,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Pappsatt!", "Kein Kuchen: lauf oder k\204mpf",
     // v1.56: el botin de un combate ganado, que espera envuelto en casa
     "Geschenk daheim!",
+    // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
+    "Neuer Geschmack!",
   },
   // ---------------- IT ----------------
   {
@@ -311,6 +319,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Che sazio!", "Niente torta: cammina",
     // v1.56: el botin de un combate ganado, que espera envuelto en casa
     "Regalo a casa!",
+    // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
+    "Gusti cambiati!",
   },
   // ---------------- PT ----------------
   {
@@ -371,6 +381,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "T\240 cheio!", "Sem bolo: ande ou lute",
     // v1.56: el botin de un combate ganado, que espera envuelto en casa
     "Presente em casa!",
+    // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
+    "Mudou de gosto!",
   },
   // ---------------- JA ----------------
   {
@@ -453,6 +465,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "おなか いっぱい!", "ケーキなし: あるこう",
     // v1.56: el botin de un combate ganado, que espera envuelto en casa
     "いえに プレゼント!",
+    // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
+    "このみが かわった!",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -518,6 +532,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "배불러!", "케이크 없음: 걷기",
     // v1.56: el botin de un combate ganado, que espera envuelto en casa
     "집에 선물!",
+    // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
+    "입맛이 바뀌었다!",
   },
 };
 

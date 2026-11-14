@@ -8,6 +8,21 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.57] - 2026-11-14
+
+### Added
+
+- **The favourite berry is marked.** Once you've discovered your pet's favourite berry, the food menu
+  frames it in gold with a small star, so you don't have to remember it for each pet.
+
+### Fixed
+
+- **A favourite "known" after evolving could be the wrong berry.** The favourite comes from the
+  species, so it usually changes when the pet evolves, but the discovered flag stayed. Now, when
+  evolving changes the favourite, it becomes a secret again (the card says "BERRY ???", no star) and
+  the status says "Its tastes changed!" once the animation ends. If the favourite stays the same, it
+  stays known. The Berry medal is kept.
+
 ## [1.56] - 2026-11-14
 
 ### Added
