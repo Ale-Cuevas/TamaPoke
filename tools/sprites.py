@@ -775,6 +775,29 @@ def icon_cake():
     return g.rows()
 
 
+def icon_revive():
+    # Revivir (v1.59): una pluma dorada (de fenix) en diagonal, con el canon blanco y la punta naranja.
+    # No es un corazon: el boton de Cuidar ya lo es
+    return [
+        "................",
+        "...........kkk..",
+        ".........kkfffk.",
+        "........kffffYk.",
+        ".......kfffffYk.",
+        "......kffwffYk..",
+        ".....kffwffYYk..",
+        "....kffwffYYk...",
+        "....kfwffYYk....",
+        "...kfwffYYk.....",
+        "...kwffYYk......",
+        "..kfffYkk.......",
+        "..kfYkk.........",
+        ".kOk............",
+        "kOk.............",
+        "kk..............",
+    ]
+
+
 def gift():
     # regalo en el suelo de casa: caja blanca, lazo rojo en cruz y moño
     g = G(16)
@@ -845,6 +868,7 @@ SPRITES = {
     "ICON_CARE": icon_care(),
     "ICON_SUN": icon_sun(),
     "ICON_CAKE": icon_cake(),
+    "ICON_REVIVE": icon_revive(),
     "EGG": egg(),
     "POOP": poop(),
     "HEART": heart(),

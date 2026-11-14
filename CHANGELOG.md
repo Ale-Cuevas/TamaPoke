@@ -8,6 +8,73 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.60] - 2026-11-14
+
+### Changed
+
+- **Neglect can kill the pet; the runaway is gone.** With all four needs at 0 (awake, board on), the
+  status says "It feels abandoned..." and the **bond drains from full to 0 in 30 minutes** (10 every
+  3 min; a lower bond empties sooner). With the bond at 0 ("It's very weak!"), **30 more minutes** and
+  the pet is dying. Feeding, playing or anything that lifts a need above 0 stops the count, but the
+  bond lost stays lost. Asleep or with the board off it never counts (the needs don't reach 0 there),
+  and the count survives a restart.
+- **The Revive dialog.** When the pet is dying the bye sound plays, any open screen closes, and the
+  home shows the pet as a dark silhouette in the rain with a dialog: "X is dying..." and "Use a Revive?
+  (N)". It has no time limit and nothing else works until you answer (USER doesn't close it).
+  - **YES** spends a Revive: FOOD, JOY, ENE and HYG come back to 50, "Revived!", the bond stays at 0
+    and it counts as a slip-up. A Revive still wrapped as a gift on the floor counts too (gifts can't
+    be opened while it's dying).
+  - **NO**, or **OK** when there are no Revives left, is the end: rain, the pet fades out, "It has passed
+    away...". Then the home is empty, as after any ending (a gift egg with no eggs and nobody in the Box).
+  - A restart while the dialog waits, or in the middle of the ending, comes back to the dialog.
+- **An egg of its line.** From level 50 a death has a 60 % chance of leaving an egg of the pet's
+  first form, which goes straight home ("It left an egg..."). The roll happens when the pet starts
+  dying, so restarting doesn't change it. An egg that was waiting in the incubator goes to the Backpack.
+- A death curses the next random egg (only commons), as the runaway did.
+
+### Removed
+
+- The runaway button ("X feels abandoned...") and its ending. A save that ended in a runaway still
+  gets the commons-only egg.
+- Serial `RUN`. `ABANDON` now just sets the four needs to 0. New: `NEGLECT <min>` (fast-forward the
+  count, 0-60), `DIE` (the dialog now); `STATS` prints `ngl= dth= dying= degg= revive=`.
+
+## [1.59] - 2026-11-14
+
+### Added
+
+- **The Revive** (a golden feather), a new Backpack item. It isn't used by hand: from v1.60 it's
+  offered when a neglected pet is dying, to save it. A tap on it in the Backpack says "Saves a dying
+  pet". A new game starts with **3**, and a save from before v1.59 gets its 3 once, the first boot
+  after updating. Up to 9, like the other items.
+- Where to find more: walk finds and the step goals' bonus finds (5 %; the Golden Berry goes from 40 %
+  to 35 %) and battle loot (5 %; the cake goes from 40 % to 35 %). Gifts take it as item 8.
+- Serial: `REVIVES [n]` (how many, or set n), `STATS` prints `revive=`, `GIFT 8` wraps one.
+
+### Changed
+
+- **The Backpack is a 3 × 3 grid** (it was 4 × 2) to fit the Revive: berry, cake, Rare Candy /
+  Protein, Iron, Carbos / Shiny Charm, egg, Revive.
+
+### Note
+
+- **Don't downgrade below v1.59 with this save.** The Backpack grew to 9 items, and older firmware
+  reads it as empty and overwrites it.
+
+## [1.58] - 2026-11-14
+
+### Added
+
+- **Tap a poop to clean it.** Each poop on the floor goes away with a tap (sparkles where it was, the
+  tap sound, +10 HYG), and the others stay where they are; the next one fills the empty spot. It works
+  with the pet asleep too, and it counts as the day's care for the streak. The bath is still there to
+  clean everything at once (HYG to 100, +1 bond). Serial: `TAP 70 282` / `116 282` / `162 282`.
+
+### Changed
+
+- **The pet poops less.** The chance is 5 % a minute while awake with FOOD above 40 (one every ~20 min);
+  it was 15 % (one every ~7 min). Time off still adds one every 4 hours.
+
 ## [1.57] - 2026-11-14
 
 ### Added

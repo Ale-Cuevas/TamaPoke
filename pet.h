@@ -14,7 +14,22 @@
 #define EVOLVE_ANIM_MS 5200UL              // animacion de evolucion (mas larga = mas epica)
 #define CEREMONY_MS 10000UL                // duracion de la despedida en pantalla
 #define FAREWELL_AGE_MIN (3UL * 24 * 60)   // se despide a los 3 dias de juego (en forma final)
-#define RUNAWAY_TICKS 60                   // se escapa tras 1 h con TODO a cero
+// abandono (v1.60, sustituye a la escapada): con las cuatro necesidades a cero (despierto y con la
+// placa encendida), el vinculo se apaga del todo en BOND_FADE_MIN minutos (-4, -3, -3...: 10 cada 3).
+// Ya a cero, DEATH_MIN minutos mas y se muere: un dialogo ofrece un Revivir. Un solo cuidado (cualquier
+// necesidad por encima de 0) para la cuenta; el vinculo perdido no vuelve. Desde el nivel
+// DEATH_EGG_LEVEL deja un huevo de su linea con un DEATH_EGG_ODDS %.
+#define BOND_FADE_MIN 30
+#define DEATH_MIN 30
+#define DEATH_EGG_LEVEL 50
+#define DEATH_EGG_ODDS 60
+#define REVIVE_NEEDS 50                    // revivido: comida, felicidad, energia y limpieza a 50
+// cacas (v1.58): probabilidad (%) por minuto despierto con la comida por encima de 40. Era 15 (una
+// cada ~7 min); con 5, una cada ~20 min. Cada una se limpia tocandola (POOP_TAP_HYG de limpieza)
+// o todas a la vez con el baño
+#define POOP_ODDS 5
+#define POOP_MAX 3
+#define POOP_TAP_HYG 10
 
 // --- ritmo del peso y del vinculo (v1.22). El peso es grasa de mas: 0 = en forma.
 // Antes se quemaba -1 cada 3 min (20 a la hora): una chuche (+12) desaparecia en
@@ -44,7 +59,8 @@ static inline uint32_t timeLeft(uint32_t deadline) {
 }
 
 // ceremonias de fin de ciclo
-enum : uint8_t { CER_NONE = 0, CER_FAREWELL, CER_RUNAWAY, CER_RELEASE };
+// CER_RUNAWAY ya no se usa (v1.60, la muerte la sustituye), pero un guardado puede traerlo en "lend"
+enum : uint8_t { CER_NONE = 0, CER_FAREWELL, CER_RUNAWAY, CER_RELEASE, CER_DEATH };
 
 enum PetMood : uint8_t { MOOD_HAPPY, MOOD_SAD, MOOD_EATING, MOOD_SLEEPING };
 
@@ -71,12 +87,15 @@ static const uint8_t STEP_GOAL_LEVELS[STEP_GOAL_TIERS] = { 1, 1, 2 };
 #define FIND_MIN_STEPS 800        // pasos premiados entre dos hallazgos (al azar entre MIN y MAX)
 #define FIND_MAX_STEPS 1200
 #define FINDS_PER_DAY 5           // tope de hallazgos al azar al dia (los regalos de las metas van aparte)
-// probabilidad de cada objeto (%). v1.54: entra la tarta (le quita 15 a la baya y 5 a las vitaminas)
-#define ODDS_BERRY 40
+// probabilidad de cada objeto (%). v1.54: entra la tarta (le quita 15 a la baya y 5 a las vitaminas).
+// v1.59: entra el Revivir (le quita 5 a la baya)
+#define ODDS_BERRY 35
 #define ODDS_CAKE 20
 #define ODDS_VITAMIN 30
 #define ODDS_CHARM 10
-static_assert(ODDS_BERRY + ODDS_CAKE + ODDS_VITAMIN + ODDS_CHARM == 100, "los hallazgos suman 100");
+#define ODDS_REVIVE 5
+static_assert(ODDS_BERRY + ODDS_CAKE + ODDS_VITAMIN + ODDS_CHARM + ODDS_REVIVE == 100, "los hallazgos suman 100");
+#define REVIVE_START 3            // Revivir con los que empieza una partida (y una vez, un guardado de antes de v1.59)
 #define ITEM_MAX 9                // tope de cada objeto en la mochila
 #define GOLDEN_FOOD 50            // baya dorada
 #define GOLDEN_JOY 15
@@ -103,10 +122,11 @@ static_assert(ODDS_BERRY + ODDS_CAKE + ODDS_VITAMIN + ODDS_CHARM == 100, "los ha
 #define EGG_MAX_STEPS 15000
 
 // objetos de la mochila (del jugador). El amuleto no se usa a mano: se lleva.
-// IT_RARECANDY, IT_EGG e IT_CAKE van al final: la mochila se guarda por posicion ("bpack") y un
-// guardado anterior trae solo las 5 (6, 7) primeras. El huevo (v1.39) tampoco se usa a mano: va a
-// casa solo. La tarta (v1.54) se come desde el menu de comida o desde la mochila.
-enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_RARECANDY, IT_EGG, IT_CAKE, IT_COUNT };
+// IT_RARECANDY, IT_EGG, IT_CAKE e IT_REVIVE van al final: la mochila se guarda por posicion ("bpack") y
+// un guardado anterior trae solo las 5 (6, 7, 8) primeras. El huevo (v1.39) tampoco se usa a mano: va a
+// casa solo. La tarta (v1.54) se come desde el menu de comida o desde la mochila. El Revivir (v1.59)
+// tampoco se usa a mano: se ofrece cuando el bicho se muere de abandono.
+enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_RARECANDY, IT_EGG, IT_CAKE, IT_REVIVE, IT_COUNT };
 
 // --- trucos del IMU (Tarea 2)
 #define GRUMPY_JOY 5                 // despertarlo agitando: -5 felicidad...
@@ -123,17 +143,19 @@ enum : uint8_t { EMOTE_NONE = 0, EMOTE_ANGRY, EMOTE_DIZZY, EMOTE_WOBBLE };
 #define PRACTICE_JOY 3                 // premio del combate de practica...
 #define PRACTICE_EVERY_MS 3600000UL    // ...como mucho una vez por hora
 // botin de combate (v1.56): cada victoria tiene un 70 % de traer un objeto, envuelto en casa, hasta 5 al
-// dia (se pueden repetir combates sin fin). Tabla (%): tarta 40, baya dorada 25, vitaminas 21 (7 cada
-// una), Caramelo Raro 7, amuleto 4 (con uno ya, tarta), huevo 3: el mas raro
+// dia (se pueden repetir combates sin fin). Tabla (%): tarta 35, baya dorada 25, vitaminas 21 (7 cada
+// una), Caramelo Raro 7, Revivir 5 (v1.59, le quita 5 a la tarta), amuleto 4 (con uno ya, tarta),
+// huevo 3: el mas raro
 #define BATTLE_DROP_ODDS 70
 #define BATTLE_DROPS_PER_DAY 5
-#define BDROP_CAKE 40
+#define BDROP_CAKE 35
 #define BDROP_GOLDEN 25
 #define BDROP_VITAMIN 21
 #define BDROP_RARECANDY 7
 #define BDROP_CHARM 4
+#define BDROP_REVIVE 5
 #define BDROP_EGG 3
-static_assert(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDROP_CHARM + BDROP_EGG == 100,
+static_assert(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDROP_CHARM + BDROP_REVIVE + BDROP_EGG == 100,
               "el botin suma 100");
 
 // medallas del individuo (bitmask)
@@ -233,16 +255,38 @@ public:
   void play();
   void toggleLight();  // dormir / despertar
   void clean();
+  // cacas (v1.58): huecos ocupados (bit i = la caca i en el suelo). Solo en RAM: el guardado trae la
+  // cuenta (poops) y al cargar se ocupan los primeros huecos. Si alguien cambia poops a mano (caja,
+  // renderizador), los huecos se rehacen desde la cuenta
+  uint8_t poopSlots() const;
+  bool cleanPoop(uint8_t slot);  // tocar una caca: false si no hay o no se puede (ceremonia, huevo)
   void caress();  // tocar al bicho
   void eggTap();  // tocar el huevo: 3 toques y eclosiona
   // un huevo en casa: el que esperaba en la incubadora, o uno nuevo (que se sortea ahora). No mira
   // la mochila: quien libera la casa usa freeHome(). saveNow=false solo marca el guardado (pasos)
-  void newEgg(bool saveNow = true);
+  // heir (v1.60): la especie del huevo que deja un bicho al morir (0 = la que salga en el sorteo)
+  void newEgg(bool saveNow = true, int16_t heir = 0);
   void release();  // soltar (pulsacion larga + confirmar)
   void syncClock(uint32_t nowEpoch);  // aplica el tiempo transcurrido apagado
   void setClock(uint32_t nowEpoch);   // fija la hora sin aplicar progresion
   void startFarewell();  // tambien usable desde la consola serie (BYE)
-  void startRunaway();   // tambien usable desde la consola serie (RUN)
+  // muerte por abandono (v1.60). startDying: se esta muriendo (tambien serie DIE); el tiempo se
+  // para y la UI pregunta. revive gasta un Revivir; letGo empieza la ceremonia del final
+  void startDying();
+  bool revive();
+  void letGo();
+  bool isDying() const { return dying; }
+  // Revivir a mano: los de la mochila y los que aun esperan envueltos (muriendose no se abren regalos)
+  uint8_t revivesOwned() const;
+  // ni ceremonia ni muriendose: lo que exige un bicho que pueda hacer cosas
+  bool busyEnding() const { return ceremony != CER_NONE || dying; }
+  // las cuatro necesidades a cero, despierto: el vinculo se apaga (y luego se muere)
+  bool neglected() const {
+    return !isEgg() && !sleeping && !busyEnding() && fullness == 0 && joy == 0 && energy == 0 && hygiene == 0;
+  }
+  uint8_t neglectMinutes() const { return neglectMin; }  // con el vinculo apagandose
+  uint8_t deathMinutes() const { return deathMin; }      // ya sin vinculo, hacia DEATH_MIN
+  int16_t deathEggSpecies() const { return deathEgg; }   // 0 = no deja huevo
 
   // sin bicho nacido: un huevo O la casa vacia (v1.39; isVacant() distingue)
   bool isEgg() const { return speciesId < 0; }
@@ -257,7 +301,7 @@ public:
   uint8_t giftCount() const { return giftN; }
   uint8_t giftItem(uint8_t i) const { return i < giftN ? gifts[i] : (uint8_t)IT_COUNT; }
   uint8_t giftEggs() const;
-  bool canOpenGift() const { return giftN && !isEgg() && !sleeping && ceremony == CER_NONE && !starterPick; }
+  bool canOpenGift() const { return giftN && !isEgg() && !sleeping && !busyEnding() && !starterPick; }
   // abre el primero: a la mochila, el bicho se alegra (corazon) y sale el aviso "REGALO!". Devuelve el
   // objeto (IT_COUNT si no se pudo abrir). *full: no cabia en la mochila y el regalo sigue ahi
   uint8_t openGift(bool *full = nullptr);
@@ -273,7 +317,6 @@ public:
   bool canEvolveNow() const;  // condiciones de evolucion cumplidas (lista)
   void evolve();              // dispara la transformacion (la llama un toque del usuario)
   bool canFarewellNow() const;  // forma final + 7 dias: lista para despedirse (boton)
-  bool canRunawayNow() const;   // abandono total 1h: lista para escaparse (boton triste)
   // el usuario decide en un dialogo; "mantener/quedaros" pospone y re-ofrece luego
   bool wantEvolveButton() const { return canEvolveNow() && level() > evoDeclinedLv; }
   bool wantFarewellButton() const { return canFarewellNow() && ageMinutes >= farDeclinedAge; }
@@ -284,8 +327,14 @@ public:
   void chooseStarter(int16_t dex) { eggTarget = dex; starterPick = false; save(); }
   void factoryReset() { prefs.clear(); }  // borra la NVS (test: comando serie WIPE)
   void dbgSetAge(uint32_t m) { ageMinutes = m; save(); }  // serie AGE (pruebas)
-  void dbgClearGifts() { giftN = 0; }  // renderizador: cada escena empieza sin regalos
-  void dbgRunawayReady() { fullness = joy = energy = hygiene = 0; neglectTicks = RUNAWAY_TICKS; }  // test
+  void dbgClearGifts() { giftN = 0; }
+  void dbgAddPoop() { addPoop(); }  // serie POOP y renderizador
+  void dbgSetPoops(uint8_t n) { poops = n > POOP_MAX ? POOP_MAX : n; poopMask = (1 << poops) - 1; }  // renderizador  // renderizador: cada escena empieza sin regalos
+  void dbgAbandon() { fullness = joy = energy = hygiene = 0; }  // serie ABANDON: empieza la cuenta
+  void dbgClearDying() { dying = false; deathEgg = 0; neglectMin = deathMin = 0; }  // renderizador
+  // serie NEGLECT <min>: adelanta la cuenta. Hasta BOND_FADE_MIN, el vinculo como si llevara m minutos
+  // apagandose; por encima, vinculo 0 y m - BOND_FADE_MIN minutos hacia la muerte
+  void dbgNeglect(uint16_t m);
   // uint16_t, no uint8_t: un uint8_t daba la vuelta a 0 en el nivel 256, y eso se
   // alcanza jugando, porque "quedaros juntos" permite posponer la despedida
   // indefinidamente. Se topa en LEVEL_MAX (999) en vez de desbordar.
@@ -338,6 +387,7 @@ public:
   uint16_t eggStepsAt() const { return eggAt; }
   // EGG <n> por serie (pruebas): n huevos en la mochila; con la casa vacia, uno pasa a casa
   void setBagEggs(uint8_t n);
+  void setRevives(uint8_t n) { items[IT_REVIVE] = n > ITEM_MAX ? ITEM_MAX : n; save(); }  // serie REVIVES (v1.59)
   // efecto de usar un objeto de la mochila (false = no se pudo: dormido, huevo, no hay)
   bool canUseItem(uint8_t it) const;
   bool useItem(uint8_t it);
@@ -366,7 +416,7 @@ public:
 
   // --- combate de practica (Tarea 3a)
   // puede combatir: nacido, despierto, sin ceremonia ni evolucion en curso
-  bool canBattle() const { return !isEgg() && !sleeping && ceremony == CER_NONE && !evolving() && !starterPick; }
+  bool canBattle() const { return !isEgg() && !sleeping && !busyEnding() && !evolving() && !starterPick; }
   // fin de un combate de practica (gane quien gane): +PRACTICE_JOY de felicidad
   // como mucho una vez por hora. Devuelve la felicidad dada (0 si no tocaba).
   // No cuenta en ningun historial de victorias.
@@ -402,7 +452,7 @@ public:
   const PetRecord &boxRecord(uint8_t k) const { return boxRec[k < BOX_SLOTS ? k : 0]; }  // solo si BOX_OK
   uint8_t boxUsed() const;   // huecos ocupados (danados incluidos)
   // se puede mover algo: sin despedida, evolucion ni eleccion de inicial
-  bool canBoxMove() const { return ceremony == CER_NONE && !evolving() && !starterPick; }
+  bool canBoxMove() const { return !busyEnding() && !evolving() && !starterPick; }
   bool canStore(uint8_t k) const { return boxState(k) == BOX_EMPTY && k < BOX_SLOTS && !isEgg() && canBoxMove(); }
   bool canWake(uint8_t k) const { return boxState(k) == BOX_OK && canBoxMove(); }
   // guarda al bicho en el hueco k (vacio) y deja en su sitio el huevo guardado, o uno nuevo
@@ -436,7 +486,13 @@ private:
   uint16_t evoDeclinedLv = 0;   // "mantener forma": no ofrecer evolucion hasta subir de nivel
   uint32_t farDeclinedAge = 0;  // "quedaros juntos": no ofrecer despedida hasta esta edad
   bool starterPick = false;     // primera partida: esperando que el jugador elija inicial
-  uint8_t neglectTicks = 0;
+  // abandono (v1.60): minutos con todo a cero apagando el vinculo, y ya sin el, hacia la muerte.
+  // Se guardan ("ngl", "dth"): un reinicio no los pone a cero
+  uint8_t neglectMin = 0, deathMin = 0;
+  bool dying = false;          // "dying": se esta muriendo, el dialogo espera
+  int16_t deathEgg = 0;        // "degg": sorteado al empezar a morirse (un reinicio no lo repite)
+  uint8_t poopMask = 0;    // huecos de las cacas (v1.58, ver poopSlots)
+  void addPoop();
   uint16_t goodTicks = 0;  // racha bien cuidado: forja la DEF
   uint32_t ceremonyUntil = 0;
   uint8_t bondToday = 0;       // tope diario de subida de vinculo
@@ -454,6 +510,7 @@ private:
   uint8_t bdropToday = 0;      // ...y objetos ganados ese dia (tope BATTLE_DROPS_PER_DAY)
   uint8_t gifts[GIFT_MAX] = { 0 };  // regalos sin abrir (v1.55), en orden de llegada
   uint8_t giftN = 0;
+  bool takeGift(uint8_t it);   // quita un regalo de ese objeto sin abrirlo (el Revivir, v1.60)
   void giveGift(uint8_t it);   // envuelto; con la cola llena, a la mochila con aviso (giveFound)
   void unwrapGifts();          // la casa queda libre: los regalos entran solos en la mochila
   uint16_t eggRem = 0;         // pasos hacia el siguiente huevo (v1.39)...

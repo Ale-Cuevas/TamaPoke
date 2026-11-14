@@ -11,7 +11,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
   {
     "Est\240 evolucionando!", "Nam nam!", "Le gusta!", "Tiene hambre!", "Necesita un ba\244o!",
     "Est\240 agotado...", "Est\240 triste...", "Est\240 rellenito...", "Es SHINY!!", "Est\240 feliz",
-    "GRACIAS! Hasta siempre", "Se ha escapado...", "Adi\242s! Se despide...",
+    "GRACIAS! Hasta siempre", "Ha muerto...", "Adi\242s! Se despide...",
     "HUEVO", "Huevo legendario!?", "Huevo raro!", "Toca el huevo...", "Se mueve!", "Est\240 a punto!",
     "POKEDEX %u/151",
     "%s%s Nv.%u",
@@ -30,7 +30,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "PROGRESO", "Nv.%u", "%u min para Nv.%u", "EVOLUCION", "Forma final",
     "Listo para evolucionar!", "Sube todo a 40 para evolucionar",
     "Evoluciona en %u niv.", "Descuidos: %u",
-    "EVOLUCIONAR", "%s quiere decirte algo...", "%s se siente abandonado...",
+    "EVOLUCIONAR", "%s quiere decirte algo...", "Se siente abandonado...",
     "Evolucionar?", "Mantener forma", "Despedirse?", "Despedirse", "Quedaros juntos",
     "Elige tu inicial",
     "Sin sprites", "C\240rgalos en la SD",
@@ -38,7 +38,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "PASEO", "%lu PASOS", "TOTAL %lu", "HALLAZGOS %u/%u", "MOCHILA", "Sin sensor de pasos",
     "META!", "HALLAZGO!", "Mochila llena", "Usar %s?", "Amuleto: huevo shiny", "Vac\241a: sal a pasear!",
     "Est\240 enfadado!", "Qu\202 mareo...",
-    "BAYA DORADA", "PROTEINA", "HIERRO", "CARBURANTE", "AMULETO IRIS", "CARAMELO RARO", "HUEVO", "TARTA",
+    "BAYA DORADA", "PROTEINA", "HIERRO", "CARBURANTE", "AMULETO IRIS", "CARAMELO RARO", "HUEVO", "TARTA", "REVIVIR",
     // combate (v1.24)
     "ENTRENAMIENTO", "Es muy eficaz!", "No es muy eficaz...", "No le afecta...", "Golpe cr\241tico!", "Especial!",
     "Toca para cargar!", "GANASTE!", "PERDISTE...", "EMPATE", "Felicidad +%u", "Premio: una vez por hora",
@@ -68,12 +68,16 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Regalo en casa!",
     // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
     "Sus gustos cambiaron!",
+    // v1.59: la pista del Revivir en la mochila (no se usa a mano)
+    "Salva a un bicho moribundo",
+    // v1.60: muerte por abandono: sin vinculo, el dialogo, el huevo que deja, revivido
+    "Est\240 muy d\202bil!", "%s se muere...", "Usar un Revivir? (%u)", "No te quedan Revivir", "VALE", "Dej\242 un huevo...", "Revivido!",
   },
   // ---------------- EN ----------------
   {
     "Evolving!", "Yum yum!", "It likes it!", "It's hungry!", "Needs a bath!",
     "Worn out...", "Feeling sad...", "A bit chubby...", "It's SHINY!!", "It's happy",
-    "THANKS! Farewell", "It ran away...", "Bye! Waving goodbye...",
+    "THANKS! Farewell", "It has passed away...", "Bye! Waving goodbye...",
     "EGG", "Legendary egg!?", "Rare egg!", "Tap the egg...", "It moves!", "Almost there!",
     "POKEDEX %u/151",
     "%s%s Lv.%u",
@@ -92,7 +96,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "PROGRESS", "Lv.%u", "%u min to Lv.%u", "EVOLUTION", "Final form",
     "Ready to evolve!", "All needs >=40 to evolve",
     "Evolves in %u lv.", "Slip-ups: %u",
-    "EVOLVE!", "%s wants to tell you...", "%s feels abandoned...",
+    "EVOLVE!", "%s wants to tell you...", "It feels abandoned...",
     "Evolve?", "Keep form", "Say goodbye?", "Goodbye", "Stay together",
     "Choose your starter",
     "No sprites", "Load them onto the SD",
@@ -100,7 +104,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "WALK", "%lu STEPS", "TOTAL %lu", "FINDS %u/%u", "BACKPACK", "No step sensor",
     "GOAL!", "FOUND!", "Backpack full", "Use %s?", "Charm: shinier egg", "Empty: go for a walk!",
     "Grumpy!", "So dizzy...",
-    "GOLDEN BERRY", "PROTEIN", "IRON", "CARBOS", "SHINY CHARM", "RARE CANDY", "EGG", "CAKE",
+    "GOLDEN BERRY", "PROTEIN", "IRON", "CARBOS", "SHINY CHARM", "RARE CANDY", "EGG", "CAKE", "REVIVE",
     // combate (v1.24)
     "PRACTICE", "Super effective!", "Not very effective...", "No effect...", "Critical hit!", "Special!",
     "Tap to charge!", "YOU WIN!", "YOU LOST...", "DRAW", "Joy +%u", "Reward: once an hour",
@@ -130,12 +134,16 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "A gift at home!",
     // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
     "Its tastes changed!",
+    // v1.59: la pista del Revivir en la mochila (no se usa a mano)
+    "Saves a dying pet",
+    // v1.60: muerte por abandono: sin vinculo, el dialogo, el huevo que deja, revivido
+    "It's very weak!", "%s is dying...", "Use a Revive? (%u)", "No Revives left", "OK", "It left an egg...", "Revived!",
   },
   // ---------------- FR ----------------
   {
     "Il \202volue!", "Miam miam!", "Il aime \207a!", "Il a faim!", "Besoin d'un bain!",
     "\220puis\202...", "Triste...", "Un peu rond...", "C'est SHINY!!", "Il est content",
-    "MERCI! Adieu", "Il s'est enfui...", "Au revoir!",
+    "MERCI! Adieu", "Il est mort...", "Au revoir!",
     "OEUF", "Oeuf l\202gendaire!?", "Oeuf rare!", "Touche l'oeuf...", "Il bouge!", "Presque l\205!",
     "POKEDEX %u/151",
     "%s%s Niv.%u",
@@ -154,7 +162,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "PROGRES", "Niv.%u", "%u min pour Niv.%u", "\220VOLUTION", "Forme finale",
     "Pr\210t \205 \202voluer!", "Tout \205 40 pour \202voluer",
     "\220volue dans %u niv.", "N\202gligences: %u",
-    "\220VOLUER", "%s veut te parler...", "%s se sent abandonn\202...",
+    "\220VOLUER", "%s veut te parler...", "Se sent abandonn\202...",
     "\220voluer?", "Garder forme", "Dire adieu?", "Adieu", "Rester ensemble",
     "Choisis ton starter",
     "Pas de sprites", "Charge-les sur la SD",
@@ -162,7 +170,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "BALADE", "%lu PAS", "TOTAL %lu", "TROUV\220S %u/%u", "SAC \205 DOS", "Pas de capteur",
     "OBJECTIF!", "TROUV\220!", "Sac plein", "Utiliser %s?", "Charme: oeuf chroma", "Vide: va te balader!",
     "Grognon!", "Tout \202tourdi...",
-    "BAIE DOR\220E", "PROT\220INE", "FER", "CARBONE", "CHARME CHROMA", "SUPER BONBON", "OEUF", "GATEAU",
+    "BAIE DOR\220E", "PROT\220INE", "FER", "CARBONE", "CHARME CHROMA", "SUPER BONBON", "OEUF", "GATEAU", "RANIMER",
     // combate (v1.24)
     "ENTRA\214NEMENT", "Super efficace!", "Pas tr\212s efficace...", "Aucun effet...", "Coup critique!", "Sp\202cial!",
     "Tape pour charger!", "GAGN\220!", "PERDU...", "\220GALIT\220", "Bonheur +%u", "Prix: une fois par heure",
@@ -192,6 +200,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Cadeau \205 la maison!",
     // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
     "Ses go\226ts ont chang\202!",
+    // v1.59: la pista del Revivir en la mochila (no se usa a mano)
+    "Sauve un ami mourant",
+    // v1.60: muerte por abandono: sin vinculo, el dialogo, el huevo que deja, revivido
+    "Il est tr\212s faible!", "%s se meurt...", "Utiliser Ranimer? (%u)", "Plus de Ranimer", "OK", "Il a laiss\202 un oeuf...", "Ranim\202!",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -202,7 +214,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
   {
     "Entwickelt sich!", "Mampf mampf!", "Gef\204llt ihm!", "Hat Hunger!", "Braucht ein Bad!",
     "Ersch\224pft...", "Traurig...", "Etwas rundlich...", "Es ist SHINY!!", "Es ist froh",
-    "DANKE! Leb wohl", "Es ist weg...", "Tsch\201ss! Winkt",
+    "DANKE! Leb wohl", "Es ist gestorben...", "Tsch\201ss! Winkt",
     "EI", "Legend\204res Ei!?", "Seltenes Ei!", "Ber\201hre das Ei...", "Es bewegt sich!", "Fast so weit!",
     "POKEDEX %u/151",
     "%s%s Lv.%u",
@@ -221,7 +233,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "FORTSCHRITT", "Lv.%u", "%u min bis Lv.%u", "ENTWICKLUNG", "Endform",
     "Bereit zur Entwicklung!", "Alles >=40 zur Entwicklung",
     "Entwicklung in %u Lv.", "Patzer: %u",
-    "ENTWICKELN", "%s will dir etwas sagen...", "%s f\201hlt sich verlassen...",
+    "ENTWICKELN", "%s will dir etwas sagen...", "F\201hlt sich verlassen...",
     "Entwickeln?", "Form behalten", "Abschied?", "Leb wohl", "Zusammen bleiben",
     "W\204hle deinen Starter",
     "Keine Sprites", "Auf die SD laden",
@@ -229,7 +241,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "SPAZIERGANG", "%lu SCHRITTE", "GESAMT %lu", "FUNDE %u/%u", "RUCKSACK", "Kein Sensor",
     "ZIEL!", "GEFUNDEN!", "Rucksack voll", "%s nutzen?", "Pin: Ei schillert", "Leer: geh spazieren!",
     "Grummelig!", "Schwindelig...",
-    "GOLDBEERE", "PROTEIN", "EISEN", "CARBON", "SCHILLERPIN", "SONDERBONBON", "EI", "KUCHEN",
+    "GOLDBEERE", "PROTEIN", "EISEN", "CARBON", "SCHILLERPIN", "SONDERBONBON", "EI", "KUCHEN", "BELEBER",
     // combate (v1.24)
     "TRAINING", "Sehr effektiv!", "Nicht sehr effektiv...", "Keine Wirkung...", "Volltreffer!", "Spezial!",
     "Tippen zum Laden!", "GEWONNEN!", "VERLOREN...", "UNENTSCHIEDEN", "Laune +%u", "Belohnung: 1x pro Stunde",
@@ -259,12 +271,16 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Geschenk daheim!",
     // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
     "Neuer Geschmack!",
+    // v1.59: la pista del Revivir en la mochila (no se usa a mano)
+    "Rettet ein sterbendes Tier",
+    // v1.60: muerte por abandono: sin vinculo, el dialogo, el huevo que deja, revivido
+    "Sehr schwach!", "%s stirbt...", "Beleber nutzen? (%u)", "Keine Beleber mehr", "OK", "Es hinterl\204sst ein Ei...", "Wiederbelebt!",
   },
   // ---------------- IT ----------------
   {
     "Si evolve!", "Gnam gnam!", "Gli piace!", "Ha fame!", "Vuole un bagno!",
     "Esausto...", "Triste...", "Un po' cicciotto...", "E' SHINY!!", "E' felice",
-    "GRAZIE! Addio", "E' scappato...", "Ciao! Saluta",
+    "GRAZIE! Addio", "E' morto...", "Ciao! Saluta",
     "UOVO", "Uovo leggendario!?", "Uovo raro!", "Tocca l'uovo...", "Si muove!", "Ci siamo quasi!",
     "POKEDEX %u/151",
     "%s%s Lv.%u",
@@ -283,7 +299,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "PROGRESSI", "Lv.%u", "%u min per Lv.%u", "EVOLUZIONE", "Forma finale",
     "Pronto a evolvere!", "Tutto a 40 per evolvere",
     "Evolve tra %u liv.", "Disattenzioni: %u",
-    "EVOLVI", "%s vuole dirti qualcosa...", "%s si sente abbandonato...",
+    "EVOLVI", "%s vuole dirti qualcosa...", "Si sente abbandonato...",
     "Evolvere?", "Mantieni forma", "Salutare?", "Addio", "Restare insieme",
     "Scegli l'iniziale",
     "Senza sprite", "Caricali sulla SD",
@@ -291,7 +307,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "PASSEGGIATA", "%lu PASSI", "TOTALE %lu", "TROVATI %u/%u", "ZAINO", "Nessun sensore",
     "OBIETTIVO!", "TROVATO!", "Zaino pieno", "Usare %s?", "Amuleto: uovo shiny", "Vuoto: fai due passi!",
     "Arrabbiato!", "Che capogiro...",
-    "BACCA D'ORO", "PROTEINA", "FERRO", "CARBURANTE", "CROMAMULETO", "CARAMELLA RARA", "UOVO", "TORTA",
+    "BACCA D'ORO", "PROTEINA", "FERRO", "CARBURANTE", "CROMAMULETO", "CARAMELLA RARA", "UOVO", "TORTA", "RIANIMA",
     // combate (v1.24)
     "ALLENAMENTO", "Superefficace!", "Non \212 molto efficace...", "Nessun effetto...", "Brutto colpo!", "Speciale!",
     "Tocca per caricare!", "HAI VINTO!", "HAI PERSO...", "PAREGGIO", "Felicit\205 +%u", "Premio: una volta l'ora",
@@ -321,12 +337,16 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Regalo a casa!",
     // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
     "Gusti cambiati!",
+    // v1.59: la pista del Revivir en la mochila (no se usa a mano)
+    "Salva chi sta morendo",
+    // v1.60: muerte por abandono: sin vinculo, el dialogo, el huevo que deja, revivido
+    "E' debolissimo!", "%s sta morendo...", "Usare Rianima? (%u)", "Niente Rianima", "OK", "Ha lasciato un uovo...", "Rianimato!",
   },
   // ---------------- PT ----------------
   {
     "Evoluindo!", "Nham nham!", "Ele gosta!", "Est\240 com fome!", "Precisa de banho!",
     "Exausto...", "Triste...", "Um pouco gordinho...", "\220 SHINY!!", "Est\240 feliz",
-    "OBRIGADO! Adeus", "Fugiu...", "Tchau! Acena",
+    "OBRIGADO! Adeus", "Morreu...", "Tchau! Acena",
     "OVO", "Ovo lend\240rio!?", "Ovo raro!", "Toque no ovo...", "Mexe-se!", "Quase l\240!",
     "POKEDEX %u/151",
     "%s%s Niv.%u",
@@ -345,7 +365,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "PROGRESSO", "Niv.%u", "%u min para Niv.%u", "EVOLUCAO", "Forma final",
     "Pronto a evoluir!", "Tudo a 40 para evoluir",
     "Evolui em %u niv.", "Descuidos: %u",
-    "EVOLUIR", "%s quer dizer-te algo...", "%s sente-se abandonado...",
+    "EVOLUIR", "%s quer dizer-te algo...", "Sente-se abandonado...",
     "Evoluir?", "Manter forma", "Despedir?", "Adeus", "Ficar juntos",
     "Escolhe o inicial",
     "Sem sprites", "Carrega-os no SD",
@@ -353,7 +373,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "PASSEIO", "%lu PASSOS", "TOTAL %lu", "ACHADOS %u/%u", "MOCHILA", "Sem sensor",
     "META!", "ACHOU!", "Mochila cheia", "Usar %s?", "Amuleto: ovo shiny", "Vazia: vai passear!",
     "Zangado!", "Que tontura...",
-    "BAGA DOURADA", "PROTEINA", "FERRO", "CARBOS", "AMULETO BRILHANTE", "DOCE RARO", "OVO", "BOLO",
+    "BAGA DOURADA", "PROTEINA", "FERRO", "CARBOS", "AMULETO BRILHANTE", "DOCE RARO", "OVO", "BOLO", "REVIVER",
     // combate (v1.24)
     "TREINO", "Super efetivo!", "Pouco efetivo...", "Sem efeito...", "Golpe cr\241tico!", "Especial!",
     "Toque para carregar!", "VENCEU!", "PERDEU...", "EMPATE", "Alegria +%u", "Pr\210mio: 1 vez por hora",
@@ -383,12 +403,16 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Presente em casa!",
     // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
     "Mudou de gosto!",
+    // v1.59: la pista del Revivir en la mochila (no se usa a mano)
+    "Salva quem esta morrendo",
+    // v1.60: muerte por abandono: sin vinculo, el dialogo, el huevo que deja, revivido
+    "Muito fraco!", "%s esta morrendo...", "Usar Reviver? (%u)", "Sem Reviver", "OK", "Deixou um ovo...", "Revivido!",
   },
   // ---------------- JA ----------------
   {
     "しんかした！", "おいしい！", "うれしそう！", "おなかすいた！", "おふろにいれて！",
     "つかれた...", "かなしい...", "ちょっとふとった...", "いろちがい！！", "ごきげん！",
-    "ありがとう！ またね", "にげちゃった...", "バイバイ！",
+    "ありがとう！ またね", "しんでしまった...", "バイバイ！",
 
     "たまご", "でんせつのたまご！？", "めずらしいたまご！", "たまごをタッチ...", "うごいた！", "もうすぐ！",
 
@@ -426,7 +450,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
 
     "%u Lv.でしんか", "おせわミス: %u",
 
-    "しんか", "%sがなにかいいたそう...", "%sがさびしがっている...",
+    "しんか", "%sがなにかいいたそう...", "さびしがっている...",
 
     "しんかする？", "このまま", "おわかれする？", "さようなら", "いっしょにいる",
 
@@ -437,7 +461,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "さんぽ", "%lu ほ", "ごうけい %lu", "みつけた %u/%u", "リュック", "センサーなし",
     "もくひょう！", "みつけた！", "リュックがいっぱい", "%sをつかう？", "おまもり: いろちがい", "からっぽ: さんぽしよう！",
     "ぷんぷん！", "くらくら...",
-    "きんのみ", "プロテイン", "アイアン", "カーボス", "ひかるおまもり", "ふしぎなアメ", "たまご", "ケーキ",
+    "きんのみ", "プロテイン", "アイアン", "カーボス", "ひかるおまもり", "ふしぎなアメ", "たまご", "ケーキ", "ふっかつ",
     // combate (v1.24)
     "れんしゅう", "こうかは ばつぐんだ！", "こうかは いまひとつ...", "こうかが ない...", "きゅうしょに あたった！", "ひっさつ！",
     "タッチで ためる！", "かった！", "まけた...", "ひきわけ", "ごきげん +%u", "ごほうびは 1じかんに 1かい",
@@ -467,6 +491,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "いえに プレゼント!",
     // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
     "このみが かわった!",
+    // v1.59: la pista del Revivir en la mochila (no se usa a mano)
+    "しにかけた なかまを たすける",
+    // v1.60: muerte por abandono: sin vinculo, el dialogo, el huevo que deja, revivido
+    "とても よわっている!", "%sが しにそう...", "ふっかつを つかう? (%u)", "ふっかつが ない", "OK", "たまごを のこした...", "ふっかつ!",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -477,7 +505,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
   {
     "진화 중!", "냠냠!", "마음에 들어해요!", "배고파요!", "목욕이 필요해요!",
     "지쳤어요...", "슬퍼해요...", "조금 통통해요...", "이로치예요!!", "행복해요",
-    "고마워요! 안녕", "가출했어요...", "잘 가! 손을 흔들며...",
+    "고마워요! 안녕", "세상을 떠났어요...", "잘 가! 손을 흔들며...",
     "알", "전설의 알!?", "희귀한 알!", "알을 톡톡...", "움직여요!", "거의 다 됐어요!",
     "도감 %u/151",
     "%s%s Lv.%u",
@@ -496,7 +524,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "진행도", "Lv.%u", "%u분 후 Lv.%u", "진화", "최종 형태",
     "진화 준비 완료!", "진화하려면 전부 40 이상",
     "%u레벨 이후에 진화", "실수: %u",
-    "진화!", "%s가 할 말이 있대요...", "%s가 버려진 기분이래요...",
+    "진화!", "%s가 할 말이 있대요...", "버려진 기분이래요...",
     "진화할까요?", "형태 유지", "작별할까요?", "작별", "계속 함께",
     "스타터를 선택하세요",
     "스프라이트 없음", "SD 카드에 넣어주세요",
@@ -504,7 +532,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "산책", "%lu 걸음", "누적 %lu", "발견 %u/%u", "배낭", "센서 없음",
     "목표 달성!", "발견!", "배낭이 가득", "%s 사용?", "부적: 이로치 알", "비었어요: 산책하자!",
     "화났어!", "어지러워...",
-    "황금열매", "프로테인", "아이언", "카보스", "빛나는부적", "이상한사탕", "알", "케이크",
+    "황금열매", "프로테인", "아이언", "카보스", "빛나는부적", "이상한사탕", "알", "케이크", "부활",
     // combate (v1.24)
     "연습", "효과가 굉장했다!", "효과가 별로인 듯...", "효과가 없다...", "급소에 맞았다!", "필살기!",
     "탭해서 모으기!", "이겼다!", "졌다...", "무승부", "기분 +%u", "보상은 1시간에 1번",
@@ -534,6 +562,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "집에 선물!",
     // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
     "입맛이 바뀌었다!",
+    // v1.59: la pista del Revivir en la mochila (no se usa a mano)
+    "죽어가는 친구를 구한다",
+    // v1.60: muerte por abandono: sin vinculo, el dialogo, el huevo que deja, revivido
+    "너무 약해요!", "%s가 죽어가요...", "부활을 쓸까요? (%u)", "부활이 없어요", "확인", "알을 남겼어요...", "부활했어요!",
   },
 };
 

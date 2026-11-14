@@ -351,7 +351,8 @@ TEST(tick, sobrepeso_se_quema_solo) {
 TEST(tick, descuido_cuenta_una_vez_por_hora) {
   Pet p;
   makePet(p, 4);
-  setStats(p, 0, 0, 0, 0);
+  setStats(p, 5, 0, 0, 0);
+  p.satedUntil = 100000;  // la comida no baja: sin las cuatro a cero no hay abandono (v1.60)
   advance(p, 1);
   CHECK_EQ(p.careMistakes, (uint8_t)1);
   advance(p, 50);
@@ -366,7 +367,8 @@ TEST(tick, descuido_enfria_el_vinculo_sin_arrasarlo) {
   Pet p;
   makePet(p, 4);
   p.bond = 50;
-  setStats(p, 0, 0, 0, 0);
+  setStats(p, 5, 0, 0, 0);
+  p.satedUntil = 100000;  // como arriba: un descuido, no el abandono (que si lo apaga, v1.60)
   advance(p, 1);
   CHECK_EQ(p.bond, (uint8_t)49);
   p.bond = 1;
@@ -756,6 +758,69 @@ TEST(care, limpiar_quita_cacas_y_deja_higiene_a_tope) {
   CHECK_EQ(p.hygiene, (uint8_t)100);
 }
 
+// v1.58: una caca se limpia tocandola; solo esa (las demas siguen en su sitio)
+TEST(care, tocar_una_caca_quita_solo_esa) {
+  Pet p;
+  makePet(p, 4);
+  p.dbgSetPoops(3);
+  p.hygiene = 40;
+  uint8_t bond = p.bond;
+  CHECK(p.cleanPoop(1));
+  CHECK_EQ(p.poops, (uint8_t)2);
+  CHECK_EQ(p.poopSlots(), (uint8_t)0b101);
+  CHECK_EQ(p.hygiene, (uint8_t)(40 + POOP_TAP_HYG));
+  CHECK_EQ(p.bond, bond);  // el vinculo lo da el baño, no cada caca
+  CHECK(!p.cleanPoop(1));  // ya no esta
+  CHECK(p.cleanPoop(0));
+  CHECK(p.cleanPoop(2));
+  CHECK_EQ(p.poops, (uint8_t)0);
+  CHECK(!p.cleanPoop(3));
+}
+
+TEST(care, la_caca_nueva_ocupa_el_hueco_libre) {
+  Pet p;
+  makePet(p, 4);
+  p.dbgSetPoops(3);
+  CHECK(p.cleanPoop(0));
+  p.dbgAddPoop();
+  CHECK_EQ(p.poops, (uint8_t)3);
+  CHECK_EQ(p.poopSlots(), (uint8_t)0b111);
+}
+
+TEST(care, una_caca_se_limpia_dormido_pero_no_en_la_ceremonia) {
+  Pet p;
+  makePet(p, 4);
+  p.dbgSetPoops(2);
+  p.sleeping = true;
+  CHECK(p.cleanPoop(0));
+  p.sleeping = false;
+  p.release();
+  CHECK(!p.cleanPoop(1));
+}
+
+TEST(care, cuenta_de_cacas_cambiada_a_mano_rehace_los_huecos) {
+  Pet p;
+  makePet(p, 4);
+  p.dbgSetPoops(3);
+  CHECK(p.cleanPoop(0));  // huecos 0b110
+  p.poops = 1;            // la caja o el renderizador cambian la cuenta
+  CHECK_EQ(p.poopSlots(), (uint8_t)0b001);
+}
+
+TEST(tick, caca_cada_veinte_minutos_de_media) {
+  Pet p;
+  makePet(p, 4);
+  mockForceRandom(POOP_ODDS);  // justo por encima: nunca
+  setStats(p, 100, 100, 100, 100);
+  advance(p, 5);
+  CHECK_EQ(p.poops, (uint8_t)0);
+  mockForceRandom(POOP_ODDS - 1);  // justo por debajo: cada minuto
+  setStats(p, 100, 100, 100, 100);
+  advance(p, 1);
+  CHECK_EQ(p.poops, (uint8_t)1);
+  mockClearForcedRandom();
+}
+
 TEST(care, mimar_sube_felicidad_y_vinculo) {
   Pet p;
   makePet(p, 4);
@@ -855,14 +920,16 @@ TEST(egg, el_primer_huevo_es_un_inicial_clasico) {
   }
 }
 
-TEST(egg, una_escapada_castiga_la_rareza) {
+TEST(egg, una_escapada_o_una_muerte_castigan_la_rareza) {
   Pet p;
   makePet(p, 4);
-  p.lastEnd = CER_RUNAWAY;
-  for (int seed = 1; seed <= 60; seed++) {
-    randomSeed(seed);
-    int16_t d = p.pickEggSpecies();
-    CHECK_MSG(DEX_TBL[d].rarity == R_COMUN, "tras una escapada solo salen comunes");
+  for (uint8_t end : { (uint8_t)CER_RUNAWAY, (uint8_t)CER_DEATH }) {  // la escapada, de un guardado viejo
+    p.lastEnd = end;
+    for (int seed = 1; seed <= 60; seed++) {
+      randomSeed(seed);
+      int16_t d = p.pickEggSpecies();
+      CHECK_MSG(DEX_TBL[d].rarity == R_COMUN, "tras una escapada o una muerte solo salen comunes");
+    }
   }
 }
 
@@ -1022,25 +1089,314 @@ TEST(ceremony, la_despedida_deja_un_huevo_nuevo) {
   CHECK_EQ(p.ageMinutes, (uint32_t)0);
 }
 
-TEST(ceremony, escaparse_pide_una_hora_de_abandono_total) {
+// ---------------------------------------------------------------- abandono y muerte (v1.60)
+static void dieAndWait(Pet &p) {
+  p.startDying();
+  p.letGo();
+  mockAdvanceMillis(CEREMONY_MS + 1);
+  p.update(millis());
+}
+
+TEST(death, todo_a_cero_apaga_el_vinculo_en_media_hora) {
+  Pet p;
+  makePet(p, 4);
+  p.bond = 100;
+  setStats(p, 0, 0, 0, 0);
+  advance(p, BOND_FADE_MIN - 1);
+  CHECK(p.bond > 0);
+  CHECK(p.bond <= 5);
+  advance(p, 1);
+  CHECK_EQ(p.bond, (uint8_t)0);
+  CHECK(!p.isDying());
+}
+
+TEST(death, un_cuidado_para_la_cuenta_y_lo_perdido_no_vuelve) {
+  Pet p;
+  makePet(p, 4);
+  p.bond = 100;
+  setStats(p, 0, 0, 0, 0);
+  advance(p, 10);
+  CHECK_EQ(p.neglectMinutes(), (uint8_t)10);
+  uint8_t b = p.bond;
+  CHECK(b < 70);
+  p.feedBerry(0);
+  advance(p, 1);
+  CHECK_EQ(p.neglectMinutes(), (uint8_t)0);
+  CHECK(p.bond <= b + 2);  // la baya da su +2, nada mas
+  CHECK(p.bond < 100);
+}
+
+TEST(death, sin_vinculo_media_hora_mas_y_se_muere) {
+  Pet p;
+  makePet(p, 4);
+  p.bond = 0;
+  setStats(p, 0, 0, 0, 0);
+  advance(p, DEATH_MIN - 1);
+  CHECK(!p.isDying());
+  CHECK_EQ(p.deathMinutes(), (uint8_t)(DEATH_MIN - 1));
+  advance(p, 1);
+  CHECK(p.isDying());
+  CHECK_EQ(p.ceremony, (uint8_t)CER_NONE);  // espera al dialogo
+}
+
+TEST(death, de_vinculo_lleno_a_muerto_en_una_hora) {
+  Pet p;
+  makePet(p, 4);
+  p.bond = 100;
+  setStats(p, 0, 0, 0, 0);
+  advance(p, BOND_FADE_MIN + DEATH_MIN - 1);
+  CHECK(!p.isDying());
+  advance(p, 1);
+  CHECK(p.isDying());
+}
+
+TEST(death, un_cuidado_en_la_ultima_media_hora_tambien_la_salva) {
+  Pet p;
+  makePet(p, 4);
+  p.bond = 0;
+  setStats(p, 0, 0, 0, 0);
+  advance(p, DEATH_MIN - 2);
+  p.feedBerry(0);  // +25 de comida (un mimo no basta: +5 de felicidad se va en el mismo minuto)
+  advance(p, 5);
+  CHECK(!p.isDying());
+  CHECK_EQ(p.deathMinutes(), (uint8_t)0);
+}
+
+TEST(death, dormido_o_apagado_no_cuenta) {
+  Pet p;
+  makePet(p, 4);
+  p.bond = 50;
+  setStats(p, 0, 0, 0, 0);
+  p.toggleLight();  // dormido: sube la energia, no hay abandono
+  advance(p, 90);
+  CHECK_EQ(p.bond, (uint8_t)50);
+  CHECK(!p.isDying());
+  p.toggleLight();
+  setStats(p, 0, 0, 0, 0);
+  p.setClock(1000u * 86400);
+  p.syncClock(1000u * 86400 + 600 * 60);  // 10 h apagado con todo a cero
+  CHECK_EQ(p.bond, (uint8_t)50);
+  CHECK_EQ(p.neglectMinutes(), (uint8_t)0);
+  CHECK(!p.isDying());
+}
+
+TEST(death, la_cuenta_sobrevive_a_un_reinicio) {
+  Pet p;
+  makePet(p, 4);
+  p.bond = 100;
+  setStats(p, 0, 0, 0, 0);
+  advance(p, 10);
+  p.flushSave();
+  Pet b;
+  b.begin();
+  CHECK_EQ(b.neglectMinutes(), (uint8_t)10);
+  CHECK_EQ(b.bond, p.bond);
+  p.bond = 0;
+  advance(p, 12);
+  p.flushSave();
+  Pet c;
+  c.begin();
+  CHECK_EQ(c.deathMinutes(), p.deathMinutes());
+  CHECK(c.deathMinutes() > 0);
+}
+
+TEST(death, muriendose_el_tiempo_se_para_y_nada_funciona) {
   Pet p;
   makePet(p, 4);
   setStats(p, 0, 0, 0, 0);
-  CHECK(!p.canRunawayNow());
-  advance(p, RUNAWAY_TICKS - 1);
-  CHECK(!p.canRunawayNow());
-  advance(p, 1);
-  CHECK(p.canRunawayNow());
+  p.dbgSetPoops(1);
+  p.startDying();
+  CHECK(p.isDying());
+  uint32_t age = p.ageMinutes;
+  advance(p, 30);
+  CHECK_EQ(p.ageMinutes, age);
+  p.feedBerry(0);
+  p.play();
+  p.caress();
+  p.toggleLight();
+  p.clean();
+  CHECK(!p.cleanPoop(0));
+  CHECK_EQ(p.fullness, (uint8_t)0);
+  CHECK_EQ(p.joy, (uint8_t)0);
+  CHECK(!p.sleeping);
+  CHECK_EQ(p.poops, (uint8_t)1);
+  p.items[IT_GOLDEN] = 1;
+  CHECK(!p.canUseItem(IT_GOLDEN));
+  CHECK(p.addGift(IT_CAKE));
+  CHECK(!p.canOpenGift());
+  CHECK(!p.canBattle());
+  CHECK(!p.canBoxMove());
+  p.release();
+  p.startFarewell();
+  CHECK_EQ(p.ceremony, (uint8_t)CER_NONE);
 }
 
-TEST(ceremony, un_solo_cuidado_salva_del_abandono) {
+TEST(death, revivir_gasta_uno_y_devuelve_la_mitad) {
   Pet p;
   makePet(p, 4);
-  p.dbgRunawayReady();
-  CHECK(p.canRunawayNow());
-  p.feedBerry(0);
+  p.bond = 0;
+  setStats(p, 0, 0, 0, 0);
+  uint8_t mist = p.careMistakes;
+  p.startDying();
+  CHECK(p.revive());
+  CHECK(!p.isDying());
+  CHECK_EQ(p.items[IT_REVIVE], (uint8_t)(REVIVE_START - 1));
+  CHECK_EQ(p.fullness, (uint8_t)REVIVE_NEEDS);
+  CHECK_EQ(p.joy, (uint8_t)REVIVE_NEEDS);
+  CHECK_EQ(p.energy, (uint8_t)REVIVE_NEEDS);
+  CHECK_EQ(p.hygiene, (uint8_t)REVIVE_NEEDS);
+  CHECK_EQ(p.bond, (uint8_t)0);
+  CHECK_EQ(p.careMistakes, (uint8_t)(mist + 1));
+  CHECK(!p.revive());  // ya no se esta muriendo
+  advance(p, 1);       // y el tiempo vuelve a correr
+  CHECK_EQ(p.fullness, (uint8_t)(REVIVE_NEEDS - 2));
+  Pet b;               // guardado al momento
+  b.begin();
+  CHECK(!b.isDying());
+  CHECK_EQ(b.items[IT_REVIVE], (uint8_t)(REVIVE_START - 1));
+}
+
+// revision v1.60: un Revivir que aun esperaba envuelto tambien lo salva (muriendose no se abren)
+TEST(death, un_revivir_envuelto_tambien_vale) {
+  Pet p;
+  makePet(p, 4);
+  p.setRevives(0);
+  CHECK(p.addGift(IT_CAKE));
+  CHECK(p.addGift(IT_REVIVE));
+  p.startDying();
+  CHECK_EQ(p.revivesOwned(), (uint8_t)1);
+  CHECK(p.revive());
+  CHECK(!p.isDying());
+  CHECK_EQ(p.giftCount(), (uint8_t)1);
+  CHECK_EQ(p.giftItem(0), (uint8_t)IT_CAKE);
+  CHECK_EQ(p.revivesOwned(), (uint8_t)0);
+}
+
+TEST(care, las_cacas_de_un_bicho_nuevo_empiezan_por_la_izquierda) {
+  Pet p;
+  makePet(p, 4);
+  p.dbgSetPoops(3);
+  CHECK(p.cleanPoop(0));
+  CHECK(p.cleanPoop(1));  // queda la del hueco 2
+  PetRecord r = p.toRecord();
+  r.poops = 1;
+  p.fromRecord(r);
+  CHECK_EQ(p.poopSlots(), (uint8_t)0b001);
+}
+
+TEST(death, sin_revivir_no_hay_salvacion) {
+  Pet p;
+  makePet(p, 4);
+  p.setRevives(0);
+  p.startDying();
+  CHECK(!p.revive());
+  CHECK(p.isDying());
+}
+
+TEST(death, dejarlo_ir_es_la_ceremonia_de_la_muerte) {
+  Pet p;
+  makePet(p, 4);
+  p.startDying();
+  p.letGo();
+  CHECK_EQ(p.ceremony, (uint8_t)CER_DEATH);
+  CHECK(!p.revive());  // ya en la ceremonia, no
+  mockAdvanceMillis(CEREMONY_MS + 1);
+  p.update(millis());
+  CHECK(p.isEgg());
+  CHECK(!p.isDying());
+  CHECK_EQ(p.ceremony, (uint8_t)CER_NONE);
+  CHECK_EQ(p.lastEnd, (uint8_t)CER_DEATH);
+  CHECK_EQ(p.items[IT_REVIVE], (uint8_t)REVIVE_START);  // no se gasto ninguno
+}
+
+TEST(death, un_corte_en_la_ceremonia_vuelve_al_dialogo) {
+  Pet p;
+  makePet(p, 4);
+  p.startDying();
+  p.letGo();
+  mockAdvanceMillis(CEREMONY_MS / 2);
+  p.update(millis());
+  Pet b;
+  b.begin();
+  CHECK(!b.isEgg());
+  CHECK(b.isDying());
+  CHECK_EQ(b.ceremony, (uint8_t)CER_NONE);
+  CHECK(b.lastEnd != CER_DEATH);
+}
+
+TEST(death, desde_el_nivel_50_deja_un_huevo_de_su_linea) {
+  Pet p;
+  makePet(p, 6);  // Charizard: el huevo es de Charmander
+  p.setLevel(DEATH_EGG_LEVEL);
+  mockForceRandom(DEATH_EGG_ODDS - 1);
+  p.startDying();
+  mockClearForcedRandom();
+  CHECK_EQ(p.deathEggSpecies(), (int16_t)4);
+  Pet b;  // un reinicio no lo vuelve a sortear
+  b.begin();
+  CHECK_EQ(b.deathEggSpecies(), (int16_t)4);
+  p.letGo();
+  mockAdvanceMillis(CEREMONY_MS + 1);
+  p.update(millis());
+  CHECK(!p.isVacant());
+  CHECK(p.isEgg());
+  CHECK_EQ(p.eggSpecies(), (int16_t)4);
+  CHECK_EQ(p.items[IT_EGG], (uint8_t)0);  // y sin huevo de regalo: ya hay uno en casa
+  CHECK(!p.hasFound());
+}
+
+TEST(death, por_debajo_del_50_o_sin_suerte_no_hay_huevo) {
+  Pet p;
+  makePet(p, 6);
+  p.setLevel(DEATH_EGG_LEVEL - 1);
+  mockForceRandom(0);
+  p.startDying();
+  mockClearForcedRandom();
+  CHECK_EQ(p.deathEggSpecies(), (int16_t)0);
+  Pet q;
+  makePet(q, 6);
+  q.setLevel(DEATH_EGG_LEVEL + 20);
+  mockForceRandom(DEATH_EGG_ODDS);
+  q.startDying();
+  mockClearForcedRandom();
+  CHECK_EQ(q.deathEggSpecies(), (int16_t)0);
+}
+
+TEST(death, sesenta_por_ciento_de_huevo) {
+  int eggs = 0;
+  for (int i = 0; i < 400; i++) {
+    Pet p;
+    makePet(p, 4);
+    p.setLevel(DEATH_EGG_LEVEL);
+    randomSeed(1000 + i);
+    p.startDying();
+    if (p.deathEggSpecies()) eggs++;
+  }
+  CHECK_RANGE(eggs, 200, 280);  // 60 % de 400 = 240
+}
+
+TEST(death, un_revivir_no_deja_huevo_pendiente) {
+  Pet p;
+  makePet(p, 6);
+  p.setLevel(DEATH_EGG_LEVEL);
+  mockForceRandom(0);
+  p.startDying();
+  mockClearForcedRandom();
+  CHECK(p.revive());
+  CHECK_EQ(p.deathEggSpecies(), (int16_t)0);
+}
+
+TEST(death, el_comando_neglect_adelanta_la_cuenta) {
+  Pet p;
+  makePet(p, 4);
+  p.dbgNeglect(BOND_FADE_MIN - 1);
+  CHECK(p.bond > 0 && p.bond <= 5);
   advance(p, 1);
-  CHECK_MSG(!p.canRunawayNow(), "comer resetea el contador de abandono");
+  CHECK_EQ(p.bond, (uint8_t)0);
+  p.dbgNeglect(BOND_FADE_MIN + DEATH_MIN - 1);
+  CHECK_EQ(p.bond, (uint8_t)0);
+  advance(p, 1);
+  CHECK(p.isDying());
 }
 
 TEST(ceremony, durante_la_ceremonia_no_se_puede_interactuar) {
@@ -1048,7 +1404,7 @@ TEST(ceremony, durante_la_ceremonia_no_se_puede_interactuar) {
   makePet(p, 4);
   setStats(p, 50, 50, 50, 50);
   p.poops = 2;
-  p.startRunaway();
+  p.release();
   p.feedBerry(0);
   p.items[IT_CAKE] = 1;
   CHECK(!p.eatCake());
@@ -1079,8 +1435,9 @@ TEST(ceremony, un_huevo_no_se_despide_ni_se_suelta) {
   p.begin();
   p.startFarewell();
   p.release();
-  p.startRunaway();
+  p.startDying();
   CHECK_EQ(p.ceremony, (uint8_t)CER_NONE);
+  CHECK(!p.isDying());
 }
 
 // ---------------------------------------------------------------- offline
@@ -1375,25 +1732,29 @@ TEST(steps, tope_de_hallazgos_al_dia) {
 TEST(steps, probabilidades_de_cada_objeto) {
   Pet p;
   makeWalker(p);
-  mockForceRandom(39);  // < 40: baya (v1.54: eran 55)
-  p.addSteps(FIND_MIN_STEPS + 39, DIA);
+  mockForceRandom(34);  // < 35: baya (v1.54: eran 55; v1.59: 40)
+  p.addSteps(FIND_MIN_STEPS + 34, DIA);
   CHECK_EQ(p.giftItem(0), (uint8_t)IT_GOLDEN);
-  mockForceRandom(50);  // 40..59: tarta (v1.54)
+  mockForceRandom(50);  // 35..54: tarta (v1.54)
   p.addSteps(FIND_MIN_STEPS + 50, DIA);
   CHECK_EQ(p.giftItem(1), (uint8_t)IT_CAKE);
-  mockForceRandom(75);  // 60..89: vitamina (random(3) forzado = 2: carburante)
+  mockForceRandom(75);  // 55..84: vitamina (random(3) forzado = 2: carburante)
   p.addSteps(FIND_MIN_STEPS + 75, DIA);
   CHECK_EQ(p.giftItem(2), (uint8_t)IT_CARBOS);
-  mockForceRandom(95);  // 90..99: amuleto (otro dia: con cuatro hallazgos se cruzaria la meta de 3000)
-  p.addSteps(FIND_MIN_STEPS + 95, DIA + 1);
+  mockForceRandom(90);  // 85..94: amuleto (otro dia: con cuatro hallazgos se cruzaria la meta de 3000)
+  p.addSteps(FIND_MIN_STEPS + 90, DIA + 1);
   CHECK_EQ(p.giftItem(3), (uint8_t)IT_CHARM);
-  p.addSteps(FIND_MIN_STEPS + 95, DIA + 2);  // otro amuleto: envuelto aun no se sabe que ya hay uno
+  p.addSteps(FIND_MIN_STEPS + 90, DIA + 2);  // otro amuleto: envuelto aun no se sabe que ya hay uno
   CHECK_EQ(p.giftItem(4), (uint8_t)IT_CHARM);
+  mockForceRandom(97);  // 95..99: Revivir (v1.59)
+  p.addSteps(FIND_MIN_STEPS + 97, DIA + 3);
+  CHECK_EQ(p.giftItem(5), (uint8_t)IT_REVIVE);
   while (p.giftCount()) p.openGift();  // al abrirlo, el segundo amuleto se vuelve baya
   CHECK_EQ(p.items[IT_CHARM], (uint8_t)1);
   CHECK_EQ(p.items[IT_GOLDEN], (uint8_t)2);
   CHECK_EQ(p.items[IT_CAKE], (uint8_t)1);
   CHECK_EQ(p.items[IT_CARBOS], (uint8_t)1);
+  CHECK_EQ(p.items[IT_REVIVE], (uint8_t)(REVIVE_START + 1));
 }
 
 TEST(steps, las_tres_vitaminas_salen_con_el_azar_real) {
@@ -1459,7 +1820,7 @@ TEST(items, baya_dorada_y_vitaminas) {
   CHECK_EQ(p.trAtk, (uint8_t)(a + VITAMIN_TRAIN));
   CHECK_EQ(p.trDef, (uint8_t)(d + VITAMIN_TRAIN));
   CHECK_EQ(p.trSpe, (uint8_t)(s + VITAMIN_TRAIN));
-  CHECK_EQ(p.itemCount(), (uint8_t)0);
+  CHECK_EQ(p.itemCount(), (uint8_t)REVIVE_START);  // solo quedan los Revivir de la partida nueva
 }
 
 TEST(items, topes_y_cuando_no_se_pueden_usar) {
@@ -1577,7 +1938,70 @@ TEST(steps, un_guardado_antiguo_carga_con_todo_a_cero) {
   b.begin();
   CHECK_EQ(b.stepsToday, (uint32_t)0);
   CHECK_EQ(b.stepsTotal, (uint32_t)0);
-  CHECK_EQ(b.itemCount(), (uint8_t)0);
+  CHECK_EQ(b.itemCount(), (uint8_t)REVIVE_START);  // nada mas que los Revivir de la partida nueva (v1.59)
+}
+
+// ---------------------------------------------------------------- Revivir (v1.59)
+TEST(revive, una_partida_nueva_empieza_con_tres) {
+  Pet p;
+  makePet(p, 4);
+  CHECK_EQ(p.items[IT_REVIVE], (uint8_t)REVIVE_START);
+  Pet b;  // un reinicio no da mas
+  b.begin();
+  CHECK_EQ(b.items[IT_REVIVE], (uint8_t)REVIVE_START);
+}
+
+TEST(revive, un_guardado_de_antes_recibe_tres_una_vez) {
+  Pet a;
+  makePet(a, 4);
+  {
+    Preferences raw;  // como lo dejaba la v1.58: sin "rvg" y la mochila de 8
+    raw.begin("tamapoke");
+    raw.remove("rvg");
+    uint8_t eight[8] = { 2, 0, 0, 0, 0, 1, 0, 3 };
+    raw.putBytes("bpack", eight, sizeof(eight));
+  }
+  Pet b;
+  b.begin();
+  CHECK_EQ(b.items[IT_GOLDEN], (uint8_t)2);
+  CHECK_EQ(b.items[IT_CAKE], (uint8_t)3);
+  CHECK_EQ(b.items[IT_REVIVE], (uint8_t)REVIVE_START);
+  b.flushSave();
+  Pet c;  // el siguiente arranque ya no los da
+  c.begin();
+  CHECK_EQ(c.items[IT_REVIVE], (uint8_t)REVIVE_START);
+}
+
+TEST(revive, el_regalo_de_la_actualizacion_respeta_el_tope) {
+  Pet a;
+  makePet(a, 4);
+  {
+    Preferences raw;
+    raw.begin("tamapoke");
+    raw.remove("rvg");
+    uint8_t nine[9] = { 0, 0, 0, 0, 0, 0, 0, 0, 8 };
+    raw.putBytes("bpack", nine, sizeof(nine));
+  }
+  Pet b;
+  b.begin();
+  CHECK_EQ(b.items[IT_REVIVE], (uint8_t)ITEM_MAX);
+}
+
+TEST(revive, no_se_usa_a_mano) {
+  Pet p;
+  makePet(p, 4);
+  CHECK(p.items[IT_REVIVE] > 0);
+  CHECK(!p.canUseItem(IT_REVIVE));
+  CHECK(!p.useItem(IT_REVIVE));
+  CHECK_EQ(p.items[IT_REVIVE], (uint8_t)REVIVE_START);
+}
+
+TEST(revive, se_puede_regalar_y_abrir) {
+  Pet p;
+  makePet(p, 4);
+  CHECK(p.addGift(IT_REVIVE));
+  CHECK_EQ(p.openGift(), (uint8_t)IT_REVIVE);
+  CHECK_EQ(p.items[IT_REVIVE], (uint8_t)(REVIVE_START + 1));
 }
 
 TEST(care, el_tope_diario_de_vinculo_vuelve_a_cero_a_medianoche) {

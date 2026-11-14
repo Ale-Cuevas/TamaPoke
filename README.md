@@ -51,7 +51,7 @@ included); tapping the screen charges a special attack. Built, host-tested
 (every one of the 151×151 pairings at three levels) and rendered on the PC; the
 on-board checks are in [docs/DEVICE_TESTS.md](docs/DEVICE_TESTS.md#battle).
 
-**v1.41: after an ending, you choose when to hatch.** A release, farewell or runaway leaves
+**v1.41: after an ending, you choose when to hatch.** A release, farewell or runaway (a death since v1.60) leaves
 the home empty with a **Hatch an egg (N)** button; no egg comes home by itself. A farewell
 leaves an egg in the Backpack, and with no egg and nobody in the Box a gift egg goes there
 (v1.40). The egg waiting from the Box counts as one of yours.
@@ -78,7 +78,7 @@ after every single flash write of every move, and rendered on the PC; the
 on-board checks are in [docs/DEVICE_TESTS.md](docs/DEVICE_TESTS.md#box-v137).
 
 The game itself runs on the 1.75" hardware upstream. Implemented: the 151 +
-shinies animated from microSD, full life cycle (egg by rarity → evolution → farewell/release/runaway, each gated
+shinies animated from microSD, full life cycle (egg by rarity → evolution → farewell/release/death, each gated
 behind a decision dialog), bred-Pokédex with gallery, a 6-slot box to hibernate pets, battle stats (genes +
 training), retention hooks (streak / bond / medals / name), biome + real-time
 backgrounds, ball minigame, training bag, animated bath, RTC with offline
@@ -128,7 +128,8 @@ While **awake**, per minute:
 | HYG | −1 | **−4 more per poop** on screen (max 3 poops) |
 | JOY | −1 | **−2 extra** if FOOD < 30, **−2 extra** if HYG < 30 |
 
-- ~**15 %/min** chance to poop (only if FOOD > 40). Poops tank hygiene fast.
+- ~**5 %/min** chance to poop (only if FOOD > 40; about one every 20 min, it was 15 % before v1.58).
+  Poops tank hygiene fast. **Tap a poop** to clean just that one (+10 HYG), awake or asleep.
 - **Care slip-up** = letting any stat hit **≤ 10** (30-min cooldown so it counts once).
   Each slip-up **delays evolution by 1 level** and cools the bond.
 
@@ -157,10 +158,10 @@ While **awake**, per minute:
   +8) and washes the pet (+10 HYG); no weight burn. From 30 s the band drifts slowly up and
   down: time in it then gives **bonus DEF** (1 pt per 4 s, up to +3, so +11 for a perfect
   session).
-- 🫧 **Bath:** clears poops, HYG → 100.
+- 🫧 **Bath:** clears poops, HYG → 100. Or tap the poops one by one (v1.58).
 - 👆 **Pet it:** +5 JOY + bond.
 - 🌙 **Sleep:** rest — ENE **+6/min**, needs drain ~**4× slower** with floors
-  (FOOD 30 / JOY 35 / HYG 45). No poops, no slip-ups, can't run away while asleep.
+  (FOOD 30 / JOY 35 / HYG 45). No poops, no slip-ups, and neglect doesn't count while asleep.
 - **Feedback (v1.30):**
   - the bars slide, and every action floats a "+N" over what it changed;
   - bond rising shows a small heart;
@@ -194,7 +195,7 @@ While **awake**, per minute:
 
   \* Legendaries only start appearing once you've **registered ≥ 25** Pokémon.
 - A daily **streak** and high **bond** push rare/legendary odds higher.
-- A clean **goodbye blesses** the next egg; a **run-away curses** it (forces Common).
+- A clean **goodbye blesses** the next egg; a **death by neglect curses** it (forces Common).
 - Within a tier it favors species whose **evolution line you haven't finished** (so
   all 151 are completable).
 - **Shiny:** base **1 / 48** (→ **1 / 24** right after a goodbye), improved by
@@ -213,8 +214,17 @@ While **awake**, per minute:
 - 💛 **Farewell** — when it's a **final form** that has lived **3 days**. A button
   appears; triggering it **blesses your next egg**. You can **postpone** ("stay
   together", re-offered in a day). The good ending.
-- 💔 **Run-away** — if you let **all four stats sit at 0 for a full hour**. A single
-  act of care cancels it. It **curses the next egg** (forces Common). The sad ending.
+- 💔 **Death by neglect** (v1.60, it replaced the run-away) — with **all four needs at 0**
+  (awake, board on), the status says "It feels abandoned..." and the **bond drains** from full to 0
+  in **30 minutes**. With the bond at 0 ("It's very weak!"), **30 more minutes** and the pet is
+  dying. Any need above 0 stops the count, but the lost bond stays lost. Asleep or with the board
+  off it never counts (the needs don't reach 0 there).
+  - A dialog waits (no time limit, USER doesn't close it): "X is dying... Use a Revive? (N)".
+    **YES** spends a Revive: the needs come back to 50, the bond stays at 0 and it counts a slip-up.
+    **NO** (or **OK** with no Revives left) is the end: rain, the pet fades, "It has passed away...".
+  - From **level 50**, there's a **60 %** chance it leaves an **egg of its line** (the first form),
+    which goes straight home ("It left an egg..."). Otherwise the home is empty, as after any ending.
+  - It **curses the next random egg** (forces Common). The sad ending.
 - 👋 **Release** — long-press the creature to let it go on your terms (neutral).
 
 After any ending the home is empty (v1.41). The egg that was waiting while you woke a pet from the
@@ -292,10 +302,11 @@ attacking until one faints, in 10–20 s after a 3 s VS card and jingle.
 
   | Loot | Odds |
   |---|---|
-  | Cake | 40 % |
+  | Cake | 35 % |
   | Golden Berry | 25 % |
   | Protein / Iron / Carbos | 21 % (7 % each) |
   | Rare Candy | 7 % |
+  | Revive (v1.59) | 5 % |
   | Shiny Charm | 4 % (a cake if you already hold one) |
   | Egg | 3 %, the rarest | The USER key, or PWR (to the screensaver
   or off), quits with no reward. The result ignores taps for its first 1.8 s
@@ -340,17 +351,19 @@ waving it around doesn't farm anything.
 
   | Item | Odds | Use |
   |---|---|---|
-  | Golden Berry | 40 % | +50 FOOD, +15 JOY, a heart |
+  | Golden Berry | 35 % | +50 FOOD, +15 JOY, a heart |
   | Cake (v1.54) | 20 % | FOOD full for 3 h, +12 JOY, +12 weight (food menu or Backpack) |
   | Protein / Iron / Carbos | 30 % (1/3 each) | +3 ATK / DEF / SPD training (cap 100) |
   | Shiny Charm | 10 % | Held, not used: the **next egg** gets ×3 shiny odds (never better than 1/8). One at a time; a second one becomes a Golden Berry. |
+  | Revive (v1.59) | 5 % | Not used by hand: when a neglected pet is dying, a dialog offers it to save the pet. A new game starts with **3**. |
   | Rare Candy | the 10000 goal, v1.25–v1.35 (it now gives +2 levels directly) | **+1 level**, keeping how full the level bar was, without ageing the pet (it can make the pet ready to evolve). Candies already in the Backpack still work. |
   | Egg | every 8000–15000 steps (v1.39), apart from the finds above and their daily cap; wrapped as a gift since v1.55 (straight home if the home is empty) | Not used by hand: it comes home by itself when home is free (an ending, or the pet stored in the Box). |
 
 - The **Backpack** holds up to 9 of each item. Since v1.53 it has its own button (the
-  backpack, last on the bottom row): every item with its count, greyed when you have none, and a
-  hint below. Tap an item to use it (a YES / NO dialog); the Charm and eggs aren't used by hand. It
-  opens while the pet sleeps too, just to look.
+  backpack, last on the bottom row): every item with its count (a 3 × 3 grid since v1.59), greyed
+  when you have none, and a hint below. Tap an item to use it (a YES / NO dialog); the Charm, eggs
+  and the Revive aren't used by hand (a tap on the Revive says what it's for). It opens while the
+  pet sleeps too, just to look.
 - The stat card's 5th page, **WALK** (swipe up, then left four times), shows today's steps with
   a ring toward the next goal and a flag per goal reached, the total and today's finds (random
   ones out of 5, "+n" for the goals' gifts).
@@ -521,6 +534,8 @@ If one bottoms out it counts as a *slip-up*.
     much slower (rest). The screen stays as bright as when it's awake. Asleep, Care is the button
     that still works, and its menu shows the sun.
   - 🫧 **Bath**: a foam scene that cleans up the poops (greyed while asleep).
+
+**Poops** (v1.58): tap one to clean it (+10 HYG, sparkles where it was). Works asleep too.
 - 🎒 **Backpack** (v1.53) → your items and eggs; tap one to use it.
 
 **Touch gestures:**
@@ -563,8 +578,8 @@ witness it), each opening a two-option dialog:
 - **Farewell** (gold button, final form + 3 days): *Say goodbye* (warm farewell,
   rising hearts → new egg) or *Stay together* (keep your companion; re-offered in
   a day). Tension: a maxed-out friend vs. completing the Pokédex.
-- **Runaway** (dark button, total neglect for 1 h): a somber "feels abandoned"
-  ending in the rain — caring for the creature cancels it.
+- **Revive** (v1.60, total neglect: the bond fades in 30 min, 30 more and it's dying): *YES* spends a
+  Revive and brings it back; *NO* is a somber ending in the rain (from level 50 it may leave an egg).
 
 ## Sprites: PMD SpriteCollab everywhere
 
@@ -626,13 +641,13 @@ always pays off.
 
 The life cycle lasts **3 days** of play. Three endings (each brings home the next egg, if
 you have one: eggs are found on walks since v1.39):
-**farewell** (final form + 3 days), **release** (long press), **runaway** (all 4
-bars at zero for 1 h). Each bred species is recorded in the **bred Pokédex**
+**farewell** (final form + 3 days), **release** (long press), **death** (all 4
+bars at zero: the bond fades in 30 min, then 30 more; a Revive saves it, v1.60). Each bred species is recorded in the **bred Pokédex**
 (normal and shiny separately).
 
 The egg rolls rarity over the ~79 base forms (47 common / 27 rare / 5 legendary),
 **biased towards the lines you're missing** (all 151 are completable), blessed by
-a farewell and punished by a runaway. Legendaries only with 25+ registered.
+a farewell and punished by a death. Legendaries only with 25+ registered.
 **Shiny** 1/48 (better with streak/bond/farewell).
 
 **Languages:** the UI ships in 8 languages — English (default), Spanish, French,
@@ -738,8 +753,9 @@ What the firmware does to save power (the policy is in `power.h`, covered by `te
 ## Serial console (115200, debug)
 
 `STATS` (full state) · `SPEC <dex>` (change species) · `LVL <n>` · `HATCH` ·
-`SHINY` · `NICK <x>` · `BYE` / `RUN` (farewell / runaway) · `ABANDON` (force the
-runaway-ready state) · `WIPE` (factory reset → new game) · `BEEP` (audio test) ·
+`SHINY` · `NICK <x>` · `BYE` (farewell) · `ABANDON` (all four needs to 0: the bond starts
+fading) · `NEGLECT <min>` (fast-forward the neglect count, 0–60: up to 30 the bond as if fading that long,
+above it bond 0 and the rest toward death) · `DIE` (dying now: the Revive dialog) · `WIPE` (factory reset → new game) · `BEEP` (audio test) ·
 `REG` (Pokédex) · `EGGS` (simulate 20 eggs) · `GAL` (gallery) · `CAREDAY` ·
 `TIME <epoch>` / `RTCSET <epoch>` · `HEALTH` (uptime + heap for the soak test) ·
 `LS` / `PUT` (SD files) · `STEPS <n>` (add n steps through the IMU's path) ·
@@ -756,7 +772,7 @@ waiting egg) · `STORE <k>` / `WAKE <k>` (store into / wake from slot k = 0–5,
 without the light) · `BOXFILL` (made-up pets in the empty slots, for tests and screenshots) ·
 `BOXCLR <k>` (empty slot k, also a damaged one) · `NVS` (used and free NVS entries) ·
 `EGG` (eggs in the Backpack, the waiting egg, steps to the next one, empty home or not) · `EGG <n>` (set the
-Backpack to n eggs, for tests) · `RELEASE` (release without the dialog) · `AGE <min>` (the pet's age in game minutes, for tests: 4320 on a final
+Backpack to n eggs, for tests) · `REVIVES [n]` (Revives in the Backpack; with n, set it, v1.59) · `RELEASE` (release without the dialog) · `AGE <min>` (the pet's age in game minutes, for tests: 4320 on a final
 form shows the farewell button) · `TAP <x> <y>` (a tap at
 canvas coordinates, through the same path as a finger; prints the battle phase).
 
