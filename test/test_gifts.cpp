@@ -215,6 +215,8 @@ TEST(battle_drop, cinco_al_dia_y_al_dia_siguiente_otra_vez) {
   CHECK_EQ(p.battleDropsToday(), (uint8_t)BATTLE_DROPS_PER_DAY);
   CHECK_EQ(p.battleDrop(true), (uint8_t)IT_COUNT);  // la sexta victoria del dia, nada
   CHECK_EQ(p.giftCount(), (uint8_t)BATTLE_DROPS_PER_DAY);
+  CHECK(p.savePending());  // lo guarda quien cierra el combate: una sola escritura
+  p.flushSave();
   Pet q;  // el tope sobrevive a un reinicio
   q.begin();
   q.setClock(GDAY * 86400 + 11 * 3600);  // el reloj, como lo pone el arranque con el RTC
@@ -251,4 +253,21 @@ TEST(battle_drop, la_tabla_y_el_huevo_es_lo_mas_raro) {
   CHECK_EQ(p.rollBattleItem(), (uint8_t)IT_CHARM);
   mockForceRandom(99);
   CHECK_EQ(p.rollBattleItem(), (uint8_t)IT_EGG);
+}
+
+TEST(gifts, uno_que_no_cabe_no_tapa_a_los_de_detras) {
+  Pet p;
+  gBorn(p);
+  p.items[IT_EGG] = ITEM_MAX;
+  CHECK(p.addGift(IT_EGG));   // no cabe: los huevos solo salen de la mochila con la casa libre
+  CHECK(p.addGift(IT_CAKE));
+  bool full = true;
+  CHECK_EQ(p.openGift(&full), (uint8_t)IT_CAKE);
+  CHECK(!full);
+  CHECK_EQ(p.items[IT_CAKE], (uint8_t)1);
+  CHECK_EQ(p.giftCount(), (uint8_t)1);
+  CHECK_EQ(p.giftItem(0), (uint8_t)IT_EGG);
+  CHECK_EQ(p.openGift(&full), (uint8_t)IT_EGG);  // solo queda el que no cabe: lo dice y sigue ahi
+  CHECK(full);
+  CHECK_EQ(p.giftCount(), (uint8_t)1);
 }

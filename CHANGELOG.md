@@ -22,6 +22,20 @@ keeps your Pokémon.
   evolving changes the favourite, it becomes a secret again (the card says "BERRY ???", no star) and
   the status says "Its tastes changed!" once the animation ends. If the favourite stays the same, it
   stays known. The Berry medal is kept.
+- A gift that doesn't fit no longer blocks the others: a tap opens the first one that fits (only when
+  none fits does the popup say "Backpack full").
+- The Box's "Store?" dialog and the release dialog counted only the eggs in the Backpack: with a
+  wrapped egg they said "No egg: home stays empty", and then the egg came home. They count it now.
+- The end of a battle writes the save once (loot and joy together) instead of twice; the loot count is
+  written after the gifts, so a power cut can't spend a loot without the gift.
+- No "No cake" hint when the cake is refused for another reason (the pet fell asleep with the menu
+  open). A tap on the food menu's right edge (1 px) no longer fed a berry that doesn't exist.
+- The first boot after updating no longer logs an error for the missing `gifts` key.
+
+### Note
+
+- **Don't downgrade below v1.54 with this save.** The Backpack grew to 8 items (the cake), and older
+  firmware reads the longer Backpack as empty and overwrites it.
 
 ## [1.56] - 2026-11-14
 

@@ -332,8 +332,8 @@ waving it around doesn't farm anything.
   day; the goals' gifts come on top). Since v1.55 each find arrives **wrapped**: a small white box
   with a red ribbon on the floor of the home screen, to the right (up to 3 in a pile, "+N" for
   more). **Tap a gift** with the pet awake to open it: the pet is happy, "GIFT!" shows what it was,
-  and it goes into the Backpack (tap to dismiss). Asleep, gifts wait. With a full Backpack the popup
-  says so and the gift stays wrapped until there's room. Up to 8 wait unopened (kept across
+  and it goes into the Backpack (tap to dismiss). Asleep, gifts wait. A tap opens the first gift that
+  fits; when none fits, the popup says "Backpack full" and they stay wrapped until there's room. Up to 8 wait unopened (kept across
   restarts); past that a find goes straight into the Backpack with the popup. When the home is left
   empty (an ending, or the pet stored in the Box), gifts unwrap themselves into the Backpack, and a
   wrapped egg counts as one of your eggs.

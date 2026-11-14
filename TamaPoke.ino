@@ -1470,14 +1470,14 @@ void onTap(int16_t x, int16_t y) {
     bool live = timeLeft(menuUntil);
     menuKind = MENU_NONE;
     if (!live || y < 288 || y > 352) return;
-    if (kind == MENU_FEED && x >= 101 && x <= 365) {
+    if (kind == MENU_FEED && x >= 101 && x < 365) {  // (x = 365 daba el objeto 4)
       int item = (x - 101) / 66;
       FxNeedSnap ns = fxSnap();
       if (item == 3) {  // la tarta (v1.54): limitada; sin ninguna, tiembla COMER
         if (!pet.eatCake()) {
           sfxPlay(SFX_DENY);
           fxo.push(FXO_DENY, 0, 0, millis());
-          cakeHintUntil = millis() + 2500;
+          if (!pet.items[IT_CAKE]) cakeHintUntil = millis() + 2500;  // (con tartas: dormido, o en una ceremonia)
           return;
         }
       } else {
@@ -2438,7 +2438,7 @@ bool render() {
       snprintf(q, sizeof(q), T(S_RELEASE_FMT), dexName(pet.speciesId));
       // sin huevos (v1.39), la nota dice que pasara: casa vacia o, sin nadie en la caja, un huevo de
       // regalo a la mochila (v1.40). Con huevos no hay nota: la casa vacia tiene su boton.
-      bool empty = !pet.eggsOwned();
+      bool empty = !pet.eggsOwned() && !pet.giftEggs();  // v1.55: un huevo envuelto tambien cuenta
       gfx->setTextColor(UI_INK);
       setSize(2);
       setCur(centerX(q, 2), empty ? 186 : 196);
@@ -5062,7 +5062,8 @@ void drawBoxAsk() {
   } else {
     snprintf(q, sizeof(q), T(S_STORE_Q_FMT), petName());
     // v1.39: sin huevo que esperaba ni en la mochila, la casa se queda vacia
-    if (!pet.eggHeld() && !pet.items[IT_EGG]) snprintf(note, sizeof(note), "%s", T(S_NO_EGG_NOTE));
+    // (v1.55: un huevo envuelto tambien: freeHome lo desenvuelve y llega a casa)
+    if (!pet.eggHeld() && !pet.items[IT_EGG] && !pet.giftEggs()) snprintf(note, sizeof(note), "%s", T(S_NO_EGG_NOTE));
   }
   gfx->fillRoundRect(73, 160, 320, 160, 16, UI_WHITE);
   gfx->drawRoundRect(73, 160, 320, 160, 16, UI_INK);
@@ -5143,7 +5144,7 @@ void renderBox() {
     // esperaba o uno de la mochila; si no hay, la casa queda vacia (v1.39)
     if (boxMove == BOXMV_WAKE) held = !vacant;
     else if (boxMove == BOXMV_STORE) held = false;
-    if (boxMove == BOXMV_STORE) vacant = !pet.eggHeld() && !pet.items[IT_EGG];
+    if (boxMove == BOXMV_STORE) vacant = !pet.eggHeld() && !pet.items[IT_EGG] && !pet.giftEggs();
     else vacant = false;
   }
   bool hideNow = boxMove && !outcome && boxMove != BOXMV_WAKE && t >= 0.3f;
@@ -6243,8 +6244,9 @@ void battleStep(uint32_t now) {
     if ((int32_t)(now - endAt) >= 0) {
       bt.phase = BT_END;
       bt.t0 = now;
-      bt.joy = pet.practiceDone();  // gane quien gane; como mucho una vez por hora
       bt.drop = pet.battleDrop(bt.eng.result == BR_WIN_A);  // ganar: 70 %, hasta 5 al dia (v1.56)
+      bt.joy = pet.practiceDone();  // gane quien gane; como mucho una vez por hora (guarda, botin incluido)
+      pet.flushSave();  // sin premio de felicidad, el botin se guarda aqui: una sola escritura
       sfxPlay(bt.eng.result == BR_WIN_A ? SFX_WIN : bt.eng.result == BR_WIN_B ? SFX_LOSE : SFX_LEVEL);
       Serial.printf("battle: %s en %u ataques, +%u felicidad, botin %u (%u hoy)\n",
                     bt.eng.result == BR_WIN_A ? "gana" : bt.eng.result == BR_WIN_B ? "pierde" : "empate",

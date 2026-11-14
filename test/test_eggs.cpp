@@ -159,7 +159,8 @@ TEST(eggs, con_la_mochila_llena_espera_envuelto) {
   CHECK_EQ(p.items[IT_EGG], (uint8_t)ITEM_MAX);
   CHECK_EQ(p.giftEggs(), (uint8_t)1);
   bool full = false;
-  while (p.giftItem(0) != IT_EGG) p.openGift();  // lo encontrado antes por el camino
+  while (p.giftCount() > 1) p.openGift();  // lo demas del camino cabe y se abre antes (v1.57)
+  CHECK_EQ(p.giftItem(0), (uint8_t)IT_EGG);
   CHECK_EQ(p.openGift(&full), (uint8_t)IT_EGG);
   CHECK(full);
   CHECK_EQ(p.giftEggs(), (uint8_t)1);

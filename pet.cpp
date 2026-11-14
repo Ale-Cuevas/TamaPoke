@@ -898,19 +898,29 @@ uint8_t Pet::giftEggs() const {
   return n;
 }
 
+// el primero que quepa (v1.57, revision): uno que no cabe no tapa a los de detras. Si no cabe ninguno,
+// se ve el primero ("mochila llena") y todos siguen envueltos
+static bool giftFits(const uint8_t *items, uint8_t it) {
+  if (it == IT_CHARM && items[IT_CHARM]) it = IT_GOLDEN;  // dos amuletos: solo se lleva uno
+  return items[it] < ((it == IT_CHARM) ? 1 : ITEM_MAX);
+}
+
 uint8_t Pet::openGift(bool *full) {
   if (full) *full = false;
   if (!canOpenGift()) return IT_COUNT;
-  uint8_t it = gifts[0];
-  if (it == IT_CHARM && items[IT_CHARM]) it = IT_GOLDEN;  // dos amuletos envueltos: solo se lleva uno
-  uint8_t cap = (it == IT_CHARM) ? 1 : ITEM_MAX;
-  if (items[it] >= cap) {  // no cabe: se ve lo que es y se queda envuelto hasta que haya sitio
+  uint8_t k = 0;
+  while (k < giftN && !giftFits(items, gifts[k])) k++;
+  if (k == giftN) {  // no cabe ninguno: se ve lo que es el primero y se queda envuelto
+    uint8_t it = gifts[0];
+    if (it == IT_CHARM && items[IT_CHARM]) it = IT_GOLDEN;
     if (full) *full = true;
     queueFound(it, true, true);
     return it;
   }
+  uint8_t it = gifts[k];
+  if (it == IT_CHARM && items[IT_CHARM]) it = IT_GOLDEN;
   items[it]++;
-  for (uint8_t i = 1; i < giftN; i++) gifts[i - 1] = gifts[i];
+  for (uint8_t i = k + 1; i < giftN; i++) gifts[i - 1] = gifts[i];
   giftN--;
   heartUntil = millis() + HEART_MS;  // se alegra (sin premio: abrir no sube nada)
   queueFound(it, false, true);
@@ -1072,7 +1082,7 @@ uint8_t Pet::battleDrop(bool won) {
   uint8_t it = rollBattleItem();
   bdropToday++;
   giveGift(it);
-  save();  // fin de una pantalla de juego: se guarda ya
+  pendingSave = true;  // lo guarda quien cierra el combate (practiceDone o flushSave): una escritura
   return it;
 }
 
@@ -1161,8 +1171,6 @@ void Pet::save() {
   prefs.putUShort("eAt", eggAt);
   prefs.putUInt("bondD", bondDay);
   prefs.putUChar("bondT", bondToday);
-  prefs.putUInt("bdD", bdropDay);    // botin de combate de hoy (v1.56)
-  prefs.putUChar("bdN", bdropToday);
   prefs.putBool("vac", vacant);
   // caja (v1.37). El uid va el ULTIMO: la NVS escribe en orden, asi que si un corte de luz
   // deja el uid nuevo, todo lo demas del bicho ya esta escrito. boxBoot() se fia de eso para
@@ -1179,6 +1187,10 @@ void Pet::save() {
     memcpy(g + 1, gifts, giftN);
     prefs.putBytes("gifts", g, sizeof(g));
   }
+  // botin de combate de hoy (v1.56), despues de los regalos: un corte entre los dos da un botin de
+  // mas, nunca uno perdido
+  prefs.putUInt("bdD", bdropDay);
+  prefs.putUChar("bdN", bdropToday);
   prefs.putBool("eggH", eggHeldFlag);
 }
 
@@ -1263,7 +1275,8 @@ void Pet::load() {
   {
     uint8_t g[GIFT_MAX + 1] = { 0 };
     giftN = 0;
-    if (prefs.getBytes("gifts", g, sizeof(g)) == sizeof(g))
+    // isKey: un guardado anterior a la v1.55 no lo tiene, y getBytes lo anotaria como error en el log
+    if (prefs.isKey("gifts") && prefs.getBytes("gifts", g, sizeof(g)) == sizeof(g))
       for (uint8_t i = 0; i < g[0] && i < GIFT_MAX; i++)
         if (g[1 + i] < IT_COUNT) gifts[giftN++] = g[1 + i];
   }
