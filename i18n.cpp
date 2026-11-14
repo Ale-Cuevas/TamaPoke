@@ -60,6 +60,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "EXTRA +%u", "FUERZA MAX", "DEFENSA MAX", "VELOCIDAD MAX",
     // v1.49: la barra fina de la ficha de combate
     "barra fina: entreno",
+    // v1.53: la mochila con su boton: como se usa y dormido solo se mira
+    "Toca un objeto para usarlo", "Duerme: solo mirar",
   },
   // ---------------- EN ----------------
   {
@@ -114,6 +116,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "BONUS +%u", "STR MAX", "DEF MAX", "SPD MAX",
     // v1.49: la barra fina de la ficha de combate
     "thin bar: training",
+    // v1.53: la mochila con su boton: como se usa y dormido solo se mira
+    "Tap an item to use it", "Asleep: just looking",
   },
   // ---------------- FR ----------------
   {
@@ -168,6 +172,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "BONUS +%u", "FORCE MAX", "DEFENSE MAX", "VITESSE MAX",
     // v1.49: la barra fina de la ficha de combate
     "barre fine: entra\214nement",
+    // v1.53: la mochila con su boton: como se usa y dormido solo se mira
+    "Touche un objet pour l'utiliser", "Il dort : on regarde",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -227,6 +233,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "BONUS +%u", "KRAFT MAX", "VERT MAX", "INIT MAX",
     // v1.49: la barra fina de la ficha de combate
     "d\201nner Balken: Training",
+    // v1.53: la mochila con su boton: como se usa y dormido solo se mira
+    "Tippe ein Item zum Benutzen", "Es schl\204ft: nur ansehen",
   },
   // ---------------- IT ----------------
   {
@@ -281,6 +289,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "BONUS +%u", "FORZA MAX", "DIFESA MAX", "VELOCITA MAX",
     // v1.49: la barra fina de la ficha de combate
     "barra sottile: allenamento",
+    // v1.53: la mochila con su boton: como se usa y dormido solo se mira
+    "Tocca un oggetto per usarlo", "Dorme: solo guardare",
   },
   // ---------------- PT ----------------
   {
@@ -335,6 +345,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "EXTRA +%u", "FOR\200A MAX", "DEFESA MAX", "VELOCIDADE MAX",
     // v1.49: la barra fina de la ficha de combate
     "barra fina: treino",
+    // v1.53: la mochila con su boton: como se usa y dormido solo se mira
+    "Toque um item para usar", "Dormindo: s\242 olhar",
   },
   // ---------------- JA ----------------
   {
@@ -411,6 +423,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "ボーナス +%u", "ちから MAX", "ぼうぎょ MAX", "すばやさ MAX",
     // v1.49: la barra fina de la ficha de combate
     "ほそい バー: とっくん",
+    // v1.53: la mochila con su boton: como se usa y dormido solo se mira
+    "タッチして つかう", "ねてる: みるだけ",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -470,6 +484,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "보너스 +%u", "힘 MAX", "방어 MAX", "속도 MAX",
     // v1.49: la barra fina de la ficha de combate
     "얇은 막대: 훈련",
+    // v1.53: la mochila con su boton: como se usa y dormido solo se mira
+    "눌러서 사용", "자는 중: 보기만",
   },
 };
 

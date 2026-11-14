@@ -628,6 +628,203 @@ def icon_sack():
     return g.rows()
 
 
+# ------------------------------------- iconos dibujados a mano en species.h
+# Se anadieron a species.h a mano (v1.39, v1.43, v1.44) sin pasar por aqui; se
+# fijan tal cual para que "emit" no los borre.
+
+def icon_egg():
+    # huevo de la mochila (v1.39): el de la pantalla principal (SPR_EGG) en pequeno
+    return [
+        "................",
+        "......kkkk......",
+        ".....kwyyyk.....",
+        "....kwyyyyyk....",
+        "....kyyyggyk....",
+        "...kyyyyggyYk...",
+        "...kyyyyyyyYk...",
+        "...kyggyyyyYk...",
+        "...kyggyyyyYk...",
+        "...kyyyyyggYk...",
+        "...kyyyyyggYk...",
+        "....kyyyyyYk....",
+        "....kYyyyYYk....",
+        ".....kYYYYk.....",
+        "......kkkk......",
+        "................",
+    ]
+
+
+def icon_dash():
+    # trineo con lineas de velocidad (v1.44)
+    return [
+        "................",
+        "................",
+        "................",
+        "bbb.............",
+        "........kkkkkk..",
+        ".bbbb..krrrrrrk.",
+        ".......krrrrrrk.",
+        "bbb...kRRRRRRRRk",
+        "......kRrrrrrrRk",
+        ".bbbb.kRRRRRRRRk",
+        ".......kkkkkkkk.",
+        "........S....S..",
+        "bbb...SSSSSSSSSS",
+        ".....S..........",
+        "....S...........",
+        "................",
+    ]
+
+
+def icon_zen():
+    # cascada sobre la poza (v1.43)
+    return [
+        "SSSSSbbbbbbSSSSS",
+        "SsSSSbwbbBbSSsSS",
+        "SSSsSbwbbBbSsSSS",
+        "SSSSSbbbwBbSSSSS",
+        ".SSsSbbbwBbSsSS.",
+        ".SSSSbwbbBbSSSS.",
+        "..SSSbwbbBbSSS..",
+        "..SsSbbbwBbSsS..",
+        "...SSbbbwBbSS...",
+        "...SSbwbbBbSS...",
+        "....SbwbbBbS....",
+        "....wbbbwBbw....",
+        "..wwwwbbbbwwww..",
+        ".wbbwbbwbbwbbww.",
+        "NNNNNNNNNNNNNNNN",
+        ".NNNNNNNNNNNNNN.",
+    ]
+
+
+# ------------------------------------------- iconos del boton mochila / cuidar
+
+def _ring(g):
+    # contorno que crece POR FUERA de la figura (para trazos finos como rayos)
+    grown = [row[:] for row in g.g]
+    for y in range(g.size):
+        for x in range(g.size):
+            if g.g[y][x] != '.':
+                continue
+            if any(0 <= x + dx < g.size and 0 <= y + dy < g.size and g.g[y + dy][x + dx] != '.'
+                   for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                grown[y][x] = 'k'
+    g.g = grown
+
+
+def icon_bag():
+    # mochila: asa arriba, solapa marron con hebilla dorada, cuerpo naranja y bolsillo
+    return [
+        "................",
+        "......kkkk......",
+        ".....k....k.....",
+        "...kkkkkkkkkk...",
+        "..kcwcccccccCk..",
+        "..kcccccccccCk..",
+        "..kccccccccCCk..",
+        "..kkccccccCCkk..",
+        "..kokkkffkkkOk..",
+        "..koookfYkooOk..",
+        "..kooookkoooOk..",
+        "..koOOOOOOOOOk..",
+        "..koOooooooOOk..",
+        "..koOooooooOOk..",
+        "..kOOOOOOOOOOk..",
+        "...kkkkkkkkkk...",
+    ]
+
+
+def icon_care():
+    # cuidar (dormir + limpiar): corazon rosa con una cruz blanca
+    return [
+        "................",
+        "................",
+        "...kkk....kkk...",
+        "..kpppk..kpppk..",
+        ".kpwpppkkppppPk.",
+        ".kwppppwwppppPk.",
+        ".kpppppwwpppPPk.",
+        ".kpppwwwwwwppPk.",
+        "..kppwwwwwwpPk..",
+        "...kpppwwppPk...",
+        "....kppwwpPk....",
+        ".....kppPPk.....",
+        "......kPPk......",
+        ".......kk.......",
+        "................",
+        "................",
+    ]
+
+
+def icon_sun():
+    # sol (despertar), junto a la luna de ICON_LIGHT
+    g = G(16)
+    g.disk(7.5, 7.5, 3.3, 3.3, 'f', 'o')
+    for x, y in ((7, 1), (8, 1), (7, 2), (8, 2), (7, 13), (8, 13), (7, 14), (8, 14),
+                 (1, 7), (1, 8), (2, 7), (2, 8), (13, 7), (13, 8), (14, 7), (14, 8),
+                 (3, 3), (12, 3), (3, 12), (12, 12)):
+        g.px(x, y, 'o')
+    _ring(g)
+    g.px(6, 6, 'w'); g.px(6, 7, 'w')
+    return g.rows()
+
+
+def icon_cake():
+    # tarta: nata blanca con goterones, capa rosa, bizcocho crema y una cereza
+    g = G(16)
+    g.rect(2, 7, 13, 14, 'y')
+    g.rect(12, 7, 13, 14, 'Y')
+    g.rect(2, 10, 13, 11, 'p'); g.rect(12, 10, 13, 11, 'P')
+    g.rect(2, 5, 13, 7, 'w')
+    g.px(4, 8, 'w'); g.px(8, 8, 'w'); g.px(8, 9, 'w'); g.px(11, 8, 'w')
+    g.disk(7.5, 3, 1.9, 1.9, 'r', 'R')
+    g.outline()
+    g.px(2, 5, '.'); g.px(13, 5, '.')
+    g.px(3, 5, 'k'); g.px(12, 5, 'k')
+    g.px(7, 2, 'w')
+    g.px(9, 0, 'G'); g.px(8, 1, 'G')
+    return g.rows()
+
+
+def gift():
+    # regalo en el suelo de casa: caja blanca, lazo rojo en cruz y moño
+    g = G(16)
+    g.rect(2, 8, 13, 15, 'w')
+    g.rect(12, 8, 13, 15, 's')
+    g.rect(1, 5, 14, 8, 'w')
+    g.rect(13, 5, 14, 8, 's')
+    g.rect(7, 5, 8, 15, 'r')
+    g.disk(5, 3, 2.4, 1.8, 'r', 'R')
+    g.disk(10, 3, 2.4, 1.8, 'r', 'R')
+    g.outline()
+    g.rect(2, 8, 13, 8, 'k')                   # borde de la tapa
+    g.rect(7, 8, 8, 8, 'R')
+    g.rect(7, 3, 8, 4, 'R')                    # nudo
+    return g.rows()
+
+
+def star():
+    # estrella amarilla para marcar una baya (escala 1, 16 px): gruesa y llena
+    return [
+        ".......kk.......",
+        "......kffk......",
+        "......kwfk......",
+        ".....kfwffk.....",
+        ".....kffffk.....",
+        "kkkkkkffffkkkkkk",
+        "kffffffffffffffk",
+        ".kffffffffffffk.",
+        "..kfffffffffok..",
+        "...kffffffffk...",
+        "...kfffffffok...",
+        "..kffffffffffk..",
+        "..kffffkkfffok..",
+        ".kfffkk..kkfook.",
+        ".kffk......kfok.",
+        ".kkk........kkk.",
+    ]
+
 SPRITES = {
     "CHARMANDER": charmander(),
     "CHARMELEON": charmeleon(),
@@ -645,6 +842,7 @@ SPRITES = {
     "ICON_BERRY_B": icon_berry_blue(),
     "ICON_BERRY_G": icon_berry_green(),
     "ICON_CANDY": icon_candy(),
+    "ICON_EGG": icon_egg(),
     "ICON_GOLDEN": icon_golden(),
     "ICON_PROTEIN": icon_protein(),
     "ICON_IRON": icon_iron(),
@@ -654,9 +852,27 @@ SPRITES = {
     "ICON_FLAG": icon_flag(),
     "ICON_BATTLE": icon_battle(),
     "ICON_SACK": icon_sack(),
+    "ICON_DASH": icon_dash(),
+    "ICON_ZEN": icon_zen(),
+    "ICON_BAG": icon_bag(),
+    "ICON_CARE": icon_care(),
+    "ICON_SUN": icon_sun(),
+    "ICON_CAKE": icon_cake(),
     "EGG": egg(),
     "POOP": poop(),
     "HEART": heart(),
+    "GIFT": gift(),
+    "STAR": star(),
+}
+
+# comentario a medida en la declaracion C (por defecto "NxN") y linea de
+# comentario previa: asi los dibujados a mano salen igual que estaban
+SPR_NOTE = {
+    "ICON_DASH": "16x16: trineo con lineas de velocidad (v1.44)",
+    "ICON_ZEN": "16x16: cascada sobre la poza (v1.43)",
+}
+SPR_PRELUDE = {
+    "ICON_EGG": "// huevo de la mochila (v1.39): el de la pantalla principal (SPR_EGG) en pequeno",
 }
 
 # anclas (ojos 3x4 / boca) y color de cuerpo para las expresiones superpuestas
@@ -777,7 +993,10 @@ def emit_c(path="species.h"):
         out.append(f"    case '{ch}': return 0x{rgb565(hexcol):04X};  // {hexcol}\n")
     out.append("    default: return 0;\n  }\n}\n\n")
     for name, rows in SPRITES.items():
-        out.append(f"static const char* const SPR_{name}[{len(rows)}] = {{  // {len(rows)}x{len(rows)}\n")
+        if name in SPR_PRELUDE:
+            out.append(SPR_PRELUDE[name] + "\n")
+        note = SPR_NOTE.get(name, f"{len(rows)}x{len(rows)}")
+        out.append(f"static const char* const SPR_{name}[{len(rows)}] = {{  // {note}\n")
         for row in rows:
             out.append(f'  "{row}",\n')
         out.append("};\n\n")

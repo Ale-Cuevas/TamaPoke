@@ -755,6 +755,82 @@ static const char* const SPR_ICON_ZEN[16] = {  // 16x16: cascada sobre la poza (
   ".NNNNNNNNNNNNNN.",
 };
 
+static const char* const SPR_ICON_BAG[16] = {  // 16x16
+  "................",
+  "......kkkk......",
+  ".....k....k.....",
+  "...kkkkkkkkkk...",
+  "..kcwcccccccCk..",
+  "..kcccccccccCk..",
+  "..kccccccccCCk..",
+  "..kkccccccCCkk..",
+  "..kokkkffkkkOk..",
+  "..koookfYkooOk..",
+  "..kooookkoooOk..",
+  "..koOOOOOOOOOk..",
+  "..koOooooooOOk..",
+  "..koOooooooOOk..",
+  "..kOOOOOOOOOOk..",
+  "...kkkkkkkkkk...",
+};
+
+static const char* const SPR_ICON_CARE[16] = {  // 16x16
+  "................",
+  "................",
+  "...kkk....kkk...",
+  "..kpppk..kpppk..",
+  ".kpwpppkkppppPk.",
+  ".kwppppwwppppPk.",
+  ".kpppppwwpppPPk.",
+  ".kpppwwwwwwppPk.",
+  "..kppwwwwwwpPk..",
+  "...kpppwwppPk...",
+  "....kppwwpPk....",
+  ".....kppPPk.....",
+  "......kPPk......",
+  ".......kk.......",
+  "................",
+  "................",
+};
+
+static const char* const SPR_ICON_SUN[16] = {  // 16x16
+  ".......kk.......",
+  "......kook......",
+  "...k..kook..k...",
+  "..kok..kk..kok..",
+  "...k..kkkk..k...",
+  ".....kffffk.....",
+  ".kk.kfwffffk.kk.",
+  "kookkfwfffokkook",
+  "kookkfffffokkook",
+  ".kk.kfffffok.kk.",
+  ".....kfoook.....",
+  "...k..kkkk..k...",
+  "..kok..kk..kok..",
+  "...k..kook..k...",
+  "......kook......",
+  ".......kk.......",
+};
+
+static const char* const SPR_ICON_CAKE[16] = {  // 16x16
+  ".........G......",
+  "........G.......",
+  "......kwkk......",
+  "......krrk......",
+  "......krrk......",
+  "...kkkwwwwkkk...",
+  "..kwwwwwwwwwwk..",
+  "..kwwwwwwwwwwk..",
+  "..kywyyywyywYk..",
+  "..kyyyyywyyyYk..",
+  "..kpppppppppPk..",
+  "..kpppppppppPk..",
+  "..kyyyyyyyyyYk..",
+  "..kyyyyyyyyyYk..",
+  "..kkkkkkkkkkkk..",
+  "................",
+};
+
 static const char* const SPR_EGG[32] = {  // 32x32
   "................................",
   "................................",
@@ -858,6 +934,44 @@ static const char* const SPR_HEART[32] = {  // 32x32
   "................................",
   "................................",
   "................................",
+};
+
+static const char* const SPR_GIFT[16] = {  // 16x16
+  "................",
+  "................",
+  "....kkk..kkk....",
+  "...krrrRRrrrk...",
+  "....krkRRkrk....",
+  ".kkkwwwkkwwwkkk.",
+  ".kwwwwwrrwwwwsk.",
+  ".kwwwwwrrwwwwsk.",
+  ".kkkkkkRRkkkkkk.",
+  "..kwwwwrrwwwsk..",
+  "..kwwwwrrwwwsk..",
+  "..kwwwwrrwwwsk..",
+  "..kwwwwrrwwwsk..",
+  "..kwwwwrrwwwsk..",
+  "..kwwwwrrwwwsk..",
+  "..kkkkkkkkkkkk..",
+};
+
+static const char* const SPR_STAR[16] = {  // 16x16
+  ".......kk.......",
+  "......kffk......",
+  "......kwfk......",
+  ".....kfwffk.....",
+  ".....kffffk.....",
+  "kkkkkkffffkkkkkk",
+  "kffffffffffffffk",
+  ".kffffffffffffk.",
+  "..kfffffffffok..",
+  "...kffffffffk...",
+  "...kfffffffok...",
+  "..kffffffffffk..",
+  "..kffffkkfffok..",
+  ".kfffkk..kkfook.",
+  ".kffk......kfok.",
+  ".kkk........kkk.",
 };
 
 static const Species SPECIES[NUM_SPECIES] = {

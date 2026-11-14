@@ -322,10 +322,13 @@ waving it around doesn't farm anything.
   | Rare Candy | the 10000 goal, v1.25–v1.35 (it now gives +2 levels directly) | **+1 level**, keeping how full the level bar was, without ageing the pet (it can make the pet ready to evolve). Candies already in the Backpack still work. |
   | Egg | every 8000–15000 steps (v1.39), apart from the finds above and their daily cap | Not used by hand: it comes home by itself when home is free (an ending, or the pet stored in the Box). |
 
-- The **Backpack** holds up to 9 of each item. Open it on the stat card's 5th
-  page, **WALK** (swipe up, then left four times): today's steps with a ring
-  toward the next goal and a flag per goal reached, the total, today's finds
-  (random ones out of 5, "+n" for the goals' gifts), and the items. Tap an item to use it.
+- The **Backpack** holds up to 9 of each item. Since v1.53 it has its own button (the
+  backpack, last on the bottom row): every item with its count, greyed when you have none, and a
+  hint below. Tap an item to use it (a YES / NO dialog); the Charm and eggs aren't used by hand. It
+  opens while the pet sleeps too, just to look.
+- The stat card's 5th page, **WALK** (swipe up, then left four times), shows today's steps with
+  a ring toward the next goal and a flag per goal reached, the total and today's finds (random
+  ones out of 5, "+n" for the goals' gifts).
 
 <details>
 <summary>Secrets (spoilers)</summary>
@@ -488,17 +491,20 @@ If one bottoms out it counts as a *slip-up*.
   gives a bonus) and a candy (+happiness but it fattens; weight makes it sluggish).
 - ⚽ **Play** → a menu with every game: the pokeball minigame (trains SPEED), a practice
   battle (crossed swords) or the training bag (red bag, trains STRENGTH).
-- 🌙 **Light** → sleep/wake (recovers energy, the scene goes dark). While asleep,
-  needs decay much slower (rest). The screen stays as bright as when it's awake.
-- 🫧 **Bath** → a foam scene that cleans up the poops.
+- 💗 **Care** (v1.53) → a menu with two choices:
+  - 🌙 **Sleep** / ☀️ **wake** (recovers energy, the scene goes dark). While asleep, needs decay
+    much slower (rest). The screen stays as bright as when it's awake. Asleep, Care is the button
+    that still works, and its menu shows the sun.
+  - 🫧 **Bath**: a foam scene that cleans up the poops (greyed while asleep).
+- 🎒 **Backpack** (v1.53) → your items and eggs; tap one to use it.
 
 **Touch gestures:**
 - Tap the creature = pet it (+happiness, bond).
 - Swipe left = open the **Pokédex / gallery** · swipe right = open the **Box** (v1.37,
   see [The Box](#the-box-v137)), from the pet or from the egg.
 - Vertical swipe up = open the **stat card** (5 pages: Profile / Battle / Medals /
-  Progress / Walk; swipe between them; tap the name on Profile to rename; on Walk, tap a
-  Backpack item to use it; the bag moved to the Play menu in v1.34).
+  Progress / Walk; swipe between them; tap the name on Profile to rename; the training bag moved
+  to the Play menu in v1.34, the Backpack to its own button in v1.53).
 - Swipe down = **set the clock** and pick the **language**, sound on/off and
   **brightness** (the sun pill: 4 levels, tap to cycle).
 - Long press (3 s) on the creature = **release** dialog.

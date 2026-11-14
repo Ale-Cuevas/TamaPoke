@@ -8,6 +8,19 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.53] - 2026-11-14
+
+### Changed
+
+- **A Backpack button.** The bottom row is now Food, Play, **Care** and **Backpack**. The Backpack
+  opens its own screen: every item with its count (greyed when you have none), the Shiny Charm
+  framed while held, eggs counting the one waiting in the incubator, and a hint. Tap an item to
+  use it, as before. It also opens while the pet sleeps, to look (nothing can be used asleep).
+  The stat card's WALK page keeps the steps, the goals and today's finds, without the item row.
+- **Care holds Sleep and Clean.** The Care button (a heart) opens a two-slot menu like the Play
+  menu: the moon puts the pet to sleep, the bubbles give it a bath. Asleep, Care is the button that
+  still works (as Light did): its menu shows a sun to wake it, and the bath greyed out.
+
 ## [1.52] - 2026-11-11
 
 ### Changed

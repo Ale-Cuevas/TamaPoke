@@ -127,7 +127,7 @@ static void resetUi() {
   gHostRandom = 12345;
   beh = decltype(beh){};
   walkLast = 0;
-  galleryOpen = cardOpen = kbOpen = clockOpen = gameOpen = sackOpen = zenOpen = dashOpen = false;
+  galleryOpen = cardOpen = bagOpen = kbOpen = clockOpen = gameOpen = sackOpen = zenOpen = dashOpen = false;
   zenSerialHold = -1;
   dashSerialSteerOn = false;
   dashTrailN = 0;
@@ -375,6 +375,16 @@ static const std::vector<Scene> &scenes() {
     { "minigame-swamp", [] { pokemon(23, 13); startGame(); gameScore = 3; }, 4 },
     { "feed", [] { pokemon(133, 12); menuKind = MENU_FEED; menuUntil = millis() + 6000; } },
     { "play-menu", [] { pokemon(133, 12); menuKind = MENU_PLAY; menuUntil = millis() + 6000; } },
+    // v1.53: the Care button (sleep | clean) and the Backpack screen
+    { "care-menu", [] { pokemon(133, 12); pet.poops = 2; menuKind = MENU_CARE; menuUntil = millis() + 6000; } },
+    { "care-menu-asleep", [] { pokemon(133, 23); pet.sleeping = true; menuKind = MENU_CARE; menuUntil = millis() + 6000; } },
+    { "bag", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 1, 1, 2 }); openBag(); } },
+    { "bag-es", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 0, 1, 0 }); openBag(); setLang(LANG_ES); applyLangFont(); } },
+    { "bag-empty", [] { pokemon(25, 13); openBag(); } },
+    { "bag-empty-es", [] { pokemon(25, 13); openBag(); setLang(LANG_ES); applyLangFont(); } },
+    { "bag-asleep", [] { pokemon(25, 23); pet.sleeping = true; walker(0, 52310, 0, { 2, 1, 0, 3, 0, 1, 0 }); openBag(); } },
+    { "bag-asleep-es", [] { pokemon(25, 23); pet.sleeping = true; walker(0, 52310, 0, { 2, 1, 0, 3, 0, 1, 0 }); openBag(); setLang(LANG_ES); applyLangFont(); } },
+    { "bag-hint", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 0, 1, 0 }); openBag(); } },
     // the sled run (v1.44): calibration (and "hold still"), running, fast, a hit, leaning, tiny / huge /
     // flying pets, the snow and volcano habitats, night, the result, Japanese, and the menu without an IMU
     { "dash-cal", [] { pokemon(123, 13); startDash(); } },
@@ -495,11 +505,10 @@ static const std::vector<Scene> &scenes() {
     // the 6000 and 10000 goals and the Rare Candy (v1.25)
     { "walk-6000", [] { pokemon(25, 13); walker(7240, 65000, 6, { 4, 0, 9, 1, 1, 0 }, 2); cardOpen = true; cardPage = 4; } },
     { "walk-10000", [] { pokemon(25, 13); walker(11032, 71500, 8, { 5, 1, 9, 2, 1, 1 }, 3); cardOpen = true; cardPage = 4; } },
-    { "walk-candy-confirm", [] {
+    { "bag-candy-confirm", [] {
        pokemon(25, 13);
        walker(11032, 71500, 8, { 5, 1, 9, 2, 1, 1 }, 3);
-       cardOpen = true;
-       cardPage = 4;
+       openBag();
        itemConfirm = IT_RARECANDY + 1;
        itemConfirmUntil = millis() + 10000;
      } },
@@ -522,11 +531,10 @@ static const std::vector<Scene> &scenes() {
        collect();
      }, 5 },
     { "card-medals-9", [] { pokemon(25, 13); pet.medals = MED_LV10 | MED_BERRY | MED_MARATHON; cardOpen = true; cardPage = 2; } },
-    { "walk-confirm", [] {
+    { "bag-confirm", [] {
        pokemon(25, 13);
        walker(1840, 52310, 2, { 2, 1, 0, 3, 0 });
-       cardOpen = true;
-       cardPage = 4;
+       openBag();
        itemConfirm = IT_GOLDEN + 1;
        itemConfirmUntil = millis() + 10000;
      } },

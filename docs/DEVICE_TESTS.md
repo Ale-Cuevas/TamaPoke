@@ -326,6 +326,21 @@ doesn't touch the record or give rewards.
   the thin ATK bar grows by the "STR +N" the result showed.
 - [ ] USER = back still quits the bag (no reward while the time runs).
 
+### Care menu and Backpack (v1.53)
+The bottom row is Food, Play, Care (heart), Backpack. `TAP x y` reaches every slot: Care is at 264 404, the
+Backpack at 326 390; the Care menu's slots are at about 200 320 (sleep / wake) and 266 320 (bath).
+- [ ] Care opens a two-slot row over the bars: moon | bubbles. The moon puts the pet to sleep; the bubbles
+  start the bath (a second tap during the bath shakes Care with the deny sound).
+- [ ] Asleep, Care and the Backpack keep their icons and the other two buttons are empty. Care shows a sun and a
+  grey bath; the sun wakes the pet, the bath shakes Care.
+- [ ] The menu closes after 6 s, on a tap outside it, and with USER.
+- [ ] The Backpack opens its own screen: "BACKPACK" / "MOCHILA", 7 slots with counts (greyed at 0), the Charm
+  framed, the eggs counting the waiting one, the hint below and "tap: back".
+- [ ] Tap an item: "Use X?" YES uses it and goes back home to show it (eating, "+N", level-up); NO, USER or a
+  tap outside the dialog keeps the Backpack open. A tap outside the grid closes the Backpack.
+- [ ] Asleep the Backpack opens with "Asleep: just looking" / "Duerme: solo mirar" and every item refuses.
+- [ ] The WALK page of the stat card no longer has the item row; the eggs hint stays when you have eggs.
+
 ### Waterfall (v1.43)
 ([NEW_GAMES.md, Task ZEN](NEW_GAMES.md#task-zen-meditate-under-the-waterfall).) `ZEN [s]` opens a session with no
 reward (from second s if given), `HOLD 1` / `HOLD 0` fake the finger, `HOLD OFF` gives it back, `ZEN?` prints

@@ -87,6 +87,8 @@ enum StrId : uint8_t {
   S_ZEN_BONUS_FMT, S_ATK_MAX, S_DEF_MAX, S_SPE_MAX,
   // v1.49: leyenda de la barra fina de entrenamiento en la ficha de combate
   S_TRAIN_LEGEND,
+  // v1.53: la mochila con su boton: como se usa y dormido solo se mira
+  S_BAG_HINT, S_BAG_ASLEEP,
   STR_COUNT
 };
 
