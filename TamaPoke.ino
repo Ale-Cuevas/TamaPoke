@@ -107,6 +107,15 @@ uint32_t poopPuffUntil = 0;    // ...hasta aqui
 #define POOP_PUFF_MS 450
 int8_t boxShakeSlot = -1;     // hueco que no se puede usar: tiembla (como un boton, fx.h)
 uint32_t boxShakeUntil = 0;
+uint8_t boxPage = 0;          // 0 = los huecos, 1 = las insignias (v1.65; deslizar a la derecha desde la caja)
+// fases de combate (v1.65): la seleccion de fase y el selector de equipo (menus estaticos, como la caja)
+bool stagesOpen = false;
+bool teamOpen = false;
+uint8_t stageSel = 0;         // la fase elegida (el selector de equipo la lleva)
+uint32_t teamPick[TEAM_MAX] = { 0 };  // uids elegidos, en orden
+uint8_t teamPickN = 0;
+int8_t stShakeIdx = -1;       // casilla (fase o bicho) que no se puede usar: tiembla
+uint32_t stShakeUntil = 0;
 int boxNowCx = 233;           // centro de la miniatura del activo (de ahi sale o ahi llega la luz)
 
 bool screenOff = false;       // pulsacion corta del boton PWR (la tercera de cada vuelta, v1.32)
@@ -599,7 +608,7 @@ void onShake() {
   if (dimStage > 0) { wakeUI(); return; }
   wakeUI();
   if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen()) return;
-  if (galleryOpen || boxOpen || cardOpen || bagOpen || kbOpen || clockOpen) return;  // el bicho no esta en pantalla
+  if (galleryOpen || boxOpen || stagesOpen || teamOpen || cardOpen || bagOpen || kbOpen || clockOpen) return;  // el bicho no esta en pantalla
   if (pet.sleeping) pet.wakeGrumpy();
   else pet.shaken();  // tambien el huevo: se tambalea
 }
@@ -1292,7 +1301,7 @@ void handleTouch() {
     tXl = x;
     tYl = y;
     // pulsacion larga sin moverse sobre el bicho -> dialogo de soltar
-    if (!holdFired && !swallowGesture && !galleryOpen && !boxOpen && !cardOpen && !bagOpen && !kbOpen && !clockOpen && !menuKind && millis() - tStart > 3000 &&
+    if (!holdFired && !swallowGesture && !galleryOpen && !boxOpen && !stagesOpen && !teamOpen && !cardOpen && !bagOpen && !kbOpen && !clockOpen && !menuKind && millis() - tStart > 3000 &&
         abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && inPetZone(tX0, tY0) && poopAt(tX0, tY0) < 0 &&
         !pet.isEgg() && !confirmUntil && !pet.busyEnding()) {
       confirmUntil = millis() + 10000;
@@ -1316,7 +1325,7 @@ void openClock();  // prototipo
 
 void onSwipeV(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (gameOpen || galleryOpen || boxOpen || bagOpen || kbOpen || sackOpen || zenOpen || dashOpen || battleOpen() || pet.busyEnding()) return;
+  if (gameOpen || galleryOpen || boxOpen || stagesOpen || teamOpen || bagOpen || kbOpen || sackOpen || zenOpen || dashOpen || battleOpen() || pet.busyEnding()) return;
   if (clockOpen) { clockOpen = false; return; }
   if (cardOpen) {
     if (dir < 0) cardOpen = false;  // arriba cierra la ficha
@@ -1340,8 +1349,15 @@ void onSwipe(int dir) {
     cardPage = p < 0 ? 0 : (p > CARD_PAGES - 1 ? CARD_PAGES - 1 : p);
     return;
   }
-  if (boxOpen) {  // la caja es una sola pagina: a la izquierda vuelve a casa, a la derecha nada
-    if (dir < 0 && !boxMove) closeBox();
+  if (stagesOpen || teamOpen) return;  // menus de fase: ni a casa ni a la Pokedex (se sale con USER o la cabecera)
+  if (boxOpen) {  // la caja, 2 paginas (v1.65): a la derecha las insignias; a la izquierda atras, y de la 1 a casa
+    if (boxMove) return;
+    if (boxPage == 0) {
+      if (dir < 0) closeBox();
+      else if (!boxAsk) boxPage = 1;
+    } else if (dir < 0) {
+      boxPage = 0;
+    }
     return;
   }
   if (!galleryOpen) {
@@ -1443,6 +1459,8 @@ void onBack() {
     galleryPmd.unload();
     return;
   }
+  if (teamOpen) { closeTeam(); return; }  // el selector vuelve a la seleccion de fase
+  if (stagesOpen) { closeStages(); return; }
   if (boxOpen) {
     if (boxMove) return;                   // la luz ya vuela: el movimiento no se corta
     if (boxAsk) { boxAsk = 0; return; }    // "guardar?" / "despertar?": NO
@@ -1477,6 +1495,14 @@ void onTap(int16_t x, int16_t y) {
   }
   if (galleryOpen) {
     galleryTap(x, y);
+    return;
+  }
+  if (teamOpen) {
+    teamTap(x, y);
+    return;
+  }
+  if (stagesOpen) {
+    stagesTap(x, y);
     return;
   }
   if (boxOpen) {
@@ -1569,7 +1595,7 @@ void onTap(int16_t x, int16_t y) {
         }
       }
       else if (slot == 4) startZen();
-      else if (pet.canBattle()) startPractice(0);
+      else if (stagesCanOpen()) openStages();  // v1.65: las fases (antes un combate suelto)
       else {
         sfxPlay(SFX_DENY);
         fxo.push(FXO_DENY, 1, 0, millis());  // tiembla JUGAR, debajo del menu ya cerrado
@@ -2234,6 +2260,7 @@ void printT(const char *s) {
 static bool staticScreen() {
   if (pet.awaitingStarter()) return true;
   if (galleryOpen || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen()) return false;  // la galeria gestiona su propio repintado
+  if (stagesOpen || teamOpen) return !timeLeft(stShakeUntil);  // menus quietos, salvo la casilla que tiembla
   if (boxOpen) return !boxMove && !timeLeft(boxShakeUntil);  // la caja, quieta salvo la luz o un hueco que tiembla
   if (kbOpen || clockOpen || bagOpen) return true;
   return cardOpen && cardPage != 0;  // la pagina 0 tiene el retrato animado
@@ -2242,12 +2269,16 @@ uint32_t walkStepsToday();
 static uint32_t mixKey(uint32_t h, uint32_t v) { return (h ^ v) * 16777619u; }
 static uint32_t screenKey() {
   uint32_t h = 2166136261u;
-  h = mixKey(h, pet.awaitingStarter() ? 1 : boxOpen ? 20 : kbOpen ? 2 : clockOpen ? 3 : bagOpen ? 21 : 4 + cardPage);
+  h = mixKey(h, pet.awaitingStarter() ? 1 : teamOpen ? 23 : stagesOpen ? 22 : boxOpen ? 20 : kbOpen ? 2 : clockOpen ? 3 : bagOpen ? 21 : 4 + cardPage);
   h = mixKey(h, sdEpoch);
   h = mixKey(h, gBright);                      // el aviso de brillo va encima de todo
   h = mixKey(h, timeLeft(briToastUntil) > 0);  // y al irse tiene que repintarse
   h = mixKey(h, gOrbitStep);                   // la orbita la mueve: hay que volver a mandarla
-  if (boxOpen) {
+  if (stagesOpen || teamOpen) {
+    mixStageKey(h);
+  } else if (boxOpen) {
+    h = mixKey(h, boxPage);
+    h = mixKey(h, pet.badgeMask());
     // cada hueco (su CRC cambia con cualquier cosa del bicho), el activo, el huevo que espera y el dialogo
     for (uint8_t k = 0; k < BOX_SLOTS; k++) {
       h = mixKey(h, pet.boxState(k));
@@ -2314,6 +2345,14 @@ bool render() {
   }
   if (galleryOpen) {
     renderGallery();
+    return true;
+  }
+  if (teamOpen) {
+    renderTeam();
+    return true;
+  }
+  if (stagesOpen) {
+    renderStages();
     return true;
   }
   if (boxOpen) {
@@ -4927,6 +4966,7 @@ void galleryTap(int16_t x, int16_t y) {
 #define BOX_CW 124
 #define BOX_CH 110
 #define BOX_NOW_Y 350  // centro de la fila "Ahora: ..."
+#define BOX_DOTS_Y 404 // puntos de pagina (v1.65), bajo la fila "Ahora:"
 #define BOX_SLEEP_BG C565(0xe2, 0xe5, 0xf4)  // fondo de un hueco ocupado: azulado, duermen
 #define BOX_LIGHT C565(0xff, 0xe7, 0x9f)     // halo dorado de la luz
 
@@ -4950,6 +4990,7 @@ bool boxCanOpen() {
 
 void openBox() {
   boxOpen = true;
+  boxPage = 0;
   boxAsk = 0;
   boxMove = BOXMV_NONE;
   boxShakeUntil = 0;
@@ -4957,6 +4998,7 @@ void openBox() {
 
 void closeBox() {
   boxOpen = false;
+  boxPage = 0;
   boxAsk = 0;
 }
 
@@ -5192,6 +5234,11 @@ void renderBox() {
   uint32_t now = millis();
   gfx->fillScreen(RGB565_BLACK);
   gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  if (boxPage == 1) {  // las insignias (v1.65)
+    renderBadges();
+    gfx->flush();
+    return;
+  }
 
   // el movimiento en marcha (0..1); desde 0,85 se ve como quedara
   float t = 0;
@@ -5267,6 +5314,7 @@ void renderBox() {
     }
   }
 
+  drawPageDots(2, 0, BOX_DOTS_Y);
   if (boxAsk) drawBoxAsk();
   gfx->flush();
 }
@@ -5303,6 +5351,7 @@ void boxTap(int16_t x, int16_t y) {
     closeBox();
     return;
   }
+  if (boxPage != 0) return;  // las insignias no tienen nada que tocar
   int k = boxSlotAt(x, y);
   if (k < 0) return;
   bool ok = pet.boxState(k) == BOX_EMPTY ? pet.canStore(k) : pet.canWake(k);
@@ -5438,6 +5487,353 @@ void boxFill() {
     r.storedEpoch = pet.lastSeenEpoch;
     pet.boxPut(k, r);
   }
+}
+
+// ---------- fases: seleccion, selector de equipo e insignias (v1.65) ----------
+// Menus estaticos, como la caja (no repintan sin cambio de clave: mixStageKey() mezcla todo lo que
+// se dibuja). El combate en si es de startStage() (la pantalla de combate). La pagina de insignias
+// es la segunda de la caja (deslizar a la derecha desde sus huecos).
+
+// STUB-B1: lo sustituye la funcion real al fusionar
+void startStage(uint8_t stage, const uint32_t *uids, uint8_t n) {
+  Serial.printf("startStage(%u, n=%u) [stub]\n", (unsigned)stage, (unsigned)n);
+  for (uint8_t i = 0; i < n; i++) Serial.printf("  uid=%08lX\n", (unsigned long)uids[i]);
+}
+
+#define STG_X 73        // rejilla de 2x4 casillas de 156x62 (las esquinas de arriba quedan ~3 px dentro del circulo)
+#define STG_Y 78
+#define STG_W 156
+#define STG_H 62
+#define STG_GAPX 8
+#define STG_GAPY 6
+#define STG_TITLE_BAND 72   // tocar por encima = salir
+#define STG_LEGEND_Y 366
+#define STG_LOCK_INK 0x8410          // gris del texto y la silueta de una fase bloqueada
+#define STG_SIL 0xAD55               // silueta de la insignia aun no ganada
+#define STG_PICKED_BG C565(0xd8, 0xf0, 0xd8)
+#define TEAM_CW 84      // tarjetas de bicho: 4 en la fila de arriba y 3 debajo
+#define TEAM_CH 100
+#define TEAM_GAP 6
+#define TEAM_ROW1_Y 96
+#define TEAM_SINGLE_Y 140   // hasta 4 bichos, una sola fila
+#define TEAM_BAND 90        // tocar por encima de las tarjetas = volver
+#define TEAM_BTN_X 153
+#define TEAM_BTN_Y 326
+#define TEAM_BTN_W 160
+#define TEAM_BTN_H 50
+#define BADGE_CELL_W 96     // pagina de insignias: 4x2 de 64 px (escala 4)
+#define BADGE_ROW_Y 118
+#define BADGE_ROW_H 128
+
+// un bicho que puede ir al equipo: el de casa (slot TEAM_HOME) o uno de la caja
+struct TeamCand {
+  uint32_t uid;
+  int8_t slot;
+};
+static TeamCand teamCand[1 + BOX_SLOTS];
+static uint8_t teamCandN = 0;
+
+static void teamBuildCands() {
+  teamCandN = 0;
+  if (!pet.isEgg()) teamCand[teamCandN++] = { pet.uid, (int8_t)TEAM_HOME };
+  for (uint8_t k = 0; k < BOX_SLOTS; k++)
+    if (pet.boxState(k) == BOX_OK) teamCand[teamCandN++] = { pet.boxRecord(k).uid, (int8_t)k };
+}
+
+static bool teamIsPicked(uint32_t uid) {
+  for (uint8_t i = 0; i < teamPickN; i++)
+    if (teamPick[i] == uid) return true;
+  return false;
+}
+
+// quita de la eleccion a quien ya no existe o no puede pelear (p. ej. el de casa se durmio)
+static void teamPrune() {
+  uint8_t n = 0;
+  for (uint8_t i = 0; i < teamPickN; i++)
+    if (pet.teamCanFight(teamPick[i])) teamPick[n++] = teamPick[i];
+  teamPickN = n;
+}
+
+// hay alguien que pueda pelear: el de casa despierto o cualquiera de la caja
+bool stagesCanOpen() { return pet.canBattle() || pet.boxHasPets(); }
+
+void closeStages() {
+  stagesOpen = false;
+  teamOpen = false;
+  stShakeUntil = 0;
+  stShakeIdx = -1;
+}
+
+void openStages() {
+  stagesOpen = true;
+  teamOpen = false;
+  stShakeUntil = 0;
+  stShakeIdx = -1;
+}
+
+// el selector: precargado con el ultimo equipo (sin los que ya no existen o no pelean) y, si no queda
+// nadie, con el de casa si puede
+void openTeam(uint8_t stage) {
+  stageSel = stage;
+  teamPickN = 0;
+  const uint32_t *last = pet.teamUids();
+  for (uint8_t i = 0; i < TEAM_MAX; i++)
+    if (last[i] && pet.teamCanFight(last[i]) && !teamIsPicked(last[i])) teamPick[teamPickN++] = last[i];
+  if (!teamPickN && pet.canBattle() && !pet.isEgg()) teamPick[teamPickN++] = pet.uid;
+  teamOpen = true;
+  stShakeUntil = 0;
+  stShakeIdx = -1;
+}
+
+void closeTeam() {
+  teamOpen = false;
+  stShakeUntil = 0;
+  stShakeIdx = -1;
+}
+
+// la clave de repintado de los dos menus: todo lo que dibujan
+void mixStageKey(uint32_t &h) {
+  h = mixKey(h, pet.badgeMask());
+  h = mixKey(h, pet.stageRewardMask());
+  h = mixKey(h, gLang);
+  h = mixKey(h, stageSel);
+  h = mixKey(h, teamPickN);
+  for (uint8_t i = 0; i < teamPickN; i++) h = mixKey(h, teamPick[i]);
+  h = mixKey(h, pet.canBattle());
+  if (teamOpen) {
+    teamBuildCands();
+    for (uint8_t i = 0; i < teamCandN; i++) {
+      h = mixKey(h, teamCand[i].uid);
+      h = mixKey(h, pet.teamCanFight(teamCand[i].uid));
+      if (teamCand[i].slot == TEAM_HOME) {
+        h = mixKey(h, pet.speciesId);
+        h = mixKey(h, pet.growMin);
+        for (const char *c = pet.nick; *c; c++) h = mixKey(h, (uint8_t)*c);
+      } else {
+        h = mixKey(h, pet.boxRecord(teamCand[i].slot).crc);
+      }
+    }
+  }
+}
+
+// puntos de pagina, como los de la ficha (cur = pagina actual)
+void drawPageDots(int count, int cur, int y) {
+  for (int i = 0; i < count; i++) {
+    int dx = CX - (count - 1) * 13 + i * 26;
+    if (i == cur) gfx->fillCircle(dx, y, 5, UI_INK);
+    else gfx->drawCircle(dx, y, 4, UI_INK);
+  }
+}
+
+static int stShakeDx(int8_t idx) {
+  if (idx != stShakeIdx || !timeLeft(stShakeUntil)) return 0;
+  float s = 1.0f - (float)timeLeft(stShakeUntil) / (float)FX_DENY_MS;
+  return (int)(4.0f * (1.0f - s) * sinf(s * 6.0f * (float)PI));
+}
+
+static void stDeny(int8_t idx) {
+  sfxPlay(SFX_DENY);
+  stShakeIdx = idx;
+  stShakeUntil = millis() + FX_DENY_MS;
+}
+
+static int stageTileX(uint8_t i) { return STG_X + (i % 2) * (STG_W + STG_GAPX); }
+static int stageTileY(uint8_t i) { return STG_Y + (i / 2) * (STG_H + STG_GAPY); }
+
+// marca de "premio de hoy": un circulo ambar con un punto
+static void drawRewardMark(int cx, int cy) {
+  gfx->fillCircle(cx, cy, 7, UI_BAR_WARN);
+  gfx->fillCircle(cx, cy, 2, UI_WHITE);
+}
+
+void renderStages() {
+  gfx->fillScreen(RGB565_BLACK);
+  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  gfx->setTextColor(UI_INK);
+  setSize(3);
+  setCur(centerX(T(S_STAGES), 3), 36);
+  printT(T(S_STAGES));
+  for (uint8_t i = 0; i < STAGE_COUNT; i++) {
+    bool open = pet.stageUnlocked(i), got = pet.hasBadge(i);
+    int x = stageTileX(i) + stShakeDx(i), y = stageTileY(i);
+    if (!open) {  // bloqueada: casilla gris, silueta y texto apagados
+      gfx->fillRoundRect(x, y, STG_W, STG_H, 12, UI_TRACK);
+    } else {
+      gfx->fillRoundRect(x, y, STG_W, STG_H, 12, UI_WHITE);
+      gfx->drawRoundRect(x, y, STG_W, STG_H, 12, UI_INK);
+      if (got) gfx->drawRoundRect(x + 1, y + 1, STG_W - 2, STG_H - 2, 11, UI_BAR_OK);  // ganada: borde verde
+    }
+    if (got) drawMap(BADGE_ICON[i], 16, x + 8, y + (STG_H - 32) / 2, 2, false);
+    else drawMapTint(BADGE_ICON[i], 16, x + 8, y + (STG_H - 32) / 2, 2, open ? STG_SIL : STG_LOCK_INK);
+    int tcx = x + 46 + 49;
+    gfx->setTextColor(open ? UI_INK : STG_LOCK_INK);
+    printTight(stageName(i), tcx, y + 10, 98);
+    char line[24];
+    if (open) snprintf(line, sizeof(line), T(S_LV_RANGE_FMT), (unsigned)STAGES[i].lvMin, (unsigned)STAGES[i].lvMax);
+    else snprintf(line, sizeof(line), "%s", T(S_LOCKED));
+    gfx->setTextColor(open ? BOX_NOTE_INK : STG_LOCK_INK);
+    printTight(line, tcx, y + 34, 98);
+    if (open && pet.stageRewardReady(i)) drawRewardMark(x + STG_W - 12, y + 12);
+  }
+  // leyenda
+  setSize(2);
+  int tw = textW(T(S_REWARD_TODAY), 2), lx = CX - (tw + 22) / 2;
+  drawRewardMark(lx + 7, STG_LEGEND_Y + 7);
+  gfx->setTextColor(BOX_NOTE_INK);
+  setCur(lx + 22, STG_LEGEND_Y);
+  printT(T(S_REWARD_TODAY));
+  gfx->flush();
+}
+
+void stagesTap(int16_t x, int16_t y) {
+  if (y < STG_TITLE_BAND) {  // tocar la cabecera = salir, como la caja
+    closeStages();
+    return;
+  }
+  for (uint8_t i = 0; i < STAGE_COUNT; i++) {
+    int tx = stageTileX(i), ty = stageTileY(i);
+    if (x < tx || x >= tx + STG_W || y < ty || y >= ty + STG_H) continue;
+    if (!pet.stageUnlocked(i)) {
+      stDeny(i);
+      return;
+    }
+    sfxPlay(SFX_TAP);
+    openTeam(i);
+    return;
+  }
+}
+
+// posicion de la tarjeta i de n
+static void teamCardPos(uint8_t i, uint8_t n, int &x, int &y) {
+  uint8_t rows = n > 4 ? 2 : 1, row = i / 4;
+  uint8_t cnt = row == 0 ? (n < 4 ? n : 4) : (uint8_t)(n - 4);
+  x = CX - (cnt * TEAM_CW + (cnt - 1) * TEAM_GAP) / 2 + (i % 4) * (TEAM_CW + TEAM_GAP);
+  y = rows == 2 ? TEAM_ROW1_Y + row * (TEAM_CH + 8) : TEAM_SINGLE_Y;
+}
+
+static void drawTeamCard(uint8_t idx, uint8_t n) {
+  const TeamCand &c = teamCand[idx];
+  int x, y;
+  teamCardPos(idx, n, x, y);
+  x += stShakeDx(idx);
+  bool fight = pet.teamCanFight(c.uid), picked = teamIsPicked(c.uid);
+  uint16_t bg = !fight ? UI_TRACK : picked ? STG_PICKED_BG : UI_WHITE;
+  gfx->fillRoundRect(x, y, TEAM_CW, TEAM_CH, 12, bg);
+  gfx->drawRoundRect(x, y, TEAM_CW, TEAM_CH, 12, picked && fight ? UI_BAR_OK : fight ? UI_INK : STG_LOCK_INK);
+  if (picked && fight) gfx->drawRoundRect(x + 1, y + 1, TEAM_CW - 2, TEAM_CH - 2, 11, UI_BAR_OK);
+  int16_t dex = c.slot == TEAM_HOME ? pet.speciesId : pet.boxRecord(c.slot).speciesId;
+  const char *nm = c.slot == TEAM_HOME ? petName() : recName(pet.boxRecord(c.slot));
+  uint16_t lv = c.slot == TEAM_HOME ? pet.level() : levelFor(pet.boxRecord(c.slot).growMin);
+  int cx = x + TEAM_CW / 2;
+  const uint8_t *t = thumbs.get(dex);
+  if (t) drawThumbFit(t, cx, y + 32, TEAM_CW - 14, 48, !fight, bg);
+  gfx->setTextColor(fight ? UI_INK : STG_LOCK_INK);
+  printTight(nm, cx, y + 62, TEAM_CW - 4);
+  char s[16];
+  snprintf(s, sizeof(s), T(S_LVL_FMT), (unsigned)lv);
+  setSize(2);
+  setCur(cx - textW(s, 2) / 2, y + 80);
+  printT(s);
+  if (picked && fight) {  // el numero de orden, encima de la miniatura
+    int pos = 0;
+    for (uint8_t i = 0; i < teamPickN; i++)
+      if (teamPick[i] == c.uid) pos = i + 1;
+    gfx->fillCircle(x + 14, y + 14, 12, UI_BAR_OK);
+    gfx->setTextColor(UI_WHITE);
+    setSize(2);
+    char d[4];
+    snprintf(d, sizeof(d), "%d", pos);
+    setCur(x + 14 - textW(d, 2) / 2, y + 7);
+    printT(d);
+  }
+}
+
+void renderTeam() {
+  teamPrune();
+  teamBuildCands();
+  gfx->fillScreen(RGB565_BLACK);
+  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  gfx->setTextColor(UI_INK);
+  printTight(T(S_PICK_TEAM), CX, 36, 280);
+  char sub[40];
+  char stg[32];
+  snprintf(stg, sizeof(stg), T(S_STAGE_FMT), (unsigned)stageSel + 1);
+  snprintf(sub, sizeof(sub), "%s: %s", stg, stageName(stageSel));
+  gfx->setTextColor(BOX_NOTE_INK);
+  printTight(sub, CX, 62, 300);
+  for (uint8_t i = 0; i < teamCandN; i++) drawTeamCard(i, teamCandN);
+  bool ok = teamPickN > 0;
+  gfx->fillRoundRect(TEAM_BTN_X, TEAM_BTN_Y, TEAM_BTN_W, TEAM_BTN_H, 14, ok ? UI_BAR_OK : UI_TRACK);
+  gfx->setTextColor(ok ? UI_WHITE : STG_LOCK_INK);
+  setSize(3);
+  setCur(TEAM_BTN_X + (TEAM_BTN_W - textW(T(S_START), 3)) / 2, TEAM_BTN_Y + 13);
+  printT(T(S_START));
+  gfx->flush();
+}
+
+void teamTap(int16_t x, int16_t y) {
+  teamPrune();
+  teamBuildCands();
+  if (x >= TEAM_BTN_X && x < TEAM_BTN_X + TEAM_BTN_W && y >= TEAM_BTN_Y && y < TEAM_BTN_Y + TEAM_BTN_H) {
+    if (!teamPickN) {
+      stDeny(-1);
+      return;
+    }
+    uint32_t uids[TEAM_MAX];
+    uint8_t n = teamPickN, st = stageSel;
+    memcpy(uids, teamPick, sizeof(uids));
+    sfxPlay(SFX_TAP);
+    closeStages();
+    startStage(st, uids, n);
+    return;
+  }
+  if (y < TEAM_BAND) {  // la cabecera: volver a las fases
+    closeTeam();
+    return;
+  }
+  for (uint8_t i = 0; i < teamCandN; i++) {
+    int cx, cy;
+    teamCardPos(i, teamCandN, cx, cy);
+    if (x < cx || x >= cx + TEAM_CW || y < cy || y >= cy + TEAM_CH) continue;
+    uint32_t uid = teamCand[i].uid;
+    if (teamIsPicked(uid)) {  // quitarlo: los de detras suben un puesto
+      uint8_t n = 0;
+      for (uint8_t j = 0; j < teamPickN; j++)
+        if (teamPick[j] != uid) teamPick[n++] = teamPick[j];
+      teamPickN = n;
+      sfxPlay(SFX_TAP);
+    } else if (!pet.teamCanFight(uid) || teamPickN >= TEAM_MAX) {
+      stDeny(i);
+    } else {
+      teamPick[teamPickN++] = uid;
+      sfxPlay(SFX_TAP);
+    }
+    return;
+  }
+}
+
+// segunda pagina de la caja: las 8 insignias, en color las ganadas y en silueta las que faltan
+void renderBadges() {
+  char head[32];
+  snprintf(head, sizeof(head), "%s %u/%u", T(S_BADGES), (unsigned)pet.badgeCount(), (unsigned)STAGE_COUNT);
+  gfx->setTextColor(UI_INK);
+  setSize(3);
+  setCur(centerX(head, 3), 36);
+  printT(head);
+  int x0 = CX - (4 * BADGE_CELL_W) / 2;
+  for (uint8_t i = 0; i < STAGE_COUNT; i++) {
+    int cx = x0 + (i % 4) * BADGE_CELL_W + BADGE_CELL_W / 2, y = BADGE_ROW_Y + (i / 4) * BADGE_ROW_H;
+    bool got = pet.hasBadge(i);
+    if (got) {
+      gfx->fillRoundRect(cx - 38, y - 6, 76, 76, 14, UI_WHITE);
+      drawMap(BADGE_ICON[i], 16, cx - 32, y, 4, false);
+    } else {
+      drawMapTint(BADGE_ICON[i], 16, cx - 32, y, 4, UI_TRACK);
+    }
+    gfx->setTextColor(got ? UI_INK : STG_LOCK_INK);
+    printTight(got ? stageName(i) : "???", cx, y + 78, BADGE_CELL_W - 2);
+  }
+  drawPageDots(2, 1, BOX_DOTS_Y);
 }
 
 #define BAT_ICON_W 27  // 24 de cuerpo + 3 de borne
@@ -5620,6 +6016,7 @@ void closeForDying() {
     galleryPmd.unload();
   }
   if (boxOpen && boxMove == BOXMV_NONE) closeBox();
+  closeStages();
   kbOpen = clockOpen = bagOpen = cardOpen = false;
   itemConfirm = 0;
   choiceKind = 0;
