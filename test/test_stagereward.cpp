@@ -231,14 +231,10 @@ TEST(stage, perder_no_da_medalla_ni_premio_y_la_felicidad_es_la_de_la_practica) 
   CHECK_EQ(p.badgeMask(), (uint8_t)0);
   CHECK(p.stageRewardReady(2));
   CHECK(!p.savePending());  // guarda por su cuenta
-  // la felicidad, como mucho una vez por hora (y comparte reloj con el combate de practica)
+  // la felicidad, como mucho una vez por hora
   CHECK_EQ(p.stageDone(2, false, t, 2).joy, (uint8_t)0);
-  CHECK_EQ(p.practiceDone(), (uint8_t)0);
   mockAdvanceMillis(PRACTICE_EVERY_MS);
   CHECK_EQ(p.stageDone(2, false, t, 2).joy, (uint8_t)PRACTICE_JOY);
-  CHECK_EQ(p.practiceDone(), (uint8_t)0);
-  mockAdvanceMillis(PRACTICE_EVERY_MS);
-  CHECK_EQ(p.practiceDone(), (uint8_t)PRACTICE_JOY);  // la practica sigue igual
   CHECK_EQ(p.stageDone(2, false, t, 2).joy, (uint8_t)0);
 }
 
@@ -276,11 +272,10 @@ TEST(stage, la_primera_victoria_paga_a_todo_el_equipo) {
   CHECK(recordValid(p.boxRecord(1)));
   CHECK(recordValid(p.boxRecord(4)));
   CHECK_EQ(p.boxRecord(1).ageMinutes, (uint32_t)910);  // crecer no los envejece
-  // el objeto, envuelto en casa (no en la mochila), sin tocar el botin de practica
+  // el objeto, envuelto en casa (no en la mochila)
   CHECK_EQ(p.giftCount(), (uint8_t)1);
   CHECK_EQ(p.giftItem(0), (uint8_t)IT_CAKE);
   CHECK_EQ(p.items[IT_CAKE], (uint8_t)0);
-  CHECK_EQ(p.battleDropsToday(), (uint8_t)0);
   CHECK(p.hasBadge(0));
   CHECK(p.stageUnlocked(1));
   CHECK(!p.stageRewardReady(0));
@@ -299,19 +294,16 @@ TEST(stage, la_primera_victoria_paga_a_todo_el_equipo) {
   }
 }
 
-TEST(stage, el_objeto_del_jefe_no_depende_del_70_ni_del_tope_de_5) {
+TEST(stage, el_objeto_del_jefe_sale_siempre_de_la_tabla) {
   Pet p;
   sBorn(p);
-  mockForceRandom(0);
-  for (int i = 0; i < BATTLE_DROPS_PER_DAY; i++) p.battleDrop(true);
-  CHECK_EQ(p.battleDropsToday(), (uint8_t)BATTLE_DROPS_PER_DAY);
-  mockForceRandom(99);  // el botin de practica no tocaria (99 >= 70); la tabla da huevo
+  mockForceRandom(99);  // la tabla da huevo: lo mas raro tambien sale
   uint32_t t[1] = { p.uid };
   StageReward r = p.stageDone(5, true, t, 1);
   mockClearForcedRandom();
   CHECK(r.paid);
   CHECK_EQ(r.item, (uint8_t)IT_EGG);
-  CHECK_EQ(p.giftCount(), (uint8_t)(BATTLE_DROPS_PER_DAY + 1));
+  CHECK_EQ(p.giftCount(), (uint8_t)1);
 }
 
 TEST(stage, la_segunda_victoria_del_dia_no_paga_otra_vez) {

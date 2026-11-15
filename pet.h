@@ -157,15 +157,12 @@ enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_RAR
 
 enum : uint8_t { EMOTE_NONE = 0, EMOTE_ANGRY, EMOTE_DIZZY, EMOTE_WOBBLE };
 
-// --- combate de practica (Tarea 3a)
-#define PRACTICE_JOY 3                 // premio del combate de practica...
+// --- combate (felicidad del final de un estadio)
+#define PRACTICE_JOY 3                 // felicidad del final de un estadio...
 #define PRACTICE_EVERY_MS 3600000UL    // ...como mucho una vez por hora
-// botin de combate (v1.56): cada victoria tiene un 70 % de traer un objeto, envuelto en casa, hasta 5 al
-// dia (se pueden repetir combates sin fin). Tabla (%): tarta 35, baya dorada 25, vitaminas 21 (7 cada
-// una), Caramelo Raro 7, Revivir 5 (v1.59, le quita 5 a la tarta), amuleto 4 (con uno ya, tarta),
-// huevo 3: el mas raro
-#define BATTLE_DROP_ODDS 70
-#define BATTLE_DROPS_PER_DAY 5
+// tabla del botin (v1.56; hoy el objeto del jefe de un estadio). Tabla (%): tarta 35, baya dorada 25,
+// vitaminas 21 (7 cada una), Caramelo Raro 7, Revivir 5 (v1.59, le quita 5 a la tarta), amuleto 4 (con
+// uno ya, tarta), huevo 3: el mas raro
 #define BDROP_CAKE 35
 #define BDROP_GOLDEN 25
 #define BDROP_VITAMIN 21
@@ -487,19 +484,12 @@ public:
     return g;
   }
 
-  // --- combate de practica (Tarea 3a)
+  // --- combate
   // puede combatir: nacido, despierto, sin ceremonia ni evolucion en curso
   bool canBattle() const { return !isEgg() && !sleeping && !busyEnding() && !evolving() && !starterPick; }
-  // fin de un combate de practica (gane quien gane): +PRACTICE_JOY de felicidad
-  // como mucho una vez por hora. Devuelve la felicidad dada (0 si no tocaba).
-  // No cuenta en ningun historial de victorias.
-  uint8_t practiceDone();
-  bool practiceRewardReady() const;  // el proximo combate de practica dara premio
-  // botin (v1.56): tras un combate; solo si se gano, 70 %, hasta 5 al dia. Devuelve el objeto, que
-  // llega envuelto a casa, o IT_COUNT si no hubo
-  uint8_t battleDrop(bool won);
-  uint8_t rollBattleItem();  // la tabla del botin (publica para las pruebas)
-  uint8_t battleDropsToday() const { return bdropDay == today() ? bdropToday : 0; }
+  // la felicidad del final de un estadio (+PRACTICE_JOY, como mucho una vez por hora) toca ya
+  bool practiceRewardReady() const;
+  uint8_t rollBattleItem();  // la tabla del botin: el objeto del jefe (publica para las pruebas)
 
   // --- estadios. Medallas, dia del premio y equipo son del jugador: sobreviven a eclosiones,
   // finales y movimientos de la caja (solo WIPE los borra)
@@ -618,8 +608,6 @@ private:
   bool foundFull[FOUND_QUEUE];
   bool foundGift[FOUND_QUEUE];
   uint8_t foundN = 0;
-  uint32_t bdropDay = 0;       // botin de combate (v1.56): dia de bdropToday...
-  uint8_t bdropToday = 0;      // ...y objetos ganados ese dia (tope BATTLE_DROPS_PER_DAY)
   uint8_t gifts[GIFT_MAX] = { 0 };  // regalos sin abrir (v1.55), en orden de llegada
   uint8_t giftN = 0;
   bool takeGift(uint8_t it);   // quita un regalo de ese objeto sin abrirlo (el Revivir, v1.60)
@@ -638,10 +626,10 @@ private:
   uint8_t shakeN = 0;
   uint32_t lastDizzyPenalty = 0;
   bool dizzyPenalized = false;
-  // combate de practica
+  // la felicidad del combate (stageDone), una vez por hora
   uint32_t lastPracticeReward = 0;  // millis del ultimo premio...
   bool practiceRewarded = false;    // ...si lo hubo
-  uint8_t practiceJoy();            // la felicidad de la practica, sin guardar (practiceDone, stageDone)
+  uint8_t practiceJoy();            // la felicidad, sin guardar (stageDone)
   // estadios (del jugador): "bdg" medallas (bit s = estadio s vencido alguna vez), "stD" + "stM" el
   // dia y los estadios cuyo premio del jefe ya se pago ese dia, "team" el ultimo equipo
   uint8_t badges = 0;

@@ -293,24 +293,7 @@ TEST(battle, el_entrenamiento_y_los_genes_cuentan) {
   CHECK(gana >= 180);
 }
 
-// ---------------------------------------------------------------- rival de practica
-TEST(battle, el_rival_de_practica_es_de_tu_rareza_y_tu_nivel) {
-  uint32_t rng = 99;
-  for (int16_t mine : { 1, 6, 25, 58, 130, 133, 136, 144, 150 }) {
-    uint8_t rar = DEX_TBL[DEX_TBL[mine].base].rarity;
-    for (int i = 0; i < 50; i++) {
-      PracticeFoe f = pickPracticeFoe(mine, 30, rng);
-      CHECK_RANGE(f.dex, (int16_t)1, (int16_t)151);
-      CHECK_EQ(DEX_TBL[DEX_TBL[f.dex].base].rarity, rar);
-      CHECK_RANGE((int)f.level, 27, 33);
-    }
-  }
-  PracticeFoe lo = pickPracticeFoe(25, 1, rng);
-  CHECK_RANGE((int)lo.level, 1, 4);
-  PracticeFoe hi = pickPracticeFoe(25, 999, rng);
-  CHECK_RANGE((int)hi.level, 97, 100);
-}
-
+// ---------------------------------------------------------------- la forma segun el nivel
 TEST(battle, el_rival_evoluciona_segun_su_nivel) {
   uint32_t rng = 5;
   CHECK_EQ(evolveForLevel(4, 10, rng), (int16_t)4);   // Charmander

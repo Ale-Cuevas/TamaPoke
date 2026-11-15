@@ -266,6 +266,7 @@ class TestBuffersDeTexto(unittest.TestCase):
         'S_WAKE_Q_FMT': ('nombre_o_apodo',),
         'S_SWAP_NOTE_FMT': ('nombre_o_apodo',),
         'S_NOW_FMT': ('nombre_o_apodo',),
+        'S_GO_FMT': ('nombre_o_apodo',),  # estadios: el relevo de un aliado
     }
     CIFRAS = {'u': 5, 'd': 5, 'lu': 10}
     ESPEC = re.compile(r'%0?\d*(lu|u|d|s)')

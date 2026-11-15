@@ -222,6 +222,7 @@ struct DashPal { uint16_t track, outside, edge, mark, rock, log, bush, sled, sle
 // genera prototipos para funciones que devuelven punteros
 const char *eggMsg();
 const char *statusMsg();
+const char *battlePhaseName();  // comando TAP
 
 // las 9 especies con sprite propio en flash (respaldo sin SD): dex -> indice
 int flashIdxForDex(int16_t dex) {
@@ -961,9 +962,23 @@ void handleSerial() {
   } else if (line.startsWith("IMULOG")) {  // IMULOG <s>: muestras en CSV (cualquier tecla para)
     long secs = line.length() > 6 ? line.substring(7).toInt() : 10;
     imuLog((uint32_t)(secs > 0 ? secs : 10) * 1000UL);
-  } else if (line == "BATTLE" || line.startsWith("BATTLE ")) {  // combate de practica [contra <dex>]
-    startPractice(line.length() > 7 ? (int16_t)line.substring(7).toInt() : 0);
-    if (!battleOpen()) Serial.println("battle: no puede (huevo, dormido, evolucionando o ya en combate)");
+  } else if (line == "BATTLE" || line.startsWith("STAGE ")) {  // STAGE <1-8>: esa fase, aunque este cerrada
+    long s = line == "BATTLE" ? 1 : line.substring(6).toInt();  // (BATTLE = STAGE 1)
+    if (s < 1 || s > STAGE_COUNT) {
+      Serial.printf("stage: 1-%u\n", STAGE_COUNT);
+    } else {
+      startStageAuto((uint8_t)(s - 1));  // el ultimo equipo, o el de casa y los de la caja
+      if (!battleOpen()) Serial.println("stage: no puede (nadie puede combatir o ya en combate)");
+    }
+    Serial.println("DONE");
+  } else if (line == "STAGEDAY") {  // los premios del jefe de hoy, otra vez
+    pet.clearStageDay();
+    Serial.println("DONE");
+  } else if (line == "BADGES" || line.startsWith("BADGES ")) {  // BADGES <mascara>: las insignias (0-255)
+    if (line.length() > 7) pet.setBadges((uint8_t)line.substring(7).toInt());
+    Serial.printf("badges=%u hoy=%u equipo=%lu,%lu,%lu,%lu\n", pet.badgeMask(), pet.stageRewardMask(),
+                  (unsigned long)pet.teamUids()[0], (unsigned long)pet.teamUids()[1],
+                  (unsigned long)pet.teamUids()[2], (unsigned long)pet.teamUids()[3]);
     Serial.println("DONE");
   } else if (line == "BALL" || line.startsWith("BALL ")) {  // BALL <puntos>: el minijuego con esa puntuacion
     long n = line.length() > 5 ? line.substring(5).toInt() : 0;  // para notar 1x, 1,5x, 2x sin llegar jugando
@@ -1091,7 +1106,7 @@ void handleSerial() {
     }
     else if (sackOpen) { if (y < 72) sackOpen = false; else sackTap(); }
     else onTap(x, y);
-    Serial.printf("tap %d %d battle=%d phase=%u\n", x, y, battleOpen() ? 1 : 0, battlePhase());
+    Serial.printf("tap %d %d battle=%d phase=%u %s\n", x, y, battleOpen() ? 1 : 0, battlePhase(), battlePhaseName());
     Serial.println("DONE");
   } else if (line == "BOX") {  // la caja (v1.37): cada hueco con uid, especie, nivel y CRC
     boxReport();
@@ -1664,6 +1679,8 @@ void onTap(int16_t x, int16_t y) {
         if (!pet.sleeping) { menuKind = MENU_FEED; menuUntil = millis() + 6000; }
       } else if (i == 1) {     // jugar: pelota o combate de practica
         if (!pet.isEgg() && !pet.sleeping && !pet.ceremony) { menuKind = MENU_PLAY; menuUntil = millis() + 6000; }
+        // huevo, dormido o casa vacia: no hay juegos, pero los de la caja si pueden ir a las fases
+        else if (!pet.ceremony && pet.boxHasPets()) openStages();
       } else if (i == BTN_CARE) {  // dormir / despertar y banar (v1.53)
         if (!pet.ceremony) { menuKind = MENU_CARE; menuUntil = millis() + 6000; }
       } else {
@@ -5494,12 +5511,6 @@ void boxFill() {
 // se dibuja). El combate en si es de startStage() (la pantalla de combate). La pagina de insignias
 // es la segunda de la caja (deslizar a la derecha desde sus huecos).
 
-// STUB-B1: lo sustituye la funcion real al fusionar
-void startStage(uint8_t stage, const uint32_t *uids, uint8_t n) {
-  Serial.printf("startStage(%u, n=%u) [stub]\n", (unsigned)stage, (unsigned)n);
-  for (uint8_t i = 0; i < n; i++) Serial.printf("  uid=%08lX\n", (unsigned long)uids[i]);
-}
-
 #define STG_X 73        // rejilla de 2x4 casillas de 156x62 (las esquinas de arriba quedan ~3 px dentro del circulo)
 #define STG_Y 78
 #define STG_W 156
@@ -6761,18 +6772,22 @@ void drawMap(const char *const *map, int n, int x, int y, int s, bool silhouette
   }
 }
 
-// ---------- combate de practica (docs/FEATURES.md, Tarea 3a) ----------
-// Un combate automatico contra un rival simulado (FR-3.1..3.5): tarjeta VS con
-// el jingle, entrada al campo y un ataque cada ATTACK_MS. Tocar la pantalla
-// carga el especial (5 toques). El motor puro (battle.h) decide cada ataque en el
-// momento en que empieza; aqui solo se anima y se cuenta. El combate por radio
-// (3d) reutilizara esta pantalla con los ataques que mande el anfitrion.
+// ---------- fases de combate (stage.h) ----------
+// Una fase: 3 rivales seguidos (2 esbirros y el jefe) contra un equipo ordenado de 1 a 4 bichos (el
+// de casa y/o los de la caja). Tarjeta VS con el jingle, entrada al campo y un ataque cada ATTACK_MS;
+// tocar la pantalla carga el especial (5 toques). Tras un KO el caido se desvanece y, en el relevo,
+// entra el siguiente (aliado o rival) andando desde su lado mientras el que sigue en pie se queda con
+// su vida: la vida no se recupera en toda la fase. El motor puro (stage.h, battle.h) decide cada
+// ataque en el momento en que empieza; aqui solo se anima y se cuenta. Leer la SD bloquea el loop:
+// los sprites se cargan al empezar y en el relevo, nunca con ataques en marcha.
 
-enum : uint8_t { BT_OFF = 0, BT_INTRO, BT_FIGHT, BT_END };
+enum : uint8_t { BT_OFF = 0, BT_INTRO, BT_FIGHT, BT_END, BT_SWAP };  // (BT_END sigue siendo 3: comando TAP)
 #define BT_VS_MS 2000      // tarjeta VS; el resto de INTRO_MS es la entrada al campo
 #define BT_HIT_MS 350      // el golpe llega a mitad del avance del atacante
 #define BT_HPBAR_MS 400    // la barra de vida baja en este tiempo
 #define BT_FAINT_MS 900    // el derrotado se desvanece
+#define BT_SWAP_MS 1800    // relevo tras un KO: el cartel y la entrada del siguiente...
+#define BT_SWAP_WALK_MS 1000  // ...que entra andando en el ultimo segundo, como en la intro
 #define BT_END_MS 7000     // el resultado se cierra solo (o con un toque)
 // v1.38: el resultado no atiende toques durante 1,8 s. Se suele llegar al final aporreando la
 // pantalla para cargar el especial, y el siguiente toque cerraba el resultado sin dejarlo ver.
@@ -6783,87 +6798,216 @@ enum : uint8_t { BT_OFF = 0, BT_INTRO, BT_FIGHT, BT_END };
 #define BT_ME_GROUND 352
 #define BT_FOE_X 318       // el rival: arriba a la derecha
 #define BT_FOE_GROUND 198
+#define BT_ME_BOX_X 222    // cuadro de vida del aliado (con la tira del equipo dentro)...
+#define BT_ME_BOX_Y 258
+#define BT_FOE_BOX_X 80    // ...y el del rival (con su "1/3" o JEFE debajo)
+#define BT_FOE_BOX_Y 64
+#define BT_PIP_R 5         // tira del equipo: una pastilla por bicho
+#define BT_PIP_PITCH 16
+#define BT_PIP_DEAD 0x9492 // gris del caido
+#define BT_NAME_LEN 13     // nombre de un aliado (apodo de 11 + margen)
 
-PmdMon foePmd;  // sprite del rival: se carga antes de la intro, nunca durante el combate
+PmdMon foePmd;   // sprite del rival en curso
+PmdMon allyPmd;  // el del aliado en curso si no es el de casa (el de casa es pmd)
 struct {
   uint8_t phase = BT_OFF;
-  uint32_t t0 = 0;       // inicio de la fase en curso
-  Battle eng;
-  SpecialMeter meter;    // el tuyo: lo cargan tus toques
-  SpecialMeter foeMeter; // el del rival simulado: PRACTICE_AI_TAPS por ataque suyo
+  uint32_t t0 = 0;       // inicio de la fase en curso (en BT_FIGHT, del combate en curso)
+  StageRun run;          // la fase: equipo, rivales, combate en curso y medidores
   BattleEvent ev;        // ultimo ataque calculado
   bool haveEv = false;
   bool evSounded = false;
   uint32_t evAt = 0;     // instante (programado) en que empezo ese ataque
   uint16_t hpBefore[2] = { 0, 0 };
-  int16_t foeDex = 1;
-  uint8_t joy = 0;       // premio dado al acabar
-  uint8_t drop = IT_COUNT;  // botin de la victoria (v1.56), envuelto en casa; IT_COUNT = ninguno
+  uint8_t swap = SN_NONE;  // en el relevo: SN_NEXT_ALLY o SN_NEXT_FOE
+  // el equipo, en el orden de run.team: lo que la pantalla necesita de cada uno
+  uint32_t uid[TEAM_MAX] = { 0 };
+  int16_t dex[TEAM_MAX] = { 0 };
+  bool shiny[TEAM_MAX] = { false };
+  bool home[TEAM_MAX] = { false };  // el de casa: su sprite es pmd
+  char name[TEAM_MAX][BT_NAME_LEN] = {};
+  bool cleared = false;  // resultado: fase superada
+  StageReward rw = { false, false, (uint8_t)IT_COUNT, 0, 0 };  // lo que pago stageDone
 } bt;
 
 bool battleOpen() { return bt.phase != BT_OFF; }
-uint8_t battlePhase() { return bt.phase; }  // comando TAP: 0 cerrado, 1 intro, 2 combate, 3 resultado
+// comando TAP: 0 cerrado, 1 intro, 2 combate, 3 resultado, 4 relevo
+uint8_t battlePhase() { return bt.phase; }
+const char *battlePhaseName() {
+  return bt.phase == BT_INTRO ? "intro" : bt.phase == BT_FIGHT ? "fight" : bt.phase == BT_SWAP ? "swap"
+       : bt.phase == BT_END ? "end" : "off";
+}
 
+// cierra la fase en cualquier momento (resultado, USER, PWR, el dialogo de la muerte): sin premio si
+// no habia acabado (stageDone solo se llama al entrar en el resultado)
 void closeBattle() {
   bt.phase = BT_OFF;
   foePmd.unload();
+  allyPmd.unload();
 }
 
-// empieza un combate de practica; forceDex 1-151 elige al rival (comando BATTLE <dex>)
-void startPractice(int16_t forceDex) {
-  if (!pet.canBattle() || battleOpen()) return;
-  uint32_t rng = (uint32_t)random(0x7FFFFFFF) ^ (millis() << 7);
-  PracticeFoe pf = pickPracticeFoe(pet.speciesId, pet.level(), rng);
-  if (forceDex >= 1 && forceDex <= DEX_COUNT) pf.dex = forceDex;
-  uint8_t tr = (uint8_t)((pet.trAtk + pet.trDef + pet.trSpe) / 3);  // tu entrenamiento medio
-  Fighter me = makeFighter(pet.speciesId, pet.level(), pet.geneAtk, pet.geneDef, pet.geneSpe, pet.trAtk,
-                           pet.trDef, pet.trSpe);
-  Fighter foe = makeFighter(pf.dex, pf.level, 100, 100, 100, tr, tr, tr);  // genes medios
-  bt = decltype(bt){};
-  bt.foeDex = pf.dex;
-  bt.eng.begin(me, foe, battleRand(rng));
-  bt.hpBefore[0] = me.maxHp;
-  bt.hpBefore[1] = foe.maxHp;
+// quien esta en el campo: 0 = el aliado en curso, 1 = el rival en curso
+int16_t battleDex(uint8_t side) { return side ? bt.run.foeInfo().dex : bt.dex[bt.run.ally]; }
+const char *battleName(uint8_t side) { return side ? dexName(battleDex(1)) : bt.name[bt.run.ally]; }
+PmdMon &battleMon(uint8_t side) { return side ? foePmd : (bt.home[bt.run.ally] ? pmd : allyPmd); }
+
+// sprites (bloquean el loop: solo al empezar y en el relevo)
+void battleLoadFoe() {
   foePmd.unload();
-  foePmd.load(pf.dex, false);  // antes de la intro: leer la SD bloquea el loop
+  foePmd.load((uint8_t)battleDex(1), false);
+}
+void battleLoadAlly() {
+  allyPmd.unload();
+  uint8_t a = bt.run.ally;
+  if (!bt.home[a]) allyPmd.load((uint8_t)bt.dex[a], bt.shiny[a]);
+}
+
+// Empieza la fase `stage` con el equipo `uids` en orden (el selector de equipo). Se salta los que no
+// esten (ni en casa ni en la caja), no puedan combatir o esten repetidos; no hace nada si no queda
+// nadie, si la fase no existe o si ya hay un combate.
+void startStage(uint8_t stage, const uint32_t *uids, uint8_t n) {
+  if (stage >= STAGE_COUNT || battleOpen() || !uids) return;
+  bt = decltype(bt){};
+  Fighter mates[TEAM_MAX];
+  uint8_t m = 0;
+  for (uint8_t i = 0; i < n && m < TEAM_MAX; i++) {
+    uint32_t id = uids[i];
+    bool dup = false;
+    for (uint8_t j = 0; j < m; j++) dup |= (bt.uid[j] == id);
+    int8_t k = pet.teamSlotOf(id);
+    if (dup || k < 0 || !pet.teamCanFight(id)) continue;
+    if (k == TEAM_HOME) {
+      mates[m] = makeFighter(pet.speciesId, pet.level(), pet.geneAtk, pet.geneDef, pet.geneSpe, pet.trAtk,
+                             pet.trDef, pet.trSpe);
+      bt.dex[m] = pet.speciesId;
+      bt.shiny[m] = pet.shiny;
+      bt.home[m] = true;
+      snprintf(bt.name[m], BT_NAME_LEN, "%.*s", (int)sizeof(pet.nick), pet.nick[0] ? pet.nick : dexName(pet.speciesId));
+    } else {
+      const PetRecord &r = pet.boxRecord((uint8_t)k);
+      mates[m] = makeFighter(r.speciesId, levelFor(r.growMin), r.geneAtk, r.geneDef, r.geneSpe, r.trAtk, r.trDef,
+                             r.trSpe);
+      bt.dex[m] = r.speciesId;
+      bt.shiny[m] = (r.flags & REC_SHINY) != 0;
+      bt.home[m] = false;
+      snprintf(bt.name[m], BT_NAME_LEN, "%.*s", (int)sizeof(r.nick), recName(r));
+    }
+    bt.uid[m++] = id;
+  }
+  if (!m) return;
+  pet.setTeam(bt.uid, m);  // el ultimo equipo (sin escribir ya en flash)
+  uint32_t seed = (uint32_t)random(0x7FFFFFFF) ^ (millis() << 7);
+  bt.run.begin(stage, mates, m, seed);
+  battleLoadFoe();  // antes de la intro: leer la SD bloquea el loop
+  battleLoadAlly();
   menuKind = MENU_NONE;
   bt.phase = BT_INTRO;
   bt.t0 = millis();
   sfxPlay(SFX_BATTLE);
   wakeUI();
-  Serial.printf("battle: #%d nv.%u contra #%d nv.%u\n", me.dex, me.level, foe.dex, foe.level);
+  Serial.printf("stage %u: equipo", stage + 1);
+  for (uint8_t i = 0; i < m; i++) Serial.printf(" #%d nv.%u", bt.dex[i], bt.run.team[i].level);
+  Serial.print(" | rivales");
+  for (uint8_t f = 0; f < STAGE_FOES; f++) {
+    const StageFoe &e = bt.run.foes[f];
+    Serial.printf(" #%d nv.%u ent.%u/%u/%u", e.dex, e.level, e.tAtk, e.tDef, e.tSpe);
+  }
+  Serial.println();
+}
+
+// La fase con el ultimo equipo si alguno de sus bichos aun puede combatir; si no, el de casa (si
+// puede) y detras los de la caja por orden de hueco, hasta TEAM_MAX (consola y respaldo del menu)
+void startStageAuto(uint8_t stage) {
+  const uint32_t *saved = pet.teamUids();
+  for (uint8_t i = 0; i < TEAM_MAX; i++)
+    if (saved[i] && pet.teamCanFight(saved[i])) {
+      startStage(stage, saved, TEAM_MAX);
+      return;
+    }
+  uint32_t ids[TEAM_MAX];
+  uint8_t n = 0;
+  if (pet.uid && pet.teamCanFight(pet.uid)) ids[n++] = pet.uid;
+  for (uint8_t k = 0; k < BOX_SLOTS && n < TEAM_MAX; k++)
+    if (pet.boxState(k) == BOX_OK) ids[n++] = pet.boxRecord(k).uid;
+  startStage(stage, ids, n);
+}
+
+// la fase del boton del menu: la primera abierta con el premio de hoy sin cobrar; si no, la mas alta
+uint8_t stageAutoPick() {
+  uint8_t hi = 0;
+  for (uint8_t s = 0; s < STAGE_COUNT; s++) {
+    if (!pet.stageUnlocked(s)) continue;
+    if (pet.stageRewardReady(s)) return s;
+    hi = s;
+  }
+  return hi;
 }
 
 void battleTap(int16_t x, int16_t y) {
+  (void)x;
+  (void)y;
   if (bt.phase == BT_END) {
     if (millis() - bt.t0 >= BT_END_LOCK_MS) closeBattle();  // antes, el toque no hace nada
     return;
   }
-  if (bt.phase != BT_FIGHT || bt.eng.over()) return;  // en la intro los toques no cuentan
-  if (bt.meter.tap()) sfxPlay(SFX_TAP);
+  if (bt.phase != BT_FIGHT) return;  // en la intro y en el relevo los toques no cuentan
+  if (bt.run.tap()) sfxPlay(SFX_TAP);  // (tampoco con el KO ya dado)
 }
 
-// avanza el combate: calcula el siguiente ataque cuando le toca y lo hace sonar
+// fin de la fase: paga (una sola vez, y guarda) y pasa al resultado
+void battleEnd(bool cleared) {
+  bt.cleared = cleared;
+  bt.rw = pet.stageDone(bt.run.stage, cleared, bt.uid, bt.run.teamN);
+  bt.phase = BT_END;
+  bt.t0 = millis();  // despues de la escritura en flash: el bloqueo del toque cuenta desde aqui
+  sfxPlay(cleared ? SFX_WIN : SFX_LOSE);
+  Serial.printf("stage %u: %s, insignia nueva %d, premio %d (%u bichos), objeto %u, +%u felicidad\n",
+                bt.run.stage + 1, cleared ? "superada" : "perdida", bt.rw.newBadge ? 1 : 0, bt.rw.paid ? 1 : 0,
+                bt.rw.pets, bt.rw.item, bt.rw.joy);
+}
+
+// tras el KO y el desvanecido: entra el siguiente (relevo) o se acaba la fase
+void battleAfterKo() {
+  StageRun &r = bt.run;
+  bool allyFell = r.eng.result == BR_WIN_B;
+  Serial.printf("stage: %s #%d gana a #%d en %u ataques (aliado %u/%u %u/%u PS, rival %u/%u %u/%u PS)\n",
+                allyFell ? "rival" : "aliado", allyFell ? battleDex(1) : battleDex(0),
+                allyFell ? battleDex(0) : battleDex(1), r.eng.attacks, r.ally + 1, r.teamN, r.eng.f[0].hp,
+                r.eng.f[0].maxHp, r.foeIdx + 1, STAGE_FOES, r.eng.f[1].hp, r.eng.f[1].maxHp);
+  uint8_t s = r.advance();
+  if (s == SN_CLEARED || s == SN_LOST) {
+    battleEnd(s == SN_CLEARED);
+    return;
+  }
+  bt.swap = s;
+  bt.haveEv = false;
+  if (s == SN_NEXT_FOE) battleLoadFoe();
+  else battleLoadAlly();
+  bt.phase = BT_SWAP;
+  bt.t0 = millis();  // despues de leer la SD: el relevo se ve entero
+  sfxPlay(SFX_WAKE);
+}
+
+// avanza la fase: calcula el siguiente ataque cuando le toca y lo hace sonar
 void battleStep(uint32_t now) {
-  if (bt.phase == BT_INTRO && now - bt.t0 >= INTRO_MS) {
+  if (bt.phase == BT_OFF || bt.phase == BT_END) return;
+  lastInteract = now;  // nadie tiene por que tocar: sin atenuar ni salvapantallas a mitad de fase
+  if (bt.phase == BT_INTRO) {
+    if ((int32_t)(now - bt.t0) < INTRO_MS) return;
     bt.phase = BT_FIGHT;
     bt.t0 += INTRO_MS;
   }
-  if (bt.phase != BT_FIGHT) return;
-  if (!bt.eng.over()) {
-    uint32_t due = bt.t0 + (uint32_t)bt.eng.attacks * ATTACK_MS;
+  if (bt.phase == BT_SWAP) {
+    if ((int32_t)(now - bt.t0) < BT_SWAP_MS) return;
+    bt.phase = BT_FIGHT;  // el reloj de ataques empieza de cero con el combate nuevo
+    bt.t0 += BT_SWAP_MS;
+  }
+  StageRun &r = bt.run;
+  if (!r.eng.over()) {
+    uint32_t due = bt.t0 + (uint32_t)r.eng.attacks * ATTACK_MS;
     if ((int32_t)(now - due) >= 0) {
-      uint8_t who = bt.eng.nextAttacker();
-      bool special;
-      if (who == 0) {
-        special = bt.meter.useForAttack();
-      } else {
-        for (int i = 0; i < PRACTICE_AI_TAPS; i++) bt.foeMeter.tap();
-        special = bt.foeMeter.useForAttack();
-      }
-      bt.hpBefore[0] = bt.eng.f[0].hp;
-      bt.hpBefore[1] = bt.eng.f[1].hp;
-      bt.ev = bt.eng.step(special);
+      bt.hpBefore[0] = r.eng.f[0].hp;
+      bt.hpBefore[1] = r.eng.f[1].hp;
+      bt.ev = r.attack();
       bt.haveEv = true;
       bt.evSounded = false;
       bt.evAt = due;  // el programado, no "ahora": un frame lento no desplaza el resto
@@ -6873,26 +7017,12 @@ void battleStep(uint32_t now) {
     bt.evSounded = true;
     sfxPlay(!bt.ev.eff4 ? SFX_DENY : bt.ev.special ? SFX_SPECIAL : bt.ev.crit ? SFX_CRIT : SFX_HIT);
   }
-  if (bt.eng.over() && bt.haveEv) {
-    bool ko = bt.ev.hp[0] == 0 || bt.ev.hp[1] == 0;
-    uint32_t endAt = bt.evAt + ATTACK_MS + (ko ? BT_FAINT_MS : 0);
-    if ((int32_t)(now - endAt) >= 0) {
-      bt.phase = BT_END;
-      bt.t0 = now;
-      bt.drop = pet.battleDrop(bt.eng.result == BR_WIN_A);  // ganar: 70 %, hasta 5 al dia (v1.56)
-      bt.joy = pet.practiceDone();  // gane quien gane; como mucho una vez por hora (guarda, botin incluido)
-      pet.flushSave();  // sin premio de felicidad, el botin se guarda aqui: una sola escritura
-      sfxPlay(bt.eng.result == BR_WIN_A ? SFX_WIN : bt.eng.result == BR_WIN_B ? SFX_LOSE : SFX_LEVEL);
-      Serial.printf("battle: %s en %u ataques, +%u felicidad, botin %u (%u hoy)\n",
-                    bt.eng.result == BR_WIN_A ? "gana" : bt.eng.result == BR_WIN_B ? "pierde" : "empate",
-                    bt.eng.attacks, bt.joy, bt.drop, pet.battleDropsToday());
-    }
-  }
+  if (r.koPending() && bt.haveEv && (int32_t)(now - (bt.evAt + ATTACK_MS + BT_FAINT_MS)) >= 0) battleAfterKo();
 }
 
 // vida que ensena la barra: baja durante BT_HPBAR_MS desde que llega el golpe
 uint16_t battleShownHp(uint8_t side, uint32_t now) {
-  if (!bt.haveEv) return bt.eng.f[side].hp;
+  if (!bt.haveEv) return bt.run.eng.f[side].hp;
   uint32_t dt = now - bt.evAt;
   uint16_t a = bt.hpBefore[side], b = bt.ev.hp[side];
   if (dt < BT_HIT_MS) return a;
@@ -6900,12 +7030,7 @@ uint16_t battleShownHp(uint8_t side, uint32_t now) {
   return (uint16_t)(a + ((int32_t)b - a) * (int32_t)(dt - BT_HIT_MS) / BT_HPBAR_MS);
 }
 
-const char *battleName(uint8_t side) {
-  if (side == 1) return dexName(bt.foeDex);
-  return pet.nick[0] ? pet.nick : dexName(pet.speciesId);
-}
-
-// fondo del campo: cielo por la hora, el suelo del bioma de tu bicho y dos tarimas
+// fondo del campo: cielo por la hora, el suelo del bioma de tu aliado en curso y dos tarimas
 void drawBattleField(int shake) {
   int hh = sceneHour();
   bool night = hh < 6 || hh >= 20;
@@ -6917,7 +7042,7 @@ void drawBattleField(int shake) {
   for (int y = 0; y < BT_HORIZON; y += 8) gfx->fillRect(0, y, 466, 8, lerp565(top, bot, y, BT_HORIZON));
   if (night)
     for (auto &st : STARS) gfx->fillRect(st[0], st[1] / 2 + 20, 4, 4, UI_WHITE);
-  uint8_t bio = DEX_TBL[pet.speciesId].biome;
+  uint8_t bio = DEX_TBL[battleDex(0)].biome;
   uint16_t soil = BIOME_SOIL[bio < BIOME_COUNT ? bio : 0];
   if (night) soil = lerp565(soil, C565(0x16, 0x1c, 0x30), 9, 16);
   gfx->fillRect(0, BT_HORIZON, 466, 466 - BT_HORIZON, soil);
@@ -6929,8 +7054,8 @@ void drawBattleField(int shake) {
 // uno de los dos: su sprite PMD; si no lo hay, la miniatura; si tampoco, "?"
 // maxS: tu bicho x3 y el rival x2 en el campo (los frames de ATTACK son grandes)
 void drawFighter(uint8_t side, uint8_t act, int x, int ground, uint32_t t, bool loop, bool sil, uint8_t maxS) {
-  PmdMon &m = side == 0 ? pmd : foePmd;
-  int16_t dex = side == 0 ? pet.speciesId : bt.foeDex;
+  PmdMon &m = battleMon(side);
+  int16_t dex = battleDex(side);
   if (m.loaded) {
     if (!m.has(act)) act = PMD_IDLE;
     drawPmdActM(m, act, x, ground, t, loop, sil, maxS);
@@ -6980,13 +7105,32 @@ void renderScreensaver() {
   gfx->flush();
 }
 
-// cuadro de vida: nombre, nivel, barra (y numeros en el tuyo)
-void drawHpBox(uint8_t side, int x, int y, uint16_t hp) {
-  const Fighter &f = bt.eng.f[side];
+// tira del equipo: una pastilla por bicho, en orden, desde x (centro de la primera) a la altura y.
+// Llena = en pie, hueca y gris = caido; el que esta en el campo, con un aro.
+void drawTeamPips(int x, int y, uint32_t now) {
+  const StageRun &r = bt.run;
+  for (uint8_t i = 0; i < r.teamN; i++) {
+    int px = x + i * BT_PIP_PITCH;
+    bool cur = i == r.ally && bt.phase != BT_END;
+    bool alive = (i == r.ally && bt.phase == BT_FIGHT) ? battleShownHp(0, now) > 0 : r.allyHp(i) > 0;
+    if (alive) {
+      gfx->fillCircle(px, y, BT_PIP_R, UI_BAR_BAD);
+      gfx->drawCircle(px, y, BT_PIP_R, UI_INK);
+    } else {
+      gfx->drawCircle(px, y, BT_PIP_R, BT_PIP_DEAD);
+      gfx->drawCircle(px, y, BT_PIP_R - 1, BT_PIP_DEAD);
+    }
+    if (cur && alive) gfx->drawCircle(px, y, BT_PIP_R + 2, UI_INK);
+  }
+}
+
+// cuadro de vida: nombre, nivel, barra (y en el tuyo los numeros y la tira del equipo)
+void drawHpBox(uint8_t side, int x, int y, uint16_t hp, uint32_t now) {
+  const Fighter &f = bt.run.eng.f[side];
   int h = side == 0 ? 70 : 54;
   gfx->fillRoundRect(x, y, 182, h, 10, UI_WHITE);
   gfx->drawRoundRect(x, y, 182, h, 10, UI_INK);
-  gfx->setTextColor(side == 0 ? DEX_TBL[pet.speciesId].accent : DEX_TBL[bt.foeDex].accent);
+  gfx->setTextColor(DEX_TBL[battleDex(side)].accent);
   setSize(2);
   setCur(x + 10, y + 8);
   printT(battleName(side));
@@ -7006,7 +7150,24 @@ void drawHpBox(uint8_t side, int x, int y, uint16_t hp) {
     snprintf(n, sizeof(n), "%u/%u", (unsigned)hp, (unsigned)f.maxHp);
     setCur(x + 172 - textW(n, 2), y + 50);
     printT(n);
+    drawTeamPips(x + 18, y + 56, now);
   }
+}
+
+// bajo el cuadro del rival: cual de los tres es ("1/3", "2/3") o JEFE en rojo
+void drawFoeTag(int x, int y) {
+  char n[8];
+  const char *s = n;
+  bool boss = bt.run.isBoss();
+  if (boss) s = T(S_BOSS);
+  else snprintf(n, sizeof(n), "%u/%u", (unsigned)(bt.run.foeIdx + 1), (unsigned)STAGE_FOES);
+  setSize(2);
+  int tw = textW(s, 2), w = tw + 16;
+  gfx->fillRoundRect(x, y, w, 24, 8, boss ? UI_BAR_BAD : UI_WHITE);
+  gfx->drawRoundRect(x, y, w, 24, 8, UI_INK);
+  gfx->setTextColor(boss ? UI_WHITE : UI_INK);
+  setCur(x + 8, y + 5);
+  printT(s);
 }
 
 // Una flecha ">" sin palo (v1.38): dos brazos de METER_T px de grueso que se juntan en la punta.
@@ -7036,12 +7197,13 @@ void drawChevron(int x, int y, bool filled, uint16_t fill, uint16_t edge) {
 // medidor del especial (v1.38): "> > > > >" y un cartel "Toca!" mientras los toques cargan.
 // Llenas laten cuando esta listo; bloqueado tras un especial, en gris y sin cartel.
 void drawSpecialMeter(uint32_t now) {
-  bool armed = bt.meter.armed(), locked = bt.meter.locked();
+  const SpecialMeter &mt = bt.run.meter;
+  bool armed = mt.armed(), locked = mt.locked();
   for (int i = 0; i < SPECIAL_TAPS; i++) {
     int x = METER_X + i * METER_PITCH;
     if (locked) {
       drawChevron(x, METER_Y, false, 0, UI_TRACK);
-    } else if (i < bt.meter.pips) {
+    } else if (i < mt.pips) {
       uint16_t c = (armed && (now / 160) % 2) ? UI_WHITE : UI_BAR_WARN;
       drawChevron(x, METER_Y, true, c, UI_INK);
     } else {
@@ -7049,7 +7211,7 @@ void drawSpecialMeter(uint32_t now) {
     }
   }
   // el cartel: solo cuando un toque cuenta (ni lleno, ni bloqueado, ni con el combate decidido)
-  if (locked || bt.meter.pips >= SPECIAL_TAPS || bt.eng.over()) return;
+  if (locked || mt.pips >= SPECIAL_TAPS || bt.run.eng.over()) return;
   const char *tap = T(S_TAP_BOX);
   setSize(2);
   // ancho minimo: con la fuente coreana textW() se queda corto (mide la tinta, no el avance)
@@ -7062,16 +7224,21 @@ void drawSpecialMeter(uint32_t now) {
   printT(tap);
 }
 
-// tarjeta VS: el rival arriba, tu bicho abajo, cada mitad del color de su tipo
+// tarjeta VS: el primer rival arriba, tu primer aliado abajo, cada mitad del color de su tipo; encima
+// la fase ("Fase 3 - Roca") y debajo la tira del equipo
 void drawVsCard() {
   uint16_t ink = UI_INK;
-  gfx->fillRect(0, 0, 466, CY - 6, lerp565(DEX_TBL[bt.foeDex].accent, UI_WHITE, 5, 8));
-  gfx->fillRect(0, CY + 6, 466, 466 - CY - 6, lerp565(DEX_TBL[pet.speciesId].accent, UI_WHITE, 5, 8));
+  gfx->fillRect(0, 0, 466, CY - 6, lerp565(DEX_TBL[battleDex(1)].accent, UI_WHITE, 5, 8));
+  gfx->fillRect(0, CY + 6, 466, 466 - CY - 6, lerp565(DEX_TBL[battleDex(0)].accent, UI_WHITE, 5, 8));
   gfx->fillRect(0, CY - 6, 466, 12, ink);
+  char head[40];
+  snprintf(head, sizeof(head), T(S_STAGE_FMT), (unsigned)(bt.run.stage + 1));
+  size_t hl = strlen(head);
+  snprintf(head + hl, sizeof(head) - hl, " - %s", stageName(bt.run.stage));
   gfx->setTextColor(ink);
   setSize(2);
-  setCur(centerX(T(S_PRACTICE), 2), 54);
-  printT(T(S_PRACTICE));
+  setCur(centerX(head, 2), 54);
+  printT(head);
   char lv[10];
   for (uint8_t side = 0; side < 2; side++) {
     const char *nm = battleName(side);
@@ -7082,12 +7249,13 @@ void drawVsCard() {
     gfx->setTextColor(ink);
     setCur(centerX(nm, ts), y);
     printT(nm);
-    snprintf(lv, sizeof(lv), T(S_LVL_FMT), (unsigned)bt.eng.f[side].level);
+    snprintf(lv, sizeof(lv), T(S_LVL_FMT), (unsigned)bt.run.eng.f[side].level);
     gfx->setTextColor(ink);
     setSize(2);
     setCur(centerX(lv, 2), y + 38);
     printT(lv);
   }
+  drawTeamPips(CX - (bt.run.teamN - 1) * BT_PIP_PITCH / 2, 376, millis());
   gfx->fillCircle(CX, CY, 46, UI_WHITE);
   gfx->drawCircle(CX, CY, 46, ink);
   gfx->drawCircle(CX, CY, 45, ink);
@@ -7123,10 +7291,43 @@ void drawBattleCaption(uint32_t now) {
   }
 }
 
+// cartel del relevo, donde va el medidor: "Siguiente rival" (y JEFE en grande si lo es) o "Adelante, X!"
+void drawSwapCaption() {
+  char go[40];
+  const char *l1, *l2 = nullptr;
+  if (bt.swap == SN_NEXT_FOE) {
+    l1 = T(S_NEXT_RIVAL);
+    if (bt.run.isBoss()) l2 = T(S_BOSS);
+  } else {
+    snprintf(go, sizeof(go), T(S_GO_FMT), battleName(0));
+    l1 = go;
+  }
+  setSize(2);
+  int w1 = textW(l1, 2), w2 = 0;
+  if (l2) {
+    setSize(3);
+    w2 = textW(l2, 3);
+  }
+  int bw = (w1 > w2 ? w1 : w2) + 28, bh = l2 ? 66 : 38, by = l2 ? 354 : 364;
+  gfx->fillRoundRect(CX - bw / 2, by, bw, bh, 12, UI_WHITE);
+  gfx->drawRoundRect(CX - bw / 2, by, bw, bh, 12, UI_INK);
+  gfx->setTextColor(UI_INK);
+  setSize(2);
+  setCur(CX - w1 / 2, by + 12);
+  printT(l1);
+  if (l2) {
+    gfx->setTextColor(UI_BAR_BAD);
+    setSize(3);
+    setCur(CX - w2 / 2, by + 34);
+    printT(l2);
+  }
+}
+
 // Dibuja un frame del combate. false = se acaba de cerrar (render pinta la casa).
 bool renderBattle() {
-  uint32_t now = millis();
-  battleStep(now);
+  battleStep(millis());
+  uint32_t now = millis();  // despues: un relevo que acaba de leer la SD empieza ahora
+  if (bt.phase == BT_OFF) return false;
   if (bt.phase == BT_END && now - bt.t0 >= BT_END_MS) {
     closeBattle();
     return false;
@@ -7156,6 +7357,17 @@ bool renderBattle() {
     x[1] = (int)(536 - (536 - BT_FOE_X) * p);
     act[0] = PMD_WALKR;
     act[1] = PMD_WALKL;
+  } else if (bt.phase == BT_SWAP) {  // relevo: el caido ya no esta y el nuevo entra desde su lado
+    uint8_t s = bt.swap == SN_NEXT_FOE ? 1 : 0;
+    int32_t w = (int32_t)(now - bt.t0) - (BT_SWAP_MS - BT_SWAP_WALK_MS);
+    if (w < 0) {
+      hidden[s] = true;
+    } else {
+      float p = (float)w / BT_SWAP_WALK_MS;
+      if (p > 1) p = 1;
+      x[s] = s ? (int)(536 - (536 - BT_FOE_X) * p) : (int)(-70 + (BT_ME_X + 70) * p);
+      act[s] = s ? PMD_WALKL : PMD_WALKR;
+    }
   } else if (bt.haveEv) {
     uint8_t a = bt.ev.attacker, d = 1 - a;
     uint32_t dt = now - bt.evAt;
@@ -7175,7 +7387,7 @@ bool renderBattle() {
     }
     if (ko && dt >= BT_HIT_MS + 400) {  // se desvanece y se hunde
       uint32_t f = dt - BT_HIT_MS - 400;
-      if (f >= BT_FAINT_MS || bt.phase == BT_END) hidden[d] = true;
+      if (f >= BT_FAINT_MS) hidden[d] = true;
       sil[d] = (f / 90) % 2;
       g[d] += (int)(f * 40 / BT_FAINT_MS);
       act[d] = PMD_HURT;
@@ -7196,62 +7408,93 @@ bool renderBattle() {
   for (uint8_t side : order)
     if (!hidden[side])
       drawFighter(side, act[side], x[side] + shake, g[side], at[side], loop[side], sil[side], side == 0 ? 3 : 2);
-  drawHpBox(1, 80, 64, battleShownHp(1, now));
-  drawHpBox(0, 222, 258, battleShownHp(0, now));
+  drawHpBox(1, BT_FOE_BOX_X, BT_FOE_BOX_Y, battleShownHp(1, now), now);
+  drawFoeTag(BT_FOE_BOX_X + 10, BT_FOE_BOX_Y + 58);
+  drawHpBox(0, BT_ME_BOX_X, BT_ME_BOX_Y, battleShownHp(0, now), now);
   if (bt.phase == BT_FIGHT) {
     drawSpecialMeter(now);
     drawBattleCaption(now);
+  } else if (bt.phase == BT_SWAP) {
+    drawSwapCaption();
   }
   if (flash) gfx->fillCircle(CX, CY, 231, UI_WHITE);
   gfx->flush();
   return true;
 }
 
-// Resultado: el ganador posa en el centro (en un empate, los dos), el titulo
-// arriba y el premio abajo. Un toque, la tecla USER o BT_END_MS lo cierran.
+// Resultado: el que quedo en pie posa en el centro (tu aliado si se supero, el rival si no), el
+// titulo arriba, el objeto del jefe debajo y lo que pago stageDone abajo: la insignia nueva, el
+// premio del equipo y la felicidad. Un toque, la tecla USER o BT_END_MS lo cierran.
 void drawBattleResult(uint32_t now) {
   drawBattleField(0);
   uint32_t t = now - bt.t0;
-  if (bt.eng.result == BR_DRAW) {
-    drawFighter(0, PMD_IDLE, CX - 84, 300, t, true, false, 3);
-    drawFighter(1, PMD_IDLE, CX + 84, 300, t, true, false, 3);
-  } else {
-    drawFighter(bt.eng.result == BR_WIN_A ? 0 : 1, PMD_POSE, CX, 306, t, true, false, 4);
-  }
-  const char *l1 = bt.eng.result == BR_WIN_A ? T(S_WIN) : bt.eng.result == BR_WIN_B ? T(S_LOSE) : T(S_DRAW);
+  drawFighter(bt.cleared ? 0 : 1, PMD_POSE, CX, 296, t, true, false, 4);
+  const char *l1 = T(bt.cleared ? S_STAGE_CLEAR : S_STAGE_LOST);
   gfx->fillRoundRect(98, 50, 270, 50, 14, UI_BAR_WARN);
   gfx->drawRoundRect(98, 50, 270, 50, 14, UI_INK);
   gfx->setTextColor(UI_INK);
   setSize(3);
-  uint8_t ts = textW(l1, 3) <= 250 ? 3 : 2;
+  uint8_t ts = textW(l1, 3) <= 256 ? 3 : 2;
   setSize(ts);
   setCur(centerX(l1, ts), ts == 3 ? 64 : 68);
   printT(l1);
-  char l2[40];
-  if (bt.joy) snprintf(l2, sizeof(l2), T(S_PRACTICE_JOY_FMT), (unsigned)bt.joy);
-  const char *r = bt.joy ? l2 : T(S_PRACTICE_NONE);
-  gfx->fillRoundRect(83, 330, 300, 64, 14, UI_WHITE);
-  gfx->drawRoundRect(83, 330, 300, 64, 14, UI_INK);
-  gfx->setTextColor(bt.joy ? UI_BAR_OK : UI_INK);
-  setSize(2);
-  setCur(centerX(r, 2), 342);
-  printT(r);
-  // botin (v1.56): una pildora bajo el titulo con la cajita y "Regalo en casa!" (lo que es se ve al
-  // abrirlo); ahi no tapa al ganador ni se sale de la pantalla redonda
-  if (bt.drop < IT_COUNT) {
-    const char *g = T(S_BATTLE_GIFT);
+  // el objeto del jefe: una pildora bajo el titulo con la cajita y "Regalo en casa!" (lo que es se ve
+  // al abrirlo); con la casa vacia va a la mochila, y se ve el objeto con "MOCHILA"
+  if (bt.rw.item < IT_COUNT) {
+    bool bag = pet.isVacant();
+    const char *g = T(bag ? S_BACKPACK : S_BATTLE_GIFT);
     setSize(2);
     int w = 32 + 8 + textW(g, 2), gx = CX - w / 2;
     gfx->fillRoundRect(gx - 12, 106, w + 24, 42, 14, UI_WHITE);
     gfx->drawRoundRect(gx - 12, 106, w + 24, 42, 14, UI_INK);
-    drawMap(SPR_GIFT, 16, gx, 111, 2, false);
+    drawMap(bag ? ITEM_ICON[bt.rw.item] : SPR_GIFT, 16, gx, 111, 2, false);
     gfx->setTextColor(UI_BAR_BAD);
     setCur(gx + 40, 121);
     printT(g);
   }
-  if (t >= BT_END_LOCK_MS) {  // ya se puede cerrar con un toque (v1.38)
+  // lo demas, en un cuadro bajo el ganador (solo lo que de verdad se dio)
+  const char *ln[3];
+  uint16_t lc[3];
+  uint8_t n = 0;
+  if (bt.rw.newBadge) { ln[n] = T(S_NEW_BADGE); lc[n++] = UI_BAR_BAD; }
+  if (bt.rw.paid) { ln[n] = T(S_TEAM_REWARD); lc[n++] = UI_INK; }
+  char joy[40];
+  if (bt.rw.joy) {
+    snprintf(joy, sizeof(joy), T(S_PRACTICE_JOY_FMT), (unsigned)bt.rw.joy);
+    ln[n] = joy;
+    lc[n++] = UI_BAR_OK;
+  }
+  // y la pista "toca: volver" en su ultima fila, reservada desde el principio (el cuadro no crece)
+  bool hint = t >= BT_END_LOCK_MS;
+  if (!n && !hint) return;
+  setSize(2);
+  int bw = textW(T(S_BACK), 2), bh = 12 + 20;
+  for (uint8_t i = 0; i < n; i++) {
+    bool badge = bt.rw.newBadge && i == 0;
+    int w = textW(ln[i], 2) + (badge ? 40 : 0);
+    if (w > bw) bw = w;
+    bh += badge ? 32 : 20;
+  }
+  bw += 28;
+  int y = 304;
+  gfx->fillRoundRect(CX - bw / 2, y, bw, bh, 14, UI_WHITE);
+  gfx->drawRoundRect(CX - bw / 2, y, bw, bh, 14, UI_INK);
+  int ly = y + 6;
+  for (uint8_t i = 0; i < n; i++) {
+    bool badge = bt.rw.newBadge && i == 0;
+    int w = textW(ln[i], 2) + (badge ? 40 : 0), lx = CX - w / 2;
+    if (badge) {
+      drawMap(BADGE_ICON[bt.run.stage], 16, lx, ly, 2, false);
+      lx += 40;
+    }
+    gfx->setTextColor(lc[i]);
+    setCur(lx, ly + (badge ? 9 : 3));
+    printT(ln[i]);
+    ly += badge ? 32 : 20;
+  }
+  if (hint) {  // ya se puede cerrar con un toque (v1.38)
     gfx->setTextColor(UI_TRACK);
-    setCur(centerX(T(S_BACK), 2), 368);
+    setCur(centerX(T(S_BACK), 2), ly + 3);
     printT(T(S_BACK));
   }
 }

@@ -3,7 +3,7 @@
 #include "dex.h"
 
 // Motor de combate (docs/FEATURES.md, Tarea 3a). Logica pura y determinista para
-// una semilla dada: el combate de practica de una sola placa y, mas adelante, el
+// una semilla dada: los estadios de una sola placa (stage.h) y, mas adelante, el
 // combate por radio (3d), donde el anfitrion lo ejecuta y manda cada ataque. Se
 // prueba en el PC (test/test_battle.cpp), incluido un Monte Carlo de los 151x151.
 //
@@ -28,8 +28,7 @@
 #define MAX_ATTACKS 15         // tope: luego gana quien conserve mas % de vida
 #define ATTACK_MS 1300         // tiempo por ataque en pantalla
 #define INTRO_MS 3000          // tarjeta VS + jingle + entrada al campo
-#define PRACTICE_AI_TAPS 2     // el rival simulado "toca" 2 veces por ataque suyo
-#define PRACTICE_LEVEL_SPREAD 3  // nivel del rival de practica: el tuyo +-3
+#define PRACTICE_AI_TAPS 2     // el jefe de un estadio "toca" 2 veces por ataque suyo
 
 // resultado
 enum : uint8_t { BR_NONE = 0, BR_WIN_A, BR_WIN_B, BR_DRAW };
@@ -261,28 +260,4 @@ static inline int16_t evolveForLevel(int16_t dex, uint16_t level, uint32_t &rng)
     dex = (dex == DEX_EEVEE) ? (int16_t)(134 + battleRand(rng) % 3) : (int16_t)d.evolvesTo;
   }
   return dex;
-}
-
-// Rival del combate de practica (FR-3.5): una linea de la misma rareza de huevo
-// que la tuya, a tu nivel +-3, en la forma que le toca a ese nivel. Genes medios
-// y tu entrenamiento medio los pone quien lo arma (makeFighter).
-struct PracticeFoe {
-  int16_t dex = 1;
-  uint8_t level = 1;
-};
-
-static inline PracticeFoe pickPracticeFoe(int16_t mine, uint16_t myLevel, uint32_t &rng) {
-  if (mine < 1 || mine > DEX_COUNT) mine = 1;
-  uint8_t rar = DEX_TBL[DEX_TBL[mine].base].rarity;
-  int16_t cand[DEX_COUNT];
-  int n = 0;
-  for (int16_t d = 1; d <= DEX_COUNT; d++)
-    if (DEX_TBL[d].base == d && DEX_TBL[d].rarity == rar) cand[n++] = d;
-  PracticeFoe foe;
-  int16_t base = n ? cand[battleRand(rng) % n] : DEX_TBL[mine].base;
-  int lv = (myLevel > BATTLE_LEVEL_CAP ? BATTLE_LEVEL_CAP : myLevel) +
-           (int)(battleRand(rng) % (2 * PRACTICE_LEVEL_SPREAD + 1)) - PRACTICE_LEVEL_SPREAD;
-  foe.level = (uint8_t)(lv < 1 ? 1 : (lv > BATTLE_LEVEL_CAP ? BATTLE_LEVEL_CAP : lv));
-  foe.dex = evolveForLevel(base, foe.level, rng);
-  return foe;
 }

@@ -2697,31 +2697,34 @@ TEST(battle, solo_combate_nacido_y_despierto) {
   CHECK(!p.canBattle());
 }
 
-TEST(battle, la_practica_da_felicidad_una_vez_por_hora) {
+// la felicidad del final de un estadio (la del antiguo combate de practica): perdido, sin premio del jefe
+static uint8_t stageJoy(Pet &p) { return p.stageDone(0, false, nullptr, 0).joy; }
+
+TEST(battle, el_estadio_da_felicidad_una_vez_por_hora) {
   Pet p;
   makePet(p, 25);
   setStats(p, 80, 50, 80, 100);
   CHECK(p.practiceRewardReady());
-  CHECK_EQ(p.practiceDone(), (uint8_t)PRACTICE_JOY);
+  CHECK_EQ(stageJoy(p), (uint8_t)PRACTICE_JOY);
   CHECK_EQ(p.joy, (uint8_t)(50 + PRACTICE_JOY));
   CHECK(!p.practiceRewardReady());
   mockAdvanceMillis(PRACTICE_EVERY_MS - 1000);
-  CHECK_EQ(p.practiceDone(), (uint8_t)0);  // otra dentro de la hora: sin premio
+  CHECK_EQ(stageJoy(p), (uint8_t)0);  // otro dentro de la hora: sin premio
   CHECK_EQ(p.joy, (uint8_t)(50 + PRACTICE_JOY));
   mockAdvanceMillis(1000);
-  CHECK_EQ(p.practiceDone(), (uint8_t)PRACTICE_JOY);
+  CHECK_EQ(stageJoy(p), (uint8_t)PRACTICE_JOY);
   CHECK_EQ(p.joy, (uint8_t)(50 + 2 * PRACTICE_JOY));
   p.joy = 99;
   mockAdvanceMillis(PRACTICE_EVERY_MS);
-  CHECK_EQ(p.practiceDone(), (uint8_t)1);  // tope de 100: dice lo que de verdad dio
+  CHECK_EQ(stageJoy(p), (uint8_t)1);  // tope de 100: dice lo que de verdad dio
   CHECK_EQ(p.joy, (uint8_t)100);
 }
 
-TEST(battle, la_practica_no_toca_energia_ni_comida) {
+TEST(battle, el_estadio_no_toca_energia_ni_comida) {
   Pet p;
   makePet(p, 25);
   setStats(p, 60, 50, 40, 100);
-  p.practiceDone();
+  stageJoy(p);
   CHECK_EQ(p.fullness, (uint8_t)60);
   CHECK_EQ(p.energy, (uint8_t)40);
 }
