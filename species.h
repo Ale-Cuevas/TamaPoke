@@ -76,6 +76,12 @@ static inline uint16_t spriteColor(char ch) {
     case 'S': return 0x7BF1;  // #787e8c
     case 'v': return 0xEF31;  // #efe68a
     case 'V': return 0xB528;  // #b4a640
+    case 'u': return 0xA39A;  // #a672d6
+    case 'U': return 0x6A14;  // #6c42a6
+    case 'q': return 0xC253;  // #c2489e
+    case 'Q': return 0x814D;  // #80296c
+    case 'i': return 0x4AD8;  // #4f5bc2
+    case 'I': return 0x29B0;  // #2f3586
     default: return 0;
   }
 }
@@ -831,6 +837,158 @@ static const char* const SPR_ICON_REVIVE[16] = {  // 16x16
   "...kVVVVkk......",
   "...kVVkk........",
   "....kk..........",
+};
+
+static const char* const SPR_BADGE_GRASS[16] = {  // 16x16
+  "................",
+  "..........kkkk..",
+  "......kkkkggwgk.",
+  "....kkggggggggk.",
+  "...kgwgggggggGk.",
+  "..kgwggkgggggGk.",
+  "..kggggGkggggGk.",
+  "..kgggggGkgggGk.",
+  "..kggggggGkggGk.",
+  "..kgggggggGkGGk.",
+  "..kGggggggGGGk..",
+  "...kGGggGGGGkk..",
+  "....kkGGGkkk....",
+  "....kk.kk.......",
+  "...kk...........",
+  "..kk............",
+};
+
+static const char* const SPR_BADGE_WATER[16] = {  // 16x16
+  ".......kk.......",
+  "......kbbk......",
+  "......kbbk......",
+  ".....kbbbBk.....",
+  ".....kbwbBk.....",
+  "....kbbwbbBk....",
+  "...kbbwbbbBBk...",
+  "...kbwbbbbBBk...",
+  "..kbbwbbbbbBBk..",
+  "..kbbbbbbbbBBk..",
+  "..kbbbbbbbBBBk..",
+  "..kBbbbbbBBBBk..",
+  "...kBBbbBBBBk...",
+  "...kkBBBBBBkk...",
+  ".....kkkkkk.....",
+  "................",
+};
+
+static const char* const SPR_BADGE_ROCK[16] = {  // 16x16
+  "................",
+  "......kk........",
+  "....kkssk.......",
+  "...ksswcckkk....",
+  "..kswccccccckk..",
+  ".kswcccckcccccck",
+  ".kwccccckkcccCCk",
+  "kccckcccckccCCCk",
+  "kcccckkcccccCCCk",
+  "kccccccckccCCCk.",
+  ".kcccccckkCCCCk.",
+  ".kcccccCCCCCCk..",
+  "..kcccCCCCCkk...",
+  "...kkCCCCkk.....",
+  ".....kkkk.......",
+  "................",
+};
+
+static const char* const SPR_BADGE_FIRE[16] = {  // 16x16
+  ".......k........",
+  "......krk.......",
+  "......krrk......",
+  ".....krrrk..k...",
+  ".....krorrk.kk..",
+  "....krooorrkkrk.",
+  "...krrooofrrrrk.",
+  "...krooofffrrRk.",
+  "..krooofffforrRk",
+  "..kroofffwffoRRk",
+  "..kroofffffforRk",
+  "..kroooffffooRRk",
+  "...krooofffooRk.",
+  "...kRooooooRRk..",
+  "....kkRRRRRkk...",
+  "......kkkkk.....",
+};
+
+static const char* const SPR_BADGE_ELECTRIC[16] = {  // 16x16
+  "................",
+  "......kkkkkk....",
+  ".....kffwffk....",
+  ".....kfwffYk....",
+  "....kffffYYk....",
+  "....kfffYYk.....",
+  "...kffffYYkkkk..",
+  "...kfffffffffYk.",
+  "...kkkkkfffYYk..",
+  "......kfffYYk...",
+  ".....kffYYYk....",
+  ".....kfYYYk.....",
+  "....kfYYkk......",
+  "....kYkk........",
+  "....kk..........",
+  "................",
+};
+
+static const char* const SPR_BADGE_GHOST[16] = {  // 16x16
+  "................",
+  ".....kkkkkk.....",
+  "....kuuuuuuk....",
+  "...kuwwuuuuUk...",
+  "..kuwuuuuuuuUk..",
+  "..kuuukuukuuUk..",
+  "..kuuukuukuuUk..",
+  "..kuuuukkuuuUk..",
+  "..kuuuuuuuuuUk..",
+  "..kuuuuuuuuUUk..",
+  "..kuuuuuuuuUUk..",
+  "..kuuUuuuUuUUk..",
+  "..kuUkUuUkUkUk..",
+  "..kUk.kUk.kUk...",
+  "...k...k...k....",
+  "................",
+};
+
+static const char* const SPR_BADGE_POISON[16] = {  // 16x16
+  "................",
+  "......kkkk......",
+  "......kwQk......",
+  "......kqQk......",
+  "......kqQk......",
+  ".....kkqQkk.....",
+  "....kqqqqQQk....",
+  "...kqqwqqqQQk...",
+  "..kqqwqqgqqQQk..",
+  "..kqqqqqGgqQQk..",
+  "..kqqqqqqGqQQk..",
+  "..kqgqqqqqqQQk..",
+  "..kqGgqqqqQQQk..",
+  "...kQQQQQQQQk...",
+  "....kkkkkkkk....",
+  "................",
+};
+
+static const char* const SPR_BADGE_DRAGON[16] = {  // 16x16
+  "................",
+  "..kkkkkkkkkkk...",
+  ".kffffffffffYk..",
+  ".kYYYYYYYYYYYk..",
+  "..kiiiiiiiiIIk..",
+  "..kiwwiiiiiIIk..",
+  "..kiwiiiiiiIIk..",
+  "..kiiiiiiiiIk...",
+  "...kiiiiiiIIk...",
+  "...kiiiiiiIk....",
+  "....kiiiiIIk....",
+  "....kiiiiIk.....",
+  ".....kiiIk......",
+  "......kiIk......",
+  ".......kk.......",
+  "................",
 };
 
 static const char* const SPR_EGG[32] = {  // 32x32

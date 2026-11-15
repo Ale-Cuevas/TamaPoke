@@ -77,6 +77,9 @@ static const ExpectedFmt EXPECTED[] = {
   { S_DODGED_FMT,      "%u" },
   { S_SPD_GAIN_FMT,    "%u" },
   { S_ZEN_BONUS_FMT,   "%u" },
+  { S_GO_FMT,          "%s" },  // stages
+  { S_LV_RANGE_FMT,    "%u,%u" },
+  { S_STAGE_FMT,       "%u" },
 };
 static const int NUM_EXPECTED = (int)(sizeof(EXPECTED) / sizeof(EXPECTED[0]));
 
@@ -198,6 +201,25 @@ TEST(i18n, las_medallas_no_llevan_acentos) {
       for (int t = 0; t < 3; t++)
         for (const char *c = tab[t]; c && *c; c++)
           CHECK_MSG((unsigned char)*c < 128, std::string("no ASCII: ") + tab[t]);
+    }
+  }
+  gLang = LANG_DEFAULT;
+}
+
+TEST(i18n, los_nombres_de_fase_estan_en_todos_los_idiomas) {
+  for (int lang = 0; lang < LANG_COUNT; lang++) {
+    gLang = (Lang)lang;
+    const bool cjk = LANG_IS_CJK(lang);
+    for (int i = 0; i < STAGE_NAME_COUNT; i++) {
+      const char *n = stageName((uint8_t)i);
+      char where[64];
+      snprintf(where, sizeof(where), "[%s][fase %d]", LANG_NAME[lang], i);
+      CHECK_MSG(n && n[0], std::string("stageName vacio ") + where);
+      // los nombres cuelgan de un cartel redondo: cortos (en CJK la anchura se ve en la placa)
+      if (!cjk && n) CHECK_MSG(strlen(n) <= 12, std::string("nombre de fase demasiado largo ") + where + ": " + n);
+      // no hay dos fases con el mismo nombre
+      for (int j = 0; j < i; j++)
+        CHECK_MSG(strcmp(n, stageName((uint8_t)j)) != 0, std::string("nombre de fase repetido ") + where);
     }
   }
   gLang = LANG_DEFAULT;

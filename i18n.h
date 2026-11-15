@@ -104,6 +104,9 @@ enum StrId : uint8_t {
   S_SLEEPY,
   // v1.64: una hora para el Revivir: los minutos que quedan, y el aviso de que murio
   S_DYING_LEFT_FMT, S_DIED_FMT, S_DIED_LATE,
+  // stages: la lista de fases, el equipo, los carteles de la pelea y las insignias
+  S_STAGES, S_BADGES, S_PICK_TEAM, S_START, S_BOSS, S_LOCKED, S_STAGE_CLEAR, S_STAGE_LOST,
+  S_NEXT_RIVAL, S_GO_FMT, S_NEW_BADGE, S_LV_RANGE_FMT, S_TEAM_REWARD, S_REWARD_TODAY, S_STAGE_FMT,
   STR_COUNT
 };
 
@@ -111,6 +114,8 @@ const char *T(StrId id);       // texto en el idioma activo
 const char *medalName(int i);  // banner de medalla (MED_COUNT)
 const char *medalLabel(int i); // etiqueta corta de medalla
 const char *medalDesc(int i);  // descripcion larga de medalla
+#define STAGE_NAME_COUNT 8     // las 8 fases (igual que STAGE_COUNT de stage.h)
+const char *stageName(uint8_t i); // nombre del tema de la fase 0-7 (planta ... dragon)
 
 void loadLang();             // lee el idioma de NVS (llamar en setup)
 void setLang(Lang l);        // cambia y persiste el idioma

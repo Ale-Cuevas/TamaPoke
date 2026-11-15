@@ -76,6 +76,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Tiene sue\244o...",
     // v1.64: la hora del Revivir
     "Quedan %u min", "%s ha muerto...", "No lleg\242 el Revivir",
+    // stages
+    "Fases", "Insignias", "Elige tu equipo", "Empezar", "JEFE", "Bloqueada", "\255Fase superada!", "Derrotado...",
+    "Siguiente rival", "\255Adelante, %s!", "\255Nueva insignia!", "Nv.%u-%u", "Equipo: +1 h, +v\241nculo",
+    "Premio disponible", "Fase %u",
   },
   // ---------------- EN ----------------
   {
@@ -146,6 +150,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Getting sleepy...",
     // v1.64: la hora del Revivir
     "%u min left", "%s has died...", "No Revive in time",
+    // stages
+    "Stages", "Badges", "Pick your team", "Start", "BOSS", "Locked", "Stage clear!", "Defeated...",
+    "Next rival", "Go, %s!", "New badge!", "Lv.%u-%u", "Team: +1 h, +bond",
+    "Reward ready", "Stage %u",
   },
   // ---------------- FR ----------------
   {
@@ -216,6 +224,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Il a sommeil...",
     // v1.64: la hora del Revivir
     "Encore %u min", "%s est mort...", "Ranimer trop tard",
+    // stages
+    "Phases", "Insignes", "Choisis ton \202quipe", "Commencer", "BOSS", "Verrouill\202", "Phase r\202ussie!", "Battu...",
+    "Prochain rival", "Allez, %s!", "Nouvel insigne!", "Niv.%u-%u", "\220quipe: +1 h, +lien",
+    "R\202compense pr\202te", "Phase %u",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -291,6 +303,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Wird m\201de...",
     // v1.64: la hora del Revivir
     "Noch %u Min.", "%s ist gestorben...", "Kein Beleber rechtzeitig",
+    // stages
+    "Stufen", "Abzeichen", "W\204hle dein Team", "Start", "BOSS", "Gesperrt", "Stufe geschafft!", "Besiegt...",
+    "N\204chster Gegner", "Los, %s!", "Neues Abzeichen!", "Lv.%u-%u", "Team: +1 Std, +Bindung",
+    "Belohnung bereit", "Stufe %u",
   },
   // ---------------- IT ----------------
   {
@@ -361,6 +377,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Ha sonno...",
     // v1.64: la hora del Revivir
     "Ancora %u min", "%s e' morto...", "Rianima non arrivato",
+    // stages
+    "Fasi", "Distintivi", "Scegli la squadra", "Via", "BOSS", "Bloccata", "Fase superata!", "Sconfitto...",
+    "Prossimo rivale", "Vai, %s!", "Nuovo distintivo!", "Lv.%u-%u", "Squadra: +1 h, +legame",
+    "Premio pronto", "Fase %u",
   },
   // ---------------- PT ----------------
   {
@@ -431,6 +451,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Esta com sono...",
     // v1.64: la hora del Revivir
     "Faltam %u min", "%s morreu...", "Reviver nao chegou",
+    // stages
+    "Fases", "Ins\241gnias", "Escolhe a tua equipa", "Iniciar", "CHEFE", "Bloqueada", "Fase conclu\241da!", "Derrotado...",
+    "Pr\242ximo rival", "Vai, %s!", "Nova ins\241gnia!", "Niv.%u-%u", "Equipa: +1 h, +la\207o",
+    "Pr\202mio pronto", "Fase %u",
   },
   // ---------------- JA ----------------
   {
@@ -523,6 +547,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "ねむそう...",
     // v1.64: la hora del Revivir
     "のこり %u ふん", "%sは しんでしまった...", "ふっかつが まにあわなかった",
+    // stages
+    "ステージ", "バッジ", "チームをえらぶ", "スタート", "ボス", "ロックちゅう", "ステージクリア!", "まけた...",
+    "つぎのあいて", "いけ、%s!", "あたらしいバッジ!", "Lv.%u-%u", "チーム: +1じかん、+なかよし",
+    "ごほうびあり", "ステージ%u",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -598,6 +626,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "졸려요...",
     // v1.64: la hora del Revivir
     "%u분 남았어요", "%s가 죽었어요...", "부활이 늦었어요",
+    // stages
+    "스테이지", "배지", "팀을 고르세요", "시작", "보스", "잠김", "스테이지 클리어!", "패배...",
+    "다음 상대", "가자, %s!", "새 배지!", "Lv.%u-%u", "팀: +1시간, +유대",
+    "보상 준비됨", "스테이지 %u",
   },
 };
 
@@ -641,10 +673,23 @@ static const char *const MED_DSC[LANG_COUNT][MED_COUNT] = {
     "연속 7일", "유대감 최대", "최종 진화", "건강함", "10000걸음" },
 };
 
+// Nombres de las 8 fases (v1.65) [idioma][fase]: planta, agua, roca, fuego, electrico, fantasma, veneno, dragon.
+static const char *const STAGE_NAME[LANG_COUNT][STAGE_NAME_COUNT] = {
+  { "Planta", "Agua", "Roca", "Fuego", "El\202ctrico", "Fantasma", "Veneno", "Drag\242n" },
+  { "Grass", "Water", "Rock", "Fire", "Electric", "Ghost", "Poison", "Dragon" },
+  { "Plante", "Eau", "Roche", "Feu", "Electrique", "Fant\223me", "Poison", "Dragon" },
+  { "Pflanze", "Wasser", "Gestein", "Feuer", "Elektro", "Geist", "Gift", "Drache" },
+  { "Erba", "Acqua", "Roccia", "Fuoco", "Elettro", "Spettro", "Veleno", "Drago" },
+  { "Planta", "Agua", "Pedra", "Fogo", "Eletrico", "Fantasma", "Veneno", "Dragao" },
+  { "くさ", "みず", "いわ", "ほのお", "でんき", "ゴースト", "どく", "ドラゴン" },
+  { "풀", "물", "바위", "불", "전기", "고스트", "독", "드래곤" },
+};
+
 const char *T(StrId id) { return STRINGS[gLang][id]; }
 const char *medalName(int i)  { return MED_NAME[gLang][i]; }
 const char *medalLabel(int i) { return MED_LBL[gLang][i]; }
 const char *medalDesc(int i)  { return MED_DSC[gLang][i]; }
+const char *stageName(uint8_t i) { return STAGE_NAME[gLang][i < STAGE_NAME_COUNT ? i : 0]; }
 
 void loadLang() {
   Preferences p;
