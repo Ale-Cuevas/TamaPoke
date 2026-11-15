@@ -1256,7 +1256,7 @@ void Pet::shaken() {
   }
 }
 
-// ---------- combate de practica (docs/FEATURES.md, Tarea 3a) ----------
+// ---------- combate: felicidad y botin ----------
 
 bool Pet::practiceRewardReady() const {
   return !practiceRewarded || millis() - lastPracticeReward >= PRACTICE_EVERY_MS;
@@ -1276,21 +1276,6 @@ uint8_t Pet::rollBattleItem() {
   return it;
 }
 
-uint8_t Pet::battleDrop(bool won) {
-  if (!won || isEgg() || busyEnding()) return IT_COUNT;
-  uint32_t day = today();
-  if (bdropDay != day) {
-    bdropDay = day;
-    bdropToday = 0;
-  }
-  if (bdropToday >= BATTLE_DROPS_PER_DAY || random(100) >= BATTLE_DROP_ODDS) return IT_COUNT;
-  uint8_t it = rollBattleItem();
-  bdropToday++;
-  giveGift(it);
-  pendingSave = true;  // lo guarda quien cierra el combate (practiceDone o flushSave): una escritura
-  return it;
-}
-
 uint8_t Pet::practiceJoy() {
   if (isEgg() || busyEnding() || !practiceRewardReady()) return 0;
   practiceRewarded = true;
@@ -1298,13 +1283,6 @@ uint8_t Pet::practiceJoy() {
   uint8_t before = joy;
   joy = clamp100(joy + PRACTICE_JOY);
   return joy - before;
-}
-
-uint8_t Pet::practiceDone() {
-  if (isEgg() || busyEnding() || !practiceRewardReady()) return 0;
-  uint8_t j = practiceJoy();
-  save();  // fin de una pantalla de juego, como el minijuego: se guarda ya
-  return j;
 }
 
 // ---------- estadios ----------
@@ -1358,7 +1336,7 @@ bool Pet::payStageDay(uint8_t stage) {
 // veces el mismo dia ni dejar un hueco danado.
 StageReward Pet::stageDone(uint8_t stage, bool cleared, const uint32_t *uids, uint8_t n) {
   StageReward res = { false, false, (uint8_t)IT_COUNT, 0, 0 };
-  res.joy = practiceJoy();  // gane o pierda, como el combate de practica (0 con huevo, casa vacia o final)
+  res.joy = practiceJoy();  // gane o pierda, una vez por hora (0 con huevo, casa vacia o final)
   if (cleared && stage < STAGE_COUNT) {
     uint8_t bit = (uint8_t)(1u << stage);
     if (!(badges & bit)) {
@@ -1390,7 +1368,7 @@ StageReward Pet::stageDone(uint8_t stage, bool cleared, const uint32_t *uids, ui
           if (writeSlot((uint8_t)k, r)) res.pets++;
         }
       }
-      res.item = rollBattleItem();  // seguro: ni el 70 % ni el tope de 5 del botin de practica
+      res.item = rollBattleItem();  // seguro: sale siempre
       // con la casa vacia no hay quien abra un regalo: a la mochila con su aviso (como unwrapGifts)
       if (vacant) giveFound(res.item);
       else giveGift(res.item);
@@ -1507,10 +1485,6 @@ void Pet::save() {
     memcpy(g + 1, gifts, giftN);
     prefs.putBytes("gifts", g, sizeof(g));
   }
-  // botin de combate de hoy (v1.56), despues de los regalos: un corte entre los dos da un botin de
-  // mas, nunca uno perdido
-  prefs.putUInt("bdD", bdropDay);
-  prefs.putUChar("bdN", bdropToday);
   prefs.putBool("eggH", eggHeldFlag);
 }
 
@@ -1624,8 +1598,6 @@ void Pet::load() {
   }
   bondDay = prefs.getUInt("bondD", 0);
   bondToday = prefs.getUChar("bondT", 0);
-  bdropDay = prefs.getUInt("bdD", 0);
-  bdropToday = prefs.getUChar("bdN", 0);
   // estadios: un guardado anterior no trae las claves (sin medallas, nada pagado, sin equipo)
   badges = prefs.getUChar("bdg", 0);
   stageDay = prefs.getUInt("stD", 0);

@@ -184,49 +184,7 @@ TEST(gifts, lo_que_no_cabe_sigue_envuelto_al_desenvolver) {
   CHECK_EQ(p.giftItem(0), (uint8_t)IT_GOLDEN);
 }
 
-// ---------------------------------------------------------------- botin de combate (v1.56)
-TEST(battle_drop, solo_al_ganar) {
-  Pet p;
-  gBorn(p);
-  mockForceRandom(0);  // siempre toca (0 < 70), y la tabla da tarta
-  CHECK_EQ(p.battleDrop(false), (uint8_t)IT_COUNT);
-  CHECK_EQ(p.giftCount(), (uint8_t)0);
-  CHECK_EQ(p.battleDrop(true), (uint8_t)IT_CAKE);
-  CHECK_EQ(p.giftCount(), (uint8_t)1);  // envuelto, en casa
-  CHECK_EQ(p.giftItem(0), (uint8_t)IT_CAKE);
-  CHECK_EQ(p.items[IT_CAKE], (uint8_t)0);
-}
-
-TEST(battle_drop, setenta_por_ciento) {
-  Pet p;
-  gBorn(p);
-  mockForceRandom(BATTLE_DROP_ODDS);  // 70: ya no toca
-  CHECK_EQ(p.battleDrop(true), (uint8_t)IT_COUNT);
-  CHECK_EQ(p.battleDropsToday(), (uint8_t)0);  // lo que no trae nada no gasta el tope
-  mockForceRandom(BATTLE_DROP_ODDS - 1);
-  CHECK(p.battleDrop(true) != IT_COUNT);
-}
-
-TEST(battle_drop, cinco_al_dia_y_al_dia_siguiente_otra_vez) {
-  Pet p;
-  gBorn(p);
-  mockForceRandom(0);
-  for (int i = 0; i < BATTLE_DROPS_PER_DAY; i++) CHECK_EQ(p.battleDrop(true), (uint8_t)IT_CAKE);
-  CHECK_EQ(p.battleDropsToday(), (uint8_t)BATTLE_DROPS_PER_DAY);
-  CHECK_EQ(p.battleDrop(true), (uint8_t)IT_COUNT);  // la sexta victoria del dia, nada
-  CHECK_EQ(p.giftCount(), (uint8_t)BATTLE_DROPS_PER_DAY);
-  CHECK(p.savePending());  // lo guarda quien cierra el combate: una sola escritura
-  p.flushSave();
-  Pet q;  // el tope sobrevive a un reinicio
-  q.begin();
-  q.setClock(GDAY * 86400 + 11 * 3600);  // el reloj, como lo pone el arranque con el RTC
-  CHECK_EQ(q.battleDropsToday(), (uint8_t)BATTLE_DROPS_PER_DAY);
-  CHECK_EQ(q.battleDrop(true), (uint8_t)IT_COUNT);
-  q.setClock((GDAY + 1) * 86400 + 10 * 3600);  // otro dia
-  CHECK_EQ(q.battleDropsToday(), (uint8_t)0);
-  CHECK_EQ(q.battleDrop(true), (uint8_t)IT_CAKE);
-}
-
+// ---------------------------------------------------------------- tabla del botin (v1.56)
 TEST(battle_drop, la_tabla_y_el_huevo_es_lo_mas_raro) {
   Pet p;
   gBorn(p);

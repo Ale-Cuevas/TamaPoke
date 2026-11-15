@@ -147,6 +147,9 @@ static void resetUi() {
   menuKind = MENU_NONE;
   closeBattle();
   bt = decltype(bt){};
+  pet.setBadges(0);      // estadios: sin insignias, nada cobrado hoy y sin equipo guardado
+  pet.clearStageDay();
+  pet.setTeam(nullptr, 0);
   choiceKind = 0;
   pet.sleeping = false;
   pet.ceremony = CER_NONE;
@@ -334,6 +337,63 @@ static void battleUntil(bool (*done)()) {
     gHostMillis += 85;
     battleStep(millis());
   }
+}
+
+// the language of a scene, set after pokemon() (which goes back to English)
+static void lang(Lang l) {
+  setLang(l);
+  applyLangFont();
+}
+
+// a stage run from a scene, with the sketch's own startStage(): `order` lists the team, -1 = the home
+// pet, k = box slot k
+static uint32_t gTeam[TEAM_MAX];
+static uint8_t gTeamN = 0;
+static void stageGo(uint8_t stage, std::initializer_list<int> order) {
+  if (!pet.uid) pet.uid = 0x7E57u;  // pokemon() sets the species by hand: the pet never hatched, no uid
+  gTeamN = 0;
+  for (int k : order)
+    if (gTeamN < TEAM_MAX) gTeam[gTeamN++] = k < 0 ? pet.uid : pet.boxRecord((uint8_t)k).uid;
+  startStage(stage, gTeam, gTeamN);
+}
+
+// the run put straight into a fight: the allies before `ally` fainted, the foes before `foe` beaten,
+// the two on the field at allyPct / foePct % of their HP, the fight just starting (sprites loaded as
+// the hand-over does)
+static void stageJump(uint8_t ally, uint8_t foe, uint8_t allyPct, uint8_t foePct) {
+  StageRun &r = bt.run;
+  if (ally >= r.teamN) ally = r.teamN - 1;
+  for (uint8_t i = 0; i < ally; i++) r.team[i].hp = 0;
+  r.ally = ally;
+  r.team[ally].hp = (uint16_t)std::max(1, r.team[ally].maxHp * allyPct / 100);
+  r.foeIdx = foe;
+  r.foe = stageFoeFighter(r.foes[foe]);
+  r.foe.hp = (uint16_t)std::max(1, r.foe.maxHp * foePct / 100);
+  r.meter = SpecialMeter{};
+  r.foeMeter = SpecialMeter{};
+  r.eng.beginCarry(r.team[ally], r.foe, 777);
+  battleLoadFoe();
+  battleLoadAlly();
+  bt.haveEv = false;
+  bt.phase = BT_FIGHT;
+  bt.t0 = millis();
+}
+
+// a fight that ends in one KO (one side at 1 HP), then 1.3 s into the hand-over: the caption and
+// the newcomer half-way in (the capture frame adds 85 ms)
+static void stageSwap(uint8_t ally, uint8_t foe, uint8_t allyPct, uint8_t foePct) {
+  stageJump(ally, foe, allyPct, foePct);
+  battleUntil([] { return bt.phase == BT_SWAP; });
+  gHostMillis += 1300 - 85;
+}
+
+// the last KO of the run, then `ms` into the result. The hourly joy depends on which scenes ran
+// before (Pet keeps its clock): it is shown as due
+static void stageResult(uint8_t ally, uint8_t foe, uint8_t allyPct, uint8_t foePct, uint32_t ms) {
+  stageJump(ally, foe, allyPct, foePct);
+  battleUntil([] { return bt.phase == BT_END; });
+  bt.rw.joy = PRACTICE_JOY;
+  gHostMillis += ms;
 }
 
 struct Scene {
@@ -730,101 +790,153 @@ static const std::vector<Scene> &scenes() {
      }, 3 },
     { "tilt-walk", [] { pokemon(25, 13); gStubTiltSide = 1; }, 8 },
     { "tilt-slide", [] { pokemon(25, 13); gStubTiltSide = -1; gStubTiltSlide = true; }, 8 },
-    // practice battle (Task 3a): driven to a given moment with the sketch's own battleStep()
-    { "battle-vs", [] { pokemon(25, 13); startPractice(79); }, 2 },
-    { "battle-walkin", [] { pokemon(25, 13); startPractice(79); }, 30 },
+    // stage battles: driven to a given moment with the sketch's own battleStep(), or put straight
+    // into a fight with stageJump(). Team order: -1 = the home pet, k = box slot k.
+    { "battle-vs", [] { pokemon(25, 13); boxThree(); stageGo(0, { -1, 4, 1 }); }, 2 },
+    { "battle-vs-es", [] { pokemon(25, 13); boxThree(); lang(LANG_ES); stageGo(0, { -1, 4, 1 }); }, 2 },
+    { "battle-walkin", [] { pokemon(25, 13); stageGo(0, { -1 }); }, 30 },
     { "battle-special", [] {
        pokemon(25, 13);
-       startPractice(79);
-       bt.meter.pips = SPECIAL_TAPS;  // charged before the first attack
+       stageGo(0, { -1 });
+       bt.run.meter.pips = SPECIAL_TAPS;  // charged before the first attack
        battleUntil([] { return bt.haveEv && bt.ev.special && millis() - bt.evAt >= BT_HIT_MS + 100; });
      }, 1 },
     { "battle-mid", [] {
        pokemon(25, 13);
-       startPractice(79);
-       battleUntil([] { return bt.eng.attacks >= 4 && millis() - bt.evAt >= BT_HIT_MS + 150; });
-       bt.meter.pips = 3;
+       stageGo(0, { -1 });
+       battleUntil([] { return bt.run.eng.attacks >= 4 && millis() - bt.evAt >= BT_HIT_MS + 150; });
+       bt.run.meter.pips = 3;
      }, 1 },
-    { "battle-result", [] {
-       pokemon(25, 13);
-       startPractice(129);  // Magikarp: a win
-       battleUntil([] { return bt.phase == BT_END; });
-     }, 4 },
     // v1.38: "> > > > >" and the "Tap!" box from the first moment of the fight; three charged
     { "battle-tap", [] {
        pokemon(25, 13);
-       startPractice(79);
+       stageGo(0, { -1 });
        battleUntil([] { return bt.phase == BT_FIGHT; });
      }, 1 },
     { "battle-charging", [] {
        pokemon(25, 13);
-       startPractice(79);
-       battleUntil([] { return bt.eng.attacks >= 2 && millis() - bt.evAt >= BT_HIT_MS + 900; });
-       bt.meter.pips = 3;
+       stageGo(0, { -1 });
+       battleUntil([] { return bt.run.eng.attacks >= 2 && millis() - bt.evAt >= BT_HIT_MS + 900; });
+       bt.run.meter.pips = 3;
      }, 1 },
     { "battle-armed", [] {
        pokemon(25, 13);
-       startPractice(79);
-       battleUntil([] { return bt.eng.attacks >= 2 && millis() - bt.evAt >= BT_HIT_MS + 900; });
-       bt.meter.pips = SPECIAL_TAPS;
+       stageGo(0, { -1 });
+       battleUntil([] { return bt.run.eng.attacks >= 2 && millis() - bt.evAt >= BT_HIT_MS + 900; });
+       bt.run.meter.pips = SPECIAL_TAPS;
      }, 1 },
     { "battle-locked", [] {  // after a special: grey outlines, no box
        pokemon(25, 13);
-       startPractice(79);
-       battleUntil([] { return bt.eng.attacks >= 2 && millis() - bt.evAt >= BT_HIT_MS + 900; });
-       bt.meter.cooldown = SPECIAL_COOLDOWN;
+       stageGo(0, { -1 });
+       battleUntil([] { return bt.run.eng.attacks >= 2 && millis() - bt.evAt >= BT_HIT_MS + 900; });
+       bt.run.meter.cooldown = SPECIAL_COOLDOWN;
+     }, 1 },
+    // four pets: the first one fainted, the second (Squirtle, from the box) against the second foe
+    { "battle-team4", [] {
+       pokemon(25, 13);
+       boxThree();
+       stageGo(1, { -1, 0, 4, 1 });
+       stageJump(1, 1, 80, 60);
+       battleUntil([] { return bt.run.eng.attacks >= 2 && millis() - bt.evAt >= BT_HIT_MS + 450; });
+     }, 1 },
+    { "battle-team4-es", [] {
+       pokemon(25, 13);
+       boxThree();
+       lang(LANG_ES);
+       stageGo(1, { -1, 0, 4, 1 });
+       stageJump(1, 1, 80, 60);
+       battleUntil([] { return bt.run.eng.attacks >= 2 && millis() - bt.evAt >= BT_HIT_MS + 450; });
+     }, 1 },
+    // a boxed pet (BLAZE, Charizard) leads: its own sprite, name, colour and soil; the home pet second
+    { "battle-boxed", [] {
+       pokemon(25, 13);
+       boxThree();
+       stageGo(3, { 4, -1 });
+       battleUntil([] { return bt.run.eng.attacks >= 3 && millis() - bt.evAt >= BT_HIT_MS + 450; });
+     }, 1 },
+    { "battle-boxed-es", [] {
+       pokemon(25, 13);
+       boxThree();
+       lang(LANG_ES);
+       stageGo(3, { 4, -1 });
+       battleUntil([] { return bt.run.eng.attacks >= 3 && millis() - bt.evAt >= BT_HIT_MS + 450; });
+     }, 1 },
+    // the hand-over after a KO: caption + the newcomer walking in, the survivor in place
+    { "battle-swap-foe", [] { pokemon(25, 13); boxThree(); stageGo(0, { -1, 4 }); stageSwap(0, 0, 100, 1); }, 1 },
+    { "battle-swap-foe-es", [] {
+       pokemon(25, 13); boxThree(); lang(LANG_ES); stageGo(0, { -1, 4 }); stageSwap(0, 0, 100, 1);
+     }, 1 },
+    { "battle-swap-boss", [] { pokemon(25, 13); boxThree(); stageGo(0, { -1, 4 }); stageSwap(1, 1, 70, 1); }, 1 },
+    { "battle-swap-boss-es", [] {
+       pokemon(25, 13); boxThree(); lang(LANG_ES); stageGo(0, { -1, 4 }); stageSwap(1, 1, 70, 1);
+     }, 1 },
+    { "battle-swap-ally", [] { pokemon(25, 13); boxThree(); stageGo(0, { -1, 4, 1 }); stageSwap(0, 1, 1, 100); }, 1 },
+    { "battle-swap-ally-es", [] {
+       pokemon(25, 13); boxThree(); lang(LANG_ES); stageGo(0, { -1, 4, 1 }); stageSwap(0, 1, 1, 100);
+     }, 1 },
+    // the boss of the rock stage (Golem), the team down to its last pet
+    { "battle-boss", [] {
+       pokemon(25, 13);
+       boxThree();
+       stageGo(2, { 0, 1, -1 });
+       stageJump(2, 2, 65, 75);
+       battleUntil([] { return bt.run.eng.attacks >= 2 && millis() - bt.evAt >= BT_HIT_MS + 450; });
+     }, 1 },
+    { "battle-boss-es", [] {
+       pokemon(25, 13);
+       boxThree();
+       lang(LANG_ES);
+       stageGo(2, { 0, 1, -1 });
+       stageJump(2, 2, 65, 75);
+       battleUntil([] { return bt.run.eng.attacks >= 2 && millis() - bt.evAt >= BT_HIT_MS + 450; });
+     }, 1 },
+    // results: the boss falls (first time, reward not taken today: item + team + badge + joy); the
+    // same with today's reward already taken; the last ally falls. "battle-result" is inside the tap
+    // lock (no "tap: back"), the others just after it.
+    { "battle-result", [] { pokemon(25, 13); boxThree(); stageGo(2, { -1, 4 }); stageResult(0, 2, 100, 1, 0); }, 4 },
+    { "battle-clear", [] {
+       pokemon(25, 13); boxThree(); stageGo(2, { -1, 4 }); stageResult(0, 2, 100, 1, BT_END_LOCK_MS);
+     }, 1 },
+    { "battle-clear-es", [] {
+       pokemon(25, 13); boxThree(); lang(LANG_ES); stageGo(2, { -1, 4 }); stageResult(0, 2, 100, 1, BT_END_LOCK_MS);
+     }, 1 },
+    { "battle-clear-none", [] {
+       pokemon(25, 13);
+       boxThree();
+       stageGo(2, { -1, 4 });
+       pet.stageDone(2, true, gTeam, gTeamN);  // cleared once already today: badge and reward taken
+       stageResult(0, 2, 100, 1, BT_END_LOCK_MS);
+     }, 1 },
+    { "battle-clear-none-es", [] {
+       pokemon(25, 13);
+       boxThree();
+       lang(LANG_ES);
+       stageGo(2, { -1, 4 });
+       pet.stageDone(2, true, gTeam, gTeamN);
+       stageResult(0, 2, 100, 1, BT_END_LOCK_MS);
+     }, 1 },
+    { "battle-lost", [] { pokemon(25, 13); boxThree(); stageGo(2, { 4, -1 }); stageResult(1, 2, 1, 100, BT_END_LOCK_MS); }, 1 },
+    { "battle-lost-es", [] {
+       pokemon(25, 13); boxThree(); lang(LANG_ES); stageGo(2, { 4, -1 }); stageResult(1, 2, 1, 100, BT_END_LOCK_MS);
      }, 1 },
     { "battle-tap-ja", [] {
        pokemon(4, 19);
-       setLang(LANG_JA);
-       applyLangFont();
-       startPractice(7);
+       lang(LANG_JA);
+       stageGo(1, { -1 });
        battleUntil([] { return bt.phase == BT_FIGHT; });
-       bt.meter.pips = 2;
+       bt.run.meter.pips = 2;
      }, 1 },
     { "battle-tap-ko", [] {
        pokemon(4, 13);
-       setLang(LANG_KO);
-       applyLangFont();
-       startPractice(7);
+       lang(LANG_KO);
+       stageGo(1, { -1 });
        battleUntil([] { return bt.phase == BT_FIGHT; });
      }, 1 },
-    // the result ignores taps for BT_END_LOCK_MS: "battle-result" is inside the lock (no "tap: back"),
-    // "battle-result-open" just after it
-    { "battle-result-open", [] {
-       pokemon(25, 13);
-       startPractice(129);
-       battleUntil([] { return bt.phase == BT_END; });
-       gHostMillis += BT_END_LOCK_MS;
-     }, 1 },
-    // v1.56: a win that brought a gift home (what it is shows when it's opened)
-    { "battle-result-gift", [] {
-       pokemon(25, 13);
-       startPractice(129);
-       battleUntil([] { return bt.phase == BT_END; });
-       bt.drop = IT_CAKE;
-       gHostMillis += BT_END_LOCK_MS;
-     }, 1 },
-    { "battle-result-gift-es", [] {
-       pokemon(25, 13);
-       startPractice(129);
-       battleUntil([] { return bt.phase == BT_END; });
-       bt.drop = IT_CAKE;
-       gHostMillis += BT_END_LOCK_MS;
-       setLang(LANG_ES);
-       applyLangFont();
-     }, 1 },
-    { "battle-draw", [] {
-       pokemon(19, 20);
-       startPractice(92);  // Rattata vs Gastly: neither can touch the other
-       battleUntil([] { return bt.phase == BT_END; });
-     }, 4 },
     { "battle-ja", [] {
        pokemon(4, 19);
-       setLang(LANG_JA);
-       applyLangFont();
-       startPractice(7);
-       battleUntil([] { return bt.eng.attacks >= 3 && millis() - bt.evAt >= BT_HIT_MS + 150; });
+       lang(LANG_JA);
+       stageGo(1, { -1 });
+       battleUntil([] { return bt.run.eng.attacks >= 3 && millis() - bt.evAt >= BT_HIT_MS + 150; });
      }, 1 },
   };
   return s;
