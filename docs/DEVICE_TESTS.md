@@ -251,6 +251,8 @@ the events without moving the board.
   both).
 
 ### Battle
+**Superseded by v1.65:** the practice battle is gone; see [Battle stages (v1.65)](#battle-stages-v165). Kept as
+history (`BATTLE <dex>` no longer exists; `BATTLE` is now `STAGE 1`).
 (v1.24, [FEATURES.md 3a](FEATURES.md#3a-battle-engine-and-practice-battle).) `BATTLE` or `BATTLE <dex>` over
 serial starts one; the log prints the matchup and the result.
 - [ ] PLAY opens the menu (ball | crossed swords); the ball starts the minigame as before, the swords a battle.
@@ -316,7 +318,7 @@ doesn't touch the record or give rewards.
 ### Games menu (v1.34)
 ([GAMEPLAY_TUNING.md, #4 GAMES](GAMEPLAY_TUNING.md#4-games-all-games-in-the-play-menu).)
 - [ ] PLAY opens a wider menu with three icons: ball | crossed swords | red bag. Each slot starts its game: the
-  ball game, a practice battle, the training bag (10 s of hits, then the result as before).
+  ball game, a practice battle (since v1.65 the stage list), the training bag (10 s of hits, then the result as before).
 - [ ] While the pet is evolving or can't battle, the swords slot still shakes PLAY with the deny sound; the
   ball and bag slots still work.
 - [ ] The stat card's Battle page shows only the four bars (ATK, DEF, SPD, WGT), spread over the page, with no
@@ -418,6 +420,8 @@ Backpack, at about 319 314.
 - [ ] A real walk: a find shows up as a gift (no popup), and opening it adds it to the Backpack.
 
 ### Battle loot (v1.56)
+**Superseded by v1.65:** wins no longer roll for loot (70 %, 5 a day). A stage boss gives one guaranteed item, once a
+day per stage: see [Stage rewards and badges (v1.65)](#stage-rewards-and-badges-v165). Kept as history.
 `BATTLE [dex]` starts a practice battle; the `battle:` line at the end prints the loot item (8 = none) and how
 many came today. Magikarp (`BATTLE 129`) is an easy win.
 - [ ] A win with loot: "A gift at home!" / "Regalo en casa!" with a gift box under the title; back home, a gift on
@@ -563,3 +567,119 @@ without moving anyone.
   exactly once, the egg either active or `eggHeld=1`.
 - [x] Taps that can't work: an empty slot with the egg active, or a damaged slot, shakes with the deny sound.
 - [x] Long names fit inside the slot and the dialogs: a 10-letter species (Charmander) and an 11-letter nickname.
+
+### Battle stages (v1.65)
+([README, Battles: stages](../README.md#battles-stages-v165).) Play opens the stage list; a stage opens the team
+picker; Start begins the run. English and Spanish only. **Back up the save first** (`esptool read_flash 0x9000
+0x5000`) if the board holds a real pet: a run pays its boss reward, and the tests below change growth, bond, gifts and
+badges. Serial helpers: `STAGE <1-8>` starts that stage even if locked (with the last team, or the home pet and the
+Box pets in slot order); `BADGES` prints `badges=<mask> hoy=<mask> equipo=<4 uids>`; `BADGES <0-255>` sets the
+badges (bit 0 = stage 1); `STAGEDAY` makes today's boss rewards available again; `BOXFILL` fills the empty Box
+slots with made-up pets (a boxed one is a fine ally); `STATS`; `NVS`; `TAP <x> <y>` taps the canvas and prints the
+battle phase (0 off, 1 intro, 2 fight, 3 result, 4 hand-over). The stage tiles are at x 151 / 315 and y 109 / 177 /
+245 / 313 (stage 1 is top left, stage 2 top right, and so on); Start is at 233 351. The log prints `stage N: team ...
+| rivales ...`, one line per KO and, at the end, `stage N: superada/perdida, insignia nueva, premio, objeto,
++felicidad`.
+
+**Over serial** (no finger needed):
+- [ ] `BADGES 0`, `STAGEDAY`, `BADGES` prints `badges=0 hoy=0`. `STAGE 1` with the home pet awake: the log lists the
+  team and 3 foes in the stage's range (Lv 15-20 for the two minions, the boss Ivysaur Lv 20); phase 1 (intro), then
+  2 (fight) after about 3 s. `STAGE 9` and `STAGE 0` print `stage: 1-8` and start nothing.
+- [ ] `STAGE 8` works with stage 8 locked (the serial command ignores locks): foes Lv 70-80, the boss Dragonite Lv
+  80. `STAGE 1` again while a run is open prints "stage: no puede ..." (nothing new starts).
+- [ ] `BATTLE` is the same as `STAGE 1`. `BATTLE 25` (a dex number) is not a command any more: no run starts.
+- [ ] With an egg or a sleeping pet at home and an empty Box, `STAGE 1` prints "stage: no puede ..." and
+  starts nothing. After `BOXFILL` it starts with the boxed pets.
+- [ ] The KO lines (`stage: aliado|rival #dex gana a #dex en N ataques (aliado i/n hp/max PS, rival f/3 hp/max PS)`)
+  show the carry-over: after an ally falls, the next KO line has the next ally index and the foe's HP as it was;
+  after a foe falls, the next line has the same ally index with the HP it had left (it never goes back up).
+- [ ] `TAP` during the intro (phase 1) and during a hand-over (phase 4) does not charge the meter; during the fight
+  (phase 2) it does (the arrows fill); after the result appears (phase 3) a `TAP` in the first 1.8 s
+  keeps it open and one after that closes it.
+- [ ] Unlock order: `BADGES 0` and stage 2's tile (`TAP 315 109`) shakes with the deny sound and opens nothing;
+  `BADGES 1` and the same tap opens the picker. `BADGES 3` unlocks stage 3, `BADGES 255` all 8.
+
+**With a finger on the screen** (EN, then repeat the key ones in ES):
+- [ ] Play menu → crossed swords: the stage list, 8 tiles in 2 columns, title "Stages" / "Fases". With `BADGES 0` only
+  stage 1 is open (white tile, "Lv.15-20" / "Nv.15-20"); the others are grey and say "Locked" / "Bloqueada". A tap on a
+  locked tile shakes it with the deny sound. Tap the title: back to home.
+- [ ] `BADGES 5` (stages 1 and 3 cleared): those tiles have a green border and their badge in colour; stage 2 and 4
+  are open; 5 to 8 are locked. After `STAGEDAY`, every open tile that hasn't been paid today has an amber dot and
+  "Reward ready" / "Premio disponible" shows in the legend below.
+- [ ] Open a stage: "Pick your team" / "Elige tu equipo" with "Stage N: <name>" under it, a card per pet (the
+  home pet and each pet in the Box: thumbnail, name, level). Tap one: a green number 1 appears; tap a second: 2; tap
+  the first again: it deselects and the second becomes 1. Pick 4, then try a fifth (needs `BOXFILL`, 5+ pets): it
+  shakes and nothing is added. Start with nobody picked is grey and shakes when tapped. The last team is picked
+  again when you come back to the picker.
+- [ ] With the home pet asleep and `BOXFILL` done: its card is greyed out and a tap shakes it; the boxed pets can
+  be picked.
+- [ ] Egg at home, a sleeping pet at home, or an empty home, with at least one pet in the Box: tapping Play opens the
+  stage list directly (no menu). With nobody in the Box and an egg, Play does nothing.
+- [ ] The stage battle: after the VS card ("Stage N - <name>", the first foe above, the first ally below, the team
+  pips at the bottom) and the walk-in, the ally's HP box has one pip per team pet and the foe's has "1/3" under it.
+  After the first foe falls, the caption "Next rival" shows while the new foe walks in and the tag reads "2/3"; the
+  boss has "BOSS" / "JEFE".
+- [ ] When an ally falls, its pip turns grey, the caption "Go, X!" / "Adelante, X!" shows and the next ally walks in
+  from its side while the foe keeps its HP (the bar doesn't refill). The same ally keeps its HP across a foe change.
+- [ ] Meter: the five arrows and the "Tap!" box as in v1.38; tapping during the intro or the hand-over does nothing;
+  a special on the first foe never comes from the foe; one comes now and then from the boss.
+- [ ] The result: "Stage clear!" / "Fase superada!" with the winner posing, or "Defeated..." / "Derrotado..." with
+  the foe posing. One tap closes it after 1.8 s ("tap: back" shows then); it closes by itself after 7 s.
+- [ ] Note how long a 1-pet run and a 4-pet run take (the old fight was 10-20 s): ____ / ____.
+- [ ] `HEALTH` before and after 10 stage runs: the minimum heap stays flat (the foes' sprites are freed each fight).
+
+### Stage rewards and badges (v1.65)
+Use `STATS` (the home pet's `grow=` and bond) and `BOX` (each boxed pet's `grow=` and `bond=`) before and after.
+`BADGES` shows the badge mask, which stages were paid today (`hoy=`, bit 0 = stage 1) and the team's uids.
+
+**Over serial:**
+- [ ] A cleared stage with the reward available (`STAGEDAY` first): the end line says `superada, insignia nueva 1,
+  premio 1 (N bichos)` and an item number below 8. Home pet `grow=` +60 and bond +5 (outside the daily bond cap:
+  also true after the day's cap is reached), and every boxed pet in the team the same (`BOX`), including one that
+  fainted during the run. A pet that wasn't in the team is unchanged.
+- [ ] The item is a gift: "A gift at home!" / "Regalo en casa!" on the result, a gift box on the floor at home
+  (a gift box on the floor), a tap opens it. With the home empty (a farewell, `BOXFILL` done), the item goes straight to the
+  Backpack with its notice.
+- [ ] Clearing the same stage again the same day: `insignia nueva 0, premio 0`, no growth, no bond, no gift, and
+  the amber dot is gone. A different stage the same day does pay. After `STAGEDAY`, the first stage pays again.
+- [ ] A restart after the payment: `BADGES` still shows the badge and `hoy=` with that stage's bit (it can't be paid
+  twice by restarting). A lost run: the line says `perdida`, `premio 0`, no badge, no growth; the line ends
+  `+3 felicidad` only if the home pet hasn't had the JOY from a run in the last hour (a restart forgets the hour).
+- [ ] The +3 JOY (home pet) comes at most once an hour, win or loss, and not with an egg or an empty home (a run
+  with only boxed pets).
+- [ ] A boxed pet that crosses its evolution level with the +60 minutes (put one just under, with `BOXFILL` and
+  `LVL` on it before storing it, or find one with `BOX`): after you wake it, the evolve choice appears.
+- [ ] A boss reward that takes the home pet over a level: the level-up celebration plays after the result (`FX
+  levelup` shows how it looks) and `STATS` shows the new level.
+- [ ] A run in which the home pet is the one that faints first still pays it (it was in the team).
+- [ ] Badges: `BADGES 0`, win stage 1: `badges=1`. Win stage 2 (`STAGE 2` and a win): `badges=3`. A second win of
+  stage 1 doesn't change the mask. `BADGES 255` then `BADGES 0` clears them.
+
+**With a finger on the screen:**
+- [ ] The Box's second page: swipe right from the Box's slots: "Badges 0/8" / "Insignias 0/8", 8 silhouettes with
+  "???", two page dots (the second filled). Swipe left: back to the slots (dots again, the first filled); another
+  swipe left leaves the Box. The USER key and the title also close the Box from either page.
+- [ ] `BADGES 5`: "Badges 2/8", stages 1 and 3 in colour with their names (EN: Grass, Rock; ES: Planta, Roca), the
+  rest silhouettes. `BADGES 255`: "Badges 8/8" and all eight named.
+- [ ] A swipe right on the Box page while a store / wake question is open does nothing (`boxAsk`).
+- [ ] Earning a new badge at the end of a run: the result shows the badge icon with "New badge!" / "Nueva
+  insignia!" first, then "Team: +1 h, +bond" / "Equipo: +1 h, +vínculo" and the gift pill; the Box's badges page
+  shows it afterwards. Clearing a stage you already hold doesn't show "New badge!".
+- [ ] The stat card's **Medals** page is the same as before (per pet: Lv10, Lv25 ...): it shows no badges.
+
+### Stage power paths and NVS (v1.65)
+- [ ] USER during the intro, the fight, the hand-over and the result: the run closes at once, the home screen returns with the
+  pet where it was, and no reward, no badge and no JOY (`BADGES` and `STATS` unchanged; the log has no `superada`
+  or `perdida` line).
+- [ ] PWR during a run (a short press) goes to the screensaver and the run is over: pressing PWR twice more returns
+  to home, not to the fight. Same with a long press (power off, then on): nothing was saved of the run.
+- [ ] USER in the team picker goes back to the stage list, and USER in the stage list goes home.
+- [ ] The dying dialog (`DIE`, or the 30 + 30 minute neglect) while a run is open: the run closes and the dialog
+  shows; no reward.
+- [ ] A restart in the middle of a run comes back to home with the badges, the paid-today mask and the last team
+  as they were before the run (`BADGES`).
+- [ ] `NVS` before the first run on a v1.64 save and after the first cleared stage (and after `BADGES 255` and a
+  stage 8 clear): the new keys `bdg`, `stD`, `stM` and `team` cost about 6 entries; note used / free before and
+  after in PENDING_TESTS: ____ / ____. A Box slot written by a reward keeps its `crc=ok` (`BOX`).
+- [ ] After a restart and `BOX` / `STATS`, every pet exactly once, the Backpack and the gifts as left, the last
+  team as `BADGES` printed it.

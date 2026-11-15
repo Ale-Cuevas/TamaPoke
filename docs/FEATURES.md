@@ -568,6 +568,9 @@ The task is big, so it ships in five parts, each its own PR:
   species of the same egg rarity as yours, at your level ±3, with average genes
   and your average training. Reward: joy +3, at most once an hour; it is not
   counted in your win/loss record.
+  *(2026-11-15: v1.65 replaced the practice battle with 8 battle stages and a
+  team of up to 4; the text above is the original spec, kept as history. See
+  [README, Battles: stages](../README.md#battles-stages-v165).)*
 
 **Engine** (`battle.h`, pure, deterministic for a given seed, xorshift32):
 - Battle stats from the pet's own formula (`atkStat()` & co.: Gen 1 base ×
@@ -622,7 +625,11 @@ The task is big, so it ships in five parts, each its own PR:
 - `powerCtx().gameOpen`-style 85 ms frames during the battle.
 
 **Built in v1.24** (`battle.h`, the type data in `tools/dex_data.py` /
-`dex.h`, the screen at the end of `TamaPoke.ino`). Decisions the spec left open:
+`dex.h`, the screen at the end of `TamaPoke.ino`). Decisions the spec left open
+(2026-11-15: since v1.65 the practice battle, its 15-attack cap and draws, the 70 %
+loot chance and `BATTLE <dex>` are gone, replaced by the battle stages in
+[README, Battles: stages](../README.md#battles-stages-v165); the engine in
+`battle.h` is still what the stages use, and these notes are kept as history):
 - **Where the practice battle lives.** The Friends screen comes with 3b, so
   until then PLAY opens a menu (ball game | battle) and the battle starts from
   there. That menu is 3b's generic menu (`menuKind` + `menuUntil`), and the
@@ -772,7 +779,8 @@ out of `Pet::save()`, which rewrites every key each time.
   PLAY can open "Ball game / Friends" the same way. This also fixes a quirk: a
   horizontal swipe can open the gallery on top of the food menu today.
 - Friends screen: a round "radar" with up to 4 nearby pets as bubbles (sprite
-  thumbnail, nickname, level), a searching animation, "Practice" when nobody
+  thumbnail, nickname, level; since v1.65 the "Practice" entry would be the stage list instead,
+  see 3a), a searching animation, "Practice" when nobody
   is near.
 - Invite dialog: the existing choice-dialog pattern, with a 10 s countdown.
 

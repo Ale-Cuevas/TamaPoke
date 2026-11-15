@@ -8,6 +8,61 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.65] - 2026-11-15
+
+### Added
+
+- **Battle stages.** The Play menu's battle button opens a list of **8 stages**, each with 3 enemies in a row (two
+  minions from a themed pool, then a fixed boss at the top level of the range):
+
+  | # | Stage | Minion level | Minion training (each stat) | Boss (level, training) |
+  |---|---|---|---|---|
+  | 1 | Grass | 15-20 | 20-35 | Ivysaur, Lv 20, 40 |
+  | 2 | Water | 25-30 | 30-40 | Wartortle, Lv 30, 50 |
+  | 3 | Rock / Ground | 35-40 | 50-55 | Golem, Lv 40, 60 |
+  | 4 | Fire | 40-45 | 60-65 | Arcanine, Lv 45, 65 |
+  | 5 | Electric | 50-55 | 60-65 | Electabuzz, Lv 55, 65 |
+  | 6 | Ghost / Psychic | 60-65 | 60-65 | Gengar, Lv 65, 70 |
+  | 7 | Poison / Bug | 65-70 | 60-65 | Nidoking, Lv 70, 70 |
+  | 8 | Dragon | 70-80 | 70-75 | Dragonite, Lv 80, 80 |
+
+  Stage 1 is open; clearing stage N opens N+1, and cleared stages can be replayed. A tile is grey and says
+  "Locked" (a tap shakes it with the deny sound), shows its level range when open, or has a green border and its
+  badge when cleared; an amber dot marks a stage whose reward is still available today.
+- **A team of 1 to 4 pets.** After the stage, a picker shows the home pet and every pet in the Box: tap to add
+  (a number shows the order), tap again to remove (the rest move up one), a fifth is refused with the deny sound,
+  a sleeping home pet is greyed out. The last team comes pre-selected. **Start** begins.
+- **The stage run.** The team fights in order and HP is **not** restored inside a stage: when an ally faints the
+  next one comes in against the same foe at its remaining HP, and when a foe faints the same ally carries on with
+  what it has left. Fights go to a knockout (no 15-attack cap, no draws). The stage is lost when all allies have
+  fainted. The ally's HP box has one pip per team member, the foe's has a "1/3", "2/3" or BOSS tag, and a caption
+  ("Next rival" / "Go, X!") shows while the next fighter walks in. Taps charge the special as before and only
+  count during the fight. The first foe never uses a special, the second uses it sparingly, the boss at the old
+  practice rate. USER, PWR or the dying dialog during a run forfeit it with no reward; nothing is saved mid-run.
+- **Boss reward, once per day per stage:** every pet of the team (boxed and fainted ones too) gets **+60 growth
+  minutes** and **+5 bond** (outside the daily bond cap), plus one item from the battle loot table, guaranteed,
+  as a wrapped gift (straight to the Backpack with the home empty). A boxed pet that passes its evolution level
+  evolves when it's woken.
+- **Badges.** The first clear of a stage earns its badge (ES: insignia), which is not the same as a pet's
+  Medals. The Box has a **second page** with the 8 badges (swipe right from the Box, swipe left to go back, page
+  dots): cleared ones in colour, the rest a grey silhouette and "???".
+- Any finished run, won or lost, gives the home pet +3 JOY, at most once an hour. With an egg, a sleeping pet or an
+  empty home, Play opens the stages directly if the Box has pets.
+- Save: `bdg` (badges), `stD` / `stM` (the day and the stages already paid that day), `team` (the last team).
+  About 6 NVS entries; no migration.
+- Serial: `STAGE <1-8>` starts that stage even if it's locked (with the last team, or the home pet and the Box
+  pets in slot order); `STAGEDAY` makes today's boss rewards available again; `BADGES [mask]` prints the badge
+  mask (and with a number, sets it).
+
+### Changed
+
+- `BATTLE` is now an alias of `STAGE 1`.
+
+### Removed
+
+- The practice battle: one random 1-vs-1 fight with a 15-attack cap and draws, its 70 % loot chance and its
+  limit of 5 a day. `BATTLE <dex>` no longer exists.
+
 ## [1.64] - 2026-11-15
 
 ### Changed
