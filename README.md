@@ -44,12 +44,16 @@ captures from the board and rendered on the PC; the on-board checks (step
 accuracy, battery drain, 400 kHz I2C) are listed in
 [docs/DEVICE_TESTS.md](docs/DEVICE_TESTS.md#steps).
 
-**v1.24: practice battles.** PLAY now opens a small menu: the ball game, or a
-**battle** against a simulated opponent of your rarity and level. Battles are
-automatic and use real Gen 1 base stats and types (Flying and dual types
-included); tapping the screen charges a special attack. Built, host-tested
-(every one of the 151×151 pairings at three levels) and rendered on the PC; the
-on-board checks are in [docs/DEVICE_TESTS.md](docs/DEVICE_TESTS.md#battle).
+**v1.65: battle stages.** The battle button of the Play menu (v1.24 had a single
+random practice fight) now opens **8 themed stages**, each with two minions and a
+boss, fought by a **team of up to 4 pets** (the home pet and/or pets from the Box)
+whose HP carries over from one fight to the next. Beating a boss pays once a day
+per stage (growth and bond for the whole team, plus a gift) and the first clear
+earns a **badge**, shown on a second page of the Box. Battles are automatic and
+use real Gen 1 base stats and types (Flying and dual types included); tapping the
+screen charges a special attack. See [Battles](#battles-stages-v165). Built,
+host-tested and rendered on the PC; the on-board checks are in
+[docs/DEVICE_TESTS.md](docs/DEVICE_TESTS.md#battle-stages-v165).
 
 **v1.41: after an ending, you choose when to hatch.** A release, farewell or runaway (a death since v1.60) leaves
 the home empty with a **Hatch an egg (N)** button; no egg comes home by itself. A farewell
@@ -79,14 +83,14 @@ on-board checks are in [docs/DEVICE_TESTS.md](docs/DEVICE_TESTS.md#box-v137).
 
 The game itself runs on the 1.75" hardware upstream. Implemented: the 151 +
 shinies animated from microSD, full life cycle (egg by rarity → evolution → farewell/release/death, each gated
-behind a decision dialog), bred-Pokédex with gallery, a 6-slot box to hibernate pets, battle stats (genes +
-training), retention hooks (streak / bond / medals / name), biome + real-time
+behind a decision dialog), bred-Pokédex with gallery, a 6-slot box to hibernate pets, 8 battle stages with
+a team of up to 4 and badges, battle stats (genes + training), retention hooks (streak / bond / medals / name), biome + real-time
 backgrounds, ball minigame, training bag, animated bath, RTC with offline
 progression, battery (AXP2101) and PWR button, AMOLED burn-in protection (pixel orbit + screensaver),
 **sound (ES8311)**, **8 UI languages (English default)**, **starter choice on
 first run**, and a one-click **web installer**.
 
-Pending: wild encounters / battle (designed, not implemented), 3D case, soak
+Pending: wild encounters / linked battles (designed, not implemented), 3D case, soak
 test. See **Roadmap**.
 
 ## Game manual (the actual numbers)
@@ -139,14 +143,14 @@ While **awake**, per minute:
   gold frame and a star (v1.57). Evolving can change the favourite: then it's a secret again and the
   status says "Its tastes changed!".
 - 🍰 **Cake** (v1.54, the food menu's 4th slot, replacing the candy): **limited**, found on walks
-  (and won in battles). It fills FOOD to 100 and **keeps it full for 3 hours** (the bar turns pink and
+  (and won from stage bosses). It fills FOOD to 100 and **keeps it full for 3 hours** (the bar turns pink and
   the status says "So full!"; games don't make it hungry either, and the time counts while the board
   is off), +12 JOY, but **+12 weight**. The slot shows how many you have; with none it's grey and a
   tap says where to find one.
 - ⚽ **Play:** a menu with all the games: the **ball minigame** (+JOY, −ENE; trains **SPEED** and
   burns weight; the ball keeps speeding up as you score: twice as fast at 80 as at 1, up to 3×),
-  a **practice battle** (+3 JOY, at most once an hour, and a win can bring an item home; see Battles
-  below), the training bag, the
+  the **battle stages** (+3 JOY for a finished run, at most once an hour; a boss reward can bring an
+  item home; see Battles below), the training bag, the
   sled run and the waterfall.
 - 🥊 **Training bag** (third slot of the Play menu): trains **STRENGTH** (~4 hits = 1 pt, cap
   +18/session), tires it.
@@ -246,6 +250,9 @@ egg: home stays empty".
 ### The Box (v1.37)
 Swipe **right** from the home screen (pet or egg) to open the Box: **6 slots** where pets
 **hibernate** while you raise another. Swipe left, tap the title or press USER to go back.
+Since v1.65 the Box has a **second page** with your 8 battle **badges**: swipe right from the slots to see
+it, swipe left to come back (see [Battles](#battles-stages-v165)). The pets in the Box can also fight in the
+battle stages as part of your team, and a boss reward gives them growth and bond right in their slot.
 - **Store:** tap an empty slot (it shows a "+" when the current pet fits) and confirm. The
   pet goes in, and an egg takes its place: the egg that was waiting, or one from the
   Backpack (v1.39). With neither, the dialog says "No egg: home stays empty" and the home
@@ -258,7 +265,7 @@ Swipe **right** from the home screen (pet or egg) to open the Box: **6 slots** w
   comes back after your next store or ending: storing and waking never re-roll an egg, or
   spend the Shiny Charm twice.
 - **Hibernation is total:** a stored pet doesn't age, grow, get hungry or slip up, not even
-  while the board is off. Farewell age and evolution levels only count time spent active.
+  while the board is off. Farewell age and evolution levels only count time spent active. The one exception is a battle stage's boss reward (+60 growth minutes, +5 bond).
 - Each pet keeps its own **bond**, daily bond cap and **medals**. Streak, steps, finds,
   goals, the Backpack, records and the Pokédex are yours and stay put; the first care of the
   day gives its +4 bond once a day, to whoever is active.
@@ -283,31 +290,65 @@ ATK / DEF / SPD = real **Gen-1 base** × genes + level + training (STRENGTH ← 
 SPEED ← minigame and sled run, DEFENSE ← waterfall and 12 h of unbroken good care; vitamins from walks add
 +3 each). They are what battles use, with the level capped at 100.
 
-### Battles (practice, v1.24)
+### Battles: stages (v1.65)
 
-![The VS card, a special attack landing, and a win](docs/images/battle-216.png)
+PLAY → the crossed swords opens the **stage list**: 8 tiles in a 2 × 4 grid, in order. Stage 1 is open;
+beating a stage's boss opens the next, and cleared stages can be replayed. A locked tile is grey and a tap
+shakes it with the deny sound; an open one shows its level range; a cleared one has a green border and its
+badge. An **amber dot** marks a stage whose boss reward is still available today. Tap the title to go back.
 
-PLAY → the crossed swords. A battle is **automatic**: the pets take turns
-attacking until one faints, in 10–20 s after a 3 s VS card and jingle.
-- **Your opponent** is simulated: a Pokémon line of the same egg rarity as
-  yours, at your level ±3 (evolved as far as that level allows), with average
-  genes and your average training.
-- **Who wins:** real **Gen 1 base stats** × genes + level + training, and the
-  **Gen 1 type chart** (15 types, dual types multiply, e.g. Electric is ×4 on
-  Gyarados and does nothing to Diglett). The faster pet attacks first each
-  round; 1 hit in 16 is a critical (×1.5).
-- Every hit takes **5–25 %** of the target's max HP, so a battle is never over
-  in fewer than 7 attacks, and after **15 attacks** the pet with more HP left
-  wins (an exact tie is a draw).
-- **Your one input: tap the screen.** 5 taps fill the meter of five arrows
-  (`> > > > >`, with a "Tap!" box next to it while a tap counts; v1.38), and
-  your next attack is a **special** (+30 % power, up to 30 %, with a flash and
-  a shake). After a special the meter rests for 2 normal attacks. The opponent
-  charges its own.
-- **Reward:** +3 JOY whether you win or lose, at most once an hour. Practice
-  isn't counted in any win/loss record.
-- **Loot (v1.56):** a **win** has a **70 %** chance of an item, at most **5 a day**. It waits at
-  home as a gift ("A gift at home!" under the title); open it to see what it is.
+| # | Stage | Minions (level) | Minion training | Boss (level, training) |
+|---|---|---|---|---|
+| 1 | Grass | 15–20 | 20–35 | Ivysaur, 20, 40 |
+| 2 | Water | 25–30 | 30–40 | Wartortle, 30, 50 |
+| 3 | Rock / Ground | 35–40 | 50–55 | Golem, 40, 60 |
+| 4 | Fire | 40–45 | 60–65 | Arcanine, 45, 65 |
+| 5 | Electric | 50–55 | 60–65 | Electabuzz, 55, 65 |
+| 6 | Ghost / Psychic | 60–65 | 60–65 | Gengar, 65, 70 |
+| 7 | Poison / Bug | 65–70 | 60–65 | Nidoking, 70, 70 |
+| 8 | Dragon | 70–80 | 70–75 | Dragonite, 80, 80 |
+
+Each stage is **3 enemies in a row**: two minions of different species from the stage's theme (each at a random
+level in the range and with its own random training per stat), then the fixed boss at the top level. Foes have
+average genes (100) and are never shiny. Training is the same 0–100 scale as yours (ATK, DEF and SPD each).
+
+**The team.** After you pick a stage, a picker shows the **home pet and every pet in the Box**. Tap a pet to add
+it (a number shows its place in the order), tap it again to remove it (the ones behind move up). You can take
+1 to 4; a fifth, or a pet that can't fight (the home pet asleep), shakes with the deny sound. The last team is
+pre-selected. **Start** begins; tap the title to go back to the list.
+
+**The fight.** It is **automatic**, as before: the pets take turns attacking until one faints. What changes:
+- **HP is not restored inside a stage.** When an ally faints, the next one in your order comes in against the
+  *same* foe, at the foe's remaining HP. When a foe faints, the *same* ally carries on against the next foe with
+  what it has left. The stage is **lost** when all your pets have fainted and **cleared** when the boss does.
+- Fights go to a **knockout**: no 15-attack cap and no draws. Every hit still takes **5–25 %** of the target's
+  max HP, so one fight is never over in fewer than 7 attacks.
+- **Who wins** is as in any battle: real **Gen 1 base stats** × genes + level + training, and the **Gen 1
+  type chart** (15 types, dual types multiply, e.g. Electric is ×4 on Gyarados and does nothing to Diglett). The
+  faster pet attacks first each round; 1 hit in 16 is a critical (×1.5).
+- On screen: one pip per team pet in your HP box (grey once fainted), the foe's HP box has "1/3", "2/3" or
+  **BOSS** under it, and a caption ("Next rival" / "Go, X!") shows while the next fighter walks in.
+- **Your one input: tap the screen.** 5 taps fill the meter of five arrows (`> > > > >`, with a "Tap!" box next
+  to it while a tap counts) and your next attack is a **special** (+30 % power, up to 30 %, with a flash and a
+  shake). After a special the meter rests for 2 normal attacks, and a new ally starts with an empty meter. Taps
+  count only during the fight itself, not on the VS card or between fighters. The **first foe never uses a
+  special**, the second uses it **sparingly**, the boss at the rate of the old practice opponent (about one
+  attack in three).
+- The USER key, PWR (to the screensaver or off) or the dying dialog **quits with no reward**: nothing is saved
+  mid-run, so the stage just ends. The result ignores taps for its first 1.8 s so the taps that charged the
+  special don't close it unseen, and closes by itself after 7 s.
+
+**Rewards.**
+- **Boss reward, once per day per stage:** beating the boss gives **every pet of the team** (including the ones
+  in the Box and the ones that fainted) **+60 growth minutes** and **+5 bond** (outside the daily bond cap), and
+  **one item from the loot table below, guaranteed**. The item arrives as a wrapped gift ("A gift at home!"
+  under the title; open it to see what it is), or straight into the Backpack when the home is empty. Clearing
+  the same stage again the same day pays nothing more; the amber dot goes away. A boxed pet that passes its
+  evolution level this way evolves once it's woken; the home pet's level-ups celebrate as usual.
+- **Badge:** the **first clear** of a stage earns its badge (ES: insignia), for good. It's the player's, not a
+  pet's: it is a different thing from the per-pet **Medals** of the stat card.
+- **Joy:** a finished run, won or lost, gives the home pet **+3 JOY**, at most once an hour.
+- Stage battles aren't counted in any win/loss record.
 
   | Loot | Odds |
   |---|---|
@@ -317,10 +358,13 @@ attacking until one faints, in 10–20 s after a 3 s VS card and jingle.
   | Rare Candy | 7 % |
   | Revive (v1.59) | 5 % |
   | Shiny Charm | 4 % (a cake if you already hold one) |
-  | Egg | 3 %, the rarest | The USER key, or PWR (to the screensaver
-  or off), quits with no reward. The result ignores taps for its first 1.8 s
-  (v1.38), so the taps that charged the special don't close it unseen.
-- Battles between two boards over the air are next (see the roadmap).
+  | Egg | 3 %, the rarest |
+
+**Badges page.** The Box has two pages (page dots at the bottom): swipe **right** from the Box's slots for the
+badges page, swipe **left** to go back (and once more to leave the Box). It shows "Badges n/8" and the 8 badges:
+the ones you've earned in colour with the stage's name, the rest as a grey silhouette with "???".
+
+Battles between two boards over the air are next (see the roadmap).
 
 ### Steps, finds & the Backpack (v1.20)
 
@@ -536,8 +580,9 @@ If one bottoms out it counts as a *slip-up*.
 **Buttons (bottom arc, icons):**
 - 🍎 **Feed** → food menu: 3 berries (each species has a hidden favourite that
   gives a bonus) and the cake (limited: full for 3 h, but it fattens; weight makes it sluggish).
-- ⚽ **Play** → a menu with every game: the pokeball minigame (trains SPEED), a practice
-  battle (crossed swords) or the training bag (red bag, trains STRENGTH).
+- ⚽ **Play** → a menu with every game: the pokeball minigame (trains SPEED), the battle
+  stages (crossed swords) or the training bag (red bag, trains STRENGTH). With an egg, a sleeping pet
+  or an empty home, Play opens the stage list directly when the Box has pets.
 - 💗 **Care** (v1.53) → a menu with two choices:
   - 🌙 **Sleep** / ☀️ **wake** (recovers energy, the scene goes dark). While asleep, needs decay
     much slower (rest); at night even slower, and it wakes up by itself at 08:00 (v1.63). The screen stays as bright as when it's awake. Asleep, Care is the button
@@ -702,7 +747,8 @@ back), and `PERF` prints how long the background takes to draw.
 - `board_amoled_216.h` — every pin and I2C address of the board, with sources
 - `rtcbat.h` / `rtcbat.cpp` — PCF85063 RTC + AXP2101 PMU (battery, brightness, PWR button)
 - `imu.h` / `imu.cpp` — QMI8658 accelerometer: configuration and its own chunked FIFO reader
-- `battle.h` — the battle engine: Gen 1 type chart, damage, special meter, the practice opponent
+- `battle.h` — the battle engine: Gen 1 type chart, damage, special meter (pure code, tested on the PC)
+- `stage.h` — the 8 battle stages: the table of foes and the run (team, HP carried over, rewards' rules)
   (pure code, tested on the PC)
 - `steps.h` / `motion.h` — the software step counter and the shake / face-down / tilt detectors
   (pure code, tested on the PC against captures from the board in `test/data/imu/`)
@@ -771,8 +817,10 @@ already spent dying, 60 = too late for a Revive) · `NIGHT` (the night routine's
 `LS` / `PUT` (SD files) · `STEPS <n>` (add n steps through the IMU's path) ·
 `IMU` (FIFO reads, samples/s, acceleration, tilt) · `IMULOG <s>` (stream samples
 as CSV, the `test/data/imu/` format; any key stops it) · `SHAKE` /
-`FACEDOWN` / `FACEDOWN 0` (inject the motion events) · `BATTLE` / `BATTLE <dex>`
-(a practice battle, against a random or the given species; the result is logged) ·
+`FACEDOWN` / `FACEDOWN 0` (inject the motion events) · `STAGE <1-8>` (start that battle stage, even if
+it's locked, with the last team, or the home pet and the Box pets in slot order; the result is logged;
+`BATTLE` is the same as `STAGE 1`) · `STAGEDAY` (today's boss rewards available again) ·
+`BADGES [mask]` (the badge mask, today's paid stages and the last team; with a number 0–255, set the badges) ·
 `BALL <score>` (open the ball game at that score to feel its speed: 1× at 1, 2× at 80;
 the result doesn't touch the record or the save) · `FX <effect>` (show a feedback effect without touching the save: `levelup`, `levelup6`,
 `medal`, `streak`, `goal`, `goal3`, `stat`, `bond`, `train`, `deny`, `press`, `oops`,
@@ -799,7 +847,7 @@ Specified in [docs/FEATURES.md](docs/FEATURES.md), each one its own task:
   tilt & slide.
 - ~~**Practice battle**~~ — done in v1.24: the battle engine (Gen 1 types and
   stats, tap-charged special, PMD Attack/Hurt animations) against a simulated
-  opponent on one board.
+  opponent on one board. Replaced in v1.65 by the 8 battle stages with a team.
 - ~~**Feedback effects**~~ — done in v1.30: level-up animation and jingle, one
   celebration at a time, sliding bars with "+N", button, hatch and slip-up effects.
   Specified in [docs/NEXT_FEATURES.md](docs/NEXT_FEATURES.md), with two more tasks:
