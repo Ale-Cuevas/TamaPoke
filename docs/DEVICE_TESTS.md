@@ -335,6 +335,20 @@ Backpack at 326 390; the Care menu's slots are at about 200 320 (sleep / wake) a
   grey bath; the sun wakes the pet, the bath shakes Care.
 - [ ] The menu closes after 6 s, on a tap outside it, and with USER.
 
+### Night routine (v1.63)
+Back up the NVS first ([nvs backup](#save-time-sound-sd)). `TIME <epoch>` sets the clock (local time as epoch:
+`date -u -d '2026-11-15 22:59:30' +%s`); `NIGHT` prints `hour sleepy sleep nslp nawake bedn night bond`.
+- [ ] `TIME` 21:59:30, wait a minute: at 22:00 the thought bubble with "zzz" (beside the head, on the side with
+  room) and "Getting sleepy..." / "Tiene sueño...". `NIGHT` `sleepy=1`.
+- [ ] Moon at 22:30: the "+3" bond heart, `NIGHT` `bond` +3 and `nslp=1`. Sun, moon again: no more bond.
+- [ ] Awake at 22:59:30: at 23:00 it goes to bed by itself, no heart. With a game open at 23:00 it waits, and
+  goes to bed right after the game closes.
+- [ ] Sun at 23:10: `nawake` counts up, and after 30 min it's asleep again.
+- [ ] Asleep, `TIME` 07:59:30: at 08:00 it wakes up and the morning tune plays, also with the screen dark
+  (PWR). Volume off: silent.
+- [ ] Power off at about 22:50 with the pet awake, on again after 08:00 (`RTCSET` to fake it): awake, ENE high,
+  FOOD and JOY at 50 or a bit less.
+
 ### Neglect and death (v1.60)
 Back up the NVS first ([nvs backup](#save-time-sound-sd)). `ABANDON` sets the four needs to 0; `NEGLECT <min>`
 fast-forwards (29 = the bond almost gone, 59 = one minute from dying); `DIE` jumps to the dialog; `STATS` prints

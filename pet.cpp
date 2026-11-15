@@ -51,6 +51,7 @@ void Pet::resetHome() {
   careMistakes = 0;
   mistakeCooldown = 0;
   sleeping = false;
+  wokeUp();
 }
 
 void Pet::newEgg(bool saveNow, int16_t heir) {
@@ -205,13 +206,12 @@ void Pet::syncClock(uint32_t nowEpoch) {
       continue;
     }
     growMin++;  // crece igual apagado que en vivo, dormido o despierto
+    // la noche (v1.63) tambien pasa apagada: a las BED_HOUR se duerme y a las WAKE_HOUR se despierta
+    // (sin sonido: no hay nadie mirando). La hora de este minuto sale de la ultima vista
+    int h = hourAt(seen + (i + 1) * 60);
+    nightMinute(h, false);
     if (sleeping) {  // descanso: baja lento y con suelo, igual que en vivo
-      energy = clamp100(energy + 6);
-      if (ageMinutes % 2 == 0) {
-        if (!full) fullness = dropTo(fullness, 1, 30);
-        joy = dropTo(joy, 1, 35);
-      }
-      if (ageMinutes % 3 == 0) hygiene = dropTo(hygiene, 1, 45);
+      sleepMinute(full, h);
       continue;
     }
     if (!full) fullness = dropTo(fullness, 2, 15);
@@ -257,19 +257,16 @@ void Pet::tick() {
     return;
   }
   growMin++;  // el nivel sale de aqui (growth.h), despierto o dormido
+  int h = localHour();
+  nightMinute(h, true);  // la noche (v1.63): se duerme o se despierta solo
 
   // el sueño es descanso: la energia se recupera y las necesidades bajan MUCHO
   // mas lento que despierto y con suelo (amanece pidiendo algo de mimo, no a
   // cero, sin descuidos ni escapadas). despierto: comida -2/min, hig/joy -1/min.
   // El peso aun se quema; la racha de buen cuidado (goodTicks) queda en pausa.
   if (sleeping) {
-    energy = clamp100(energy + 6);
+    sleepMinute(full, h);
     if (weight > 0 && ageMinutes % WEIGHT_BURN_SLEEP_MIN == 0) weight--;
-    if (ageMinutes % 2 == 0) {                 // ~4x mas lento que despierto
-      if (!full) fullness = dropTo(fullness, 1, 30);
-      joy = dropTo(joy, 1, 35);
-    }
-    if (ageMinutes % 3 == 0) hygiene = dropTo(hygiene, 1, 45);
     checkMedals();  // aun puede cruzar un nivel por edad mientras duerme
     if (++ticksSinceSave >= 5) pendingSave = true;
     return;
@@ -533,6 +530,7 @@ void Pet::startDying() {
   if (isEgg() || busyEnding() || starterPick) return;
   dying = true;
   sleeping = false;
+  wokeUp();
   neglectMin = deathMin = 0;
   deathEgg = 0;
   if (level() >= DEATH_EGG_LEVEL && random(100) < DEATH_EGG_ODDS) {
@@ -785,8 +783,81 @@ void Pet::play() {
 void Pet::toggleLight() {
   if (busyEnding()) return;
   if (isEgg()) return;
-  sleeping = !sleeping;
+  if (sleeping) {
+    sleeping = false;
+    wokeUp();
+  } else {
+    goToBed();
+  }
   save();
+}
+
+// --- la noche (v1.63)
+// un minuto dormido: la energia vuelve y las necesidades bajan lento y con suelo. De dia (una
+// siesta) ~4x mas lento que despierto; de noche la mitad aun, con suelos mas altos
+void Pet::sleepMinute(bool full, int h) {
+  energy = clamp100(energy + 6);
+  if (nightHour(h)) {
+    if (ageMinutes % 4 == 0) {
+      if (!full) fullness = dropTo(fullness, 1, NIGHT_FOOD_FLOOR);
+      joy = dropTo(joy, 1, NIGHT_JOY_FLOOR);
+    }
+    if (ageMinutes % 6 == 0) hygiene = dropTo(hygiene, 1, NIGHT_HYG_FLOOR);
+    return;
+  }
+  if (ageMinutes % 2 == 0) {
+    if (!full) fullness = dropTo(fullness, 1, 30);
+    joy = dropTo(joy, 1, 35);
+  }
+  if (ageMinutes % 3 == 0) hygiene = dropTo(hygiene, 1, 45);
+}
+
+// acostarlo a mano (la luz o boca abajo). Desde EVENING_HOUR es dormir de noche: se despertara solo
+// a las WAKE_HOUR. Con sueño (desde SLEEPY_HOUR), la primera vez de esa noche da BED_BOND de vinculo
+void Pet::goToBed() {
+  sleeping = true;
+  nightAwakeMin = 0;
+  int h = localHour();
+  nightSleep = h >= EVENING_HOUR || (h >= 0 && h < WAKE_HOUR);
+  uint32_t n = nightId(lastSeenEpoch);
+  if (nightHour(h) && n && bedNight != n) {
+    bedNight = n;
+    bond = clamp100(bond + BED_BOND);  // fuera del tope diario de addBond, como BOND_CARE_DAY
+  }
+}
+
+// un minuto de la noche, en vivo (tick) o apagado (syncClock, live = false). h = -1 sin reloj
+void Pet::nightMinute(int h, bool live) {
+  int prev = lastTickHour;
+  lastTickHour = (int8_t)h;
+  if (h < 0 || isEgg() || busyEnding() || starterPick) {
+    nightAwakeMin = 0;
+    return;
+  }
+  if (sleeping) {
+    nightAwakeMin = 0;
+    if (bedHour(h)) nightSleep = true;  // una siesta que llega a la noche tambien amanece a las 8
+    if (nightSleep && !nightHour(h)) {  // por la mañana: se despierta solo (una siesta de tarde no)
+      sleeping = false;
+      nightSleep = false;
+      if (live) morningWake = true;
+      pendingSave = true;
+    }
+    return;
+  }
+  if (!bedHour(h)) {
+    nightAwakeMin = 0;
+    return;
+  }
+  // al llegar las BED_HOUR (o al encender la placa en esa hora), ya; despertado de noche, a los
+  // NIGHT_RESLEEP_MIN minutos despierto. Con un juego abierto (nightHold) espera a que acabe
+  if (h == BED_HOUR && prev != BED_HOUR) nightAwakeMin = NIGHT_RESLEEP_MIN;
+  else if (nightAwakeMin < NIGHT_RESLEEP_MIN) nightAwakeMin++;
+  if (nightHold || nightAwakeMin < NIGHT_RESLEEP_MIN) return;
+  sleeping = true;
+  nightSleep = true;
+  nightAwakeMin = 0;
+  pendingSave = true;  // sin vinculo: no lo acostaste tu
 }
 
 uint8_t Pet::poopSlots() const {
@@ -1133,6 +1204,7 @@ bool Pet::useItem(uint8_t it) {
 void Pet::wakeGrumpy() {
   if (isEgg() || !sleeping || busyEnding()) return;
   sleeping = false;
+  wokeUp();
   uint32_t now = millis();
   if (!grumpied || now - lastGrumpy >= GRUMPY_COOLDOWN_MS) {
     joy = clamp100(joy - GRUMPY_JOY);
@@ -1218,7 +1290,7 @@ uint8_t Pet::practiceDone() {
 // boca abajo de noche: a dormir, como el boton de luz pero sin escribir ya en flash
 void Pet::sleepDeferred() {
   if (busyEnding() || isEgg() || sleeping) return;
-  sleeping = true;
+  goToBed();
   pendingSave = true;
 }
 
@@ -1257,6 +1329,8 @@ void Pet::save() {
   prefs.putUChar("crack", eggTaps);
   prefs.putUChar("mist", careMistakes);
   prefs.putBool("sleep", sleeping);
+  prefs.putBool("nslp", nightSleep);  // la noche (v1.63)
+  prefs.putUInt("bedn", bedNight);
   prefs.putUChar("lend", lastEnd);
   // abandono (v1.60): la cuenta y el dialogo de la muerte sobreviven a un reinicio
   prefs.putUChar("ngl", neglectMin);
@@ -1357,6 +1431,8 @@ void Pet::load() {
   eggTaps = prefs.getUChar("crack", 0);
   careMistakes = prefs.getUChar("mist", 0);
   sleeping = prefs.getBool("sleep", false);
+  nightSleep = sleeping && prefs.getBool("nslp", false);
+  bedNight = prefs.getUInt("bedn", 0);
   lastEnd = prefs.getUChar("lend", CER_NONE);
   neglectMin = prefs.getUChar("ngl", 0);
   deathMin = prefs.getUChar("dth", 0);
@@ -1582,6 +1658,8 @@ void Pet::fromRecord(const PetRecord &r) {
   shiny = (r.flags & REC_SHINY) != 0;
   berryKnown = (r.flags & REC_BERRY) != 0;
   sleeping = (r.flags & REC_SLEEP) != 0;
+  nightSleep = sleeping;  // dormido en la caja: se despierta solo por la mañana (v1.63)
+  nightAwakeMin = 0;
   memcpy(nick, r.nick, sizeof(nick));
   nick[sizeof(nick) - 1] = 0;
   ageMinutes = r.ageMinutes;

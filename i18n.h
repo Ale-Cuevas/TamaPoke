@@ -100,6 +100,8 @@ enum StrId : uint8_t {
   // v1.60: muerte por abandono: estado sin vinculo, el dialogo (con o sin Revivir), el huevo que deja
   // y el estado al revivir
   S_WEAK, S_DYING_FMT, S_USE_REVIVE_FMT, S_NO_REVIVES, S_OK, S_DIED_EGG, S_REVIVED,
+  // v1.63: la noche, tiene sueño (desde las 22)
+  S_SLEEPY,
   STR_COUNT
 };
 

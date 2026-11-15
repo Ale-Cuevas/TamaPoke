@@ -362,6 +362,10 @@ static const std::vector<Scene> &scenes() {
     { "abandoned", [] { pokemon(4, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.bond = 60; } },
     { "abandoned-es", [] { pokemon(4, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.bond = 60;
                            setLang(LANG_ES); applyLangFont(); } },
+    // la noche (v1.63): con sueño desde las 22, el globo con "zzz" (a la izquierda si anda por la derecha)
+    { "sleepy", [] { pokemon(25, 22); } },
+    { "sleepy-es", [] { pokemon(25, 22); setLang(LANG_ES); applyLangFont(); } },
+    { "sleepy-right", [] { pokemon(7, 22); beh.x = beh.targetX = 330; } },
     { "weak", [] { pokemon(4, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.bond = 0; } },
     { "dying-revive", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.dbgSetPoops(2);
                            pet.items[IT_REVIVE] = 3; pet.startDying(); }, 2 },

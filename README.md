@@ -162,6 +162,13 @@ While **awake**, per minute:
 - 👆 **Pet it:** +5 JOY + bond.
 - 🌙 **Sleep:** rest — ENE **+6/min**, needs drain ~**4× slower** with floors
   (FOOD 30 / JOY 35 / HYG 45). No poops, no slip-ups, and neglect doesn't count while asleep.
+- 🌃 **Night (v1.63, needs the clock):** from **22:00** the pet is sleepy (a thought bubble with "zzz",
+  "Getting sleepy..."). Putting it to bed while it's sleepy gives **+3 bond**, once a night. At **23:00** it
+  goes to bed by itself (no bond); woken before 08:00, it falls asleep again after 30 minutes awake. Asleep
+  between 22:00 and 08:00 the needs drain half as fast as in a nap, with higher floors (FOOD 50 / JOY 50 /
+  HYG 55): a pet put to bed well cared for wakes up with every bar at 50 or more. At **08:00** it wakes up by
+  itself with a short tune (also with the screen dark). A nap in the afternoon isn't woken, unless it lasts
+  into the night. All of this also happens with the board off.
 - **Feedback (v1.30):**
   - the bars slide, and every action floats a "+N" over what it changed;
   - bond rising shows a small heart;
@@ -531,7 +538,7 @@ If one bottoms out it counts as a *slip-up*.
   battle (crossed swords) or the training bag (red bag, trains STRENGTH).
 - 💗 **Care** (v1.53) → a menu with two choices:
   - 🌙 **Sleep** / ☀️ **wake** (recovers energy, the scene goes dark). While asleep, needs decay
-    much slower (rest). The screen stays as bright as when it's awake. Asleep, Care is the button
+    much slower (rest); at night even slower, and it wakes up by itself at 08:00 (v1.63). The screen stays as bright as when it's awake. Asleep, Care is the button
     that still works, and its menu shows the sun.
   - 🫧 **Bath**: a foam scene that cleans up the poops (greyed while asleep).
 
