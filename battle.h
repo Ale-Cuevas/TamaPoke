@@ -21,9 +21,9 @@
 #define SPECIAL_POWER_PCT 130  // el especial: +30 %
 #define SPECIAL_TAPS 5         // toques para cargarlo
 #define SPECIAL_COOLDOWN 2     // ataques normales propios antes de volver a cargar
-#define HIT_MIN_PCT 5          // cada golpe, entre el 5 y el 25 % de la vida maxima del rival...
-#define HIT_MAX_PCT 25
-#define SPECIAL_MAX_PCT 30     // ...o el 30 % si es especial: un KO pide al menos 4 golpes
+#define HIT_MIN_PCT 2          // cada golpe, entre el 2 y el 60 % de la vida maxima del rival...
+#define HIT_MAX_PCT 60
+#define SPECIAL_MAX_PCT 70     // ...o el 70 % si es especial: un KO pide al menos 2 golpes
 #define CRIT_ONE_IN 16         // golpe critico (x1,5)
 #define MAX_ATTACKS 15         // tope: luego gana quien conserve mas % de vida
 #define ATTACK_MS 1300         // tiempo por ataque en pantalla
@@ -84,6 +84,17 @@ struct Fighter {
   uint16_t maxHp = 1, hp = 1, atk = 1, def = 1, spe = 1;
   uint8_t type1 = TY_NORMAL, type2 = TY_NONE;
 };
+
+// el mejor de los dos tipos del atacante contra el defensor, en cuartos: cada
+// ataque usa el tipo que mas pega (con empate, da igual cual: solo cuenta el numero)
+static inline uint8_t bestEff4(const Fighter &a, const Fighter &d) {
+  uint8_t e = typeEff4(a.type1, d.type1, d.type2);
+  if (a.type2 != TY_NONE) {
+    uint8_t e2 = typeEff4(a.type2, d.type1, d.type2);
+    if (e2 > e) e = e2;
+  }
+  return e;
+}
 
 // las stats de combate de la ficha (base real de gen 1 x genes + nivel +
 // entrenamiento, como Pet::atkStat) con el nivel topado; vida = base + nivel + 10
@@ -164,13 +175,13 @@ struct Battle {
   // con 0 es un fallo de quien llama y entra con 1), no hay tope de ataques y
   // siempre acaba en KO, nunca en BR_DRAW. Si ninguno de los dos puede tocar al
   // otro (normal contra fantasma), los golpes salen x0,25 en vez de 0: el suelo
-  // del HIT_MIN_PCT asegura el KO en unos 40 ataques como mucho.
+  // del HIT_MIN_PCT asegura el KO en unos 50 ataques como mucho.
   void beginCarry(const Fighter &a, const Fighter &b, uint32_t seed) {
     begin(a, b, seed);  // la misma secuencia de azar que begin para la misma semilla
     carry = true;
     f[0].hp = carryHp(a);
     f[1].hp = carryHp(b);
-    stale = typeEff4(f[0].type1, f[1].type1, f[1].type2) == 0 && typeEff4(f[1].type1, f[0].type1, f[0].type2) == 0;
+    stale = bestEff4(f[0], f[1]) == 0 && bestEff4(f[1], f[0]) == 0;
   }
 
   bool over() const { return result != BR_NONE; }
@@ -191,7 +202,7 @@ struct Battle {
     ev.index = attacks;
     ev.attacker = a;
     ev.special = special;
-    ev.eff4 = stale ? 1 : typeEff4(f[a].type1, f[d].type1, f[d].type2);
+    ev.eff4 = stale ? 1 : bestEff4(f[a], f[d]);
     ev.crit = (battleRand(rng) % CRIT_ONE_IN) == 0;  // las dos tiradas siempre, para que la
     uint8_t roll = 85 + battleRand(rng) % 16;        // secuencia no dependa del resultado
     uint16_t dmg = hitDamage(f[a], f[d], ev.eff4, special, ev.crit, roll);

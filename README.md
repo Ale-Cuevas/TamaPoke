@@ -321,15 +321,15 @@ pre-selected. **Start** begins; tap the title to go back to the list.
 - **HP is not restored inside a stage.** When an ally faints, the next one in your order comes in against the
   *same* foe, at the foe's remaining HP. When a foe faints, the *same* ally carries on against the next foe with
   what it has left. The stage is **lost** when all your pets have fainted and **cleared** when the boss does.
-- Fights go to a **knockout**: no 15-attack cap and no draws. Every hit still takes **5–25 %** of the target's
-  max HP, so one fight is never over in fewer than 7 attacks.
+- Fights go to a **knockout**: no 15-attack cap and no draws. Every hit takes **2–60 %** of the target's
+  max HP (70 % for a special), so one fight is never over in fewer than 3 attacks.
 - **Who wins** is as in any battle: real **Gen 1 base stats** × genes + level + training, and the **Gen 1
-  type chart** (15 types, dual types multiply, e.g. Electric is ×4 on Gyarados and does nothing to Diglett). The
+  type chart** (15 types, dual types multiply, and each attack uses the attacker's stronger type, e.g. Electric is ×4 on Gyarados and does nothing to Diglett). The
   faster pet attacks first each round; 1 hit in 16 is a critical (×1.5).
 - On screen: one pip per team pet in your HP box (grey once fainted), the foe's HP box has "1/3", "2/3" or
   **BOSS** under it, and a caption ("Next rival" / "Go, X!") shows while the next fighter walks in.
 - **Your one input: tap the screen.** 5 taps fill the meter of five arrows (`> > > > >`, with a "Tap!" box next
-  to it while a tap counts) and your next attack is a **special** (+30 % power, up to 30 %, with a flash and a
+  to it while a tap counts) and your next attack is a **special** (+30 % power, up to 70 %, with a flash and a
   shake). After a special the meter rests for 2 normal attacks, and a new ally starts with an empty meter. Taps
   count only during the fight itself, not on the VS card or between fighters. The **first foe never uses a
   special**, the second uses it **sparingly**, the boss at the rate of the old practice opponent (about one

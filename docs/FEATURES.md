@@ -581,12 +581,13 @@ The task is big, so it ships in five parts, each its own PR:
   SPD): `((2L/5 + 2) × P × A / D) / 50 + 2`, with L the clamped level, P = 40
   (52 for a special), then × type effectiveness, × a roll of 85-100 %, × 1.5 on
   a critical (1 in 16).
-- Type effectiveness: the attacker's primary type against the defender's one
-  or two types, from the 15-type Gen 1 chart (×0, ×0.5, ×1, ×2, multiplied for
-  dual types).
-- **Length guarantee:** each hit is clamped to 5-25 % of the defender's max HP
-  (30 % for a special). A KO therefore takes at least 4 hits, so a battle is at
-  least 7 attacks. At 1.3 s per attack that is about 10 s with the faint
+- Type effectiveness: each attack uses whichever of the attacker's one or two
+  types does more against the defender's one or two types (`bestEff4`), from the
+  15-type Gen 1 chart (×0, ×0.5, ×1, ×2, multiplied for dual types). A dual-type
+  attacker is never held back by a weak or immune first type.
+- **Length guarantee:** each hit is clamped to 2-60 % of the defender's max HP
+  (70 % for a special; v1.66, it was 5-25 % and 30 %). A KO therefore takes at
+  least 2 hits, so a battle is at least 3 attacks. At 1.3 s per attack that is about 10 s with the faint
   animation. A hard cap of 15 attacks (about 19.5 s) ends it; then the pet with
   the higher remaining HP % wins, and an exact tie is a draw.
 - Turn order: higher SPD attacks first each round; a tie is a seeded coin
@@ -635,10 +636,11 @@ loot chance and `BATTLE <dex>` are gone, replaced by the battle stages in
   there. That menu is 3b's generic menu (`menuKind` + `menuUntil`), and the
   swipe-over-the-food-menu quirk is fixed with it. When Friends lands, the
   battle entry becomes Friends, with "Practice" inside it.
-- **No effect is 0 damage.** The 5 % floor applies to hits that land; an immune
-  target takes nothing ("No effect..."). Two pets immune to each other (Rattata
-  and Gastly) draw at the 15-attack cap. The length guarantee still holds: the
-  pet that faints always takes at least 4 hits.
+- **No effect is 0 damage.** The 2 % floor applies to hits that land; an immune
+  target takes nothing ("No effect..."). Two pets immune to each other with both
+  of their types would draw at the 15-attack cap (no real Gen 1 pair is: since
+  v1.66 Gastly's Poison hits Rattata). The length guarantee still holds: the
+  pet that faints always takes at least 2 hits.
 - **The opponent's special:** it "taps" `PRACTICE_AI_TAPS` (2) times before each
   of its attacks, so it charges a special about every third attack, with the
   same cooldown as yours.
