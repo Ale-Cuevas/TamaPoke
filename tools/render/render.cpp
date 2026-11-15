@@ -143,6 +143,15 @@ static void resetUi() {
   galleryDetail = 0;
   galleryPage = 0;
   cardPage = 0;
+  // fases (v1.65): menus cerrados, sin insignias, sin premios cobrados y sin equipo anterior
+  stagesOpen = teamOpen = false;
+  boxPage = 0;
+  teamPickN = 0;
+  stShakeUntil = 0;
+  stShakeIdx = -1;
+  pet.setBadges(0);
+  pet.clearStageDay();
+  pet.setTeam(nullptr, 0);
   menuUntil = confirmUntil = choiceUntil = bathUntil = poopPuffUntil = 0;
   menuKind = MENU_NONE;
   closeBattle();
@@ -308,6 +317,29 @@ static void boxThree() {
   boxPet(0, 7, 12);
   boxPet(1, 133, 23, true);
   boxPet(4, 6, 41, false, "BLAZE");
+}
+
+// stage menus (v1.65). `badges` = the earned mask, `paid` = stages whose boss reward was already taken today
+static void stageSetup(uint8_t badges, uint8_t paid, bool es) {
+  if (es) { setLang(LANG_ES); applyLangFont(); }
+  if (!pet.uid && !pet.isEgg()) pet.uid = 0x5EED0001;  // the scenes set the species directly: no hatch, so no uid
+  for (uint8_t i = 0; i < STAGE_COUNT; i++)
+    if (paid & (1u << i)) pet.stageDone(i, true, &pet.uid, 1);
+  pet.setBadges(badges);
+}
+// the team picker: the last team is set from `picks` (-1 = the home pet, k = Box slot k), then the picker opens
+static void teamSetup(std::initializer_list<int> picks, uint8_t stage, bool es) {
+  stageSetup(0x7F, 0, es);
+  uint32_t u[TEAM_MAX] = { 0 };
+  uint8_t n = 0;
+  for (int k : picks) u[n++] = k < 0 ? pet.uid : pet.boxRecord((uint8_t)k).uid;
+  pet.setTeam(u, n);
+  openStages();
+  openTeam(stage);
+}
+static void boxSix() {
+  const int16_t dex[BOX_SLOTS] = { 1, 4, 7, 16, 133, 143 };
+  for (uint8_t k = 0; k < BOX_SLOTS; k++) boxPet(k, dex[k], 8 + k * 9, k == 3);
 }
 
 // the egg screen (not a starter pick), as "saver-egg-night" sets it
@@ -712,6 +744,29 @@ static const std::vector<Scene> &scenes() {
     { "box-store-fx", [] { pokemon(25, 13); boxThree(); openBox(); boxStartMove(2); }, 4 },
     { "box-swap-fx", [] { pokemon(25, 13); boxThree(); openBox(); boxStartMove(4); }, 4 },
     { "box-store-end", [] { pokemon(25, 13); boxThree(); openBox(); boxStartMove(2); }, 8 },
+    // stage select, team picker and the badges page (v1.65)
+    { "stages-fresh", [] { pokemon(25, 13); stageSetup(0, 0, false); openStages(); } },
+    { "stages-fresh-es", [] { pokemon(25, 13); stageSetup(0, 0, true); openStages(); } },
+    { "stages-mid", [] { pokemon(25, 13); stageSetup(0x07, 0x03, false); openStages(); } },
+    { "stages-mid-es", [] { pokemon(25, 13); stageSetup(0x07, 0x03, true); openStages(); } },
+    { "stages-all", [] { pokemon(25, 13); stageSetup(0xFF, 0x1F, false); openStages(); } },
+    { "stages-all-es", [] { pokemon(25, 13); stageSetup(0xFF, 0x1F, true); openStages(); } },
+    { "team-home", [] { pokemon(25, 13); teamSetup({}, 1, false); } },
+    { "team-home-es", [] { pokemon(25, 13); teamSetup({}, 4, true); } },
+    { "team-full", [] { pokemon(25, 13); boxSix(); teamSetup({ 2, -1, 5, 0 }, 2, false); } },
+    { "team-full-es", [] { pokemon(25, 13); boxSix(); teamSetup({ 2, -1, 5, 0 }, 4, true); } },
+    { "team-asleep", [] { pokemon(25, 22); boxThree(); pet.sleeping = true; teamSetup({ 1 }, 0, false); } },
+    { "team-asleep-es", [] { pokemon(25, 22); boxThree(); pet.sleeping = true; teamSetup({ 1 }, 0, true); } },
+    { "team-vacant", [] { vacantNow(10); boxThree(); teamSetup({}, 0, false); } },
+    { "team-vacant-es", [] { vacantNow(10); boxThree(); teamSetup({ 4 }, 3, true); } },
+    { "box-dots", [] { pokemon(25, 13); boxThree(); openBox(); } },
+    { "box-dots-es", [] { pokemon(25, 13); boxThree(); setLang(LANG_ES); applyLangFont(); openBox(); } },
+    { "badges-0", [] { pokemon(25, 13); stageSetup(0, 0, false); openBox(); boxPage = 1; } },
+    { "badges-0-es", [] { pokemon(25, 13); stageSetup(0, 0, true); openBox(); boxPage = 1; } },
+    { "badges-3", [] { pokemon(25, 13); stageSetup(0x07, 0, false); openBox(); boxPage = 1; } },
+    { "badges-3-es", [] { pokemon(25, 13); stageSetup(0x07, 0, true); openBox(); boxPage = 1; } },
+    { "badges-8", [] { pokemon(25, 13); stageSetup(0xFF, 0, false); openBox(); boxPage = 1; } },
+    { "badges-8-es", [] { pokemon(25, 13); stageSetup(0xFF, 0, true); openBox(); boxPage = 1; } },
     { "box-ja", [] { pokemon(25, 13); setLang(LANG_JA); applyLangFont(); boxThree(); openBox(); } },
     { "box-ko", [] { pokemon(25, 13); setLang(LANG_KO); applyLangFont(); boxThree(); openBox(); boxAsk = 5; boxAskUntil = millis() + 10000; } },
     { "box-de", [] { pokemon(25, 13); setLang(LANG_DE); applyLangFont(); boxThree(); boxPet(5, 2, 17); openBox(); } },
