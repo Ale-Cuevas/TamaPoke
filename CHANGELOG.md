@@ -8,6 +8,18 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.64] - 2026-11-15
+
+### Changed
+
+- **A Revive has 1 hour.** While the pet is dying the header counts the minutes left ("42 min left" /
+  "Quedan 42 min"; "It's very weak!" when there are no Revives). The hour is real time: it also runs with the
+  board off. When it's up, the bye sound plays (board on) and the dialog says "X has died..." / "X ha
+  muerto..." and "No Revive in time" / "No llegó el Revivir", with only OK. OK is the same ending as NO: the
+  rain, "It has passed away...", and the egg of its line from level 50 (60 %). A restart keeps the count
+  (`dym`).
+- Serial: `DYING <min>` sets the minutes already spent dying (60 = too late); `STATS` prints `dym=`.
+
 ## [1.63] - 2026-11-15
 
 ### Added

@@ -33,7 +33,7 @@ void Pet::begin() {
 // lo comun de empezar con un huevo y de quedarse con la casa vacia: nadie, a cero
 void Pet::resetHome() {
   ceremony = CER_NONE;
-  neglectMin = deathMin = 0;
+  neglectMin = deathMin = dyingMin = 0;
   dying = false;
   deathEgg = 0;
   poopMask = 0;
@@ -192,6 +192,11 @@ void Pet::syncClock(uint32_t nowEpoch) {
   lastSeenEpoch = nowEpoch;
   if (nowEpoch == 0) return;
   uint32_t mins = (seen && nowEpoch > seen) ? (nowEpoch - seen) / 60 : 0;
+  // v1.64: la hora del Revivir es real: apagada tambien corre (el resto del tiempo esta parado)
+  if (dying && ceremony == CER_NONE && mins) {
+    uint32_t m = dyingMin + mins;
+    dyingMin = m > REVIVE_LIMIT_MIN ? REVIVE_LIMIT_MIN : (uint8_t)m;
+  }
   if (mins < 2 || busyEnding() || starterPick || vacant) {
     save();  // primera vez, sin tiempo que aplicar, aun eligiendo inicial o sin nadie en casa
     return;
@@ -243,6 +248,15 @@ void Pet::update(uint32_t nowMs) {
 }
 
 void Pet::tick() {
+  // muriendose (v1.64): solo corre la hora del Revivir; al acabarse, la UI dice que murio
+  if (dying && ceremony == CER_NONE && dyingMin < REVIVE_LIMIT_MIN) {
+    if (++dyingMin >= REVIVE_LIMIT_MIN) {
+      diedNow = true;
+      pendingSave = true;
+    } else if (++ticksSinceSave >= 5) {
+      pendingSave = true;
+    }
+  }
   if (busyEnding()) return;  // el tiempo se detiene en la despedida
   if (vacant) return;                // casa vacia: nadie que envejezca ni que eclosione
   if (starterPick) return;  // la partida no empieza hasta elegir inicial: si el
@@ -324,7 +338,7 @@ void Pet::tick() {
       return;
     }
   } else {
-    neglectMin = deathMin = 0;
+    neglectMin = deathMin = dyingMin = 0;
   }
 
   // ciclo completo (forma final + 7 dias): la despedida NO salta sola; queda
@@ -531,7 +545,7 @@ void Pet::startDying() {
   dying = true;
   sleeping = false;
   wokeUp();
-  neglectMin = deathMin = 0;
+  neglectMin = deathMin = dyingMin = 0;
   deathEgg = 0;
   if (level() >= DEATH_EGG_LEVEL && random(100) < DEATH_EGG_ODDS) {
     uint8_t b = DEX_TBL[speciesId].base;
@@ -544,12 +558,12 @@ void Pet::startDying() {
 // un Revivir lo salva: las necesidades a la mitad, el vinculo sigue a cero (el precio del abandono) y
 // cuenta como un descuido
 bool Pet::revive() {
-  if (!dying || ceremony != CER_NONE) return false;
+  if (!dying || ceremony != CER_NONE || reviveExpired()) return false;  // v1.64: paso la hora
   if (items[IT_REVIVE]) items[IT_REVIVE]--;
   else if (!takeGift(IT_REVIVE)) return false;  // uno que aun esperaba envuelto tambien vale
   dying = false;
   deathEgg = 0;
-  neglectMin = deathMin = 0;
+  neglectMin = deathMin = dyingMin = 0;
   fullness = joy = energy = hygiene = REVIVE_NEEDS;
   if (careMistakes < 255) careMistakes++;
   mistakeCooldown = 60;
@@ -1336,6 +1350,7 @@ void Pet::save() {
   prefs.putUChar("ngl", neglectMin);
   prefs.putUChar("dth", deathMin);
   prefs.putBool("dying", dying);
+  prefs.putUChar("dym", dyingMin);  // v1.64: la hora del Revivir
   prefs.putShort("degg", deathEgg);
   if (lastSeenEpoch) prefs.putUInt("seen", lastSeenEpoch);
   prefs.putBytes("dexreg", dexReg, sizeof(dexReg));
@@ -1438,6 +1453,8 @@ void Pet::load() {
   deathMin = prefs.getUChar("dth", 0);
   if (deathMin > DEATH_MIN) deathMin = DEATH_MIN;
   dying = prefs.getBool("dying", false);
+  dyingMin = prefs.getUChar("dym", 0);
+  if (dyingMin > REVIVE_LIMIT_MIN) dyingMin = REVIVE_LIMIT_MIN;
   deathEgg = prefs.getShort("degg", 0);
   if (deathEgg < 0 || deathEgg > 151) deathEgg = 0;
   prefs.getBytes("dexreg", dexReg, sizeof(dexReg));
@@ -1685,7 +1702,7 @@ void Pet::fromRecord(const PetRecord &r) {
   medals = r.medals;
   ceremony = CER_NONE;
   mistakeCooldown = 0;
-  neglectMin = deathMin = 0;
+  neglectMin = deathMin = dyingMin = 0;
   dying = false;
   deathEgg = 0;
   goodTicks = 0;

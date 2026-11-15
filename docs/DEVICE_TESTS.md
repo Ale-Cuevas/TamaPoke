@@ -366,6 +366,16 @@ fast-forwards (29 = the bond almost gone, 59 = one minute from dying); `DIE` jum
   `degg`.
 - [ ] A restart in the middle of the ceremony comes back to the dialog.
 
+### Revive limit (v1.64)
+`DYING <min>` sets the minutes already spent dying (needs `DIE` first); `STATS` prints `dym=`.
+- [ ] Dying with Revives: the header says "60 min left" / "Quedan 60 min" and counts down each minute. With
+  `REVIVES 0` it says "It's very weak!" instead.
+- [ ] `DYING 59`, wait a minute: the bye sound, the header goes blank and the box says "X has died..." / "X ha
+  muerto..." and "No Revive in time" / "No llegó el Revivir", with only OK (EN and ES, the name fits).
+  YES's place does nothing. OK: the rain, "It has passed away...", then the empty home (or the egg from Lv.50).
+- [ ] A restart while it waits keeps `dym`. Power off at `dym` about 30, on again 31+ min later (`RTCSET` to
+  fake it): straight to "has died", no sound.
+
 ### Revive (v1.59)
 `REVIVES` prints how many; `REVIVES <n>` sets it. `GIFT 8` wraps one. The Revive slot is the bottom right of the
 Backpack, at about 319 314.

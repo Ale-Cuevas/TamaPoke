@@ -371,6 +371,13 @@ static const std::vector<Scene> &scenes() {
                            pet.items[IT_REVIVE] = 3; pet.startDying(); }, 2 },
     { "dying-revive-es", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.items[IT_REVIVE] = 3;
                               pet.startDying(); setLang(LANG_ES); applyLangFont(); }, 2 },
+    // v1.64: la hora del Revivir; pasada, el dialogo dice que murio
+    { "dying-late", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.items[IT_REVIVE] = 3;
+                         pet.startDying(); pet.dbgDyingMin(REVIVE_LIMIT_MIN); }, 2 },
+    { "dying-late-es", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.items[IT_REVIVE] = 3;
+                            pet.startDying(); pet.dbgDyingMin(REVIVE_LIMIT_MIN); setLang(LANG_ES); applyLangFont(); }, 2 },
+    { "dying-left-es", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.items[IT_REVIVE] = 3;
+                            pet.startDying(); pet.dbgDyingMin(18); setLang(LANG_ES); applyLangFont(); }, 2 },
     { "dying-none", [] { pokemon(25, 21); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.startDying(); }, 2 },
     { "dying-none-es", [] { pokemon(25, 21); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.startDying();
                             setLang(LANG_ES); applyLangFont(); }, 2 },

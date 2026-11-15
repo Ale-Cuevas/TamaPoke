@@ -102,6 +102,8 @@ enum StrId : uint8_t {
   S_WEAK, S_DYING_FMT, S_USE_REVIVE_FMT, S_NO_REVIVES, S_OK, S_DIED_EGG, S_REVIVED,
   // v1.63: la noche, tiene sueño (desde las 22)
   S_SLEEPY,
+  // v1.64: una hora para el Revivir: los minutos que quedan, y el aviso de que murio
+  S_DYING_LEFT_FMT, S_DIED_FMT, S_DIED_LATE,
   STR_COUNT
 };
 

@@ -24,6 +24,9 @@
 #define DEATH_EGG_LEVEL 50
 #define DEATH_EGG_ODDS 60
 #define REVIVE_NEEDS 50                    // revivido: comida, felicidad, energia y limpieza a 50
+// v1.64: el Revivir tiene una hora. Si en REVIVE_LIMIT_MIN minutos (reales: tambien apagada) no se usa,
+// se muere: el dialogo dice que murio y solo deja ver el final (con su huevo)
+#define REVIVE_LIMIT_MIN 60
 // la noche (v1.63), con hora (sin reloj no hay nada de esto). Desde SLEEPY_HOUR tiene sueño (globo con
 // "zzz"); a las BED_HOUR se duerme solo y, despertado antes de WAKE_HOUR, vuelve a dormirse a los
 // NIGHT_RESLEEP_MIN minutos despierto. A las WAKE_HOUR se despierta solo y suena, si se durmio de
@@ -309,6 +312,12 @@ public:
   bool revive();
   void letGo();
   bool isDying() const { return dying; }
+  // v1.64: paso la hora sin Revivir; ya solo queda el final
+  bool reviveExpired() const { return dying && dyingMin >= REVIVE_LIMIT_MIN; }
+  uint8_t reviveMinutesLeft() const { return dying && dyingMin < REVIVE_LIMIT_MIN ? REVIVE_LIMIT_MIN - dyingMin : 0; }
+  uint8_t dyingMinutes() const { return dyingMin; }
+  // acaba de pasar la hora con la placa encendida: la UI lo lee una vez y suena (SFX_BYE)
+  bool diedNow = false;
   // Revivir a mano: los de la mochila y los que aun esperan envueltos (muriendose no se abren regalos)
   uint8_t revivesOwned() const;
   // ni ceremonia ni muriendose: lo que exige un bicho que pueda hacer cosas
@@ -364,7 +373,12 @@ public:
   void dbgAddPoop() { addPoop(); }  // serie POOP y renderizador
   void dbgSetPoops(uint8_t n) { poops = n > POOP_MAX ? POOP_MAX : n; poopMask = (1 << poops) - 1; }  // renderizador  // renderizador: cada escena empieza sin regalos
   void dbgAbandon() { fullness = joy = energy = hygiene = 0; }  // serie ABANDON: empieza la cuenta
-  void dbgClearDying() { dying = false; deathEgg = 0; neglectMin = deathMin = 0; }  // renderizador
+  void dbgClearDying() { dying = false; deathEgg = 0; neglectMin = deathMin = dyingMin = 0; }  // renderizador
+  void dbgDyingMin(uint8_t m) {  // serie DYING <min> (v1.64): minutos ya pasados muriendose
+    if (!dying) return;
+    dyingMin = m > REVIVE_LIMIT_MIN ? REVIVE_LIMIT_MIN : m;
+    save();
+  }
   // serie NEGLECT <min>: adelanta la cuenta. Hasta BOND_FADE_MIN, el vinculo como si llevara m minutos
   // apagandose; por encima, vinculo 0 y m - BOND_FADE_MIN minutos hacia la muerte
   void dbgNeglect(uint16_t m);
@@ -523,6 +537,7 @@ private:
   // Se guardan ("ngl", "dth"): un reinicio no los pone a cero
   uint8_t neglectMin = 0, deathMin = 0;
   bool dying = false;          // "dying": se esta muriendo, el dialogo espera
+  uint8_t dyingMin = 0;        // "dym" (v1.64): minutos muriendose, hacia REVIVE_LIMIT_MIN
   int16_t deathEgg = 0;        // "degg": sorteado al empezar a morirse (un reinicio no lo repite)
   // la noche (v1.63): "nslp" se durmio de noche (se despierta solo a las WAKE_HOUR); "bedn" la ultima
   // noche (nightId) en que acostarlo dio vinculo. Solo en RAM: minutos despierto de noche y la hora

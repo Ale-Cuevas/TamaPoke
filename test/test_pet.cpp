@@ -27,6 +27,9 @@ static void makePet(Pet &p, int16_t dex) {
   p.eggTap();  // 3 toques = eclosion inmediata
 }
 
+// el reloj de las pruebas: el dia 1000 a las hh:mm (hora local, como el RTC)
+static uint32_t at(int hh, int mm, uint32_t day = 1000) { return day * 86400u + hh * 3600u + mm * 60u; }
+
 static void setStats(Pet &p, uint8_t f, uint8_t j, uint8_t e, uint8_t h) {
   p.fullness = f; p.joy = j; p.energy = e; p.hygiene = h;
 }
@@ -1386,6 +1389,100 @@ TEST(death, un_revivir_no_deja_huevo_pendiente) {
   CHECK_EQ(p.deathEggSpecies(), (int16_t)0);
 }
 
+// v1.64: el Revivir tiene una hora
+TEST(death, una_hora_para_el_revivir) {
+  Pet p;
+  makePet(p, 4);
+  p.startDying();
+  CHECK_EQ(p.reviveMinutesLeft(), (uint8_t)REVIVE_LIMIT_MIN);
+  advance(p, REVIVE_LIMIT_MIN - 1);
+  CHECK(!p.reviveExpired());
+  CHECK_EQ(p.reviveMinutesLeft(), (uint8_t)1);
+  CHECK(!p.diedNow);
+  advance(p, 1);
+  CHECK(p.reviveExpired());
+  CHECK(p.diedNow);
+  CHECK(p.savePending());
+  CHECK_EQ(p.reviveMinutesLeft(), (uint8_t)0);
+  CHECK(p.isDying());
+  CHECK_MSG(!p.revive(), "pasada la hora, el Revivir ya no sirve");
+  CHECK_EQ(p.items[IT_REVIVE], (uint8_t)REVIVE_START);
+  advance(p, 30);
+  CHECK_EQ(p.dyingMinutes(), (uint8_t)REVIVE_LIMIT_MIN);
+}
+
+TEST(death, a_tiempo_el_revivir_aun_sirve) {
+  Pet p;
+  makePet(p, 4);
+  p.startDying();
+  advance(p, REVIVE_LIMIT_MIN - 1);
+  CHECK(p.revive());
+  CHECK(!p.isDying());
+  CHECK_EQ(p.dyingMinutes(), (uint8_t)0);
+}
+
+TEST(death, la_hora_corre_tambien_apagada) {
+  Pet p;
+  makePet(p, 4);
+  p.setClock(at(12, 0));
+  p.startDying();
+  p.syncClock(at(12, 40));
+  CHECK(!p.reviveExpired());
+  CHECK_EQ(p.reviveMinutesLeft(), (uint8_t)(REVIVE_LIMIT_MIN - 40));
+  Pet q;
+  makePet(q, 4);
+  q.setClock(at(12, 0));
+  q.startDying();
+  q.syncClock(at(13, 1));
+  CHECK(q.reviveExpired());
+  CHECK_MSG(!q.diedNow, "apagada no suena: el dialogo ya lo dice al encender");
+  CHECK(!q.revive());
+  Pet b;  // y se guardo
+  b.begin();
+  CHECK(b.reviveExpired());
+}
+
+TEST(death, la_cuenta_de_la_hora_sobrevive_a_un_reinicio) {
+  Pet p;
+  makePet(p, 4);
+  p.startDying();
+  advance(p, 25);
+  p.flushSave();
+  Pet b;
+  b.begin();
+  CHECK(b.isDying());
+  CHECK_EQ(b.dyingMinutes(), (uint8_t)25);
+}
+
+TEST(death, pasada_la_hora_el_final_deja_su_huevo) {
+  Pet p;
+  makePet(p, 6);
+  p.setLevel(DEATH_EGG_LEVEL);
+  mockForceRandom(DEATH_EGG_ODDS - 1);
+  p.startDying();
+  mockClearForcedRandom();
+  advance(p, REVIVE_LIMIT_MIN);
+  CHECK(p.reviveExpired());
+  p.letGo();
+  mockAdvanceMillis(CEREMONY_MS + 1);
+  p.update(millis());
+  CHECK(!p.isDying());
+  CHECK(p.isEgg());
+  CHECK_EQ(p.eggSpecies(), (int16_t)4);
+  CHECK_EQ(p.lastEnd, (uint8_t)CER_DEATH);
+}
+
+TEST(death, el_comando_dying_adelanta_la_hora) {
+  Pet p;
+  makePet(p, 4);
+  p.dbgDyingMin(30);
+  CHECK_EQ(p.dyingMinutes(), (uint8_t)0);  // sin morirse no hace nada
+  p.startDying();
+  p.dbgDyingMin(REVIVE_LIMIT_MIN - 1);
+  advance(p, 1);
+  CHECK(p.reviveExpired());
+}
+
 TEST(death, el_comando_neglect_adelanta_la_cuenta) {
   Pet p;
   makePet(p, 4);
@@ -2332,8 +2429,6 @@ TEST(imu, nada_de_esto_en_una_ceremonia) {
 }
 
 // ---------------------------------------------------------------- la noche (v1.63)
-// el reloj de las pruebas: el dia 1000 a las hh:mm (hora local, como el RTC)
-static uint32_t at(int hh, int mm, uint32_t day = 1000) { return day * 86400u + hh * 3600u + mm * 60u; }
 
 // minutos en vivo con el reloj andando (en el sketch, el loop pone lastSeenEpoch cada 30 s)
 static void liveMinutes(Pet &p, uint32_t minutes) {
