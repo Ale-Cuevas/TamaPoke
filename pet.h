@@ -157,15 +157,12 @@ enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_RAR
 
 enum : uint8_t { EMOTE_NONE = 0, EMOTE_ANGRY, EMOTE_DIZZY, EMOTE_WOBBLE };
 
-// --- combate de practica (Tarea 3a)
-#define PRACTICE_JOY 3                 // premio del combate de practica...
+// --- combate (felicidad del final de un estadio)
+#define PRACTICE_JOY 3                 // felicidad del final de un estadio...
 #define PRACTICE_EVERY_MS 3600000UL    // ...como mucho una vez por hora
-// botin de combate (v1.56): cada victoria tiene un 70 % de traer un objeto, envuelto en casa, hasta 5 al
-// dia (se pueden repetir combates sin fin). Tabla (%): tarta 35, baya dorada 25, vitaminas 21 (7 cada
-// una), Caramelo Raro 7, Revivir 5 (v1.59, le quita 5 a la tarta), amuleto 4 (con uno ya, tarta),
-// huevo 3: el mas raro
-#define BATTLE_DROP_ODDS 70
-#define BATTLE_DROPS_PER_DAY 5
+// tabla del botin (v1.56; hoy el objeto del jefe de un estadio). Tabla (%): tarta 35, baya dorada 25,
+// vitaminas 21 (7 cada una), Caramelo Raro 7, Revivir 5 (v1.59, le quita 5 a la tarta), amuleto 4 (con
+// uno ya, tarta), huevo 3: el mas raro
 #define BDROP_CAKE 35
 #define BDROP_GOLDEN 25
 #define BDROP_VITAMIN 21
@@ -175,6 +172,32 @@ enum : uint8_t { EMOTE_NONE = 0, EMOTE_ANGRY, EMOTE_DIZZY, EMOTE_WOBBLE };
 #define BDROP_EGG 3
 static_assert(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDROP_CHARM + BDROP_REVIVE + BDROP_EGG == 100,
               "el botin suma 100");
+
+// --- estadios: 8 estadios tematicos, cada uno con su jefe, que combate un equipo ordenado de 1 a 4
+// bichos (el de casa y/o los de la caja). stage.h define los mismos valores: de ahi los #ifndef.
+// Vencer al jefe da la medalla del estadio (del jugador, para siempre) y, una vez al dia por estadio,
+// el premio del jefe: a cada bicho del equipo STAGE_GROW_MIN minutos de crecimiento y STAGE_BOND de
+// vinculo (fuera del tope diario), y un objeto de la tabla del botin, envuelto en casa
+#ifndef STAGE_COUNT
+#define STAGE_COUNT 8
+#endif
+#ifndef TEAM_MAX
+#define TEAM_MAX 4
+#endif
+#define STAGE_GROW_MIN 60
+#define STAGE_BOND 5
+#define TEAM_HOME 100  // teamSlotOf: el bicho de casa (0..BOX_SLOTS-1 = su hueco de la caja; -1 = nadie)
+static_assert(STAGE_COUNT <= 8, "las medallas de estadio caben en un byte");
+static_assert(TEAM_HOME >= BOX_SLOTS, "TEAM_HOME no es un hueco de la caja");
+
+// lo que dio el final de un estadio (stageDone)
+struct StageReward {
+  bool paid;      // se pago el premio del jefe (vencido y aun no pagado hoy)
+  bool newBadge;  // la medalla del estadio es nueva
+  uint8_t item;   // el objeto del jefe (envuelto en casa), o IT_COUNT
+  uint8_t joy;    // felicidad dada al bicho de casa (la del combate de practica: una vez por hora)
+  uint8_t pets;   // bichos del equipo que recibieron el premio
+};
 
 // medallas del individuo (bitmask)
 enum : uint16_t {
@@ -461,19 +484,39 @@ public:
     return g;
   }
 
-  // --- combate de practica (Tarea 3a)
+  // --- combate
   // puede combatir: nacido, despierto, sin ceremonia ni evolucion en curso
   bool canBattle() const { return !isEgg() && !sleeping && !busyEnding() && !evolving() && !starterPick; }
-  // fin de un combate de practica (gane quien gane): +PRACTICE_JOY de felicidad
-  // como mucho una vez por hora. Devuelve la felicidad dada (0 si no tocaba).
-  // No cuenta en ningun historial de victorias.
-  uint8_t practiceDone();
-  bool practiceRewardReady() const;  // el proximo combate de practica dara premio
-  // botin (v1.56): tras un combate; solo si se gano, 70 %, hasta 5 al dia. Devuelve el objeto, que
-  // llega envuelto a casa, o IT_COUNT si no hubo
-  uint8_t battleDrop(bool won);
-  uint8_t rollBattleItem();  // la tabla del botin (publica para las pruebas)
-  uint8_t battleDropsToday() const { return bdropDay == today() ? bdropToday : 0; }
+  // la felicidad del final de un estadio (+PRACTICE_JOY, como mucho una vez por hora) toca ya
+  bool practiceRewardReady() const;
+  uint8_t rollBattleItem();  // la tabla del botin: el objeto del jefe (publica para las pruebas)
+
+  // --- estadios. Medallas, dia del premio y equipo son del jugador: sobreviven a eclosiones,
+  // finales y movimientos de la caja (solo WIPE los borra)
+  bool hasBadge(uint8_t s) const { return s < STAGE_COUNT && (badges & (1u << s)); }
+  uint8_t badgeMask() const { return badges; }
+  uint8_t badgeCount() const;
+  // el 0 siempre; el s con la medalla del s - 1
+  bool stageUnlocked(uint8_t s) const { return s < STAGE_COUNT && (s == 0 || hasBadge(s - 1)); }
+  // estadios cuyo premio del jefe ya se pago hoy (sin reloj, el dia 0 dura hasta tenerlo)
+  uint8_t stageRewardMask() const { return stageDay == today() ? stageMask : 0; }
+  bool stageRewardReady(uint8_t s) const { return s < STAGE_COUNT && !(stageRewardMask() & (1u << s)); }
+  // el ultimo equipo, en orden (TEAM_MAX uids, 0 = vacio). setTeam no escribe en flash: marca el
+  // guardado, como addSteps
+  const uint32_t *teamUids() const { return team; }
+  void setTeam(const uint32_t *uids, uint8_t n);
+  // donde esta el bicho de ese uid: TEAM_HOME (en casa), su hueco de la caja (BOX_OK) o -1
+  int8_t teamSlotOf(uint32_t id) const;
+  // puede ir en el equipo: el de casa si canBattle(); uno de la caja, siempre (hiberna entero)
+  bool teamCanFight(uint32_t id) const;
+  // fin de un estadio (vencido o no), una vez al acabar: la felicidad del combate de practica al de
+  // casa (una vez por hora); vencido, la medalla y, si hoy no se pago, el premio del jefe a cada uid
+  // que siga existiendo y un objeto envuelto. Guarda antes de volver. Corte de luz: la marca de
+  // "pagado hoy" y la medalla se escriben antes que los premios (se puede perder parte del premio,
+  // nunca cobrarlo dos veces)
+  StageReward stageDone(uint8_t stage, bool cleared, const uint32_t *uids, uint8_t n);
+  void setBadges(uint8_t mask) { badges = mask; pendingSave = true; }    // serie y renderizador
+  void clearStageDay() { stageDay = 0; stageMask = 0; pendingSave = true; }  // premios de hoy otra vez
 
   // --- trucos del IMU (Tarea 2): sin guardado inmediato
   void wakeGrumpy();     // agitar con el bicho dormido: se despierta de mal humor
@@ -565,8 +608,6 @@ private:
   bool foundFull[FOUND_QUEUE];
   bool foundGift[FOUND_QUEUE];
   uint8_t foundN = 0;
-  uint32_t bdropDay = 0;       // botin de combate (v1.56): dia de bdropToday...
-  uint8_t bdropToday = 0;      // ...y objetos ganados ese dia (tope BATTLE_DROPS_PER_DAY)
   uint8_t gifts[GIFT_MAX] = { 0 };  // regalos sin abrir (v1.55), en orden de llegada
   uint8_t giftN = 0;
   bool takeGift(uint8_t it);   // quita un regalo de ese objeto sin abrirlo (el Revivir, v1.60)
@@ -585,9 +626,17 @@ private:
   uint8_t shakeN = 0;
   uint32_t lastDizzyPenalty = 0;
   bool dizzyPenalized = false;
-  // combate de practica
+  // la felicidad del combate (stageDone), una vez por hora
   uint32_t lastPracticeReward = 0;  // millis del ultimo premio...
   bool practiceRewarded = false;    // ...si lo hubo
+  uint8_t practiceJoy();            // la felicidad, sin guardar (stageDone)
+  // estadios (del jugador): "bdg" medallas (bit s = estadio s vencido alguna vez), "stD" + "stM" el
+  // dia y los estadios cuyo premio del jefe ya se pago ese dia, "team" el ultimo equipo
+  uint8_t badges = 0;
+  uint32_t stageDay = 0;
+  uint8_t stageMask = 0;
+  uint32_t team[TEAM_MAX] = { 0 };
+  bool payStageDay(uint8_t stage);  // marca el premio de hoy en la NVS; false = no se pudo (no se paga)
 
   uint32_t today() const { return lastSeenEpoch ? lastSeenEpoch / 86400 : 0; }
   void registerCare(bool saveNow = true);   // primer cuidado del dia: racha + vinculo

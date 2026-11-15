@@ -40,6 +40,12 @@ PALETTE = {
     'S': '#787e8c',  # gris sombra
     'v': '#efe68a',  # amarillo palido (cristal del Revivir, v1.62)
     'V': '#b4a640',  # oliva (sombra del cristal)
+    'u': '#a672d6',  # lila (insignia fantasma)
+    'U': '#6c42a6',  # lila sombra
+    'q': '#c2489e',  # magenta (insignia veneno)
+    'Q': '#80296c',  # magenta sombra
+    'i': '#4f5bc2',  # indigo (insignia dragon)
+    'I': '#2f3586',  # indigo sombra
 }
 
 W = H = 32
@@ -839,6 +845,175 @@ def star():
         ".kkk........kkk.",
     ]
 
+def badge_grass():
+    # insignia de fase (hoja verde), 16x16 con contorno y brillo
+    return [
+        "................",
+        "..........kkkk..",
+        "......kkkkggwgk.",
+        "....kkggggggggk.",
+        "...kgwgggggggGk.",
+        "..kgwggkgggggGk.",
+        "..kggggGkggggGk.",
+        "..kgggggGkgggGk.",
+        "..kggggggGkggGk.",
+        "..kgggggggGkGGk.",
+        "..kGggggggGGGk..",
+        "...kGGggGGGGkk..",
+        "....kkGGGkkk....",
+        "....kk.kk.......",
+        "...kk...........",
+        "..kk............",
+    ]
+
+def badge_water():
+    # insignia de fase (gota azul), 16x16 con contorno y brillo
+    return [
+        ".......kk.......",
+        "......kbbk......",
+        "......kbbk......",
+        ".....kbbbBk.....",
+        ".....kbwbBk.....",
+        "....kbbwbbBk....",
+        "...kbbwbbbBBk...",
+        "...kbwbbbbBBk...",
+        "..kbbwbbbbbBBk..",
+        "..kbbbbbbbbBBk..",
+        "..kbbbbbbbBBBk..",
+        "..kBbbbbbBBBBk..",
+        "...kBBbbBBBBk...",
+        "...kkBBBBBBkk...",
+        ".....kkkkkk.....",
+        "................",
+    ]
+
+def badge_rock():
+    # insignia de fase (roca marron facetada), 16x16 con contorno y brillo
+    return [
+        "................",
+        "......kk........",
+        "....kkssk.......",
+        "...ksswcckkk....",
+        "..kswccccccckk..",
+        ".kswcccckcccccck",
+        ".kwccccckkcccCCk",
+        "kccckcccckccCCCk",
+        "kcccckkcccccCCCk",
+        "kccccccckccCCCk.",
+        ".kcccccckkCCCCk.",
+        ".kcccccCCCCCCk..",
+        "..kcccCCCCCkk...",
+        "...kkCCCCkk.....",
+        ".....kkkk.......",
+        "................",
+    ]
+
+def badge_fire():
+    # insignia de fase (llama roja y naranja), 16x16 con contorno y brillo
+    return [
+        ".......k........",
+        "......krk.......",
+        "......krrk......",
+        ".....krrrk..k...",
+        ".....krorrk.kk..",
+        "....krooorrkkrk.",
+        "...krrooofrrrrk.",
+        "...krooofffrrRk.",
+        "..krooofffforrRk",
+        "..kroofffwffoRRk",
+        "..kroofffffforRk",
+        "..kroooffffooRRk",
+        "...krooofffooRk.",
+        "...kRooooooRRk..",
+        "....kkRRRRRkk...",
+        "......kkkkk.....",
+    ]
+
+def badge_electric():
+    # insignia de fase (rayo amarillo), 16x16 con contorno y brillo
+    return [
+        "................",
+        "......kkkkkk....",
+        ".....kffwffk....",
+        ".....kfwffYk....",
+        "....kffffYYk....",
+        "....kfffYYk.....",
+        "...kffffYYkkkk..",
+        "...kfffffffffYk.",
+        "...kkkkkfffYYk..",
+        "......kfffYYk...",
+        ".....kffYYYk....",
+        ".....kfYYYk.....",
+        "....kfYYkk......",
+        "....kYkk........",
+        "....kk..........",
+        "................",
+    ]
+
+def badge_ghost():
+    # insignia de fase (fantasma lila), 16x16 con contorno y brillo
+    return [
+        "................",
+        ".....kkkkkk.....",
+        "....kuuuuuuk....",
+        "...kuwwuuuuUk...",
+        "..kuwuuuuuuuUk..",
+        "..kuuukuukuuUk..",
+        "..kuuukuukuuUk..",
+        "..kuuuukkuuuUk..",
+        "..kuuuuuuuuuUk..",
+        "..kuuuuuuuuUUk..",
+        "..kuuuuuuuuUUk..",
+        "..kuuUuuuUuUUk..",
+        "..kuUkUuUkUkUk..",
+        "..kUk.kUk.kUk...",
+        "...k...k...k....",
+        "................",
+    ]
+
+def badge_poison():
+    # insignia de fase (frasco de veneno magenta), 16x16 con contorno y brillo
+    return [
+        "................",
+        "......kkkk......",
+        "......kwQk......",
+        "......kqQk......",
+        "......kqQk......",
+        ".....kkqQkk.....",
+        "....kqqqqQQk....",
+        "...kqqwqqqQQk...",
+        "..kqqwqqgqqQQk..",
+        "..kqqqqqGgqQQk..",
+        "..kqqqqqqGqQQk..",
+        "..kqgqqqqqqQQk..",
+        "..kqGgqqqqQQQk..",
+        "...kQQQQQQQQk...",
+        "....kkkkkkkk....",
+        "................",
+    ]
+
+def badge_dragon():
+    # insignia de fase (colmillo indigo con borde dorado), 16x16 con contorno y brillo
+    return [
+        "................",
+        "..kkkkkkkkkkk...",
+        ".kffffffffffYk..",
+        ".kYYYYYYYYYYYk..",
+        "..kiiiiiiiiIIk..",
+        "..kiwwiiiiiIIk..",
+        "..kiwiiiiiiIIk..",
+        "..kiiiiiiiiIk...",
+        "...kiiiiiiIIk...",
+        "...kiiiiiiIk....",
+        "....kiiiiIIk....",
+        "....kiiiiIk.....",
+        ".....kiiIk......",
+        "......kiIk......",
+        ".......kk.......",
+        "................",
+    ]
+
+
 SPRITES = {
     "CHARMANDER": charmander(),
     "CHARMELEON": charmeleon(),
@@ -872,6 +1047,14 @@ SPRITES = {
     "ICON_SUN": icon_sun(),
     "ICON_CAKE": icon_cake(),
     "ICON_REVIVE": icon_revive(),
+    "BADGE_GRASS": badge_grass(),
+    "BADGE_WATER": badge_water(),
+    "BADGE_ROCK": badge_rock(),
+    "BADGE_FIRE": badge_fire(),
+    "BADGE_ELECTRIC": badge_electric(),
+    "BADGE_GHOST": badge_ghost(),
+    "BADGE_POISON": badge_poison(),
+    "BADGE_DRAGON": badge_dragon(),
     "EGG": egg(),
     "POOP": poop(),
     "HEART": heart(),
