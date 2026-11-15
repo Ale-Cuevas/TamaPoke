@@ -38,7 +38,8 @@
 #include "button.h"
 #include "imu.h"    // pasos y trucos de movimiento (QMI8658); SensorLib queda en imu.cpp
 #include "steps.h"  // STEP_FLUSH_MS
-#include "battle.h" // motor del combate de practica (logica pura)
+#include "battle.h" // motor del combate (logica pura)
+#include "stage.h"  // fases de combate: 3 rivales seguidos contra un equipo de 1 a 4 (logica pura)
 #include "wind.h"   // viento del paisaje: hierba, flores y copas que se mecen (logica pura)
 #include "burnin.h" // contra el quemado del AMOLED: orbita de la imagen y salvapantallas (logica pura)
 #include "fx.h"     // efectos de respuesta: celebraciones en cola, "+N", botones, eclosion (logica pura)
@@ -3786,6 +3787,12 @@ void clockTap(int16_t x, int16_t y) {
 }
 
 // iconos de la mochila, en el orden de IT_* (pet.h)
+// insignia de cada fase (v1.65), en el orden de STAGES: la gana quien tumba al jefe
+static const char *const *const BADGE_ICON[STAGE_COUNT] = {
+  SPR_BADGE_GRASS, SPR_BADGE_WATER, SPR_BADGE_ROCK, SPR_BADGE_FIRE,
+  SPR_BADGE_ELECTRIC, SPR_BADGE_GHOST, SPR_BADGE_POISON, SPR_BADGE_DRAGON,
+};
+
 static const char *const *const ITEM_ICON[IT_COUNT] = {
   SPR_ICON_GOLDEN, SPR_ICON_PROTEIN, SPR_ICON_IRON, SPR_ICON_CARBOS, SPR_ICON_CHARM, SPR_ICON_RARECANDY, SPR_ICON_EGG,
   SPR_ICON_CAKE, SPR_ICON_REVIVE,
