@@ -1669,7 +1669,8 @@ void onTap(int16_t x, int16_t y) {
       Serial.printf("BTN %d\n", i);
       fxo.push(FXO_PRESS, i, 0, millis());
       // dormido solo funcionan cuidados (despertarlo) y la mochila (mirar): el boton tiembla (fx.h)
-      if (pet.sleeping && i != BTN_CARE && i != BTN_BAG) {
+      // ...y jugar si hay bichos en la caja: ellos si pueden ir a las fases (v1.65)
+      if (pet.sleeping && i != BTN_CARE && i != BTN_BAG && !(i == 1 && pet.boxHasPets())) {
         sfxPlay(SFX_DENY);
         fxo.push(FXO_DENY, i, 0, millis());
         return;
@@ -6677,7 +6678,8 @@ void drawBar(int x, int y, const char *label, uint8_t val, bool sated) {
 void drawButtons() {
   uint32_t now = millis();
   for (int i = 0; i < 4; i++) {
-    bool off = pet.sleeping && i != BTN_CARE && i != BTN_BAG;  // durmiendo: cuidados y mochila
+    // durmiendo: cuidados y mochila (y jugar, por las fases, si hay bichos en la caja)
+    bool off = pet.sleeping && i != BTN_CARE && i != BTN_BAG && !(i == 1 && pet.boxHasPets());
     // efectos (fx.h): el boton tocado se hunde 2 px; si no se puede usar, tiembla de lado
     int ox = 0, oy = 0;
     bool pressed = fxo.find(FXO_PRESS, i) != nullptr;
