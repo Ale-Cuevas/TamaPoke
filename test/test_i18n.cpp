@@ -58,6 +58,8 @@ static const ExpectedFmt EXPECTED[] = {
   { S_FAREWELL_BTN,    "%s" },
   { S_DYING_FMT,       "%s" },
   { S_USE_REVIVE_FMT,  "%u" },
+  { S_DYING_LEFT_FMT,  "%u" },  // v1.64
+  { S_DIED_FMT,        "%s" },
   { S_STEPS_FMT,       "%lu" },
   { S_HATCH_FMT,       "%u" },
   { S_STEPS_TOTAL_FMT, "%lu" },

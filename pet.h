@@ -24,6 +24,24 @@
 #define DEATH_EGG_LEVEL 50
 #define DEATH_EGG_ODDS 60
 #define REVIVE_NEEDS 50                    // revivido: comida, felicidad, energia y limpieza a 50
+// v1.64: el Revivir tiene una hora. Si en REVIVE_LIMIT_MIN minutos (reales: tambien apagada) no se usa,
+// se muere: el dialogo dice que murio y solo deja ver el final (con su huevo)
+#define REVIVE_LIMIT_MIN 60
+// la noche (v1.63), con hora (sin reloj no hay nada de esto). Desde SLEEPY_HOUR tiene sueño (globo con
+// "zzz"); a las BED_HOUR se duerme solo y, despertado antes de WAKE_HOUR, vuelve a dormirse a los
+// NIGHT_RESLEEP_MIN minutos despierto. A las WAKE_HOUR se despierta solo y suena, si se durmio de
+// noche (desde EVENING_HOUR: una siesta de tarde no). Acostarlo tu con sueño da BED_BOND de vinculo,
+// una vez por noche y fuera del tope diario. Dormido de noche las necesidades bajan la mitad que en
+// una siesta, con suelos mas altos: amanece con todo a 50 o mas si se acosto bien cuidado.
+#define EVENING_HOUR 20
+#define SLEEPY_HOUR 22
+#define BED_HOUR 23
+#define WAKE_HOUR 8
+#define NIGHT_RESLEEP_MIN 30
+#define BED_BOND 3
+#define NIGHT_FOOD_FLOOR 50   // comida y felicidad: -1 cada 4 min, hasta 50
+#define NIGHT_JOY_FLOOR 50
+#define NIGHT_HYG_FLOOR 55    // limpieza: -1 cada 6 min, hasta 55
 // cacas (v1.58): probabilidad (%) por minuto despierto con la comida por encima de 40. Era 15 (una
 // cada ~7 min); con 5, una cada ~20 min. Cada una se limpia tocandola (POOP_TAP_HYG de limpieza)
 // o todas a la vez con el baño
@@ -254,6 +272,24 @@ public:
   uint16_t speStat() const;
   void play();
   void toggleLight();  // dormir / despertar
+  // --- la noche (v1.63). Hora local 0-23 de lastSeenEpoch, -1 sin reloj
+  static int hourAt(uint32_t epoch) { return epoch ? (int)((epoch / 3600) % 24) : -1; }
+  int localHour() const { return hourAt(lastSeenEpoch); }
+  // de SLEEPY_HOUR a WAKE_HOUR: tiene sueño despierto, dormido baja lento, acostarlo da vinculo
+  static bool nightHour(int h) { return h >= SLEEPY_HOUR || (h >= 0 && h < WAKE_HOUR); }
+  static bool bedHour(int h) { return h >= BED_HOUR || (h >= 0 && h < WAKE_HOUR); }  // se duerme solo
+  // despierto con sueño: la UI pone el globo con "zzz" y "Tiene sueño..."
+  bool sleepy() const { return !sleeping && !isEgg() && !busyEnding() && !starterPick && nightHour(localHour()); }
+  bool nightSlept() const { return nightSleep; }        // se durmio de noche: se despierta a las WAKE_HOUR
+  uint8_t nightAwakeMinutes() const { return nightAwakeMin; }
+  uint32_t bedNightId() const { return bedNight; }
+  // noche de una hora: de WAKE_HOUR a WAKE_HOUR del dia siguiente (0 sin reloj)
+  static uint32_t nightId(uint32_t epoch) { return epoch > WAKE_HOUR * 3600UL ? (epoch - WAKE_HOUR * 3600UL) / 86400 + 1 : 0; }
+  // la UI lo pone mientras hay un juego, combate, evolucion o movimiento de la caja: no se duerme solo
+  // en mitad (lo hara al acabar)
+  bool nightHold = false;
+  // se desperto solo por la mañana con la placa encendida: la UI lo lee una vez y suena (SFX_MORNING)
+  bool morningWake = false;
   void clean();
   // cacas (v1.58): huecos ocupados (bit i = la caca i en el suelo). Solo en RAM: el guardado trae la
   // cuenta (poops) y al cargar se ocupan los primeros huecos. Si alguien cambia poops a mano (caja,
@@ -276,6 +312,12 @@ public:
   bool revive();
   void letGo();
   bool isDying() const { return dying; }
+  // v1.64: paso la hora sin Revivir; ya solo queda el final
+  bool reviveExpired() const { return dying && dyingMin >= REVIVE_LIMIT_MIN; }
+  uint8_t reviveMinutesLeft() const { return dying && dyingMin < REVIVE_LIMIT_MIN ? REVIVE_LIMIT_MIN - dyingMin : 0; }
+  uint8_t dyingMinutes() const { return dyingMin; }
+  // acaba de pasar la hora con la placa encendida: la UI lo lee una vez y suena (SFX_BYE)
+  bool diedNow = false;
   // Revivir a mano: los de la mochila y los que aun esperan envueltos (muriendose no se abren regalos)
   uint8_t revivesOwned() const;
   // ni ceremonia ni muriendose: lo que exige un bicho que pueda hacer cosas
@@ -331,7 +373,12 @@ public:
   void dbgAddPoop() { addPoop(); }  // serie POOP y renderizador
   void dbgSetPoops(uint8_t n) { poops = n > POOP_MAX ? POOP_MAX : n; poopMask = (1 << poops) - 1; }  // renderizador  // renderizador: cada escena empieza sin regalos
   void dbgAbandon() { fullness = joy = energy = hygiene = 0; }  // serie ABANDON: empieza la cuenta
-  void dbgClearDying() { dying = false; deathEgg = 0; neglectMin = deathMin = 0; }  // renderizador
+  void dbgClearDying() { dying = false; deathEgg = 0; neglectMin = deathMin = dyingMin = 0; }  // renderizador
+  void dbgDyingMin(uint8_t m) {  // serie DYING <min> (v1.64): minutos ya pasados muriendose
+    if (!dying) return;
+    dyingMin = m > REVIVE_LIMIT_MIN ? REVIVE_LIMIT_MIN : m;
+    save();
+  }
   // serie NEGLECT <min>: adelanta la cuenta. Hasta BOND_FADE_MIN, el vinculo como si llevara m minutos
   // apagandose; por encima, vinculo 0 y m - BOND_FADE_MIN minutos hacia la muerte
   void dbgNeglect(uint16_t m);
@@ -490,7 +537,19 @@ private:
   // Se guardan ("ngl", "dth"): un reinicio no los pone a cero
   uint8_t neglectMin = 0, deathMin = 0;
   bool dying = false;          // "dying": se esta muriendo, el dialogo espera
+  uint8_t dyingMin = 0;        // "dym" (v1.64): minutos muriendose, hacia REVIVE_LIMIT_MIN
   int16_t deathEgg = 0;        // "degg": sorteado al empezar a morirse (un reinicio no lo repite)
+  // la noche (v1.63): "nslp" se durmio de noche (se despierta solo a las WAKE_HOUR); "bedn" la ultima
+  // noche (nightId) en que acostarlo dio vinculo. Solo en RAM: minutos despierto de noche y la hora
+  // del minuto anterior (para ver el paso de las 22 a las 23)
+  bool nightSleep = false;
+  uint32_t bedNight = 0;
+  uint8_t nightAwakeMin = 0;
+  int8_t lastTickHour = -1;
+  void nightMinute(int h, bool live);  // un minuto de la noche: dormirse o despertarse solo
+  void sleepMinute(bool full, int h);  // un minuto dormido: energia y necesidades (en vivo y apagado)
+  void goToBed();                      // acostarlo (luz o boca abajo): de noche, vinculo y despertar solo
+  void wokeUp() { nightSleep = false; nightAwakeMin = 0; }
   uint8_t poopMask = 0;    // huecos de las cacas (v1.58, ver poopSlots)
   void addPoop();
   uint16_t goodTicks = 0;  // racha bien cuidado: forja la DEF

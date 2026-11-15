@@ -335,6 +335,20 @@ Backpack at 326 390; the Care menu's slots are at about 200 320 (sleep / wake) a
   grey bath; the sun wakes the pet, the bath shakes Care.
 - [ ] The menu closes after 6 s, on a tap outside it, and with USER.
 
+### Night routine (v1.63)
+Back up the NVS first ([nvs backup](#save-time-sound-sd)). `TIME <epoch>` sets the clock (local time as epoch:
+`date -u -d '2026-11-15 22:59:30' +%s`); `NIGHT` prints `hour sleepy sleep nslp nawake bedn night bond`.
+- [ ] `TIME` 21:59:30, wait a minute: at 22:00 the thought bubble with "zzz" (beside the head, on the side with
+  room) and "Getting sleepy..." / "Tiene sueño...". `NIGHT` `sleepy=1`.
+- [ ] Moon at 22:30: the "+3" bond heart, `NIGHT` `bond` +3 and `nslp=1`. Sun, moon again: no more bond.
+- [ ] Awake at 22:59:30: at 23:00 it goes to bed by itself, no heart. With a game open at 23:00 it waits, and
+  goes to bed right after the game closes.
+- [ ] Sun at 23:10: `nawake` counts up, and after 30 min it's asleep again.
+- [ ] Asleep, `TIME` 07:59:30: at 08:00 it wakes up and the morning tune plays, also with the screen dark
+  (PWR). Volume off: silent.
+- [ ] Power off at about 22:50 with the pet awake, on again after 08:00 (`RTCSET` to fake it): awake, ENE high,
+  FOOD and JOY at 50 or a bit less.
+
 ### Neglect and death (v1.60)
 Back up the NVS first ([nvs backup](#save-time-sound-sd)). `ABANDON` sets the four needs to 0; `NEGLECT <min>`
 fast-forwards (29 = the bond almost gone, 59 = one minute from dying); `DIE` jumps to the dialog; `STATS` prints
@@ -352,13 +366,23 @@ fast-forwards (29 = the bond almost gone, 59 = one minute from dying); `DIE` jum
   `degg`.
 - [ ] A restart in the middle of the ceremony comes back to the dialog.
 
+### Revive limit (v1.64)
+`DYING <min>` sets the minutes already spent dying (needs `DIE` first); `STATS` prints `dym=`.
+- [ ] Dying with Revives: the header says "60 min left" / "Quedan 60 min" and counts down each minute. With
+  `REVIVES 0` it says "It's very weak!" instead.
+- [ ] `DYING 59`, wait a minute: the bye sound, the header goes blank and the box says "X has died..." / "X ha
+  muerto..." and "No Revive in time" / "No llegó el Revivir", with only OK (EN and ES, the name fits).
+  YES's place does nothing. OK: the rain, "It has passed away...", then the empty home (or the egg from Lv.50).
+- [ ] A restart while it waits keeps `dym`. Power off at `dym` about 30, on again 31+ min later (`RTCSET` to
+  fake it): straight to "has died", no sound.
+
 ### Revive (v1.59)
 `REVIVES` prints how many; `REVIVES <n>` sets it. `GIFT 8` wraps one. The Revive slot is the bottom right of the
 Backpack, at about 319 314.
 - [ ] Flashing v1.59 over an older save shows `revive=3` in `STATS`; a restart doesn't add more. The rest of the
   Backpack is unchanged.
 - [ ] The Backpack is a 3 × 3 grid inside the circle: berry, cake, candy / protein, iron, carbos / charm, egg,
-  Revive (a golden feather). The hint and "tap: back" fit below it, EN and ES.
+  Revive (a yellow crystal since v1.62; a golden feather before). The hint and "tap: back" fit below it, EN and ES.
 - [ ] A tap on the Revive (with one or more) plays the tap sound and the hint says "Saves a dying pet" /
   "Salva a un bicho moribundo" for 3 s. It never asks "Use?".
 

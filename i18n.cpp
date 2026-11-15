@@ -72,6 +72,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Salva a un bicho moribundo",
     // v1.60: muerte por abandono: sin vinculo, el dialogo, el huevo que deja, revivido
     "Est\240 muy d\202bil!", "%s se muere...", "Usar un Revivir? (%u)", "No te quedan Revivir", "VALE", "Dej\242 un huevo...", "Revivido!",
+    // v1.63: tiene sueño
+    "Tiene sue\244o...",
+    // v1.64: la hora del Revivir
+    "Quedan %u min", "%s ha muerto...", "No lleg\242 el Revivir",
   },
   // ---------------- EN ----------------
   {
@@ -138,6 +142,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Saves a dying pet",
     // v1.60: muerte por abandono: sin vinculo, el dialogo, el huevo que deja, revivido
     "It's very weak!", "%s is dying...", "Use a Revive? (%u)", "No Revives left", "OK", "It left an egg...", "Revived!",
+    // v1.63: tiene sueño
+    "Getting sleepy...",
+    // v1.64: la hora del Revivir
+    "%u min left", "%s has died...", "No Revive in time",
   },
   // ---------------- FR ----------------
   {
@@ -204,6 +212,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Sauve un ami mourant",
     // v1.60: muerte por abandono: sin vinculo, el dialogo, el huevo que deja, revivido
     "Il est tr\212s faible!", "%s se meurt...", "Utiliser Ranimer? (%u)", "Plus de Ranimer", "OK", "Il a laiss\202 un oeuf...", "Ranim\202!",
+    // v1.63: tiene sueño
+    "Il a sommeil...",
+    // v1.64: la hora del Revivir
+    "Encore %u min", "%s est mort...", "Ranimer trop tard",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -275,6 +287,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Rettet ein sterbendes Tier",
     // v1.60: muerte por abandono: sin vinculo, el dialogo, el huevo que deja, revivido
     "Sehr schwach!", "%s stirbt...", "Beleber nutzen? (%u)", "Keine Beleber mehr", "OK", "Es hinterl\204sst ein Ei...", "Wiederbelebt!",
+    // v1.63: tiene sueño
+    "Wird m\201de...",
+    // v1.64: la hora del Revivir
+    "Noch %u Min.", "%s ist gestorben...", "Kein Beleber rechtzeitig",
   },
   // ---------------- IT ----------------
   {
@@ -341,6 +357,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Salva chi sta morendo",
     // v1.60: muerte por abandono: sin vinculo, el dialogo, el huevo que deja, revivido
     "E' debolissimo!", "%s sta morendo...", "Usare Rianima? (%u)", "Niente Rianima", "OK", "Ha lasciato un uovo...", "Rianimato!",
+    // v1.63: tiene sueño
+    "Ha sonno...",
+    // v1.64: la hora del Revivir
+    "Ancora %u min", "%s e' morto...", "Rianima non arrivato",
   },
   // ---------------- PT ----------------
   {
@@ -407,6 +427,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Salva quem esta morrendo",
     // v1.60: muerte por abandono: sin vinculo, el dialogo, el huevo que deja, revivido
     "Muito fraco!", "%s esta morrendo...", "Usar Reviver? (%u)", "Sem Reviver", "OK", "Deixou um ovo...", "Revivido!",
+    // v1.63: tiene sueño
+    "Esta com sono...",
+    // v1.64: la hora del Revivir
+    "Faltam %u min", "%s morreu...", "Reviver nao chegou",
   },
   // ---------------- JA ----------------
   {
@@ -495,6 +519,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "しにかけた なかまを たすける",
     // v1.60: muerte por abandono: sin vinculo, el dialogo, el huevo que deja, revivido
     "とても よわっている!", "%sが しにそう...", "ふっかつを つかう? (%u)", "ふっかつが ない", "OK", "たまごを のこした...", "ふっかつ!",
+    // v1.63: tiene sueño
+    "ねむそう...",
+    // v1.64: la hora del Revivir
+    "のこり %u ふん", "%sは しんでしまった...", "ふっかつが まにあわなかった",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -566,6 +594,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "죽어가는 친구를 구한다",
     // v1.60: muerte por abandono: sin vinculo, el dialogo, el huevo que deja, revivido
     "너무 약해요!", "%s가 죽어가요...", "부활을 쓸까요? (%u)", "부활이 없어요", "확인", "알을 남겼어요...", "부활했어요!",
+    // v1.63: tiene sueño
+    "졸려요...",
+    // v1.64: la hora del Revivir
+    "%u분 남았어요", "%s가 죽었어요...", "부활이 늦었어요",
   },
 };
 

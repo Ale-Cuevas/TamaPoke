@@ -48,7 +48,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.60"
+#define FW_VERSION "1.64"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -449,12 +449,22 @@ void ensureMon() {
 
 void loop() {
   uint32_t now = millis();
+  // la noche (v1.63): con un juego, combate, evolucion o movimiento de la caja en marcha no se duerme
+  // solo a las 23 (lo hace al acabar)
+  pet.nightHold = pet.evolving() || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen() ||
+                  boxMove != BOXMV_NONE;
   pet.update(now);
 
   // el amplificador sigue al estado de sueno (la llamada sale sola si no cambia).
   // Aqui cubre todas las vias: el boton de luz, el sueno nocturno y el que llega
   // aplicado desde la progresion offline.
   audioSetSleeping(pet.sleeping);
+  // se desperto solo a las 8: suena, tambien con la pantalla apagada (despues de audioSetSleeping,
+  // que dormido tiene el amplificador apagado)
+  if (pet.morningWake) {
+    pet.morningWake = false;
+    sfxPlay(SFX_MORNING);
+  }
   fxCollect(now);  // subidas de nivel, medallas, metas... (fx.h)
 
   // avisa con un sonido cuando el bicho pasa a estar listo para evolucionar
@@ -470,6 +480,10 @@ void loop() {
   if (dyingNow && !wasDying) closeForDying();
   if (dyingNow && boxOpen && boxMove == BOXMV_NONE) closeBox();  // empezo a morirse en mitad de un movimiento
   wasDying = dyingNow;
+  if (pet.diedNow) {  // v1.64: paso la hora sin Revivir (el dialogo pasa a decir que murio)
+    pet.diedNow = false;
+    sfxPlay(SFX_BYE);
+  }
 
   handleTouch();
   zenTick(millis());  // cascada: fisica con el dedo de ahora, en cada vuelta
@@ -821,6 +835,18 @@ void handleSerial() {
     pet.dbgNeglect((uint16_t)(m < 0 ? 0 : (m > 60 ? 60 : m)));
     Serial.printf("bond=%u ngl=%u dth=%u\n", pet.bond, pet.neglectMinutes(), pet.deathMinutes());
     Serial.println("DONE");
+  } else if (line.startsWith("DYING ")) {  // v1.64: minutos ya pasados muriendose (60 = paso la hora)
+    long m = line.substring(6).toInt();
+    pet.dbgDyingMin((uint8_t)(m < 0 ? 0 : (m > REVIVE_LIMIT_MIN ? REVIVE_LIMIT_MIN : m)));
+    Serial.printf("dying=%d dym=%u left=%u late=%d\n", pet.isDying() ? 1 : 0, pet.dyingMinutes(),
+                  pet.reviveMinutesLeft(), pet.reviveExpired() ? 1 : 0);
+    Serial.println("DONE");
+  } else if (line == "NIGHT") {  // v1.63: la noche (con TIME para saltar a las 21:59, 22:59 o 07:59)
+    Serial.printf("hour=%d sleepy=%d sleep=%d nslp=%d nawake=%u bedn=%lu night=%lu bond=%u\n", pet.localHour(),
+                  pet.sleepy() ? 1 : 0, pet.sleeping ? 1 : 0, pet.nightSlept() ? 1 : 0, pet.nightAwakeMinutes(),
+                  (unsigned long)pet.bedNightId(), (unsigned long)Pet::nightId(pet.lastSeenEpoch),
+                  pet.bond);
+    Serial.println("DONE");
   } else if (line == "DIE") {  // v1.60: se muere ya (el dialogo del Revivir)
     pet.startDying();
     Serial.printf("dying=%d degg=%d revive=%u\n", pet.isDying() ? 1 : 0, pet.deathEggSpecies(), pet.items[IT_REVIVE]);
@@ -1119,8 +1145,9 @@ void handleSerial() {
                   pet.shiny, pet.streak, pet.bestStreak, pet.bond, pet.bondGainedToday(), pet.medals,
                   pet.totalMedals, pet.nick);
     // abandono (v1.60): minutos apagando el vinculo, minutos hacia la muerte, el dialogo y su huevo
-    Serial.printf("ngl=%u dth=%u dying=%d degg=%d revive=%u lend=%u\n", pet.neglectMinutes(), pet.deathMinutes(),
-                  pet.isDying() ? 1 : 0, pet.deathEggSpecies(), pet.items[IT_REVIVE], pet.lastEnd);
+    Serial.printf("ngl=%u dth=%u dying=%d dym=%u degg=%d revive=%u lend=%u\n", pet.neglectMinutes(),
+                  pet.deathMinutes(), pet.isDying() ? 1 : 0, pet.dyingMinutes(), pet.deathEggSpecies(),
+                  pet.items[IT_REVIVE], pet.lastEnd);
     Serial.printf("rec ball=%u bag=%u zen=%u.%u dash=%u\n", pet.gameHi, pet.strHi, pet.zenHi / 10, pet.zenHi % 10, pet.dashHi);
     // crecimiento (v1.35, growth.h): de el sale el nivel; la edad va aparte
     Serial.printf("grow=%lu lv=%u into=%u/%u age=%lu\n", (unsigned long)pet.growMin, pet.level(),
@@ -5595,8 +5622,9 @@ void closeForDying() {
   bathPending = false;
 }
 
-// dialogo: con Revivir, SI (revive) / NO (se va); sin ninguno, un solo boton (se va). Sin tiempo
-// limite, y un toque fuera de los botones no hace nada: decide si el bicho sigue
+// dialogo: con Revivir, SI (revive) / NO (se va); sin ninguno, un solo boton (se va). El Revivir tiene
+// una hora (v1.64): pasada, dice que murio y solo queda VALE (se va). Un toque fuera de los botones no
+// hace nada: decide si el bicho sigue
 // el cuadro va abajo, en el sitio de las barras y los botones: arriba se ve al bicho apagandose
 #define DIE_BOX_X 94   // 278 x 120: a la altura de su borde de abajo (y 410) el circulo deja x 85..381
 #define DIE_BOX_Y 290
@@ -5612,29 +5640,35 @@ void drawDyingScreen() {
   uint32_t now = millis();
   const DexEntry &d = DEX_TBL[pet.speciesId];
   const char *nm = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
-  drawHeader(nm, gNight ? UI_INK_NIGHT : d.accent, T(S_WEAK));
+  uint8_t n = pet.revivesOwned();  // tambien los que esperan envueltos
+  bool late = pet.reviveExpired();  // v1.64: paso la hora del Revivir
+  char left[32];  // con Revivir y aun a tiempo, la cabecera dice cuanto queda; pasada la hora, nada
+  if (late) left[0] = 0;
+  else if (n) snprintf(left, sizeof(left), T(S_DYING_LEFT_FMT), (unsigned)pet.reviveMinutesLeft());
+  else snprintf(left, sizeof(left), "%s", T(S_WEAK));
+  drawHeader(nm, gNight ? UI_INK_NIGHT : d.accent, left);
   drawSadRain(now);
   if (pmd.loaded) drawPmdAct(pmd.has(PMD_SLEEP) ? PMD_SLEEP : PMD_IDLE, CX, PET_GROUND, now, true, true, 5);
   else drawPet();
   drawPoops();
   gfx->fillRect(0, 312, 466, 154, gNight ? UI_BG_NIGHT : UI_BG_DAY);
 
-  uint8_t n = pet.revivesOwned();  // tambien los que esperan envueltos
   gfx->fillRoundRect(DIE_BOX_X, DIE_BOX_Y, DIE_BOX_W, DIE_BOX_H, 16, UI_WHITE);
   gfx->drawRoundRect(DIE_BOX_X, DIE_BOX_Y, DIE_BOX_W, DIE_BOX_H, 16, UI_INK);
   char q[48];
-  snprintf(q, sizeof(q), T(S_DYING_FMT), nm);
+  snprintf(q, sizeof(q), T(late ? S_DIED_FMT : S_DYING_FMT), nm);
   gfx->setTextColor(UI_INK);
   setSize(2);
   setCur(centerX(q, 2), DIE_BOX_Y + 14);
   printT(q);
   char a[48];
-  if (n) snprintf(a, sizeof(a), T(S_USE_REVIVE_FMT), (unsigned)n);
+  if (late) snprintf(a, sizeof(a), "%s", T(S_DIED_LATE));
+  else if (n) snprintf(a, sizeof(a), T(S_USE_REVIVE_FMT), (unsigned)n);
   else snprintf(a, sizeof(a), "%s", T(S_NO_REVIVES));
-  gfx->setTextColor(n ? UI_INK : BOX_NOTE_INK);
+  gfx->setTextColor(n && !late ? UI_INK : BOX_NOTE_INK);
   setCur(centerX(a, 2), DIE_BOX_Y + 38);
   printT(a);
-  if (n) {
+  if (n && !late) {
     gfx->fillRoundRect(DIE_YES_X, DIE_BTN_Y, DIE_BTN_W, DIE_BTN_H, 12, UI_BAR_OK);
     gfx->setTextColor(UI_WHITE);
     setCur(DIE_YES_X + (DIE_BTN_W - textW(T(S_YES), 2)) / 2, DIE_BTN_Y + 14);
@@ -5655,7 +5689,7 @@ static bool inDieBtn(int16_t x, int16_t y, int bx) {
 }
 
 void dyingTap(int16_t x, int16_t y) {
-  if (pet.revivesOwned()) {
+  if (pet.revivesOwned() && !pet.reviveExpired()) {
     if (inDieBtn(x, y, DIE_YES_X)) {
       FxNeedSnap ns = fxSnap();
       if (pet.revive()) {
@@ -5671,7 +5705,7 @@ void dyingTap(int16_t x, int16_t y) {
       pet.letGo();
     }
   } else if (inDieBtn(x, y, DIE_OK_X)) {
-    Serial.println("REVIVE none");
+    Serial.println(pet.reviveExpired() ? "REVIVE late" : "REVIVE none");
     pet.letGo();
   }
 }
@@ -5907,6 +5941,28 @@ void drawEmote(int cx, int headY) {
   uint8_t e = pet.emote();
   if (e == EMOTE_ANGRY) drawAngerMark(cx + 46, headY - 8);
   else if (e == EMOTE_DIZZY) drawDizzyStars(cx, headY - 18, millis());
+  else if (pet.sleepy()) drawSleepyBubble(cx, headY, millis());
+}
+
+// tiene sueño (v1.63, desde las 22): un globo de pensamiento con "zzz" junto a la cabeza, del lado
+// con sitio (a la derecha, o a la izquierda si el bicho anda por la derecha), meciendose despacio
+void drawSleepyBubble(int cx, int headY, uint32_t now) {
+  int side = cx > CX + 20 ? -1 : 1;
+  int bob = (int)(3.0f * sinf(now * 0.003f));
+  int bx = cx + side * 92, by = headY - 34 + bob;  // centro de la nube
+  if (by < 118) by = 118;                           // sin pisar la cabecera
+  gfx->fillCircle(cx + side * 40, headY - 2 + bob / 2, 5, UI_WHITE);
+  gfx->drawCircle(cx + side * 40, headY - 2 + bob / 2, 5, UI_INK);
+  gfx->fillCircle(cx + side * 56, by + 16, 8, UI_WHITE);
+  gfx->drawCircle(cx + side * 56, by + 16, 8, UI_INK);
+  gfx->fillRoundRect(bx - 38, by - 20, 76, 40, 20, UI_WHITE);
+  gfx->drawRoundRect(bx - 38, by - 20, 76, 40, 20, UI_INK);
+  gfx->setTextColor(UI_INK);
+  setSize(2);
+  // una "z" mas que otra cada segundo: parece que respira
+  const char *z = (now / 1000) % 2 ? "zzz" : "zz";
+  setCur(bx - textW("zzz", 2) / 2, by - 7);
+  printT(z);
 }
 
 // alto en pantalla del sprite PMD en reposo, de los pies hacia arriba (para
@@ -6281,6 +6337,7 @@ const char *statusMsg() {
   if (pet.neglected()) return T(pet.bond > 0 ? S_ABANDONED : S_WEAK);
   if (pet.eating()) return T(S_EATING);
   if (pet.showHeart()) return T(S_LIKES);
+  if (pet.sleepy()) return T(S_SLEEPY);  // la noche (v1.63): hora de acostarlo
   if (pet.fullness < 25) return T(S_HUNGRY);
   if (pet.hygiene < 25) return T(S_NEEDS_BATH);
   if (pet.energy < 25) return T(S_EXHAUSTED);

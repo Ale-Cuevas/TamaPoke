@@ -8,6 +8,45 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.64] - 2026-11-15
+
+### Changed
+
+- **A Revive has 1 hour.** While the pet is dying the header counts the minutes left ("42 min left" /
+  "Quedan 42 min"; "It's very weak!" when there are no Revives). The hour is real time: it also runs with the
+  board off. When it's up, the bye sound plays (board on) and the dialog says "X has died..." / "X ha
+  muerto..." and "No Revive in time" / "No llegó el Revivir", with only OK. OK is the same ending as NO: the
+  rain, "It has passed away...", and the egg of its line from level 50 (60 %). A restart keeps the count
+  (`dym`).
+- Serial: `DYING <min>` sets the minutes already spent dying (60 = too late); `STATS` prints `dym=`.
+
+## [1.63] - 2026-11-15
+
+### Added
+
+- **The night routine** (it needs the clock; with no time set nothing changes):
+  - From **22:00** the pet is **sleepy**: a thought bubble with "zzz" next to its head and "Getting sleepy..." /
+    "Tiene sueño...".
+  - **Put it to bed** while it's sleepy (moon, or face-down) and it gains **+3 bond**, once a night and outside
+    the daily bond cap. Going to bed from 20:00 also counts as a night's sleep.
+  - At **23:00** it goes to bed **by itself** (no bond). Not in the middle of a game, a battle, an evolution or a
+    Box move: it waits until that ends. Woken before 08:00 (sun or a shake), it falls asleep again after
+    **30 minutes** awake.
+  - **Asleep at night** (22:00–08:00) the needs drain half as fast as in a nap, with higher floors: FOOD and JOY
+    −1 every 4 min down to 50, HYG −1 every 6 min down to 55. A pet put to bed well cared for wakes up with every
+    bar at 50 or more.
+  - At **08:00** it **wakes up by itself** with a short rising tune (also with the screen dark). An afternoon nap
+    isn't woken, unless it lasts into the night.
+  - With the board off, the night goes the same way (bed at 23:00, wake at 08:00, no sound).
+  - Serial `NIGHT` prints `hour sleepy sleep nslp nawake bedn night bond`.
+
+## [1.62] - 2026-11-15
+
+### Changed
+
+- **The Revive looks like a yellow crystal** (it was a golden feather): a slanted shard with a white shine at
+  the top, in the Backpack's bottom-right slot. (v1.61 is kept for the OTA update.)
+
 ## [1.60] - 2026-11-14
 
 ### Changed

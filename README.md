@@ -162,6 +162,13 @@ While **awake**, per minute:
 - 👆 **Pet it:** +5 JOY + bond.
 - 🌙 **Sleep:** rest — ENE **+6/min**, needs drain ~**4× slower** with floors
   (FOOD 30 / JOY 35 / HYG 45). No poops, no slip-ups, and neglect doesn't count while asleep.
+- 🌃 **Night (v1.63, needs the clock):** from **22:00** the pet is sleepy (a thought bubble with "zzz",
+  "Getting sleepy..."). Putting it to bed while it's sleepy gives **+3 bond**, once a night. At **23:00** it
+  goes to bed by itself (no bond); woken before 08:00, it falls asleep again after 30 minutes awake. Asleep
+  between 22:00 and 08:00 the needs drain half as fast as in a nap, with higher floors (FOOD 50 / JOY 50 /
+  HYG 55): a pet put to bed well cared for wakes up with every bar at 50 or more. At **08:00** it wakes up by
+  itself with a short tune (also with the screen dark). A nap in the afternoon isn't woken, unless it lasts
+  into the night. All of this also happens with the board off.
 - **Feedback (v1.30):**
   - the bars slide, and every action floats a "+N" over what it changed;
   - bond rising shows a small heart;
@@ -219,7 +226,9 @@ While **awake**, per minute:
   in **30 minutes**. With the bond at 0 ("It's very weak!"), **30 more minutes** and the pet is
   dying. Any need above 0 stops the count, but the lost bond stays lost. Asleep or with the board
   off it never counts (the needs don't reach 0 there).
-  - A dialog waits (no time limit, USER doesn't close it): "X is dying... Use a Revive? (N)".
+  - A dialog waits (USER doesn't close it): "X is dying... Use a Revive? (N)", and the header counts the
+    **minutes left: a Revive has 1 hour** (v1.64, real time: it runs with the board off too). After that
+    the dialog says "X has died... No Revive in time" with only OK, and the ending follows (the egg too).
     **YES** spends a Revive: the needs come back to 50, the bond stays at 0 and it counts a slip-up.
     **NO** (or **OK** with no Revives left) is the end: rain, the pet fades, "It has passed away...".
   - From **level 50**, there's a **60 %** chance it leaves an **egg of its line** (the first form),
@@ -531,7 +540,7 @@ If one bottoms out it counts as a *slip-up*.
   battle (crossed swords) or the training bag (red bag, trains STRENGTH).
 - 💗 **Care** (v1.53) → a menu with two choices:
   - 🌙 **Sleep** / ☀️ **wake** (recovers energy, the scene goes dark). While asleep, needs decay
-    much slower (rest). The screen stays as bright as when it's awake. Asleep, Care is the button
+    much slower (rest); at night even slower, and it wakes up by itself at 08:00 (v1.63). The screen stays as bright as when it's awake. Asleep, Care is the button
     that still works, and its menu shows the sun.
   - 🫧 **Bath**: a foam scene that cleans up the poops (greyed while asleep).
 
@@ -579,7 +588,7 @@ witness it), each opening a two-option dialog:
   rising hearts → new egg) or *Stay together* (keep your companion; re-offered in
   a day). Tension: a maxed-out friend vs. completing the Pokédex.
 - **Revive** (v1.60, total neglect: the bond fades in 30 min, 30 more and it's dying): *YES* spends a
-  Revive and brings it back; *NO* is a somber ending in the rain (from level 50 it may leave an egg).
+  Revive and brings it back, within 1 hour (v1.64); *NO* is a somber ending in the rain (from level 50 it may leave an egg).
 
 ## Sprites: PMD SpriteCollab everywhere
 
@@ -755,7 +764,8 @@ What the firmware does to save power (the policy is in `power.h`, covered by `te
 `STATS` (full state) · `SPEC <dex>` (change species) · `LVL <n>` · `HATCH` ·
 `SHINY` · `NICK <x>` · `BYE` (farewell) · `ABANDON` (all four needs to 0: the bond starts
 fading) · `NEGLECT <min>` (fast-forward the neglect count, 0–60: up to 30 the bond as if fading that long,
-above it bond 0 and the rest toward death) · `DIE` (dying now: the Revive dialog) · `WIPE` (factory reset → new game) · `BEEP` (audio test) ·
+above it bond 0 and the rest toward death) · `DIE` (dying now: the Revive dialog) · `DYING <min>` (minutes
+already spent dying, 60 = too late for a Revive) · `NIGHT` (the night routine's state) · `WIPE` (factory reset → new game) · `BEEP` (audio test) ·
 `REG` (Pokédex) · `EGGS` (simulate 20 eggs) · `GAL` (gallery) · `CAREDAY` ·
 `TIME <epoch>` / `RTCSET <epoch>` · `HEALTH` (uptime + heap for the soak test) ·
 `LS` / `PUT` (SD files) · `STEPS <n>` (add n steps through the IMU's path) ·

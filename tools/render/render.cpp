@@ -362,11 +362,22 @@ static const std::vector<Scene> &scenes() {
     { "abandoned", [] { pokemon(4, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.bond = 60; } },
     { "abandoned-es", [] { pokemon(4, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.bond = 60;
                            setLang(LANG_ES); applyLangFont(); } },
+    // la noche (v1.63): con sueño desde las 22, el globo con "zzz" (a la izquierda si anda por la derecha)
+    { "sleepy", [] { pokemon(25, 22); } },
+    { "sleepy-es", [] { pokemon(25, 22); setLang(LANG_ES); applyLangFont(); } },
+    { "sleepy-right", [] { pokemon(7, 22); beh.x = beh.targetX = 330; } },
     { "weak", [] { pokemon(4, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.bond = 0; } },
     { "dying-revive", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.dbgSetPoops(2);
                            pet.items[IT_REVIVE] = 3; pet.startDying(); }, 2 },
     { "dying-revive-es", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.items[IT_REVIVE] = 3;
                               pet.startDying(); setLang(LANG_ES); applyLangFont(); }, 2 },
+    // v1.64: la hora del Revivir; pasada, el dialogo dice que murio
+    { "dying-late", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.items[IT_REVIVE] = 3;
+                         pet.startDying(); pet.dbgDyingMin(REVIVE_LIMIT_MIN); }, 2 },
+    { "dying-late-es", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.items[IT_REVIVE] = 3;
+                            pet.startDying(); pet.dbgDyingMin(REVIVE_LIMIT_MIN); setLang(LANG_ES); applyLangFont(); }, 2 },
+    { "dying-left-es", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.items[IT_REVIVE] = 3;
+                            pet.startDying(); pet.dbgDyingMin(18); setLang(LANG_ES); applyLangFont(); }, 2 },
     { "dying-none", [] { pokemon(25, 21); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.startDying(); }, 2 },
     { "dying-none-es", [] { pokemon(25, 21); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.startDying();
                             setLang(LANG_ES); applyLangFont(); }, 2 },

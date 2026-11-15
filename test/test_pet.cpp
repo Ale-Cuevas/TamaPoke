@@ -27,6 +27,9 @@ static void makePet(Pet &p, int16_t dex) {
   p.eggTap();  // 3 toques = eclosion inmediata
 }
 
+// el reloj de las pruebas: el dia 1000 a las hh:mm (hora local, como el RTC)
+static uint32_t at(int hh, int mm, uint32_t day = 1000) { return day * 86400u + hh * 3600u + mm * 60u; }
+
 static void setStats(Pet &p, uint8_t f, uint8_t j, uint8_t e, uint8_t h) {
   p.fullness = f; p.joy = j; p.energy = e; p.hygiene = h;
 }
@@ -200,8 +203,8 @@ TEST(cake, apagado_cuenta_lo_que_quedaba) {
   CHECK(p.eatCake());
   advance(p, 120);  // le queda 1 h
   CHECK_EQ(p.fullness, (uint8_t)100);
-  p.setClock(1000u * 86400);
-  p.syncClock(1000u * 86400 + 240 * 60);  // 4 h apagado: 1 h lleno, 3 h bajando (-2/min, suelo 15)
+  p.setClock(1000u * 86400 + 12 * 3600);  // a mediodia: de noche se dormiria solo (v1.63)
+  p.syncClock(1000u * 86400 + 12 * 3600 + 240 * 60);  // 4 h apagado: 1 h lleno, 3 h bajando (-2/min, suelo 15)
   CHECK(!p.sated());
   CHECK_EQ(p.fullness, (uint8_t)15);
   Pet q;
@@ -1386,6 +1389,100 @@ TEST(death, un_revivir_no_deja_huevo_pendiente) {
   CHECK_EQ(p.deathEggSpecies(), (int16_t)0);
 }
 
+// v1.64: el Revivir tiene una hora
+TEST(death, una_hora_para_el_revivir) {
+  Pet p;
+  makePet(p, 4);
+  p.startDying();
+  CHECK_EQ(p.reviveMinutesLeft(), (uint8_t)REVIVE_LIMIT_MIN);
+  advance(p, REVIVE_LIMIT_MIN - 1);
+  CHECK(!p.reviveExpired());
+  CHECK_EQ(p.reviveMinutesLeft(), (uint8_t)1);
+  CHECK(!p.diedNow);
+  advance(p, 1);
+  CHECK(p.reviveExpired());
+  CHECK(p.diedNow);
+  CHECK(p.savePending());
+  CHECK_EQ(p.reviveMinutesLeft(), (uint8_t)0);
+  CHECK(p.isDying());
+  CHECK_MSG(!p.revive(), "pasada la hora, el Revivir ya no sirve");
+  CHECK_EQ(p.items[IT_REVIVE], (uint8_t)REVIVE_START);
+  advance(p, 30);
+  CHECK_EQ(p.dyingMinutes(), (uint8_t)REVIVE_LIMIT_MIN);
+}
+
+TEST(death, a_tiempo_el_revivir_aun_sirve) {
+  Pet p;
+  makePet(p, 4);
+  p.startDying();
+  advance(p, REVIVE_LIMIT_MIN - 1);
+  CHECK(p.revive());
+  CHECK(!p.isDying());
+  CHECK_EQ(p.dyingMinutes(), (uint8_t)0);
+}
+
+TEST(death, la_hora_corre_tambien_apagada) {
+  Pet p;
+  makePet(p, 4);
+  p.setClock(at(12, 0));
+  p.startDying();
+  p.syncClock(at(12, 40));
+  CHECK(!p.reviveExpired());
+  CHECK_EQ(p.reviveMinutesLeft(), (uint8_t)(REVIVE_LIMIT_MIN - 40));
+  Pet q;
+  makePet(q, 4);
+  q.setClock(at(12, 0));
+  q.startDying();
+  q.syncClock(at(13, 1));
+  CHECK(q.reviveExpired());
+  CHECK_MSG(!q.diedNow, "apagada no suena: el dialogo ya lo dice al encender");
+  CHECK(!q.revive());
+  Pet b;  // y se guardo
+  b.begin();
+  CHECK(b.reviveExpired());
+}
+
+TEST(death, la_cuenta_de_la_hora_sobrevive_a_un_reinicio) {
+  Pet p;
+  makePet(p, 4);
+  p.startDying();
+  advance(p, 25);
+  p.flushSave();
+  Pet b;
+  b.begin();
+  CHECK(b.isDying());
+  CHECK_EQ(b.dyingMinutes(), (uint8_t)25);
+}
+
+TEST(death, pasada_la_hora_el_final_deja_su_huevo) {
+  Pet p;
+  makePet(p, 6);
+  p.setLevel(DEATH_EGG_LEVEL);
+  mockForceRandom(DEATH_EGG_ODDS - 1);
+  p.startDying();
+  mockClearForcedRandom();
+  advance(p, REVIVE_LIMIT_MIN);
+  CHECK(p.reviveExpired());
+  p.letGo();
+  mockAdvanceMillis(CEREMONY_MS + 1);
+  p.update(millis());
+  CHECK(!p.isDying());
+  CHECK(p.isEgg());
+  CHECK_EQ(p.eggSpecies(), (int16_t)4);
+  CHECK_EQ(p.lastEnd, (uint8_t)CER_DEATH);
+}
+
+TEST(death, el_comando_dying_adelanta_la_hora) {
+  Pet p;
+  makePet(p, 4);
+  p.dbgDyingMin(30);
+  CHECK_EQ(p.dyingMinutes(), (uint8_t)0);  // sin morirse no hace nada
+  p.startDying();
+  p.dbgDyingMin(REVIVE_LIMIT_MIN - 1);
+  advance(p, 1);
+  CHECK(p.reviveExpired());
+}
+
 TEST(death, el_comando_neglect_adelanta_la_cuenta) {
   Pet p;
   makePet(p, 4);
@@ -2329,6 +2426,257 @@ TEST(imu, nada_de_esto_en_una_ceremonia) {
   CHECK(!p.sleeping);
   CHECK_EQ(p.emote(), (uint8_t)EMOTE_NONE);
   CHECK_EQ(p.joy, (uint8_t)50);
+}
+
+// ---------------------------------------------------------------- la noche (v1.63)
+
+// minutos en vivo con el reloj andando (en el sketch, el loop pone lastSeenEpoch cada 30 s)
+static void liveMinutes(Pet &p, uint32_t minutes) {
+  for (uint32_t i = 0; i < minutes; i++) {
+    p.lastSeenEpoch += 60;
+    mockAdvanceMillis(PET_TICK_MS);
+    p.update(millis());
+  }
+}
+
+TEST(night, tiene_sueno_desde_las_22) {
+  Pet p;
+  makePet(p, 4);
+  CHECK_MSG(!p.sleepy(), "sin reloj no hay noche");
+  p.lastSeenEpoch = at(21, 59);
+  CHECK(!p.sleepy());
+  p.lastSeenEpoch = at(22, 0);
+  CHECK(p.sleepy());
+  p.lastSeenEpoch = at(7, 59);
+  CHECK(p.sleepy());
+  p.lastSeenEpoch = at(8, 0);
+  CHECK(!p.sleepy());
+  p.lastSeenEpoch = at(22, 30);
+  p.toggleLight();
+  CHECK_MSG(!p.sleepy(), "dormido no tiene sueño: duerme");
+}
+
+TEST(night, a_las_23_se_duerme_solo_sin_vinculo) {
+  Pet p;
+  makePet(p, 4);
+  setStats(p, 100, 100, 100, 100);
+  p.bond = 20;
+  p.lastSeenEpoch = at(22, 57);
+  liveMinutes(p, 2);  // 22:59
+  CHECK(!p.sleeping);
+  liveMinutes(p, 1);  // 23:00
+  CHECK(p.sleeping);
+  CHECK(p.nightSlept());
+  CHECK_EQ(p.bond, (uint8_t)20);
+  CHECK(p.savePending());
+}
+
+TEST(night, con_un_juego_abierto_espera_a_que_acabe) {
+  Pet p;
+  makePet(p, 4);
+  setStats(p, 100, 100, 100, 100);
+  p.lastSeenEpoch = at(22, 58);
+  liveMinutes(p, 1);
+  p.nightHold = true;
+  liveMinutes(p, 5);  // 23:04, jugando
+  CHECK(!p.sleeping);
+  p.nightHold = false;
+  liveMinutes(p, 1);
+  CHECK_MSG(p.sleeping, "al acabar el juego se duerme ya, sin esperar otra media hora");
+}
+
+TEST(night, despertado_de_noche_se_vuelve_a_dormir_a_la_media_hora) {
+  Pet p;
+  makePet(p, 4);
+  setStats(p, 100, 100, 100, 100);
+  p.lastSeenEpoch = at(1, 0);
+  p.toggleLight();
+  CHECK(p.sleeping);
+  p.toggleLight();  // lo despiertas a la 1
+  CHECK(!p.sleeping);
+  liveMinutes(p, NIGHT_RESLEEP_MIN - 1);
+  CHECK(!p.sleeping);
+  liveMinutes(p, 1);
+  CHECK(p.sleeping);
+  // agitarlo tambien lo despierta, y tambien vuelve a dormirse
+  p.wakeGrumpy();
+  CHECK(!p.sleeping);
+  liveMinutes(p, NIGHT_RESLEEP_MIN);
+  CHECK(p.sleeping);
+}
+
+TEST(night, de_dia_despierto_no_se_duerme) {
+  Pet p;
+  makePet(p, 4);
+  setStats(p, 100, 100, 100, 100);
+  p.lastSeenEpoch = at(8, 0);
+  liveMinutes(p, 13 * 60);  // hasta las 21:00
+  CHECK(!p.sleeping);
+  Pet q;
+  makePet(q, 4);
+  setStats(q, 100, 100, 100, 100);
+  liveMinutes(q, 600);  // sin reloj (lastSeenEpoch 0 hasta que el loop lo pone): nada
+  CHECK(!q.sleeping);
+}
+
+TEST(night, acostarlo_con_sueno_da_vinculo_una_vez_por_noche) {
+  Pet p;
+  makePet(p, 4);
+  p.bond = 20;
+  p.lastSeenEpoch = at(21, 0);
+  p.toggleLight();
+  CHECK_MSG(p.nightSlept(), "desde las 20 cuenta como dormir de noche");
+  CHECK_MSG(p.bond == 20, "antes de las 22 no tiene sueño: sin vinculo");
+  p.toggleLight();
+  p.lastSeenEpoch = at(22, 30);
+  p.toggleLight();
+  CHECK_EQ(p.bond, (uint8_t)(20 + BED_BOND));
+  p.toggleLight();
+  p.lastSeenEpoch = at(2, 0, 1001);  // la misma noche, de madrugada
+  p.toggleLight();
+  CHECK_EQ(p.bond, (uint8_t)(20 + BED_BOND));
+  p.toggleLight();
+  p.lastSeenEpoch = at(22, 30, 1001);  // la noche siguiente
+  p.sleepDeferred();                   // boca abajo tambien cuenta
+  CHECK_EQ(p.bond, (uint8_t)(20 + 2 * BED_BOND));
+}
+
+TEST(night, el_vinculo_de_acostarlo_no_gasta_el_tope_diario) {
+  Pet p;
+  makePet(p, 4);
+  p.bond = 20;
+  p.lastSeenEpoch = at(22, 30);
+  p.toggleLight();
+  p.toggleLight();
+  uint8_t b = p.bond;
+  p.caress();  // un mimo sigue dando vinculo
+  CHECK(p.bond > b);
+}
+
+TEST(night, por_la_manana_se_despierta_solo_y_suena) {
+  Pet p;
+  makePet(p, 4);
+  p.lastSeenEpoch = at(23, 30);
+  p.toggleLight();
+  p.lastSeenEpoch = at(7, 58, 1001);
+  liveMinutes(p, 1);  // 07:59
+  CHECK(p.sleeping);
+  CHECK(!p.morningWake);
+  liveMinutes(p, 1);  // 08:00
+  CHECK(!p.sleeping);
+  CHECK(!p.nightSlept());
+  CHECK(p.morningWake);
+  CHECK(p.savePending());
+}
+
+TEST(night, una_siesta_de_tarde_no_se_despierta_sola) {
+  Pet p;
+  makePet(p, 4);
+  p.lastSeenEpoch = at(15, 0);
+  p.toggleLight();
+  CHECK(!p.nightSlept());
+  liveMinutes(p, 120);
+  CHECK(p.sleeping);
+}
+
+TEST(night, una_siesta_que_llega_a_la_noche_amanece_a_las_8) {
+  Pet p;
+  makePet(p, 4);
+  p.lastSeenEpoch = at(18, 0);
+  p.toggleLight();
+  liveMinutes(p, 14 * 60);  // hasta las 08:00
+  CHECK(!p.sleeping);
+  CHECK(p.morningWake);
+}
+
+TEST(night, dormido_de_noche_amanece_con_todo_a_50_o_mas) {
+  Pet p;
+  makePet(p, 4);
+  setStats(p, 100, 100, 20, 100);
+  p.lastSeenEpoch = at(22, 59);
+  liveMinutes(p, 1);  // 23:00, se duerme solo
+  CHECK(p.sleeping);
+  liveMinutes(p, 9 * 60 - 1);  // 07:59
+  CHECK(p.sleeping);
+  CHECK(p.fullness >= NIGHT_FOOD_FLOOR);
+  CHECK(p.joy >= NIGHT_JOY_FLOOR);
+  CHECK(p.hygiene >= NIGHT_HYG_FLOOR);
+  CHECK_EQ(p.energy, (uint8_t)100);
+  CHECK_EQ(p.poops, (uint8_t)0);
+  // y a la mitad de una siesta: en 2 h de noche la comida baja 30; en una siesta de dia, 60
+  Pet q;
+  makePet(q, 4);
+  setStats(q, 100, 100, 100, 100);
+  q.lastSeenEpoch = at(23, 0);
+  q.toggleLight();
+  liveMinutes(q, 2 * 60);
+  CHECK_EQ(q.fullness, (uint8_t)70);
+  Pet n;
+  makePet(n, 4);
+  setStats(n, 100, 100, 100, 100);
+  n.lastSeenEpoch = at(13, 0);
+  n.toggleLight();
+  liveMinutes(n, 2 * 60);
+  CHECK_EQ(n.fullness, (uint8_t)40);
+}
+
+TEST(night, por_debajo_del_suelo_no_baja_mas) {
+  Pet p;
+  makePet(p, 4);
+  setStats(p, 40, 30, 100, 50);
+  p.lastSeenEpoch = at(23, 0);
+  p.toggleLight();
+  liveMinutes(p, 6 * 60);
+  CHECK_EQ(p.fullness, (uint8_t)40);
+  CHECK_EQ(p.joy, (uint8_t)30);
+  CHECK_EQ(p.hygiene, (uint8_t)50);
+}
+
+TEST(night, apagado_toda_la_noche_duerme_y_amanece) {
+  Pet p;
+  makePet(p, 4);
+  setStats(p, 100, 100, 50, 100);
+  p.setClock(at(22, 50));
+  p.syncClock(at(8, 5, 1001));  // apagada de 22:50 a 08:05
+  CHECK_MSG(!p.sleeping, "a las 8 se desperto");
+  CHECK_MSG(!p.morningWake, "apagada no suena");
+  CHECK_MSG(p.energy >= 90, "durmio toda la noche (la energia volvio)");
+  CHECK(p.fullness >= 30);  // 50 de noche, y 5 min despierto
+  CHECK(p.joy >= 40);
+}
+
+TEST(night, la_noche_sobrevive_a_un_reinicio) {
+  Pet p;
+  makePet(p, 4);
+  p.lastSeenEpoch = at(22, 30);
+  p.toggleLight();  // guarda
+  Pet q;
+  q.begin();
+  CHECK(q.sleeping);
+  CHECK(q.nightSlept());
+  CHECK_EQ(q.bedNightId(), Pet::nightId(at(22, 30)));
+  q.lastSeenEpoch = at(23, 0);
+  q.toggleLight();
+  q.toggleLight();
+  CHECK_MSG(q.bond == p.bond, "tras reiniciar, la misma noche no da otra vez");
+}
+
+TEST(night, huevo_ni_ceremonia_ni_moribundo) {
+  mockNvsReset();
+  Pet e;
+  e.begin();
+  e.chooseStarter(4);
+  e.lastSeenEpoch = at(22, 59);
+  liveMinutes(e, 1);
+  CHECK(!e.sleeping);
+  CHECK(!e.sleepy());
+  Pet p;
+  makePet(p, 4);
+  p.startDying();
+  p.lastSeenEpoch = at(22, 59);
+  CHECK(!p.sleepy());
+  liveMinutes(p, 1);
+  CHECK(!p.sleeping);
 }
 
 // ---------------------------------------------------------------- combate de practica (Tarea 3a)

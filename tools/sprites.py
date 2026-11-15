@@ -38,6 +38,8 @@ PALETTE = {
     'L': '#6f7cb8',  # lavanda sombra
     's': '#aab0bc',  # gris canon
     'S': '#787e8c',  # gris sombra
+    'v': '#efe68a',  # amarillo palido (cristal del Revivir, v1.62)
+    'V': '#b4a640',  # oliva (sombra del cristal)
 }
 
 W = H = 32
@@ -776,25 +778,26 @@ def icon_cake():
 
 
 def icon_revive():
-    # Revivir (v1.59): una pluma dorada (de fenix) en diagonal, con el canon blanco y la punta naranja.
+    # Revivir (v1.62): un cristal amarillo inclinado (era una pluma dorada), con el borde de
+    # arriba en escalera, un brillo blanco en triangulo arriba y la sombra oliva abajo a la derecha.
     # No es un corazon: el boton de Cuidar ya lo es
     return [
-        "................",
-        "...........kkk..",
-        ".........kkfffk.",
-        "........kffffYk.",
-        ".......kfffffYk.",
-        "......kffwffYk..",
-        ".....kffwffYYk..",
-        "....kffwffYYk...",
-        "....kfwffYYk....",
-        "...kfwffYYk.....",
-        "...kwffYYk......",
-        "..kfffYkk.......",
-        "..kfYkk.........",
-        ".kOk............",
-        "kOk.............",
-        "kk..............",
+        "............k...",
+        "..........kkvk..",
+        "........kkwwvk..",
+        "......kkwwwvvk..",
+        "....kkwwwwvvvk..",
+        "...kwwwwwwvvvk..",
+        "...kwwwwwvvvVk..",
+        "...kvwwwvvVVVk..",
+        "...kvwwwvVVVVk..",
+        "...kvvvvvVVVVk..",
+        "...kvvvvVVVVVk..",
+        "...kVvvvVVVVk...",
+        "...kVVVVVVkk....",
+        "...kVVVVkk......",
+        "...kVVkk........",
+        "....kk..........",
     ]
 
 
