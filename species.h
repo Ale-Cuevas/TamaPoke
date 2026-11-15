@@ -74,6 +74,8 @@ static inline uint16_t spriteColor(char ch) {
     case 'L': return 0x6BF7;  // #6f7cb8
     case 's': return 0xAD97;  // #aab0bc
     case 'S': return 0x7BF1;  // #787e8c
+    case 'v': return 0xEF31;  // #efe68a
+    case 'V': return 0xB528;  // #b4a640
     default: return 0;
   }
 }
@@ -813,22 +815,22 @@ static const char* const SPR_ICON_CAKE[16] = {  // 16x16
 };
 
 static const char* const SPR_ICON_REVIVE[16] = {  // 16x16
-  "................",
-  "...........kkk..",
-  ".........kkfffk.",
-  "........kffffYk.",
-  ".......kfffffYk.",
-  "......kffwffYk..",
-  ".....kffwffYYk..",
-  "....kffwffYYk...",
-  "....kfwffYYk....",
-  "...kfwffYYk.....",
-  "...kwffYYk......",
-  "..kfffYkk.......",
-  "..kfYkk.........",
-  ".kOk............",
-  "kOk.............",
-  "kk..............",
+  "............k...",
+  "..........kkvk..",
+  "........kkwwvk..",
+  "......kkwwwvvk..",
+  "....kkwwwwvvvk..",
+  "...kwwwwwwvvvk..",
+  "...kwwwwwvvvVk..",
+  "...kvwwwvvVVVk..",
+  "...kvwwwvVVVVk..",
+  "...kvvvvvVVVVk..",
+  "...kvvvvVVVVVk..",
+  "...kVvvvVVVVk...",
+  "...kVVVVVVkk....",
+  "...kVVVVkk......",
+  "...kVVkk........",
+  "....kk..........",
 };
 
 static const char* const SPR_EGG[32] = {  // 32x32

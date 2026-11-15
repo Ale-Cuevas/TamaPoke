@@ -8,6 +8,13 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.62] - 2026-11-15
+
+### Changed
+
+- **The Revive looks like a yellow crystal** (it was a golden feather): a slanted shard with a white shine at
+  the top, in the Backpack's bottom-right slot. (v1.61 is kept for the OTA update.)
+
 ## [1.60] - 2026-11-14
 
 ### Changed

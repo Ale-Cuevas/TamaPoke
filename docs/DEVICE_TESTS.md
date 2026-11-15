@@ -358,7 +358,7 @@ Backpack, at about 319 314.
 - [ ] Flashing v1.59 over an older save shows `revive=3` in `STATS`; a restart doesn't add more. The rest of the
   Backpack is unchanged.
 - [ ] The Backpack is a 3 × 3 grid inside the circle: berry, cake, candy / protein, iron, carbos / charm, egg,
-  Revive (a golden feather). The hint and "tap: back" fit below it, EN and ES.
+  Revive (a yellow crystal since v1.62; a golden feather before). The hint and "tap: back" fit below it, EN and ES.
 - [ ] A tap on the Revive (with one or more) plays the tap sound and the hint says "Saves a dying pet" /
   "Salva a un bicho moribundo" for 3 s. It never asks "Use?".
 
