@@ -77,8 +77,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // v1.64: la hora del Revivir
     "Quedan %u min", "%s ha muerto...", "No lleg\242 el Revivir",
     // stages
-    "Fases", "Insignias", "Elige tu equipo", "Empezar", "JEFE", "Bloqueada", "\255Fase superada!", "Derrotado...",
-    "Siguiente rival", "\255Adelante, %s!", "\255Nueva insignia!", "Nv.%u-%u", "Equipo: +1 h, +v\241nculo",
+    "Fases", "Insignias", "Elige tu equipo", "Empezar", "JEFE", "Bloqueada", "Fase superada!", "Derrotado...",
+    "Siguiente rival", "Adelante, %s!", "Nueva insignia!", "Nv.%u-%u", "Equipo: +1 h, +v\241nculo",
     "Premio disponible", "Fase %u",
   },
   // ---------------- EN ----------------
