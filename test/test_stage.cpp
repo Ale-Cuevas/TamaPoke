@@ -92,7 +92,7 @@ TEST(stage, carry_nunca_empata_y_pasa_del_tope) {
   CHECK(bt.attacks > MAX_ATTACKS);
   CHECK(bt.result == BR_WIN_A || bt.result == BR_WIN_B);
   CHECK(bt.f[0].hp == 0 || bt.f[1].hp == 0);
-  // y en todos los cruces (muestreados): KO siempre, en menos de 160 ataques
+  // y en todos los cruces (muestreados): KO siempre, en menos de 30 (muerte subita; antes 142)
   int maxAtk = 0;
   for (int a = 1; a <= 151; a += 3)
     for (int b = 1; b <= 151; b += 4)
@@ -106,7 +106,8 @@ TEST(stage, carry_nunca_empata_y_pasa_del_tope) {
       }
   char msg[64];
   snprintf(msg, sizeof(msg), "el mas largo: %d ataques", maxAtk);
-  CHECK_MSG(maxAtk < 160, msg);
+  CHECK_MSG(maxAtk < 30, msg);
+  printf("    [muerte subita] combate de fase mas largo: %d ataques\n", maxAtk);
 }
 
 TEST(stage, carry_inmunes_los_dos_se_rozan_hasta_el_ko) {
@@ -531,4 +532,37 @@ TEST(stage, informe_de_balance_tasas_de_superacion) {
   // 4 bichos 10 niveles por encima superan la primera fase casi siempre
   CHECK(rate[0][2][2][0] >= 95);
   CHECK(rate[0][2][2][1] >= 90);
+}
+
+TEST(stage, ally_que_cae_por_retroceso_deja_entrar_al_siguiente) {
+  Fighter team[2] = { plain(113, 5), plain(25, 5) };
+  StageRun run;
+  run.begin(0, team, 2, 77);
+  run.eng.attacks = SUDDEN_DEATH_AT;
+  if (run.eng.nextAttacker() != 0) run.eng.attacks++;  // que ataque tu aliado
+  run.team[0].hp = run.eng.f[0].hp = 1;
+  uint16_t foeMax = run.foe.maxHp;
+  BattleEvent ev = run.attack();
+  CHECK(ev.sudden);
+  CHECK_EQ(ev.recoil, (uint16_t)1);
+  CHECK_EQ(ev.result, (uint8_t)BR_WIN_B);
+  CHECK(run.koPending());
+  CHECK_EQ(run.team[0].hp, (uint16_t)0);
+  CHECK(run.foe.hp < foeMax && run.foe.hp > 0);  // el rival conserva lo que le quito el golpe
+  uint16_t foeHp = run.foe.hp;
+  CHECK_EQ(run.advance(), (uint8_t)SN_NEXT_ALLY);
+  CHECK_EQ(run.ally, (uint8_t)1);
+  CHECK_EQ(run.team[0].hp, (uint16_t)0);
+  CHECK_EQ(run.eng.f[0].hp, run.team[1].maxHp);
+  CHECK_EQ(run.eng.f[1].hp, foeHp);
+  CHECK_EQ(run.eng.attacks, (uint8_t)0);  // combate nuevo: la cuenta de muerte subita vuelve a 0
+  // y si era el ultimo aliado, la fase se pierde
+  Fighter one[1] = { plain(113, 5) };
+  StageRun r2;
+  r2.begin(0, one, 1, 77);
+  r2.eng.attacks = SUDDEN_DEATH_AT;
+  if (r2.eng.nextAttacker() != 0) r2.eng.attacks++;
+  r2.team[0].hp = r2.eng.f[0].hp = 1;
+  r2.attack();
+  CHECK_EQ(r2.advance(), (uint8_t)SN_LOST);
 }

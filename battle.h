@@ -25,6 +25,8 @@
 #define HIT_MAX_PCT 60
 #define SPECIAL_MAX_PCT 70     // ...o el 70 % si es especial: un KO pide al menos 2 golpes
 #define CRIT_ONE_IN 16         // golpe critico (x1,5)
+#define SUDDEN_DEATH_AT 20     // desde el ataque 21 (index 20) de un combate de fase: sin DEF y con retroceso
+#define RECOIL_PCT 10          // retroceso: % de la vida maxima del propio atacante (minimo 1)
 #define MAX_ATTACKS 15         // tope: luego gana quien conserve mas % de vida
 #define ATTACK_MS 1300         // tiempo por ataque en pantalla
 #define INTRO_MS 3000          // tarjeta VS + jingle + entrada al campo
@@ -120,11 +122,12 @@ static inline Fighter makeFighter(int16_t dex, uint16_t level, uint8_t gAtk, uin
 // DEF y VEL): ((2L/5 + 2) x P x A / D) / 50 + 2, por la eficacia, por una tirada
 // del 85-100 % y x1,5 si es critico; luego entre HIT_MIN_PCT y HIT_MAX_PCT de la
 // vida maxima del defensor (SPECIAL_MAX_PCT si es especial). "No le afecta" es 0.
+// ignoreDef (muerte subita): la DEF del defensor cuenta como 1.
 static inline uint16_t hitDamage(const Fighter &a, const Fighter &d, uint8_t eff4, bool special, bool crit,
-                                 uint8_t roll) {
+                                 uint8_t roll, bool ignoreDef = false) {
   if (!eff4) return 0;
   uint32_t P = special ? (uint32_t)ATK_POWER * SPECIAL_POWER_PCT / 100 : ATK_POWER;
-  uint32_t dmg = ((uint32_t)(2 * a.level / 5 + 2) * P * a.atk / d.def) / 50 + 2;
+  uint32_t dmg = ((uint32_t)(2 * a.level / 5 + 2) * P * a.atk / (ignoreDef ? 1u : (uint32_t)d.def)) / 50 + 2;
   dmg = dmg * eff4 / 4;
   dmg = dmg * roll / 100;
   if (crit) dmg = dmg * 3 / 2;
@@ -147,6 +150,8 @@ struct BattleEvent {
   bool special = false;
   uint16_t hp[2] = { 0, 0 };  // vida de los dos tras el golpe
   uint8_t result = BR_NONE;   // != BR_NONE: este ataque acabo el combate
+  uint16_t recoil = 0;        // muerte subita: lo que se quito el atacante a si mismo
+  bool sudden = false;        // este ataque es de muerte subita (index >= SUDDEN_DEATH_AT)
 };
 
 struct Battle {
@@ -175,7 +180,8 @@ struct Battle {
   // con 0 es un fallo de quien llama y entra con 1), no hay tope de ataques y
   // siempre acaba en KO, nunca en BR_DRAW. Si ninguno de los dos puede tocar al
   // otro (normal contra fantasma), los golpes salen x0,25 en vez de 0: el suelo
-  // del HIT_MIN_PCT asegura el KO en unos 50 ataques como mucho.
+  // del HIT_MIN_PCT asegura el KO en unos 50 ataques como mucho. Pasado el ataque
+  // SUDDEN_DEATH_AT entra la muerte subita (sin DEF, con retroceso): acaba pronto.
   void beginCarry(const Fighter &a, const Fighter &b, uint32_t seed) {
     begin(a, b, seed);  // la misma secuencia de azar que begin para la misma semilla
     carry = true;
@@ -205,7 +211,8 @@ struct Battle {
     ev.eff4 = stale ? 1 : bestEff4(f[a], f[d]);
     ev.crit = (battleRand(rng) % CRIT_ONE_IN) == 0;  // las dos tiradas siempre, para que la
     uint8_t roll = 85 + battleRand(rng) % 16;        // secuencia no dependa del resultado
-    uint16_t dmg = hitDamage(f[a], f[d], ev.eff4, special, ev.crit, roll);
+    ev.sudden = attacks >= SUDDEN_DEATH_AT;
+    uint16_t dmg = hitDamage(f[a], f[d], ev.eff4, special, ev.crit, roll, ev.sudden);
     if (!ev.eff4) ev.crit = false;  // "no le afecta" no es critico
     if (dmg > f[d].hp) dmg = f[d].hp;
     f[d].hp -= dmg;
@@ -213,6 +220,15 @@ struct Battle {
     attacks++;
     if (f[d].hp == 0) {
       result = (a == 0) ? BR_WIN_A : BR_WIN_B;
+    } else if (ev.sudden) {
+      // retroceso fijo (aunque el golpe no haga nada): asegura que acaba
+      uint32_t rec = (uint32_t)f[a].maxHp * RECOIL_PCT / 100;
+      if (rec < 1) rec = 1;
+      if (rec > f[a].hp) rec = f[a].hp;
+      f[a].hp -= (uint16_t)rec;
+      ev.recoil = (uint16_t)rec;
+      if (f[a].hp == 0) result = (d == 0) ? BR_WIN_A : BR_WIN_B;
+      else if (attacks % 2 == 0) first = roundOpener();
     } else if (!carry && attacks >= MAX_ATTACKS) {
       // gana quien conserve mas % de vida (multiplicado en cruz: sin decimales)
       uint32_t pa = (uint32_t)f[0].hp * f[1].maxHp, pb = (uint32_t)f[1].hp * f[0].maxHp;

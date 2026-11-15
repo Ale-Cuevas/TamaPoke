@@ -8,6 +8,20 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.67] - 2026-11-15
+
+### Added
+
+- **Sudden death.** A stage fight that goes past 20 attacks (counted per pairing, so it starts again for each new
+  pair of pets) enters sudden death from the 21st attack: the defender's DEF counts as 1, and every attack also
+  hurts its own attacker for **10 % of its max HP (at least 1)**, even when the hit does nothing (an immune target).
+  The hit lands first: if it knocks the defender out the attacker wins and takes no recoil; otherwise the recoil is
+  applied and, if it knocks the attacker out, the other side wins (a double KO is impossible). The screen shows
+  "Sudden death!" from the 20th attack's end and "Recoil!" when the attacker's own bar drops, after the defender's.
+  The longest stage fight measured over the sampled pairs went from 142 attacks (a level-5 mirror of two tanky
+  pets) to 23. Attacks before the 21st, and the 15-attack practice cap, are unchanged. Serial prints one
+  `battle: SD #<n> dmg <d> recoil <r> hp <a>/<b>` line per sudden-death attack.
+
 ## [1.66] - 2026-11-15
 
 ### Changed
