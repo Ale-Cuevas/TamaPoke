@@ -11,6 +11,9 @@
 // La unica entrada es el especial: tocar la pantalla llena un medidor de 5 y el
 // siguiente ataque propio sale con un 30 % mas de potencia.
 //
+// Las fases (stage.h) encadenan combates con Battle::beginCarry: la vida no se
+// recupera entre uno y otro, no hay tope de ataques y siempre acaba en KO.
+//
 // Valores de partida, para afinar jugando (la tabla de constantes de FEATURES.md).
 
 #define BATTLE_LEVEL_CAP 100   // nivel que entra en las cuentas (a nivel 999 decidiria todo)
@@ -142,6 +145,8 @@ struct Battle {
   uint8_t attacks = 0;
   uint8_t result = BR_NONE;
 
+  bool carry = false;  // modo fase (beginCarry): vida heredada, sin tope, siempre acaba en KO
+
   void begin(const Fighter &a, const Fighter &b, uint32_t seed) {
     f[0] = a;
     f[1] = b;
@@ -151,7 +156,22 @@ struct Battle {
     if (!rng) rng = 1;
     attacks = 0;
     result = BR_NONE;
+    carry = false;
+    stale = false;
     first = roundOpener();
+  }
+
+  // Modo fase (stage.h): cada uno entra con la vida que trae (topada a 1..maxHp;
+  // con 0 es un fallo de quien llama y entra con 1), no hay tope de ataques y
+  // siempre acaba en KO, nunca en BR_DRAW. Si ninguno de los dos puede tocar al
+  // otro (normal contra fantasma), los golpes salen x0,25 en vez de 0: el suelo
+  // del HIT_MIN_PCT asegura el KO en unos 40 ataques como mucho.
+  void beginCarry(const Fighter &a, const Fighter &b, uint32_t seed) {
+    begin(a, b, seed);  // la misma secuencia de azar que begin para la misma semilla
+    carry = true;
+    f[0].hp = carryHp(a);
+    f[1].hp = carryHp(b);
+    stale = typeEff4(f[0].type1, f[1].type1, f[1].type2) == 0 && typeEff4(f[1].type1, f[0].type1, f[0].type2) == 0;
   }
 
   bool over() const { return result != BR_NONE; }
@@ -172,7 +192,7 @@ struct Battle {
     ev.index = attacks;
     ev.attacker = a;
     ev.special = special;
-    ev.eff4 = typeEff4(f[a].type1, f[d].type1, f[d].type2);
+    ev.eff4 = stale ? 1 : typeEff4(f[a].type1, f[d].type1, f[d].type2);
     ev.crit = (battleRand(rng) % CRIT_ONE_IN) == 0;  // las dos tiradas siempre, para que la
     uint8_t roll = 85 + battleRand(rng) % 16;        // secuencia no dependa del resultado
     uint16_t dmg = hitDamage(f[a], f[d], ev.eff4, special, ev.crit, roll);
@@ -183,7 +203,7 @@ struct Battle {
     attacks++;
     if (f[d].hp == 0) {
       result = (a == 0) ? BR_WIN_A : BR_WIN_B;
-    } else if (attacks >= MAX_ATTACKS) {
+    } else if (!carry && attacks >= MAX_ATTACKS) {
       // gana quien conserve mas % de vida (multiplicado en cruz: sin decimales)
       uint32_t pa = (uint32_t)f[0].hp * f[1].maxHp, pb = (uint32_t)f[1].hp * f[0].maxHp;
       result = pa > pb ? BR_WIN_A : pb > pa ? BR_WIN_B : BR_DRAW;
@@ -198,6 +218,8 @@ struct Battle {
 
 private:
   uint8_t first = 0;
+  bool stale = false;  // modo fase y ninguno puede tocar al otro: golpes x0,25
+  static uint16_t carryHp(const Fighter &x) { return x.hp < 1 ? 1 : (x.hp > x.maxHp ? x.maxHp : x.hp); }
   uint8_t roundOpener() {
     if (f[0].spe != f[1].spe) return f[0].spe > f[1].spe ? 0 : 1;
     return battleRand(rng) & 1;
