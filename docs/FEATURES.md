@@ -590,6 +590,13 @@ The task is big, so it ships in five parts, each its own PR:
   least 2 hits, so a battle is at least 3 attacks. At 1.3 s per attack that is about 10 s with the faint
   animation. A hard cap of 15 attacks (about 19.5 s) ends it; then the pet with
   the higher remaining HP % wins, and an exact tie is a draw.
+- **Sudden death (v1.67, stage fights only):** from the 21st attack of a pairing (`SUDDEN_DEATH_AT` 20; the count
+  restarts for each new pair) the defender's DEF counts as 1 and every attack also costs its attacker 10 % of its own
+  max HP (`RECOIL_PCT`, at least 1, capped at its remaining HP), even when the hit does nothing (immunity). The hit
+  lands first: if it is a KO the attacker wins with no recoil; otherwise the recoil is applied and if it knocks the
+  attacker out, the defender wins. A double KO cannot happen and the fight always ends (the longest sampled stage
+  fight went from 142 attacks to 23). The practice cap of 15 attacks never reaches it. On screen: "Sudden death!"
+  caption, then "Recoil!" and the attacker's bar dropping after the defender's; serial `battle: SD #n ...` lines.
 - Turn order: higher SPD attacks first each round; a tie is a seeded coin
   flip.
 - The engine takes "special armed" as an input per attack and returns one

@@ -66,6 +66,7 @@ enum StrId : uint8_t {
   S_IT_GOLDEN, S_IT_PROTEIN, S_IT_IRON, S_IT_CARBOS, S_IT_CHARM, S_IT_RARECANDY, S_IT_EGG, S_IT_CAKE, S_IT_REVIVE,
   // combate de practica (v1.24): tarjeta VS, rotulos de cada golpe, resultado
   S_PRACTICE, S_SUPER_EFF, S_NOT_EFF, S_NO_EFFECT, S_CRITICAL, S_SPECIAL, S_TAP_CHARGE,
+  S_SUDDEN_DEATH, S_RECOIL,  // v1.67: muerte subita (ataque 21 en adelante)
   S_WIN, S_LOSE, S_DRAW, S_PRACTICE_JOY_FMT, S_PRACTICE_NONE,
   // efectos de respuesta (v1.30): pildora de la subida de nivel
   S_LEVEL_UP,

@@ -340,3 +340,109 @@ TEST(battle, el_rival_evoluciona_segun_su_nivel) {
   CHECK(ramas[0] && ramas[1] && ramas[2]);
   CHECK_EQ(evolveForLevel(DEX_EEVEE, 20, rng), (int16_t)DEX_EEVEE);
 }
+
+// ---------------------------------------------------------------- muerte subita (v1.67)
+TEST(battle, antes_del_ataque_21_no_hay_retroceso_y_el_combate_es_el_de_siempre) {
+  // misma semilla: el modo fase (con muerte subita) y begin dan los mismos golpes hasta el tope de 15
+  Fighter A = plain(113, 5), B = makeFighter(113, 5, 100, 100, 100, 0, 9, 0);
+  Battle n, c;
+  n.begin(A, B, 5);
+  c.beginCarry(A, B, 5);
+  while (!n.over()) {
+    BattleEvent en = n.step(false), ec = c.step(false);
+    CHECK_EQ(en.damage, ec.damage);
+    CHECK_EQ(en.attacker, ec.attacker);
+    CHECK_EQ(en.crit, ec.crit);
+    CHECK(!ec.sudden);
+    CHECK_EQ(ec.recoil, (uint16_t)0);
+  }
+  // y en el modo fase hasta el ataque 20 (index 0..19) nada cambia
+  Battle d;
+  d.beginCarry(A, B, 5);
+  for (int i = 0; i < SUDDEN_DEATH_AT; i++) {
+    BattleEvent ev = d.step(false);
+    CHECK(!ev.sudden);
+    CHECK_EQ(ev.recoil, (uint16_t)0);
+  }
+}
+
+TEST(battle, desde_el_ataque_21_sin_defensa_y_con_retroceso) {
+  Fighter A = plain(113, 5), B = makeFighter(113, 5, 100, 100, 100, 0, 9, 0);
+  Battle bt;
+  bt.beginCarry(A, B, 5);
+  int sudden = 0;
+  while (!bt.over()) {
+    Fighter fa = bt.f[bt.nextAttacker()], fd = bt.f[1 - bt.nextAttacker()];
+    uint16_t hpA = fa.hp;
+    BattleEvent ev = bt.step(false);
+    CHECK_EQ(ev.sudden, ev.index >= SUDDEN_DEATH_AT);
+    if (!ev.sudden) continue;
+    sudden++;
+    // el dano es el de hitDamage sin DEF, dentro de lo que puede dar la tirada (85..100) y critico
+    uint16_t lo = hitDamage(fa, fd, ev.eff4, false, false, 85, true), hi = hitDamage(fa, fd, ev.eff4, false, true, 100, true);
+    uint16_t got = ev.damage;
+    if (bt.f[1 - ev.attacker].hp == 0) hi = fd.hp < hi ? fd.hp : hi, lo = fd.hp < lo ? fd.hp : lo;  // topado al KO
+    CHECK(got >= lo && got <= hi);
+    if (bt.f[1 - ev.attacker].hp == 0) {
+      CHECK_EQ(ev.recoil, (uint16_t)0);  // el golpe que deja KO no devuelve nada
+      CHECK_EQ(bt.f[ev.attacker].hp, hpA);
+    } else {
+      uint16_t want = fa.maxHp / 10 < 1 ? 1 : fa.maxHp / 10;
+      if (want > hpA) want = hpA;
+      CHECK_EQ(ev.recoil, want);
+      CHECK_EQ(bt.f[ev.attacker].hp, (uint16_t)(hpA - want));
+    }
+  }
+  CHECK(sudden > 0);
+  // sin defensa: contra un tanque muy defensivo pega mas que antes
+  Fighter t = makeFighter(113, 5, 100, 100, 100, 0, 200, 0);
+  CHECK(hitDamage(A, t, 4, false, false, 100, true) >= hitDamage(A, t, 4, false, false, 100, false));
+}
+
+TEST(battle, el_retroceso_que_deja_en_ko_da_la_victoria_al_otro) {
+  for (uint8_t who = 0; who < 2; who++) {
+    Battle bt;
+    bt.beginCarry(plain(113, 5), plain(113, 5), 1);
+    bt.attacks = SUDDEN_DEATH_AT;
+    uint8_t a = bt.nextAttacker();
+    bt.f[a].hp = 1;
+    BattleEvent ev = bt.step(false);
+    CHECK_EQ(ev.recoil, (uint16_t)1);
+    CHECK_EQ(ev.hp[a], (uint16_t)0);
+    CHECK(ev.hp[1 - a] > 0);  // doble KO imposible
+    CHECK_EQ(ev.result, (uint8_t)(a == 0 ? BR_WIN_B : BR_WIN_A));
+    CHECK_EQ(bt.result, ev.result);
+    (void)who;
+  }
+}
+
+TEST(battle, muerte_subita_el_ko_del_golpe_gana_sin_retroceso) {
+  Battle bt;
+  bt.beginCarry(plain(113, 5), plain(113, 5), 1);
+  bt.attacks = SUDDEN_DEATH_AT;
+  uint8_t a = bt.nextAttacker();
+  bt.f[1 - a].hp = 1;
+  uint16_t hpA = bt.f[a].hp;
+  BattleEvent ev = bt.step(false);
+  CHECK_EQ(ev.recoil, (uint16_t)0);
+  CHECK_EQ(bt.f[a].hp, hpA);
+  CHECK_EQ(ev.result, (uint8_t)(a == 0 ? BR_WIN_A : BR_WIN_B));
+}
+
+TEST(battle, muerte_subita_con_un_inmune_el_retroceso_acaba_el_combate) {
+  // Pikachu no toca a Diglett: sin retroceso no acabaria nunca (el 2 % minimo no se aplica a un 0)
+  Battle p;
+  p.beginCarry(plain(25, 40), plain(50, 40), 3);
+  bool sawZeroWithRecoil = false;
+  while (!p.over()) {
+    BattleEvent ev = p.step(false);
+    if (ev.sudden && ev.attacker == 0) {
+      CHECK_EQ(ev.damage, (uint16_t)0);
+      CHECK(ev.recoil > 0);
+      sawZeroWithRecoil = true;
+    }
+  }
+  CHECK(p.attacks < 200);
+  CHECK(sawZeroWithRecoil || p.attacks <= SUDDEN_DEATH_AT);
+  CHECK(p.result == BR_WIN_A || p.result == BR_WIN_B);
+}

@@ -41,7 +41,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "BAYA DORADA", "PROTEINA", "HIERRO", "CARBURANTE", "AMULETO IRIS", "CARAMELO RARO", "HUEVO", "TARTA", "REVIVIR",
     // combate (v1.24)
     "ENTRENAMIENTO", "Es muy eficaz!", "No es muy eficaz...", "No le afecta...", "Golpe cr\241tico!", "Especial!",
-    "Toca para cargar!", "GANASTE!", "PERDISTE...", "EMPATE", "Felicidad +%u", "Premio: una vez por hora",
+    "Toca para cargar!", "Muerte s\243bita!", "Retroceso!", "GANASTE!", "PERDISTE...", "EMPATE", "Felicidad +%u", "Premio: una vez por hora",
     // efectos (v1.30)
     "SUBE DE NIVEL!",
     // la caja (v1.37)
@@ -115,7 +115,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "GOLDEN BERRY", "PROTEIN", "IRON", "CARBOS", "SHINY CHARM", "RARE CANDY", "EGG", "CAKE", "REVIVE",
     // combate (v1.24)
     "PRACTICE", "Super effective!", "Not very effective...", "No effect...", "Critical hit!", "Special!",
-    "Tap to charge!", "YOU WIN!", "YOU LOST...", "DRAW", "Joy +%u", "Reward: once an hour",
+    "Tap to charge!", "Sudden death!", "Recoil!", "YOU WIN!", "YOU LOST...", "DRAW", "Joy +%u", "Reward: once an hour",
     // efectos (v1.30)
     "LEVEL UP!",
     // la caja (v1.37)
@@ -189,7 +189,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "BAIE DOR\220E", "PROT\220INE", "FER", "CARBONE", "CHARME CHROMA", "SUPER BONBON", "OEUF", "GATEAU", "RANIMER",
     // combate (v1.24)
     "ENTRA\214NEMENT", "Super efficace!", "Pas tr\212s efficace...", "Aucun effet...", "Coup critique!", "Sp\202cial!",
-    "Tape pour charger!", "GAGN\220!", "PERDU...", "\220GALIT\220", "Bonheur +%u", "Prix: une fois par heure",
+    "Tape pour charger!", "Mort subite !", "Recul !", "GAGN\220!", "PERDU...", "\220GALIT\220", "Bonheur +%u", "Prix: une fois par heure",
     // efectos (v1.30)
     "NOUVEAU NIVEAU!",
     // la caja (v1.37)
@@ -268,7 +268,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "GOLDBEERE", "PROTEIN", "EISEN", "CARBON", "SCHILLERPIN", "SONDERBONBON", "EI", "KUCHEN", "BELEBER",
     // combate (v1.24)
     "TRAINING", "Sehr effektiv!", "Nicht sehr effektiv...", "Keine Wirkung...", "Volltreffer!", "Spezial!",
-    "Tippen zum Laden!", "GEWONNEN!", "VERLOREN...", "UNENTSCHIEDEN", "Laune +%u", "Belohnung: 1x pro Stunde",
+    "Tippen zum Laden!", "Sudden Death!", "R\201cksto\341!", "GEWONNEN!", "VERLOREN...", "UNENTSCHIEDEN", "Laune +%u", "Belohnung: 1x pro Stunde",
     // efectos (v1.30)
     "AUFGESTIEGEN!",
     // la caja (v1.37)
@@ -342,7 +342,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "BACCA D'ORO", "PROTEINA", "FERRO", "CARBURANTE", "CROMAMULETO", "CARAMELLA RARA", "UOVO", "TORTA", "RIANIMA",
     // combate (v1.24)
     "ALLENAMENTO", "Superefficace!", "Non \212 molto efficace...", "Nessun effetto...", "Brutto colpo!", "Speciale!",
-    "Tocca per caricare!", "HAI VINTO!", "HAI PERSO...", "PAREGGIO", "Felicit\205 +%u", "Premio: una volta l'ora",
+    "Tocca per caricare!", "Morte improvvisa!", "Contraccolpo!", "HAI VINTO!", "HAI PERSO...", "PAREGGIO", "Felicit\205 +%u", "Premio: una volta l'ora",
     // efectos (v1.30)
     "NUOVO LIVELLO!",
     // la caja (v1.37)
@@ -416,7 +416,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "BAGA DOURADA", "PROTEINA", "FERRO", "CARBOS", "AMULETO BRILHANTE", "DOCE RARO", "OVO", "BOLO", "REVIVER",
     // combate (v1.24)
     "TREINO", "Super efetivo!", "Pouco efetivo...", "Sem efeito...", "Golpe cr\241tico!", "Especial!",
-    "Toque para carregar!", "VENCEU!", "PERDEU...", "EMPATE", "Alegria +%u", "Pr\210mio: 1 vez por hora",
+    "Toque para carregar!", "Morte s\243bita!", "Recuo!", "VENCEU!", "PERDEU...", "EMPATE", "Alegria +%u", "Pr\210mio: 1 vez por hora",
     // efectos (v1.30)
     "SUBIU DE NIVEL!",
     // la caja (v1.37)
@@ -512,7 +512,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "きんのみ", "プロテイン", "アイアン", "カーボス", "ひかるおまもり", "ふしぎなアメ", "たまご", "ケーキ", "ふっかつ",
     // combate (v1.24)
     "れんしゅう", "こうかは ばつぐんだ！", "こうかは いまひとつ...", "こうかが ない...", "きゅうしょに あたった！", "ひっさつ！",
-    "タッチで ためる！", "かった！", "まけた...", "ひきわけ", "ごきげん +%u", "ごほうびは 1じかんに 1かい",
+    "タッチで ためる！", "サドンデス！", "はんどう！", "かった！", "まけた...", "ひきわけ", "ごきげん +%u", "ごほうびは 1じかんに 1かい",
     // efectos (v1.30)
     "レベルアップ！",
     // la caja (v1.37)
@@ -591,7 +591,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "황금열매", "프로테인", "아이언", "카보스", "빛나는부적", "이상한사탕", "알", "케이크", "부활",
     // combate (v1.24)
     "연습", "효과가 굉장했다!", "효과가 별로인 듯...", "효과가 없다...", "급소에 맞았다!", "필살기!",
-    "탭해서 모으기!", "이겼다!", "졌다...", "무승부", "기분 +%u", "보상은 1시간에 1번",
+    "탭해서 모으기!", "서든데스!", "반동!", "이겼다!", "졌다...", "무승부", "기분 +%u", "보상은 1시간에 1번",
     // efectos (v1.30)
     "레벨 업!",
     // la caja (v1.37)

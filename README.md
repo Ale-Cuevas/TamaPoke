@@ -84,7 +84,7 @@ on-board checks are in [docs/DEVICE_TESTS.md](docs/DEVICE_TESTS.md#box-v137).
 The game itself runs on the 1.75" hardware upstream. Implemented: the 151 +
 shinies animated from microSD, full life cycle (egg by rarity → evolution → farewell/release/death, each gated
 behind a decision dialog), bred-Pokédex with gallery, a 6-slot box to hibernate pets, 8 battle stages with
-a team of up to 4 and badges, battle stats (genes + training), retention hooks (streak / bond / medals / name), biome + real-time
+a team of up to 4 and badges (long fights end in sudden death: no defense and 10 % recoil from the 21st attack), battle stats (genes + training), retention hooks (streak / bond / medals / name), biome + real-time
 backgrounds, ball minigame, training bag, animated bath, RTC with offline
 progression, battery (AXP2101) and PWR button, AMOLED burn-in protection (pixel orbit + screensaver),
 **sound (ES8311)**, **8 UI languages (English default)**, **starter choice on

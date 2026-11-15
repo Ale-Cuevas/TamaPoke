@@ -49,7 +49,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.66"
+#define FW_VERSION "1.67"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -6788,6 +6788,7 @@ enum : uint8_t { BT_OFF = 0, BT_INTRO, BT_FIGHT, BT_END, BT_SWAP };  // (BT_END 
 #define BT_HIT_MS 350      // el golpe llega a mitad del avance del atacante
 #define BT_HPBAR_MS 400    // la barra de vida baja en este tiempo
 #define BT_FAINT_MS 900    // el derrotado se desvanece
+#define BT_RECOIL_MS (BT_HIT_MS + BT_HPBAR_MS)  // muerte subita: el retroceso llega cuando acaba de bajar la barra del rival
 #define BT_SWAP_MS 1800    // relevo tras un KO: el cartel y la entrada del siguiente...
 #define BT_SWAP_WALK_MS 1000  // ...que entra andando en el ultimo segundo, como en la intro
 #define BT_END_MS 7000     // el resultado se cierra solo (o con un toque)
@@ -6818,6 +6819,7 @@ struct {
   BattleEvent ev;        // ultimo ataque calculado
   bool haveEv = false;
   bool evSounded = false;
+  bool recoilSounded = false;
   uint32_t evAt = 0;     // instante (programado) en que empezo ese ataque
   uint16_t hpBefore[2] = { 0, 0 };
   uint8_t swap = SN_NONE;  // en el relevo: SN_NEXT_ALLY o SN_NEXT_FOE
@@ -7012,12 +7014,20 @@ void battleStep(uint32_t now) {
       bt.ev = r.attack();
       bt.haveEv = true;
       bt.evSounded = false;
+      bt.recoilSounded = false;
+      if (bt.ev.sudden)
+        Serial.printf("battle: SD #%u dmg %u recoil %u hp %u/%u\n", (unsigned)bt.ev.index, (unsigned)bt.ev.damage,
+                      (unsigned)bt.ev.recoil, (unsigned)bt.ev.hp[0], (unsigned)bt.ev.hp[1]);
       bt.evAt = due;  // el programado, no "ahora": un frame lento no desplaza el resto
     }
   }
   if (bt.haveEv && !bt.evSounded && (int32_t)(now - (bt.evAt + BT_HIT_MS)) >= 0) {
     bt.evSounded = true;
     sfxPlay(!bt.ev.eff4 ? SFX_DENY : bt.ev.special ? SFX_SPECIAL : bt.ev.crit ? SFX_CRIT : SFX_HIT);
+  }
+  if (bt.haveEv && bt.ev.recoil && !bt.recoilSounded && (int32_t)(now - (bt.evAt + BT_RECOIL_MS)) >= 0) {
+    bt.recoilSounded = true;
+    sfxPlay(SFX_HIT);
   }
   if (r.koPending() && bt.haveEv && (int32_t)(now - (bt.evAt + ATTACK_MS + BT_FAINT_MS)) >= 0) battleAfterKo();
 }
@@ -7027,9 +7037,11 @@ uint16_t battleShownHp(uint8_t side, uint32_t now) {
   if (!bt.haveEv) return bt.run.eng.f[side].hp;
   uint32_t dt = now - bt.evAt;
   uint16_t a = bt.hpBefore[side], b = bt.ev.hp[side];
-  if (dt < BT_HIT_MS) return a;
-  if (dt >= BT_HIT_MS + BT_HPBAR_MS) return b;
-  return (uint16_t)(a + ((int32_t)b - a) * (int32_t)(dt - BT_HIT_MS) / BT_HPBAR_MS);
+  // el retroceso del atacante llega cuando el rival ya ha terminado de perder vida
+  uint32_t t0 = (side == bt.ev.attacker && bt.ev.recoil) ? BT_RECOIL_MS : BT_HIT_MS;
+  if (dt < t0) return a;
+  if (dt >= t0 + BT_HPBAR_MS) return b;
+  return (uint16_t)(a + ((int32_t)b - a) * (int32_t)(dt - t0) / BT_HPBAR_MS);
 }
 
 // fondo del campo: cielo por la hora, el suelo del bioma de tu aliado en curso y dos tarimas
@@ -7270,24 +7282,32 @@ void drawVsCard() {
 // rotulos del ultimo golpe (desde que llega hasta el siguiente)
 void drawBattleCaption(uint32_t now) {
   const char *l1 = nullptr, *l2 = nullptr;
-  if (!bt.haveEv || now - bt.evAt < BT_HIT_MS) {
-    if (!bt.haveEv && bt.phase == BT_FIGHT) l2 = T(S_TAP_CHARGE);  // pista hasta el primer golpe
+  uint16_t c1 = UI_INK, c2 = UI_INK;
+  bool hit = bt.haveEv && now - bt.evAt >= BT_HIT_MS;
+  if (!hit) {
+    if (!bt.haveEv && bt.phase == BT_FIGHT) { l2 = T(S_TAP_CHARGE); c2 = UI_TRACK; }  // pista hasta el primer golpe
   } else if (!bt.ev.eff4) {
     l1 = T(S_NO_EFFECT);
   } else {
-    if (bt.ev.special) l1 = T(S_SPECIAL);
+    if (bt.ev.special) { l1 = T(S_SPECIAL); c1 = UI_BAR_BAD; }
     else if (bt.ev.crit) l1 = T(S_CRITICAL);
     if (bt.ev.eff4 >= 8) l2 = T(S_SUPER_EFF);
     else if (bt.ev.eff4 <= 2) l2 = T(S_NOT_EFF);
   }
+  // muerte subita: este ataque o el que viene ya cuentan (la partida no sale de ella)
+  if (bt.haveEv && bt.run.eng.attacks > 0 && bt.run.eng.attacks >= SUDDEN_DEATH_AT) {
+    if (!l1) { l1 = T(S_SUDDEN_DEATH); c1 = UI_BAR_BAD; }
+    else { l2 = T(S_SUDDEN_DEATH); c2 = UI_BAR_BAD; }
+  }
+  if (bt.haveEv && bt.ev.recoil && now - bt.evAt >= BT_RECOIL_MS) { l2 = T(S_RECOIL); c2 = UI_BAR_BAD; }
   setSize(2);
   if (l1) {
-    gfx->setTextColor(bt.ev.special ? UI_BAR_BAD : UI_INK);
+    gfx->setTextColor(c1);
     setCur(centerX(l1, 2), l2 ? 382 : 392);
     printT(l1);
   }
   if (l2) {
-    gfx->setTextColor(bt.haveEv ? UI_INK : UI_TRACK);
+    gfx->setTextColor(c2);
     setCur(centerX(l2, 2), l1 ? 404 : 392);
     printT(l2);
   }
@@ -7381,18 +7401,26 @@ bool renderBattle() {
       x[a] += (int)(k * (a == 0 ? 34 : -34));
       g[a] += (int)(k * (a == 0 ? -24 : 24));
     }
-    bool ko = bt.ev.hp[d] == 0;
     if (dt >= BT_HIT_MS && dt < BT_HIT_MS + 500 && bt.ev.damage) {  // encaja el golpe
       act[d] = PMD_HURT;
       at[d] = dt - BT_HIT_MS;
       x[d] += (int)(4 * sinf(dt * 0.12f));
     }
-    if (ko && dt >= BT_HIT_MS + 400) {  // se desvanece y se hunde
-      uint32_t f = dt - BT_HIT_MS - 400;
-      if (f >= BT_FAINT_MS) hidden[d] = true;
-      sil[d] = (f / 90) % 2;
-      g[d] += (int)(f * 40 / BT_FAINT_MS);
-      act[d] = PMD_HURT;
+    if (bt.ev.recoil && dt >= BT_RECOIL_MS && dt < BT_RECOIL_MS + 500) {  // muerte subita: se hace dano a si mismo
+      act[a] = PMD_HURT;
+      at[a] = dt - BT_RECOIL_MS;
+      x[a] += (int)(4 * sinf(dt * 0.12f));
+    }
+    // cae quien se queda a 0: el defensor, o (retroceso) el propio atacante
+    for (uint8_t sd = 0; sd < 2; sd++) {
+      if (bt.ev.hp[sd] != 0) continue;
+      uint32_t t0 = (sd == a && bt.ev.recoil) ? BT_RECOIL_MS : BT_HIT_MS;
+      if (dt < t0 + 400) continue;
+      uint32_t f = dt - t0 - 400;  // se desvanece y se hunde
+      if (f >= BT_FAINT_MS) hidden[sd] = true;
+      sil[sd] = (f / 90) % 2;
+      g[sd] += (int)(f * 40 / BT_FAINT_MS);
+      act[sd] = PMD_HURT;
     }
     if (bt.ev.special && dt >= BT_HIT_MS && dt < BT_HIT_MS + 350) {  // destello y temblor
       shake = (int)(8 * sinf(dt * 0.15f));

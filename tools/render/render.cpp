@@ -916,6 +916,31 @@ static const std::vector<Scene> &scenes() {
        stageGo(3, { 4, -1 });
        battleUntil([] { return bt.run.eng.attacks >= 3 && millis() - bt.evAt >= BT_HIT_MS + 450; });
      }, 1 },
+    // v1.67 sudden death: the 21st attack of a fight, the recoil just landing (the attacker's bar
+    // dropping after the defender's); "Sudden death!" and "Recoil!" together
+    { "battle-sudden", [] {
+       pokemon(25, 13);
+       stageGo(0, { -1 });
+       stageJump(0, 0, 100, 100);
+       bt.run.eng.attacks = SUDDEN_DEATH_AT;
+       battleUntil([] { return bt.haveEv && bt.ev.recoil && millis() - bt.evAt >= BT_RECOIL_MS + 120; });
+     }, 1 },
+    { "battle-sudden-es", [] {
+       pokemon(25, 13);
+       lang(LANG_ES);
+       stageGo(0, { -1 });
+       stageJump(0, 0, 100, 100);
+       bt.run.eng.attacks = SUDDEN_DEATH_AT;
+       battleUntil([] { return bt.haveEv && bt.ev.recoil && millis() - bt.evAt >= BT_RECOIL_MS + 120; });
+     }, 1 },
+    // ...and just before the recoil: the defender's bar already down, "Sudden death!" alone
+    { "battle-sudden-pre", [] {
+       pokemon(25, 13);
+       stageGo(0, { -1 });
+       stageJump(0, 0, 100, 100);
+       bt.run.eng.attacks = SUDDEN_DEATH_AT;
+       battleUntil([] { return bt.haveEv && millis() - bt.evAt >= BT_HIT_MS + 300; });
+     }, 1 },
     // the hand-over after a KO: caption + the newcomer walking in, the survivor in place
     { "battle-swap-foe", [] { pokemon(25, 13); boxThree(); stageGo(0, { -1, 4 }); stageSwap(0, 0, 100, 1); }, 1 },
     { "battle-swap-foe-es", [] {
