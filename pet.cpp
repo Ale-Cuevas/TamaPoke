@@ -1291,14 +1291,114 @@ uint8_t Pet::battleDrop(bool won) {
   return it;
 }
 
-uint8_t Pet::practiceDone() {
+uint8_t Pet::practiceJoy() {
   if (isEgg() || busyEnding() || !practiceRewardReady()) return 0;
   practiceRewarded = true;
   lastPracticeReward = millis();
   uint8_t before = joy;
   joy = clamp100(joy + PRACTICE_JOY);
-  save();  // fin de una pantalla de juego, como el minijuego: se guarda ya
   return joy - before;
+}
+
+uint8_t Pet::practiceDone() {
+  if (isEgg() || busyEnding() || !practiceRewardReady()) return 0;
+  uint8_t j = practiceJoy();
+  save();  // fin de una pantalla de juego, como el minijuego: se guarda ya
+  return j;
+}
+
+// ---------- estadios ----------
+
+uint8_t Pet::badgeCount() const {
+  uint8_t n = 0;
+  for (uint8_t m = badges; m; m &= (uint8_t)(m - 1)) n++;
+  return n;
+}
+
+void Pet::setTeam(const uint32_t *uids, uint8_t n) {
+  if (n > TEAM_MAX) n = TEAM_MAX;
+  for (uint8_t i = 0; i < TEAM_MAX; i++) team[i] = (uids && i < n) ? uids[i] : 0;
+  pendingSave = true;
+}
+
+int8_t Pet::teamSlotOf(uint32_t id) const {
+  if (!id) return -1;
+  if (!isEgg() && id == uid) return TEAM_HOME;
+  return slotOf(id);
+}
+
+bool Pet::teamCanFight(uint32_t id) const {
+  int8_t k = teamSlotOf(id);
+  return k == TEAM_HOME ? canBattle() : k >= 0;
+}
+
+// el premio del jefe de hoy, a la NVS antes que nada de lo que paga. Un dia nuevo empieza con la
+// mascara a 0 y despues el dia ("stD" antes que "stM"): un corte entre los dos deja el dia de hoy con
+// la mascara de ayer (como mucho se pierde un premio de hoy), nunca la mascara de hoy con el dia de
+// ayer (que se volveria a pagar). Si la escritura no llega, no se paga.
+bool Pet::payStageDay(uint8_t stage) {
+  uint32_t d = today();
+  uint8_t mask = stageRewardMask();
+  if (stageDay != d) {
+    if (stageMask && !prefs.putUChar("stM", 0)) return false;
+    if (!prefs.putUInt("stD", d)) return false;
+    stageDay = d;
+    stageMask = 0;
+  }
+  mask |= (uint8_t)(1u << stage);
+  if (!prefs.putUChar("stM", mask)) return false;
+  stageMask = mask;
+  return true;
+}
+
+// Fin de un estadio. Orden de escritura (corte de luz): 1. la medalla ("bdg"), 2. el premio de hoy
+// marcado ("stD"/"stM"), 3. cada bicho de la caja del equipo, sellado en su hueco (writeSlot: la copia
+// en RAM solo cambia si la escritura llego), 4. save(): el de casa y el objeto envuelto. Un corte
+// puede dejar parte del premio sin dar (un bicho de la caja si y el siguiente no), nunca pagarlo dos
+// veces el mismo dia ni dejar un hueco danado.
+StageReward Pet::stageDone(uint8_t stage, bool cleared, const uint32_t *uids, uint8_t n) {
+  StageReward res = { false, false, (uint8_t)IT_COUNT, 0, 0 };
+  res.joy = practiceJoy();  // gane o pierda, como el combate de practica (0 con huevo, casa vacia o final)
+  if (cleared && stage < STAGE_COUNT) {
+    uint8_t bit = (uint8_t)(1u << stage);
+    if (!(badges & bit)) {
+      badges |= bit;
+      res.newBadge = true;
+      prefs.putUChar("bdg", badges);  // 1. la medalla: abre el siguiente estadio
+    }
+    if (stageRewardReady(stage) && payStageDay(stage)) {  // 2.
+      res.paid = true;
+      if (n > TEAM_MAX) n = TEAM_MAX;
+      for (uint8_t i = 0; uids && i < n; i++) {
+        uint32_t id = uids[i];
+        bool dup = false;
+        for (uint8_t j = 0; j < i; j++) dup |= (uids[j] == id);
+        if (!id || dup) continue;
+        int8_t k = teamSlotOf(id);
+        if (k == TEAM_HOME) {
+          if (busyEnding()) continue;  // se esta muriendo o despidiendo: nada que crecer
+          growMin += STAGE_GROW_MIN;   // las subidas de nivel las ve la UI (fx.h); la evolucion, el boton
+          bond = clamp100(bond + STAGE_BOND);  // fuera del tope diario de addBond
+          res.pets++;
+        } else if (k >= 0) {
+          // 3. hiberna, pero el premio lo recibe igual: crece y su nivel puede pasar el de su
+          // evolucion. Evoluciona al despertar (canEvolveNow mira el nivel; fromRecord borra el
+          // "mantener forma") y sus medallas de nivel las da checkMedals en su primer minuto en casa
+          PetRecord r = boxRec[k];
+          r.growMin += STAGE_GROW_MIN;
+          r.bond = clamp100(r.bond + STAGE_BOND);
+          if (writeSlot((uint8_t)k, r)) res.pets++;
+        }
+      }
+      res.item = rollBattleItem();  // seguro: ni el 70 % ni el tope de 5 del botin de practica
+      // con la casa vacia no hay quien abra un regalo: a la mochila con su aviso (como unwrapGifts)
+      if (vacant) giveFound(res.item);
+      else giveGift(res.item);
+    }
+  }
+  checkMedals(false);  // el de casa puede haber cruzado el 10, 25 o 50 (no hace nada con un huevo)
+  save();              // 4. fin de una pantalla de juego: se guarda ya
+  return res;
 }
 
 // boca abajo de noche: a dormir, como el boton de luz pero sin escribir ya en flash
@@ -1385,6 +1485,13 @@ void Pet::save() {
   prefs.putUInt("bondD", bondDay);
   prefs.putUChar("bondT", bondToday);
   prefs.putBool("vac", vacant);
+  // estadios (del jugador). Antes del bloque del uid: no tocan nada de los movimientos de la caja, y
+  // asi la ventana entre el uid y "eggH" no se alarga. stageDone ya los escribe por su cuenta antes de
+  // pagar (aqui solo repiten el mismo valor). "stD" antes que "stM", como en payStageDay
+  prefs.putUChar("bdg", badges);
+  prefs.putUInt("stD", stageDay);
+  prefs.putUChar("stM", stageMask);
+  prefs.putBytes("team", team, sizeof(team));
   // caja (v1.37). El uid va el ULTIMO: la NVS escribe en orden, asi que si un corte de luz
   // deja el uid nuevo, todo lo demas del bicho ya esta escrito. boxBoot() se fia de eso para
   // saber si un movimiento llego a cambiar el bicho activo. "eggH" va despues: un corte entre
@@ -1519,6 +1626,12 @@ void Pet::load() {
   bondToday = prefs.getUChar("bondT", 0);
   bdropDay = prefs.getUInt("bdD", 0);
   bdropToday = prefs.getUChar("bdN", 0);
+  // estadios: un guardado anterior no trae las claves (sin medallas, nada pagado, sin equipo)
+  badges = prefs.getUChar("bdg", 0);
+  stageDay = prefs.getUInt("stD", 0);
+  stageMask = prefs.getUChar("stM", 0);
+  memset(team, 0, sizeof(team));
+  if (prefs.isKey("team") && prefs.getBytes("team", team, sizeof(team)) != sizeof(team)) memset(team, 0, sizeof(team));
   // crecimiento (v1.35). Un guardado anterior no trae "grow": el nivel salia de la edad
   // (1 nivel por hora). Se traduce a la curva nueva con el mismo nivel y la barra igual de
   // llena, para que nadie suba ni baje de nivel al actualizar. Va despues de speciesId.
