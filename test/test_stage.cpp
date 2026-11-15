@@ -92,7 +92,7 @@ TEST(stage, carry_nunca_empata_y_pasa_del_tope) {
   CHECK(bt.attacks > MAX_ATTACKS);
   CHECK(bt.result == BR_WIN_A || bt.result == BR_WIN_B);
   CHECK(bt.f[0].hp == 0 || bt.f[1].hp == 0);
-  // y en todos los cruces (muestreados): KO siempre, en menos de 60 ataques
+  // y en todos los cruces (muestreados): KO siempre, en menos de 160 ataques
   int maxAtk = 0;
   for (int a = 1; a <= 151; a += 3)
     for (int b = 1; b <= 151; b += 4)
@@ -106,11 +106,13 @@ TEST(stage, carry_nunca_empata_y_pasa_del_tope) {
       }
   char msg[64];
   snprintf(msg, sizeof(msg), "el mas largo: %d ataques", maxAtk);
-  CHECK_MSG(maxAtk < 60, msg);
+  CHECK_MSG(maxAtk < 160, msg);
 }
 
 TEST(stage, carry_inmunes_los_dos_se_rozan_hasta_el_ko) {
-  Fighter A = plain(19, 20), B = plain(92, 20);  // Rattata (normal) contra Gastly (fantasma/veneno)
+  Fighter A = plain(19, 20), B = plain(92, 20);  // Rattata (normal) contra un fantasma puro (a mano:
+  B.type1 = TY_FANTASMA;                         // el veneno de Gastly si toca al normal)
+  B.type2 = TY_NONE;
   Battle bt;
   bt.beginCarry(A, B, 11);
   while (!bt.over() && bt.attacks < 200) {

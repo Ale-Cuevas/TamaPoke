@@ -58,6 +58,24 @@ TEST(battle, los_dos_tipos_se_multiplican) {
 }
 
 // ---------------------------------------------------------------- stats
+TEST(battle, el_mejor_de_los_dos_tipos_del_atacante) {
+  Fighter pidgey = plain(16, 20), bulba = plain(1, 20), gastly = plain(92, 20), rattata = plain(19, 20);
+  // Pidgey normal/volador contra Bulbasaur planta/veneno: normal x1, volador x2 -> gana el segundo tipo
+  CHECK_EQ(typeEff4(pidgey.type1, bulba.type1, bulba.type2), (uint8_t)4);
+  CHECK_EQ(typeEff4(pidgey.type2, bulba.type1, bulba.type2), (uint8_t)8);
+  CHECK_EQ(bestEff4(pidgey, bulba), (uint8_t)8);
+  // el primer tipo no le afecta (normal contra fantasma) y el segundo si (volador contra veneno)
+  CHECK_EQ(typeEff4(pidgey.type1, gastly.type1, gastly.type2), (uint8_t)0);
+  CHECK_EQ(bestEff4(pidgey, gastly), (uint8_t)4);
+  // un solo tipo: igual que typeEff4
+  CHECK_EQ(rattata.type2, (uint8_t)TY_NONE);
+  CHECK_EQ(bestEff4(rattata, gastly), typeEff4(rattata.type1, gastly.type1, gastly.type2));
+  CHECK_EQ(bestEff4(rattata, bulba), typeEff4(rattata.type1, bulba.type1, bulba.type2));
+  // el segundo tipo peor no baja el resultado
+  CHECK_EQ(bestEff4(bulba, pidgey), (uint8_t)std::max(typeEff4(bulba.type1, pidgey.type1, pidgey.type2),
+                                                      typeEff4(bulba.type2, pidgey.type1, pidgey.type2)));
+}
+
 TEST(battle, stats_de_la_ficha_con_el_nivel_topado) {
   Fighter p = makeFighter(25, 30, 104, 97, 108, 6, 2, 9);  // Pikachu
   const DexEntry &d = DEX_TBL[25];
@@ -74,7 +92,7 @@ TEST(battle, stats_de_la_ficha_con_el_nivel_topado) {
 }
 
 // ---------------------------------------------------------------- danyo
-TEST(battle, cada_golpe_entre_el_5_y_el_25_por_ciento) {
+TEST(battle, cada_golpe_entre_el_2_y_el_60_por_ciento) {
   for (int L : { 5, 30, 100 })
     for (int a = 1; a <= 151; a += 7)
       for (int b = 1; b <= 151; b += 5) {
@@ -97,7 +115,7 @@ TEST(battle, cada_golpe_entre_el_5_y_el_25_por_ciento) {
 
 TEST(battle, el_especial_pega_mas_y_sube_el_tope) {
   // mismo combate y misma semilla: solo cambia que el primer ataque sea especial
-  Fighter A = plain(150, 100), B = plain(129, 100);  // Mewtwo contra Magikarp: siempre al tope
+  Fighter A = plain(150, 100), B = plain(10, 5);  // Mewtwo contra Caterpie a nivel 5: siempre al tope
   Battle n, s;
   n.begin(A, B, 42);
   s.begin(A, B, 42);
@@ -135,13 +153,26 @@ TEST(battle, no_le_afecta_es_cero_y_sin_critico) {
 }
 
 TEST(battle, inmunes_los_dos_acaba_en_empate_al_tope) {
-  Fighter A = plain(19, 20), B = plain(92, 20);  // Rattata (normal) contra Gastly (fantasma/veneno)
-  CHECK_EQ(typeEff4(A.type1, B.type1, B.type2), (uint8_t)0);
-  CHECK_EQ(typeEff4(B.type1, A.type1, A.type2), (uint8_t)0);
+  // ningun bicho real de gen 1 queda inmune de los dos lados con su mejor tipo: se arma a mano
+  Fighter A = plain(19, 20), B = plain(92, 20);  // Rattata (normal) contra un fantasma puro
+  B.type1 = TY_FANTASMA;
+  B.type2 = TY_NONE;
+  CHECK_EQ(bestEff4(A, B), (uint8_t)0);
+  CHECK_EQ(bestEff4(B, A), (uint8_t)0);
   Battle bt;
   auto evs = fight(A, B, 11, true, &bt);
   CHECK_EQ((int)evs.size(), MAX_ATTACKS);
   CHECK_EQ(bt.result, (uint8_t)BR_DRAW);
+}
+
+TEST(battle, el_segundo_tipo_rompe_la_inmunidad_mutua) {
+  Fighter A = plain(19, 20), B = plain(92, 20);  // Rattata contra Gastly (fantasma/veneno)
+  CHECK_EQ(typeEff4(A.type1, B.type1, B.type2), (uint8_t)0);  // normal no toca al fantasma...
+  CHECK_EQ(typeEff4(B.type1, A.type1, A.type2), (uint8_t)0);  // ...ni el fantasma al normal...
+  CHECK_EQ(bestEff4(B, A), (uint8_t)4);                       // ...pero el veneno de Gastly si
+  Battle bt;
+  auto evs = fight(A, B, 11, true, &bt);
+  CHECK(bt.result == BR_WIN_A || bt.result == BR_WIN_B);  // ya no acaba en empate
 }
 
 TEST(battle, al_tope_gana_quien_conserva_mas_porcentaje) {
@@ -240,8 +271,8 @@ TEST(battle, sin_cargar_el_ataque_es_normal) {
 }
 
 // ---------------------------------------------------------------- Monte Carlo
-// FR-3.3 / FR-3.4: todos los cruces a 3 niveles. Cada combate dura de 7 a 15
-// ataques; el claramente mas fuerte (sin ventaja de tipo de por medio) gana casi
+// FR-3.3 / FR-3.4: todos los cruces a 3 niveles. Cada combate dura de 3 a 15
+// ataques (con topes del 60-70 % un KO puede caer en 2 golpes); el claramente mas fuerte (sin ventaja de tipo de por medio) gana casi
 // siempre, y la ventaja de tipo pesa entre bichos parecidos.
 TEST(battle, monte_carlo_151x151_duracion_y_justicia) {
   for (int L : { 5, 30, 100 }) {
@@ -252,17 +283,17 @@ TEST(battle, monte_carlo_151x151_duracion_y_justicia) {
         Battle bt;
         auto evs = fight(A, B, (uint32_t)(a * 389 + b * 7 + L), true, &bt);
         int n = (int)evs.size();
-        if (n < 7) cortos++;
+        if (n < 3) cortos++;  // 2 golpes por KO como minimo: A, B, A
         if (n > MAX_ATTACKS) largos++;
-        // el que cae recibe al menos 4 golpes (el tope del 25-30 %)
+        // el que cae recibe al menos 2 golpes (el tope del 60-70 %)
         if (bt.result == BR_WIN_A || bt.result == BR_WIN_B) {
           uint8_t loser = bt.result == BR_WIN_A ? 1 : 0;
           int golpes = 0;
           for (auto &e : evs) golpes += (e.attacker != loser);
-          CHECK(golpes >= 4);
+          CHECK(golpes >= 2);
         }
         int pa = A.maxHp + A.atk + A.def + A.spe, pb = B.maxHp + B.atk + B.def + B.spe;
-        uint8_t eab = typeEff4(A.type1, B.type1, B.type2), eba = typeEff4(B.type1, A.type1, A.type2);
+        uint8_t eab = bestEff4(A, B), eba = bestEff4(B, A);
         if (eab == 4 && eba == 4 && pa * 100 >= pb * 120) {
           fuerteN++;
           fuerteGana += bt.result == BR_WIN_A;
@@ -273,7 +304,7 @@ TEST(battle, monte_carlo_151x151_duracion_y_justicia) {
         }
       }
     char msg[160];
-    snprintf(msg, sizeof(msg), "L%d: %ld combates de menos de 7 ataques, %ld de mas de 15", L, cortos, largos);
+    snprintf(msg, sizeof(msg), "L%d: %ld combates de menos de 3 ataques, %ld de mas de 15", L, cortos, largos);
     CHECK_MSG(cortos == 0 && largos == 0, msg);
     snprintf(msg, sizeof(msg), "L%d: el mas fuerte gana %ld de %ld", L, fuerteGana, fuerteN);
     CHECK_MSG(fuerteN > 1000 && fuerteGana * 100 >= fuerteN * 90, msg);

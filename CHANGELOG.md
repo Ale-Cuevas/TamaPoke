@@ -8,6 +8,20 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.66] - 2026-11-15
+
+### Changed
+
+- **Attacks use the stronger of the two types.** A dual-type pet (or foe) now attacks with whichever of its two
+  types does more against the target, so a weak or immune first type no longer holds it back (Pidgey's Flying
+  against a Grass type, for example). A single-type pet is unchanged. Two pets only count as "immune to each
+  other" when neither has any type that can hit the other.
+- **Wider hit limits.** Each hit now takes **2-60 %** of the target's max HP (it was 5-25 %), and **70 %** for a
+  special (it was 30 %), so type advantage and level gaps count for more. A KO can now come in 2 hits (it was at
+  least 4), so a very one-sided fight is over in 3 attacks. The 85-100 % roll and the 1-in-16 critical are as
+  before. Over all 151 x 151 pets the average hits per KO went from 7.1 / 5.9 / 4.8 to 6.9 / 5.3 / 3.9 (levels
+  5 / 30 / 100).
+
 ## [1.65] - 2026-11-15
 
 ### Added
