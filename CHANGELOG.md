@@ -55,6 +55,18 @@ Work in progress on `feature/yard`: the "yard" redesign (`docs/yard-prototype/DE
 - **Care and Play panels.** The FOOD/PLAY/CARE popups became two dark panels opened from the dock: Care (berries,
   cake, light, bath) and Play (ball, stages, sack, sled, waterfall). They don't close by themselves; a refused
   card shakes inside the panel.
+- **Coins and the Shop (phase Y4).**
+  - Coins (`economy.h`, first numbers to tune): each minigame pays 3-8 by result, a stage's first clear 50 and a
+    repeat clear 10 (once per stage per day), walk goals 10 / 20 / 40. Games and repeat clears stop at 150 coins a
+    day; first clears and walk goals always pay. Max 9999. The yard shows the balance under the clock and every
+    result screen shows "+N" with a coin.
+  - The Bag has two tabs, ITEMS and SHOP (tap or swipe). The Shop sells golden berries 30, cake 40, protein, iron
+    and carbos 60, Revive 80 and rare candy 150 (eggs and the charm are not sold), with a confirm card, a
+    "Purchased!" toast, and "Not enough coins" / "Backpack full" when it can't.
+  - Backgrounds: a picker previews each yard map on the whole screen (`<` `>` or swipe). The species' own map is
+    free ("Home"); the others cost 100-250. Choosing the home map again follows the biome after an evolution.
+  - New save keys `cn`, `cnD`, `cnT`, `ybg`, `ybgO` (an old save starts at 0 coins). Serial `COINS [n]`, `SHOP`,
+    `BUY <item>`, `BUYMAP <n>`; `STATS` shows coins and maps.
 
 ### Changed
 
