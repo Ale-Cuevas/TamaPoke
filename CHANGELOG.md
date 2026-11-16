@@ -27,6 +27,19 @@ Work in progress on `feature/yard`: the "yard" redesign (`docs/yard-prototype/DE
   here", and tints the palette for dawn, dusk and night. `tools/send_sd.py --yard` sends them to `/yard/NN.bin`;
   the board now accepts `PUT yard/...` and `LS` lists both folders.
 
+### Changed
+
+- **Menus on the dark panel (phase Y1).** Backpack, the 5 stat-card pages, the rename keyboard, the Box, the badges,
+  the Pokédex, settings, the stage list, the team picker and the stage battle now use the yard look: near-black
+  disc, white title, rounded cards, green/red pills, and a round blue back button at the bottom that does what the
+  USER key does. Paged screens show `<` `>` chevrons (same as the swipe) and a "1/2" counter. Nothing else changes:
+  same content, actions and battle engine.
+  - Settings: "swipe up: cancel" is gone (the back button cancels); the version text is smaller.
+  - Battle: HP bars with numbers on top, the fight in a window on the stage's biome (taken from the stage boss),
+    a two-line log, the special meter and the team strip below. The VS card and the result use cards.
+  - Badges sit on a light plate (their dark outlines vanished on the panel); unseen Pokédex entries are slate
+    silhouettes; the use-item question uses green Use / red No pills.
+
 ## [1.68] - 2026-11-15
 
 ### Fixed

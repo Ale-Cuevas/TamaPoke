@@ -75,6 +75,8 @@ Write the result on each line: a tick, or what you saw.
 | 66 | v1.68 evening bed: put the pet to bed by touch (light button) between 20:00 and 21:59, it stays asleep (not awake a minute later) and wakes by itself at 08:00 | [Night routine](DEVICE_TESTS.md#night-routine-v163) | pending |
 | 67 | feature/yard Y0 kit: serial `YARDUI 0/1/2`; panel black is truly off, text readable at arm's length, chevrons and back button easy to hit, `<` `>` and swipes change page, USER or back closes; EN and ES | [Yard design](yard-prototype/DESIGN_YARD_UI.md) | pending |
 | 68 | feature/yard Y1b: `tools/send_sd.py --yard` sends `01.bin` and `02.bin` (about 58 KB each) without errors, and `tools/send_sd.py --ls` lists them under `yard/` next to `mons/` | [Yard design](yard-prototype/DESIGN_YARD_UI.md) | ✓ 2026-11-16: both sent at ~175 KB/s, `LS` shows `yard/01.bin 57763` and `yard/02.bin 57789` (exact sizes) |
+| 69 | feature/yard Y1 panels by touch: Backpack (use an item: green Use / red No pills are easy to hit), stat card (5 pages, rename keyboard keys), Box (store/wake dialog, `<` `>` to badges), Pokédex (`<` `>` pages, detail), settings (time +/-, volume, brightness, language, OK; back = cancel), stages, team picker (Start pill); the blue back button does what USER does on each; EN and ES | [Yard design](yard-prototype/DESIGN_YARD_UI.md) | pending |
+| 70 | feature/yard Y1 battle: a full stage run looks right (VS card, HP bars and numbers, pets stay inside the window, log lines, special meter, swaps, result card) and frames stay smooth | [Battle stages](DEVICE_TESTS.md#battle-stages-v165) | pending |
 
 Questions only the board can answer:
 - Where is the USB-C port relative to the screen's top? Bottom edge (buttons on top).
