@@ -124,6 +124,7 @@ bool screenOff = false;       // pulsacion corta del boton PWR (la tercera de ca
 // como hacen con la pantalla atenuada; cualquier toque, tecla o sacudida si (wakeUI)
 bool saverPinned = false;
 bool cardOpen = false;        // ficha del bicho (deslizar vertical)
+#define CARD_NAME_TAP_Y 96  // ficha, pagina 0: tocar arriba de esto (el nombre y la especie) = renombrar
 bool kbOpen = false;          // teclado para renombrar al bicho
 char nameBuf[12] = "";
 uint8_t nameLen = 0;
@@ -1564,7 +1565,7 @@ void onTap(int16_t x, int16_t y) {
     return;
   }
   if (cardOpen) {
-    if (cardPage == 0 && y < 84) openKeyboard();  // tocar el nombre = renombrar
+    if (cardPage == 0 && y < CARD_NAME_TAP_Y) openKeyboard();  // tocar el nombre = renombrar
     else cardOpen = false;
     return;
   }
@@ -3644,7 +3645,7 @@ static int statBarX() {
 }
 
 void drawCardStat(int y, const char *label, uint16_t val, uint16_t maxBar, uint16_t color) {
-  gfx->setTextColor(UI_INK);
+  gfx->setTextColor(Y_TEXT);  // panel del patio (Y1): texto blanco, barra sobre pista oscura
   setSize(2);
   setCur(96, y);
   printT(label);
@@ -3656,7 +3657,7 @@ void drawCardStat(int y, const char *label, uint16_t val, uint16_t maxBar, uint1
   int bw = 310 - bx;   // la barra siempre acaba en 310, dejando aire hasta el numero
   int fw = (int)val * bw / maxBar;
   if (fw > bw) fw = bw;
-  gfx->fillRoundRect(bx, y + 2, bw, 11, 3, UI_TRACK);
+  gfx->fillRoundRect(bx, y + 2, bw, 11, 3, Y_CARD_HI);
   if (fw > 2) gfx->fillRoundRect(bx, y + 2, fw, 11, 3, color);
 }
 
@@ -3669,12 +3670,12 @@ void drawCardTrain(int y, uint8_t tr, uint16_t color) {
   int bw = 310 - bx;
   int fw = (int)tr * bw / 100;
   if (fw > bw) fw = bw;
-  gfx->fillRoundRect(bx, y + 24, bw, 6, 2, UI_TRACK);
+  gfx->fillRoundRect(bx, y + 24, bw, 6, 2, Y_CARD_HI);
   if (fw > 2) gfx->fillRoundRect(bx, y + 24, fw, 6, 2, color);
   char num[8];
   if (tr >= 100) snprintf(num, sizeof(num), "MAX");
   else snprintf(num, sizeof(num), "%u", tr);
-  gfx->setTextColor(tr >= 100 ? color : 0x8410);  // gris medio: UI_TRACK casi no se lee
+  gfx->setTextColor(tr >= 100 ? color : Y_TEXT_DIM);
   setSize(2);
   setCur(330, y + 20);
   printT(num);
@@ -4387,48 +4388,57 @@ void drawMedalBadge(int x, int y, int i) {
   printT(medalLabel(i));
 }
 
+// Ficha en el panel del patio (Y1): disco oscuro, titulo blanco, filas en tarjetas, puntos de
+// pagina claros y el boton redondo de volver. Las tarjetas de fila van de CARD_ROW_X a +CARD_ROW_W.
+#define CARD_ROW_X 70
+#define CARD_ROW_W 326
+#define CARD_DOTS_Y 374
+
+// tarjeta de fila de alto h, centrada en un texto de tamano 2 que empieza en ty
+static void cardRow(int ty, int h) { yCard(CARD_ROW_X, ty + 7 - h / 2, CARD_ROW_W, h, false); }
+
 // pagina 0: perfil (retrato grande, identidad, racha, vinculo, baya)
 void renderCardProfile() {
-  const DexEntry &d = DEX_TBL[pet.speciesId];
   const char *nm = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
   char head[32];
   snprintf(head, sizeof(head), T(S_NAME_FMT), pet.shiny ? "*" : "", nm, pet.level());
-  gfx->setTextColor(d.accent);
+  gfx->setTextColor(Y_TEXT);
   // auto-encoge: a tamano 3 los nombres largos no caben en la franja estrecha de
   // arriba de la pantalla redonda, asi que se cortaban por el borde. El ancho se
   // MIDE con textW(): strlen() cuenta bytes, y en una fila UTF-8 no hay un byte
-  // por caracter ni todos miden lo mismo. Con la fuente clasica textW() devuelve
-  // strlen()*6*size, o sea exactamente la cuenta anterior: no mueve un pixel en
-  // los seis idiomas latinos (11 caracteres a tamano 3 son esos 198 px).
+  // por caracter ni todos miden lo mismo.
   setSize(3);
   int hts = (textW(head, 3) <= 198) ? 3 : 2;
   setSize(hts);
-  setCur(centerX(head, hts), hts == 3 ? 34 : 40);
+  setCur(centerX(head, hts), hts == 3 ? Y_TITLE_Y : Y_TITLE_Y + 4);
   printT(head);
   if (pet.nick[0]) {  // especie real bajo el apodo
     const char *sp = dexName(pet.speciesId);
     char par[32];
     snprintf(par, sizeof(par), "(%s)", sp);
-    gfx->setTextColor(UI_TRACK);
+    gfx->setTextColor(Y_TEXT_DIM);
     setSize(2);
-    setCur(centerX(par, 2), 64);   // medido, no contado en bytes
+    setCur(centerX(par, 2), Y_SUB_Y);   // medido, no contado en bytes
     printT(par);
   }
 
   // retrato grande animado
-  if (pmd.loaded) drawPmdAct(PMD_IDLE, CX, 206, millis(), true, false, 4);
+  if (pmd.loaded) drawPmdAct(PMD_IDLE, CX, 200, millis(), true, false, 4);
 
-  // racha con llama
-  int sx = 138, sy = 224;
-  gfx->fillTriangle(sx + 8, sy, sx + 1, sy + 18, sx + 15, sy + 18, UI_BAR_BAD);
-  gfx->fillTriangle(sx + 8, sy + 7, sx + 4, sy + 18, sx + 12, sy + 18, UI_BAR_WARN);
+  // racha con llama, centradas como grupo en su tarjeta
   char rl[40];  // en japones pierde cifras con 30 a partir de 100 dias
   snprintf(rl, sizeof(rl), T(S_STREAK_FMT), pet.streak, pet.bestStreak);
-  gfx->setTextColor(UI_INK);
   setSize(2);
-  setCur(sx + 24, sy + 2);
+  const int ry = 222;
+  cardRow(ry, 32);
+  int sx = CX - (24 + textW(rl, 2)) / 2, sy = ry - 3;
+  gfx->fillTriangle(sx + 8, sy, sx + 1, sy + 18, sx + 15, sy + 18, UI_BAR_BAD);
+  gfx->fillTriangle(sx + 8, sy + 7, sx + 4, sy + 18, sx + 12, sy + 18, UI_BAR_WARN);
+  gfx->setTextColor(Y_TEXT);
+  setCur(sx + 24, ry);
   printT(rl);
 
+  cardRow(260, 32);
   drawCardStat(258, T(S_VIN), pet.bond, 100, C565(0xd4, 0x52, 0x7e));
 
   const char *berry = !pet.berryKnown ? T(S_BERRY_UNK)
@@ -4438,67 +4448,67 @@ void renderCardProfile() {
   char info[48];
   snprintf(info, sizeof(info), T(S_INFO_FMT), berry,
            (unsigned long)(pet.ageMinutes / 1440));
-  gfx->setTextColor(UI_INK);
+  cardRow(298, 32);
+  gfx->setTextColor(Y_TEXT);
   setSize(2);
-  setCur(centerX(info, 2), 296);
+  setCur(centerX(info, 2), 298);
   printT(info);
 
-  gfx->setTextColor(UI_TRACK);
-  setCur(centerX(T(S_RENAME_HINT), 2), 332);
+  gfx->setTextColor(Y_TEXT_DIM);
+  setCur(centerX(T(S_RENAME_HINT), 2), 338);
   printT(T(S_RENAME_HINT));
 }
 
 // pagina 1: combate (4 barras). El saco de entrenamiento ya no sale de aqui sino del menu de
 // JUGAR (v1.34), con los otros juegos: las barras ocupan el sitio del boton.
 void renderCardStats() {
-  gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(T(S_BATTLE), 3), 48);
-  printT(T(S_BATTLE));
+  yTitle(T(S_BATTLE), nullptr);
 
-  drawCardStat(124, T(S_STAT_ATK), pet.atkStat(), 260, UI_BAR_BAD);
-  drawCardTrain(124, pet.trAtk, UI_BAR_BAD);
-  drawCardStat(180, T(S_STAT_DEF), pet.defStat(), 260, 0x4C98);
-  drawCardTrain(180, pet.trDef, 0x4C98);
-  drawCardStat(236, T(S_STAT_SPE), pet.speStat(), 260, UI_BAR_WARN);
-  drawCardTrain(236, pet.trSpe, UI_BAR_WARN);
-  drawCardStat(292, T(S_STAT_WGT), pet.weight, 100, 0xB3C8);
+  // cada stat en su tarjeta: la barra de combate y debajo la fina del entrenamiento
+  const int y0 = 104, step = 56;
+  for (int r = 0; r < 3; r++) yCard(CARD_ROW_X, y0 + r * step - 9, CARD_ROW_W, 50, false);
+  yCard(CARD_ROW_X, y0 + 3 * step - 9, CARD_ROW_W, 32, false);
+  drawCardStat(y0, T(S_STAT_ATK), pet.atkStat(), 260, UI_BAR_BAD);
+  drawCardTrain(y0, pet.trAtk, UI_BAR_BAD);
+  drawCardStat(y0 + step, T(S_STAT_DEF), pet.defStat(), 260, 0x4C98);
+  drawCardTrain(y0 + step, pet.trDef, 0x4C98);
+  drawCardStat(y0 + 2 * step, T(S_STAT_SPE), pet.speStat(), 260, UI_BAR_WARN);
+  drawCardTrain(y0 + 2 * step, pet.trSpe, UI_BAR_WARN);
+  drawCardStat(y0 + 3 * step, T(S_STAT_WGT), pet.weight, 100, 0xB3C8);
 
   // que es la barra fina (v1.49)
-  gfx->setTextColor(UI_TRACK);
+  gfx->setTextColor(Y_TEXT_DIM);
   setSize(2);
   setCur(centerX(T(S_TRAIN_LEGEND), 2), 338);
   printT(T(S_TRAIN_LEGEND));
 }
 
-// pagina 2: medallas con etiqueta descriptiva
+// pagina 2: medallas con etiqueta descriptiva: verdes y en blanco las conseguidas, apagadas las
+// que faltan. Dos columnas que caben en la parte estrecha de arriba del circulo.
+#define MEDAL_W 172
+#define MEDAL_H 40
+#define MEDAL_GAP 8
+#define MEDAL_Y 100
 void renderCardMedals() {
   int got = 0;
   for (int i = 0; i < MED_COUNT; i++)
     if (pet.hasMedal(1 << i)) got++;
   char head[24];
   snprintf(head, sizeof(head), T(S_MEDALS_FMT), got, MED_COUNT);
-  gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(head, 3), 48);
-  printT(head);
+  yTitle(head, nullptr);
 
   for (int i = 0; i < MED_COUNT; i++) {
-    int x = 28 + (i % 2) * 206, y = 104 + (i / 2) * 54;
-    if (i == MED_COUNT - 1 && MED_COUNT % 2) x = CX - 98;  // la impar (MARATON), centrada abajo
+    int x = CX - MEDAL_W - MEDAL_GAP / 2 + (i % 2) * (MEDAL_W + MEDAL_GAP);
+    int y = MEDAL_Y + (i / 2) * (MEDAL_H + 6);
+    if (i == MED_COUNT - 1 && MED_COUNT % 2) x = CX - MEDAL_W / 2;  // la impar (MARATON), centrada abajo
     bool g = pet.hasMedal(1 << i);
-    gfx->fillRoundRect(x, y, 196, 44, 10, g ? UI_BAR_OK : UI_TRACK);
-    if (g) {  // marca de conseguida
-      gfx->fillCircle(x + 22, y + 22, 11, UI_BG_DAY);
-      gfx->setTextColor(UI_BAR_OK);
-      setSize(2);
-      setCur(x + 16, y + 13);
-      printT("v");
-    }
-    gfx->setTextColor(g ? UI_BG_DAY : 0x8410);
+    gfx->fillRoundRect(x, y, MEDAL_W, MEDAL_H, Y_CARD_RAD, g ? Y_ACCENT_GO : Y_CARD);
+    const char *t = medalDesc(i);
     setSize(2);
-    setCur(x + 44, y + 14);
-    printT(medalDesc(i));
+    int tx = x + (MEDAL_W - textW(t, 2)) / 2;  // sin marca: "BAYA HALLADA" llena la tarjeta; el verde basta
+    gfx->setTextColor(g ? Y_TEXT : Y_TEXT_DIM);
+    setCur(tx, y + (MEDAL_H - 14) / 2);
+    printT(t);
   }
 }
 
@@ -4506,69 +4516,70 @@ void renderCardMedals() {
 // que antes eran invisibles (cuanto falta para subir/evolucionar y por que)
 void renderCardProgress() {
   const DexEntry &d = DEX_TBL[pet.speciesId];
-  gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(T(S_PROGRESS), 3), 44);
-  printT(T(S_PROGRESS));
+  yTitle(T(S_PROGRESS), nullptr);
 
   // nivel grande
   char lv[10];
   snprintf(lv, sizeof(lv), T(S_LVL_FMT), pet.level());
+  gfx->setTextColor(Y_TEXT);
   setSize(5);
-  setCur(centerX(lv, 5), 86);
+  setCur(centerX(lv, 5), 84);
   printT(lv);
 
   // barra de progreso al siguiente nivel (v1.35: cada nivel cuesta lo suyo, 20 a 180 min,
   // growth.h). En el tope (999) la barra queda llena y sin "siguiente nivel".
   bool lvMax = pet.level() >= LEVEL_MAX;
   uint16_t into = pet.levelMinutesInto(), cost = pet.levelMinutesCost();
-  int bx = 93, bw = 280, by = 158, bh = 22;
-  gfx->fillRoundRect(bx, by, bw, bh, 6, UI_TRACK);
-  int fw = lvMax ? bw - 4 : (int)((uint32_t)(bw - 4) * into / cost);
-  if (fw > 0) gfx->fillRoundRect(bx + 2, by + 2, fw, bh - 4, 5, UI_BAR_OK);
+  int bx = 93, bw = 280, by = 136, bh = 18;
+  gfx->fillRoundRect(bx, by, bw, bh, bh / 2, Y_CARD_HI);
+  int fw = lvMax ? bw : (int)((uint32_t)bw * into / cost);
+  if (fw >= bh) gfx->fillRoundRect(bx, by, fw, bh, bh / 2, Y_ACCENT_GO);
   if (!lvMax) {
     char nx[32];
     snprintf(nx, sizeof(nx), T(S_NEXT_LVL_FMT), (unsigned)(cost - into), (unsigned)(pet.level() + 1));
-    gfx->setTextColor(UI_INK);
+    gfx->setTextColor(Y_TEXT_DIM);
     setSize(2);
-    setCur(centerX(nx, 2), by + 32);
+    setCur(centerX(nx, 2), by + 28);
     printT(nx);
   }
 
-  // estado de evolucion
-  gfx->setTextColor(UI_TRACK);
-  setCur(centerX(T(S_EVO_LABEL), 2), 230);
+  // estado de evolucion, en su tarjeta
+  yCard(CARD_ROW_X, 202, CARD_ROW_W, 64, false);
+  gfx->setTextColor(Y_TEXT_DIM);
+  setSize(2);
+  setCur(centerX(T(S_EVO_LABEL), 2), 212);
   printT(T(S_EVO_LABEL));
   char evoBuf[32];
   const char *evo;
-  uint16_t evoCol = UI_INK;
+  uint16_t evoCol = Y_TEXT;
   if (d.evolvesTo == 0) {
     evo = T(S_FINAL_FORM);
   } else {
     int needed = d.evolveLevel + pet.careMistakes;
     if (pet.level() >= needed) {
-      if (pet.lowestStat() >= 40) { evo = T(S_EVO_READY); evoCol = UI_BAR_OK; }
-      else { evo = T(S_EVO_BLOCKED); evoCol = UI_BAR_BAD; }
+      if (pet.lowestStat() >= 40) { evo = T(S_EVO_READY); evoCol = Y_ACCENT_GO; }
+      else { evo = T(S_EVO_BLOCKED); evoCol = Y_ACCENT_BAD; }
     } else {
       snprintf(evoBuf, sizeof(evoBuf), T(S_EVO_IN_FMT), needed - pet.level());
       evo = evoBuf;
     }
   }
   gfx->setTextColor(evoCol);
-  setCur(centerX(evo, 2), 256);
+  setCur(centerX(evo, 2), 238);
   printT(evo);
 
   // descuidos (retrasan la evolucion)
   char ms[24];
   snprintf(ms, sizeof(ms), T(S_MISTAKES_FMT), pet.careMistakes);
-  gfx->setTextColor(pet.careMistakes > 0 ? UI_BAR_BAD : UI_INK);
-  setCur(centerX(ms, 2), 312);
+  cardRow(290, 32);
+  gfx->setTextColor(pet.careMistakes > 0 ? Y_ACCENT_BAD : Y_TEXT);
+  setCur(centerX(ms, 2), 290);
   printT(ms);
 }
 
 // pagina 4: paseo (FR-1.7). Pasos de hoy con un anillo hacia la meta, el total y los hallazgos
 // de hoy. La mochila tiene su boton desde la v1.53 (renderBag).
-#define WALK_RING_Y 140
+#define WALK_RING_Y 150
 #define WALK_RING_R 60   // radio exterior del anillo (el interior, 13 px menos)
 
 // pasos de hoy en pantalla: los del bicho mas los que el IMU aun no le ha pasado
@@ -4584,14 +4595,11 @@ void drawMapTint(const char *const *map, int n, int x, int y, int s, uint16_t co
 }
 
 void renderCardWalk() {
-  gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(T(S_WALK), 3), 40);
-  printT(T(S_WALK));
+  yTitle(T(S_WALK), nullptr);
 
   uint32_t day = pet.dayNumber();
   if (!imuPresent()) {  // FR-1.9: sin IMU lo dice y nada mas cambia
-    gfx->setTextColor(UI_TRACK);
+    gfx->setTextColor(Y_TEXT_DIM);
     setSize(2);
     setCur(centerX(T(S_NO_IMU), 2), WALK_RING_Y - 8);
     printT(T(S_NO_IMU));
@@ -4602,31 +4610,33 @@ void renderCardWalk() {
     while (tiers < STEP_GOAL_TIERS && st >= STEP_GOALS[tiers]) tiers++;
     // el anillo se llena hacia la siguiente meta; con las tres, entero y verde
     uint32_t next = STEP_GOALS[tiers < STEP_GOAL_TIERS ? tiers : STEP_GOAL_TIERS - 1];
-    gfx->fillArc(CX, WALK_RING_Y, WALK_RING_R, WALK_RING_R - 13, 0, 360, UI_TRACK);
+    gfx->fillArc(CX, WALK_RING_Y, WALK_RING_R, WALK_RING_R - 13, 0, 360, Y_CARD_HI);
     float frac = tiers >= STEP_GOAL_TIERS ? 1.0f : (float)st / next;
-    if (frac >= 1.0f) gfx->fillArc(CX, WALK_RING_Y, WALK_RING_R, WALK_RING_R - 13, 0, 360, UI_BAR_OK);
+    if (frac >= 1.0f) gfx->fillArc(CX, WALK_RING_Y, WALK_RING_R, WALK_RING_R - 13, 0, 360, Y_ACCENT_GO);
     else if (frac > 0.003f)  // de las 12 en el sentido de las agujas del reloj
-      gfx->fillArc(CX, WALK_RING_Y, WALK_RING_R, WALK_RING_R - 13, 270, 270 + 360 * frac, 0x4C98);
+      gfx->fillArc(CX, WALK_RING_Y, WALK_RING_R, WALK_RING_R - 13, 270, 270 + 360 * frac, Y_BACK);
     char num[12];
     snprintf(num, sizeof(num), "%lu", (unsigned long)st);
     uint8_t ns = strlen(num) <= 5 ? 3 : 2;
-    gfx->setTextColor(UI_INK);
+    gfx->setTextColor(Y_TEXT);
     setSize(ns);
     setCur(centerX(num, ns), WALK_RING_Y - (ns == 3 ? 18 : 14));
     printT(num);
     char goal[10];
     snprintf(goal, sizeof(goal), "/%lu", (unsigned long)next);
-    gfx->setTextColor(UI_TRACK);
+    gfx->setTextColor(Y_TEXT_DIM);
     setSize(2);
     setCur(centerX(goal, 2), WALK_RING_Y + 12);
     printT(goal);
     // una bandera por meta de hoy, en fila arriba a la derecha del anillo
-    for (int k = 0; k < tiers; k++) drawMap(SPR_ICON_FLAG, 16, CX + 48 + k * 26, WALK_RING_Y - 74, 2, false);
+    for (int k = 0; k < tiers; k++) drawMap(SPR_ICON_FLAG, 16, CX + 52 + k * 26, WALK_RING_Y - 70, 2, false);
 
+    // el total y los hallazgos, en una tarjeta
+    yCard(CARD_ROW_X, 228, CARD_ROW_W, 60, false);
     char tot[32];
     snprintf(tot, sizeof(tot), T(S_STEPS_TOTAL_FMT), (unsigned long)(pet.stepsTotal + imuStepsPending()));
-    gfx->setTextColor(UI_INK);
-    setCur(centerX(tot, 2), 212);
+    gfx->setTextColor(Y_TEXT);
+    setCur(centerX(tot, 2), 238);
     printT(tot);
     char fnd[32];
     // hallazgos al azar hacia el tope, y aparte los regalos de las metas
@@ -4637,15 +4647,15 @@ void renderCardWalk() {
       size_t L = strlen(fnd);
       snprintf(fnd + L, sizeof(fnd) - L, " +%u", (unsigned)pet.bonusFindsToday);
     }
-    setCur(centerX(fnd, 2), 236);
+    setCur(centerX(fnd, 2), 262);
     printT(fnd);
   }
 
   // la mochila tiene su propio boton desde la v1.53: aqui solo la pista de los huevos
   if (pet.eggsOwned()) {
-    gfx->setTextColor(UI_INK);
+    gfx->setTextColor(Y_TEXT);
     setSize(2);
-    setCur(centerX(T(S_EGG_HINT), 2), 290);
+    setCur(centerX(T(S_EGG_HINT), 2), 312);
     printT(T(S_EGG_HINT));
   }
 }
@@ -4658,11 +4668,19 @@ void renderCardWalk() {
 #define BAG_COLS 3
 #define BAG_ROWS 3
 #define BAG_SLOT_W 76
-#define BAG_SLOT_H 80
-#define BAG_GAP 10
+#define BAG_SLOT_H 76
+#define BAG_GAP 8
 #define BAG_X (CX - (BAG_COLS * BAG_SLOT_W + (BAG_COLS - 1) * BAG_GAP) / 2)
-#define BAG_Y 94
+#define BAG_Y 96  // panel del patio (Y1): el titulo arriba; la pestana de la tienda (Y4) ira entre los dos
+#define BAG_HINT_Y (BAG_Y + BAG_ROWS * BAG_SLOT_H + (BAG_ROWS - 1) * BAG_GAP + 14)
 #define BAG_REVIVE_HINT_MS 3000UL  // tocar el Revivir: dice para que sirve (no se usa a mano)
+// "usar objeto?" (Y1): una tarjeta que tapa la rejilla entera, con dos pastillas, Usar (verde) y NO
+#define BAG_ASK_X 88
+#define BAG_ASK_Y (BAG_Y - 4)
+#define BAG_ASK_W 290
+#define BAG_ASK_H (BAG_ROWS * BAG_SLOT_H + (BAG_ROWS - 1) * BAG_GAP + 8)
+#define BAG_ASK_PILL_Y (BAG_ASK_Y + 170)
+#define BAG_ASK_PILL_GAP 24
 // orden en pantalla: lo que se come, las vitaminas, el caramelo y lo que no se usa a mano
 static const uint8_t BAG_ORDER[] = { IT_GOLDEN, IT_CAKE, IT_RARECANDY, IT_PROTEIN, IT_IRON, IT_CARBOS,
                                      IT_CHARM, IT_EGG, IT_REVIVE };
@@ -4674,6 +4692,14 @@ void bagSlotXY(int k, int &x, int &y) {
   y = BAG_Y + (k / BAG_COLS) * (BAG_SLOT_H + BAG_GAP);
 }
 
+// las dos pastillas del "usar objeto?": x de cada una (centradas como pareja) y sus anchos
+static void bagAskPills(int &xUse, int &wUse, int &xNo, int &wNo) {
+  wUse = yPillWidth(T(S_USE));
+  wNo = yPillWidth(T(S_NO));
+  xUse = CX - (wUse + BAG_ASK_PILL_GAP + wNo) / 2;
+  xNo = xUse + wUse + BAG_ASK_PILL_GAP;
+}
+
 void openBag() {
   bagOpen = true;
   itemConfirm = 0;
@@ -4681,14 +4707,11 @@ void openBag() {
 }
 
 void renderBag() {
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
-  gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(T(S_BACKPACK), 3), 44);
-  printT(T(S_BACKPACK));
+  yPanelBg();
+  yTitle(T(S_BACKPACK), nullptr);
 
-  // una casilla por objeto, con su cuenta; el amuleto, enmarcado si se lleva
+  // una tarjeta por objeto, con su cuenta; el amuleto, enmarcado si se lleva. Sin ninguno, la
+  // tarjeta queda hundida (solo el borde) y el icono en silueta.
   for (int k = 0; k < (int)BAG_SLOTS; k++) {
     uint8_t i = BAG_ORDER[k];
     int x, y;
@@ -4696,21 +4719,23 @@ void renderBag() {
     // los huevos (v1.40): tambien el que espera en la incubadora
     uint8_t n = (i == IT_EGG) ? pet.eggsOwned() : pet.items[i];
     bool held = (i == IT_CHARM) && n;
-    gfx->fillRoundRect(x, y, BAG_SLOT_W, BAG_SLOT_H, 12, n ? UI_WHITE : UI_BG_DAY);
-    gfx->drawRoundRect(x, y, BAG_SLOT_W, BAG_SLOT_H, 12, held ? UI_BAR_WARN : (n ? UI_INK : UI_TRACK));
-    if (held) gfx->drawRoundRect(x + 1, y + 1, BAG_SLOT_W - 2, BAG_SLOT_H - 2, 11, UI_BAR_WARN);
-    if (n) drawMap(ITEM_ICON[i], 16, x + (BAG_SLOT_W - 48) / 2, y + 6, 3, false);
-    else drawMapTint(ITEM_ICON[i], 16, x + (BAG_SLOT_W - 48) / 2, y + 6, 3, UI_TRACK);
+    if (n) yCard(x, y, BAG_SLOT_W, BAG_SLOT_H, false);
+    else gfx->drawRoundRect(x, y, BAG_SLOT_W, BAG_SLOT_H, Y_CARD_RAD, Y_CARD);
+    if (held) {
+      gfx->drawRoundRect(x, y, BAG_SLOT_W, BAG_SLOT_H, Y_CARD_RAD, UI_BAR_WARN);
+      gfx->drawRoundRect(x + 1, y + 1, BAG_SLOT_W - 2, BAG_SLOT_H - 2, Y_CARD_RAD - 1, UI_BAR_WARN);
+    }
+    if (n) drawMap(ITEM_ICON[i], 16, x + (BAG_SLOT_W - 48) / 2, y + 5, 3, false);
+    else drawMapTint(ITEM_ICON[i], 16, x + (BAG_SLOT_W - 48) / 2, y + 5, 3, Y_CARD_HI);
     char c[6];
     snprintf(c, sizeof(c), "x%u", n);
-    gfx->setTextColor(n ? UI_INK : UI_TRACK);
+    gfx->setTextColor(n ? Y_TEXT : Y_TEXT_DIM);
     setSize(2);
-    setCur(x + (BAG_SLOT_W - textW(c, 2)) / 2, y + 58);
+    setCur(x + (BAG_SLOT_W - textW(c, 2)) / 2, y + 56);
     printT(c);
   }
   // una pista: el Revivir recien tocado, dormido, los huevos (v1.39), el amuleto, la mochila vacia o
   // como se usa
-  int hy = BAG_Y + BAG_ROWS * BAG_SLOT_H + (BAG_ROWS - 1) * BAG_GAP + 18;
   bool empty = pet.itemCount() == 0 && !pet.eggsOwned();
   bool reviveHint = timeLeft(bagReviveHintUntil) > 0;
   const char *hint = reviveHint            ? T(S_REVIVE_HINT)
@@ -4719,43 +4744,40 @@ void renderBag() {
                      : pet.eggsOwned()     ? T(S_EGG_HINT)
                      : pet.items[IT_CHARM] ? T(S_CHARM_HELD)
                                            : T(S_BAG_HINT);
-  gfx->setTextColor(empty ? UI_TRACK : UI_INK);
+  gfx->setTextColor(empty ? Y_TEXT_DIM : Y_TEXT);
   setSize(2);
-  setCur(centerX(hint, 2), hy);
+  setCur(centerX(hint, 2), BAG_HINT_Y);
   printT(hint);
-  gfx->setTextColor(UI_TRACK);
-  setCur(centerX(T(S_BACK), 2), 412);
-  printT(T(S_BACK));
+  yBackBtn();
 
-  // "usar objeto?" (mismo dialogo que "soltar?")
+  // "usar objeto?" (mismo dialogo que "soltar?"): tarjeta encima de la rejilla, Usar / NO
   if (itemConfirm) {
     uint8_t it = itemConfirm - 1;
-    gfx->fillRoundRect(94, 168, 278, 152, 16, UI_WHITE);
-    gfx->drawRoundRect(94, 168, 278, 152, 16, UI_INK);
-    drawMap(ITEM_ICON[it], 16, CX - 16, 176, 2, false);
+    yCard(BAG_ASK_X, BAG_ASK_Y, BAG_ASK_W, BAG_ASK_H, true);
+    drawMap(ITEM_ICON[it], 16, CX - 32, BAG_ASK_Y + 34, 4, false);
     char q[48];
     snprintf(q, sizeof(q), T(S_USE_FMT), T((StrId)(S_IT_GOLDEN + it)));
-    gfx->setTextColor(UI_INK);
+    gfx->setTextColor(Y_TEXT);
     setSize(2);
-    setCur(centerX(q, 2), 218);
+    setCur(centerX(q, 2), BAG_ASK_Y + 120);
     printT(q);
-    gfx->fillRoundRect(118, 252, 100, 52, 12, UI_BAR_OK);
-    gfx->setTextColor(UI_WHITE);
-    setCur(118 + (100 - textW(T(S_YES), 2)) / 2, 270);
-    printT(T(S_YES));
-    gfx->fillRoundRect(248, 252, 100, 52, 12, UI_BAR_BAD);
-    setCur(248 + (100 - textW(T(S_NO), 2)) / 2, 270);
-    printT(T(S_NO));
+    int xu, wu, xn, wn;
+    bagAskPills(xu, wu, xn, wn);
+    yPill(xu, BAG_ASK_PILL_Y, T(S_USE), Y_ACCENT_GO);
+    yPill(xn, BAG_ASK_PILL_Y, T(S_NO), Y_ACCENT_BAD);
   }
   gfx->flush();
 }
 
-// toques en la mochila: una casilla pide confirmacion; fuera de la rejilla, se cierra
+// toques en la mochila: una casilla pide confirmacion; el boton de volver (o fuera de la rejilla)
+// la cierra
 void bagTap(int16_t x, int16_t y) {
-  if (itemConfirm) {
+  if (itemConfirm) {  // solo la pastilla de Usar usa el objeto; cualquier otro toque es NO
     uint8_t it = itemConfirm - 1;
     itemConfirm = 0;
-    if (timeLeft(itemConfirmUntil) && x >= 118 && x <= 218 && y >= 252 && y <= 304) {
+    int xu, wu, xn, wn;
+    bagAskPills(xu, wu, xn, wn);
+    if (timeLeft(itemConfirmUntil) && yPillHit(x, y, xu, BAG_ASK_PILL_Y, wu)) {
       FxNeedSnap ns = fxSnap();
       if (pet.useItem(it)) {
         fxNeeds(ns);
@@ -4766,6 +4788,10 @@ void bagTap(int16_t x, int16_t y) {
         sfxPlay(SFX_DENY);
       }
     }
+    return;
+  }
+  if (yBackHit(x, y)) {  // como la tecla USER
+    bagOpen = false;
     return;
   }
   for (int k = 0; k < (int)BAG_SLOTS; k++) {
@@ -4788,25 +4814,26 @@ void bagTap(int16_t x, int16_t y) {
   bagOpen = false;
 }
 
+// puntos de pagina de la ficha en colores claros (sobre el panel oscuro)
+static void cardPageDots(int y) {
+  for (int i = 0; i < CARD_PAGES; i++) {
+    int dx = CX - (CARD_PAGES - 1) * 13 + i * 26;
+    if (i == cardPage) gfx->fillCircle(dx, y, 5, Y_TEXT);
+    else gfx->fillCircle(dx, y, 4, Y_CARD_HI);
+  }
+}
+
 void renderCard() {
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  yPanelBg();
   if (cardPage == 0) renderCardProfile();
   else if (cardPage == 1) renderCardStats();
   else if (cardPage == 2) renderCardMedals();
   else if (cardPage == 3) renderCardProgress();
   else renderCardWalk();
 
-  // indicador de paginas + ayuda
-  for (int i = 0; i < CARD_PAGES; i++) {
-    int dx = CX - (CARD_PAGES - 1) * 13 + i * 26;
-    if (i == cardPage) gfx->fillCircle(dx, 374, 5, UI_INK);
-    else gfx->drawCircle(dx, 374, 4, UI_INK);
-  }
-  gfx->setTextColor(UI_TRACK);
-  setSize(2);
-  setCur(centerX(T(S_BACK), 2), 398);
-  printT(T(S_BACK));
+  // indicador de paginas + boton de volver (tocar en cualquier otro sitio tambien cierra)
+  cardPageDots(CARD_DOTS_Y);
+  yBackBtn();
   gfx->flush();
 }
 
@@ -4814,10 +4841,14 @@ void renderCard() {
 
 static const char KB_KEYS[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ.-";  // 28 + DEL + OK = 30
 #define KB_COLS 6
-#define KB_X 40
-#define KB_Y 150
-#define KB_W 64
-#define KB_H 52
+#define KB_W 58  // celda (y zona de toque) de cada tecla; se dibuja 6 px menor
+#define KB_H 48
+#define KB_X (CX - KB_COLS * KB_W / 2)
+#define KB_Y 118  // panel del patio (Y1): todo sube para dejar sitio al boton de volver
+#define KB_BOX_X 93
+#define KB_BOX_Y 72
+#define KB_BOX_W 280
+#define KB_BOX_H 36
 
 void openKeyboard() {
   kbOpen = true;
@@ -4827,35 +4858,27 @@ void openKeyboard() {
 }
 
 void renderKeyboard() {
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
-  gfx->setTextColor(UI_INK);
-  setSize(2);
-  setCur(centerX(T(S_NAME), 2), 56);
-  printT(T(S_NAME));
+  yPanelBg();
+  yTitle(T(S_NAME), nullptr);
   // buffer actual
-  gfx->fillRoundRect(83, 84, 300, 40, 8, UI_WHITE);
-  gfx->drawRoundRect(83, 84, 300, 40, 8, UI_INK);
+  yCard(KB_BOX_X, KB_BOX_Y, KB_BOX_W, KB_BOX_H, true);
+  gfx->setTextColor(Y_TEXT);
   setSize(3);
-  setCur(95, 94);
+  setCur(KB_BOX_X + 12, KB_BOX_Y + 8);
   printT(nameLen ? nameBuf : "_");
 
   for (int i = 0; i < 30; i++) {
     int x = KB_X + (i % KB_COLS) * KB_W, y = KB_Y + (i / KB_COLS) * KB_H;
-    bool special = (i >= 28);
-    gfx->fillRoundRect(x, y, KB_W - 6, KB_H - 6, 6, special ? UI_BAR_WARN : UI_WHITE);
-    gfx->drawRoundRect(x, y, KB_W - 6, KB_H - 6, 6, UI_INK);
-    gfx->setTextColor(UI_INK);
+    uint16_t bg = i == 29 ? Y_ACCENT_GO : i == 28 ? Y_CARD_HI : Y_CARD;
+    gfx->fillRoundRect(x + 3, y + 3, KB_W - 6, KB_H - 6, 8, bg);
+    gfx->setTextColor(Y_TEXT);
     setSize(2);
-    if (i < 28) {
-      setCur(x + KB_W / 2 - 9, y + KB_H / 2 - 10);
-      printT(KB_KEYS[i]);
-    } else {
-      const char *lab = (i == 28) ? "<-" : "OK";
-      setCur(x + KB_W / 2 - 15, y + KB_H / 2 - 10);
-      printT(lab);
-    }
+    char lab[3] = { i < 28 ? KB_KEYS[i] : 0, 0, 0 };
+    if (i >= 28) strcpy(lab, i == 28 ? "<-" : "OK");
+    setCur(x + (KB_W - textW(lab, 2)) / 2, y + (KB_H - 14) / 2);
+    printT(lab);
   }
+  yBackBtn();
   gfx->flush();
 }
 
@@ -4863,6 +4886,10 @@ void keyboardTap(int16_t x, int16_t y) {
   // filtra ANTES de dividir: con x/y menores que KB_X/KB_Y la resta da negativo
   // y la division entera trunca hacia cero (no hacia -inf), asi que col/row
   // saldria 0 en vez de negativo y el filtro de abajo no lo detectaria
+  if (yBackHit(x, y)) {  // como la tecla USER: descarta el nombre y vuelve a la ficha
+    kbOpen = false;
+    return;
+  }
   if (x < KB_X || y < KB_Y) return;
   int col = (x - KB_X) / KB_W, row = (y - KB_Y) / KB_H;
   if (col >= KB_COLS || row >= 5) return;

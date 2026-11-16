@@ -707,6 +707,22 @@ static const std::vector<Scene> &scenes() {
        itemConfirm = IT_GOLDEN + 1;
        itemConfirmUntil = millis() + 10000;
      } },
+    // yard Y1: the panel restyle of the backpack and the stat card, in Spanish too
+    { "bag-confirm-es", [] {
+       pokemon(25, 13);
+       walker(11032, 71500, 8, { 5, 1, 9, 2, 1, 1 }, 3);
+       openBag();
+       itemConfirm = IT_RARECANDY + 1;
+       itemConfirmUntil = millis() + 10000;
+       setLang(LANG_ES);
+       applyLangFont();
+     } },
+    { "card-profile-es", [] { pokemon(25, 13); pet.streak = 365; pet.bestStreak = 365; setLang(LANG_ES); applyLangFont(); cardOpen = true; cardPage = 0; } },
+    { "card-profile-nick", [] { pokemon(6, 36); pet.rename("SPARKY"); pet.shiny = true; cardOpen = true; cardPage = 0; } },
+    { "card-medals-es", [] { pokemon(25, 13); pet.medals = MED_LV10 | MED_BERRY | MED_MARATHON; setLang(LANG_ES); applyLangFont(); cardOpen = true; cardPage = 2; } },
+    { "card-progress-es", [] { pokemon(25, 13); setLang(LANG_ES); applyLangFont(); cardOpen = true; cardPage = 3; } },
+    { "walk-goal-es", [] { pokemon(25, 13); walker(3512, 61200, 4, { 4, 0, 9, 1, 1, 0, 2 }, 1); setLang(LANG_ES); applyLangFont(); cardOpen = true; cardPage = 4; } },
+    { "keyboard-es", [] { pokemon(25, 13); pet.rename("PIKA"); openKeyboard(); setLang(LANG_ES); applyLangFont(); } },
     { "walk-noimu", [] { pokemon(25, 13); gStubImuPresent = false; cardOpen = true; cardPage = 4; } },
     { "walk-ja", [] {
        pokemon(25, 13);
