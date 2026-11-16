@@ -73,8 +73,37 @@ void Pet::newEgg(bool saveNow, int16_t heir) {
     if (charm) items[IT_CHARM] = 0;
     eggShiny = (random(shinyOdds(charm)) == 0);
     eggTaps = 0;
+    eggPlaced = 0;
+    eggSaved = 0;
   }
+  // Y3: el huevo se pone en el patio (el inicial no: se abre con 3 toques). El que vuelve de la
+  // incubadora sigue con su hora: la incubadora tambien incuba
+  if (timedEggs && !starterPick && !eggPlaced) placeEgg();
   persist(saveNow);
+}
+
+void Pet::placeEgg() {
+  eggPlaced = lastSeenEpoch >= EGG_EPOCH_MIN ? lastSeenEpoch : EGG_NO_CLOCK;
+  eggShakeHave = false;
+}
+
+void Pet::eggClockStamp() {
+  if (eggPlaced && !eggClockKnown(eggPlaced) && lastSeenEpoch >= EGG_EPOCH_MIN) {
+    eggPlaced = lastSeenEpoch;
+    pendingSave = true;
+  }
+}
+
+void Pet::dbgEggElapsed(uint32_t min) {
+  if (!isEgg() || vacant || starterPick) return;
+  if (!eggPlaced) placeEgg();
+  if (lastSeenEpoch >= EGG_EPOCH_MIN) eggPlaced = eggPlacedFor(lastSeenEpoch, min);
+  pendingSave = true;
+}
+
+void Pet::hatchNow() {
+  if (!isEgg() || vacant || starterPick || busyEnding()) return;
+  hatch();
 }
 
 // Guardar en la caja deja la casa libre. Huevos limitados (v1.39): vuelve el que esperaba en la
@@ -148,6 +177,10 @@ void Pet::vacate(bool saveNow) {
   vacant = true;
   starterPick = false;
   eggTaps = 0;
+  if (!eggHeldFlag) {  // (el de la incubadora conserva su hora)
+    eggPlaced = 0;
+    eggSaved = 0;
+  }
   persist(saveNow);
 }
 
@@ -202,12 +235,14 @@ void Pet::syncClock(uint32_t nowEpoch) {
     return;
   }
   if (mins > 14UL * 24 * 60) mins = 14UL * 24 * 60;  // tope: 2 semanas
+  if (yardEgg()) eggClockStamp();  // puesto sin hora: cuenta desde la ultima vista
 
   for (uint32_t i = 0; i < mins; i++) {
     bool full = sated();  // la tarta (v1.54) tambien cuenta apagado
     ageMinutes++;
     if (isEgg()) {
-      if (ageMinutes >= 3) hatch();  // eclosiona en tu ausencia
+      // el del patio (Y3): a su hora real; el inicial o uno del sistema de antes, a los 3 min
+      if (yardEgg() ? eggMinutesLeft(seen + (i + 1) * 60) == 0 : ageMinutes >= 3) hatch();  // eclosiona en tu ausencia
       continue;
     }
     growMin++;  // crece igual apagado que en vivo, dormido o despierto
@@ -267,7 +302,12 @@ void Pet::tick() {
   ageMinutes++;
 
   if (isEgg()) {
-    if (ageMinutes >= 3) hatch();  // si no lo tocas, eclosiona solo a los 3 min
+    if (yardEgg()) {  // el del patio (Y3): a las 4 h reales menos lo que le quitaron las sacudidas
+      eggClockStamp();
+      if (eggMinutesLeft() == 0) hatch();
+    } else if (ageMinutes >= 3) {
+      hatch();  // si no lo tocas, eclosiona solo a los 3 min
+    }
     return;
   }
   growMin++;  // el nivel sale de aqui (growth.h), despierto o dormido
@@ -609,6 +649,8 @@ void Pet::release() {
 
 void Pet::hatch() {
   speciesId = eggTarget;
+  eggPlaced = 0;  // el huevo del patio ya no esta
+  eggSaved = 0;
   shiny = eggShiny;
   // genes del individuo: 90-110% por stat (cada crianza es unica)
   geneAtk = 90 + random(21);
@@ -930,6 +972,7 @@ void Pet::caress() {
 
 void Pet::eggTap() {
   if (!isEgg() || vacant) return;
+  if (yardEgg()) return;  // el del patio no se abre a toques (Y3): solo se tambalea (la UI)
   if (++eggTaps >= 3) hatch();
   else save();
 }
@@ -1234,13 +1277,20 @@ void Pet::wakeGrumpy() {
 
 // agitarlo despierto: se marea. 3 sacudidas en 2 min restan felicidad, como
 // mucho una vez cada 10 min. El huevo solo se tambalea.
-void Pet::shaken() {
-  if (busyEnding()) return;
+bool Pet::shaken() {
+  if (busyEnding()) return false;
   if (isEgg()) {
-    if (!vacant) startEmote(EMOTE_WOBBLE);
-    return;
+    if (vacant) return false;
+    startEmote(EMOTE_WOBBLE);
+    // el del patio (Y3): la sacudida le quita minutos (una cada EGG_SHAKE_COOLDOWN_MS, hasta el tope).
+    // Solo se marca el guardado: lo vuelca el loop con la pantalla atenuada
+    if (yardEgg() && eggShake(&eggSaved, &eggShakeMs, &eggShakeHave, millis())) {
+      pendingSave = true;
+      return true;
+    }
+    return false;
   }
-  if (sleeping) return;  // dormido es wakeGrumpy()
+  if (sleeping) return false;  // dormido es wakeGrumpy()
   startEmote(EMOTE_DIZZY);
   uint32_t now = millis();
   if (shakeN == DIZZY_SHAKES) {
@@ -1256,6 +1306,7 @@ void Pet::shaken() {
     shakeN = 0;
     pendingSave = true;
   }
+  return false;
 }
 
 // ---------- combate: felicidad y botin ----------
@@ -1421,6 +1472,8 @@ void Pet::save() {
   prefs.putShort("dexn", speciesId);
   prefs.putShort("eggT2", eggTarget);
   prefs.putUChar("crack", eggTaps);
+  prefs.putUInt("yegg", eggPlaced);  // el huevo del patio (Y3)
+  prefs.putUChar("ysav", eggSaved);
   prefs.putUChar("mist", careMistakes);
   prefs.putBool("sleep", sleeping);
   prefs.putBool("nslp", nightSleep);  // la noche (v1.63)
@@ -1527,6 +1580,11 @@ void Pet::load() {
     eggTarget = (oldT >= 0 && oldT < 9) ? OLD2DEX[oldT] : 4;
   }
   eggTaps = prefs.getUChar("crack", 0);
+  // el huevo del patio (Y3). Sin la clave (un guardado anterior) no lo es: un huevo a medias del sistema
+  // de toques lo termina asi (3 toques, o solo a los 3 min de edad)
+  eggPlaced = prefs.isKey("yegg") ? prefs.getUInt("yegg", 0) : 0;
+  eggSaved = prefs.isKey("ysav") ? prefs.getUChar("ysav", 0) : 0;
+  if (eggSaved > EGG_SHAKE_CAP) eggSaved = EGG_SHAKE_CAP;
   careMistakes = prefs.getUChar("mist", 0);
   sleeping = prefs.getBool("sleep", false);
   nightSleep = sleeping && prefs.getBool("nslp", false);

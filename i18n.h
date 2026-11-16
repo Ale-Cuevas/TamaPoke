@@ -110,6 +110,8 @@ enum StrId : uint8_t {
   S_NEXT_RIVAL, S_GO_FMT, S_NEW_BADGE, S_LV_RANGE_FMT, S_TEAM_REWARD, S_REWARD_TODAY, S_STAGE_FMT,
   // el patio (v2.0): la tienda, sus botones y las etiquetas del dock (Cuidar / Jugar / Mochila)
   S_SHOP, S_BUY, S_USE, S_PURCHASED, S_DOCK_CARE, S_DOCK_PLAY, S_DOCK_BAG,
+  // el huevo del patio (v2.0, Y3): la pista de agitarlo (en el globo, con lo que le falta)
+  S_EGG_SHAKE,
   STR_COUNT
 };
 

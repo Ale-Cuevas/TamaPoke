@@ -82,6 +82,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Premio disponible", "Fase %u",
     // el patio (v2.0)
     "TIENDA", "Comprar", "Usar", "Comprado!", "Cuidar", "Jugar", "Mochila",
+    // el huevo del patio (v2.0, Y3)
+    "Agitame!",
   },
   // ---------------- EN ----------------
   {
@@ -158,6 +160,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Reward ready", "Stage %u",
     // el patio (v2.0)
     "SHOP", "Buy", "Use", "Purchased!", "Care", "Play", "Bag",
+    // el huevo del patio (v2.0, Y3)
+    "Shake me!",
   },
   // ---------------- FR ----------------
   {
@@ -234,6 +238,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "R\202compense pr\202te", "Phase %u",
     // el patio (v2.0)
     "BOUTIQUE", "Acheter", "Utiliser", "Achet\202!", "Soins", "Jouer", "Sac",
+    // el huevo del patio (v2.0, Y3)
+    "Secoue-moi!",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -315,6 +321,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Belohnung bereit", "Stufe %u",
     // el patio (v2.0)
     "LADEN", "Kaufen", "Nutzen", "Gekauft!", "Pflege", "Spielen", "Tasche",
+    // el huevo del patio (v2.0, Y3)
+    "Sch\201ttel mich!",
   },
   // ---------------- IT ----------------
   {
@@ -391,6 +399,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Premio pronto", "Fase %u",
     // el patio (v2.0)
     "NEGOZIO", "Compra", "Usa", "Comprato!", "Cura", "Gioca", "Zaino",
+    // el huevo del patio (v2.0, Y3)
+    "Scuotimi!",
   },
   // ---------------- PT ----------------
   {
@@ -467,6 +477,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Pr\202mio pronto", "Fase %u",
     // el patio (v2.0)
     "LOJA", "Comprar", "Usar", "Comprado!", "Cuidar", "Jogar", "Mochila",
+    // el huevo del patio (v2.0, Y3)
+    "Me sacode!",
   },
   // ---------------- JA ----------------
   {
@@ -565,6 +577,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "ごほうびあり", "ステージ%u",
     // el patio (v2.0)
     "ショップ", "かう", "つかう", "かったよ!", "おせわ", "あそぶ", "バッグ",
+    // el huevo del patio (v2.0, Y3)
+    "ゆらして!",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -646,6 +660,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "보상 준비됨", "스테이지 %u",
     // el patio (v2.0)
     "상점", "구매", "사용", "구매 완료!", "돌보기", "놀기", "가방",
+    // el huevo del patio (v2.0, Y3)
+    "흔들어 줘!",
   },
 };
 

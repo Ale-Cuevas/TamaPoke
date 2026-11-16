@@ -524,3 +524,154 @@ inline bool yardPetHit(int x, int y, float px, float py, int w, int h) {
   if (h < 48) h = 48;
   return x >= px - half && x <= px + half && y >= py - h - 8 && y <= py + 12;
 }
+
+// ---------- la comida que cae al patio (fase Y3) ----------
+// Tocar una baya o la tarta en el panel Cuidar ya no da de comer al momento: la comida cae al suelo
+// cerca del bicho (YF_FALL), el bicho la ve ("!", YF_NOTICE), va andando (YF_WALK), se la come con su
+// accion Eat (YF_EAT) y solo entonces el juego aplica la comida (yardFoodStep devuelve true). Una sola
+// a la vez; la logica de Pet decide lo demas.
+#define YARD_FOOD_REACH 36          // px de los pies a la comida: ya la alcanza
+#define YARD_FOOD_FALL_MS 650       // la caida con su bote
+#define YARD_FOOD_NOTICE_MS 700     // el "!" antes de ir
+#define YARD_FOOD_EAT_MS 900        // el bocado: la comida se encoge y desaparece
+#define YARD_FOOD_WALK_MAX_MS 15000 // si no llega (otro bicho en medio), se la come donde este
+#define YARD_FOOD_MIN_D 48          // px: nunca debajo del bicho
+
+enum : uint8_t { YF_NONE = 0, YF_FALL, YF_NOTICE, YF_WALK, YF_EAT };
+
+struct YardFood {
+  uint8_t phase = YF_NONE;
+  uint8_t kind = 0;    // lo que es (el juego: baya 0-2, tarta 3)
+  int16_t x = 0, y = 0; // donde esta en el suelo (el centro de su celda)
+  int16_t cell = -1;    // la celda a la que se anda (-1: se come donde esta el bicho)
+  uint32_t t0 = 0;      // inicio de la fase de ahora
+  uint32_t tag = 0;     // de quien es (el juego: el uid del bicho; si cambia, se cancela)
+};
+
+inline bool yardFoodReached(float px, float py, float fx, float fy) {
+  return yardDist(px, py, fx, fy) <= YARD_FOOD_REACH;
+}
+
+// las celdas a las que se llega andando desde `from` (4 vecinos)
+inline void yardReachable(const uint8_t *walk, int from, bool *seen) {
+  memset(seen, 0, YARD_CELLS);
+  if (!yardFree(walk, from)) return;
+  uint8_t q[YARD_CELLS];
+  int qh = 0, qt = 0;
+  q[qt++] = (uint8_t)from;
+  seen[from] = true;
+  static const int8_t D[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+  while (qh < qt) {
+    int c = q[qh++];
+    for (auto &d : D) {
+      int nx = yardCellCX(c) + d[0], ny = yardCellCY(c) + d[1];
+      if (yardCellBlocked(walk, nx, ny)) continue;
+      int k = yardCellIdx(nx, ny);
+      if (seen[k]) continue;
+      seen[k] = true;
+      q[qt++] = (uint8_t)k;
+    }
+  }
+}
+
+// donde cae la comida: una celda libre y alcanzable cerca del bicho (pies en px, py; mirando a face),
+// a YARD_FOOD_MIN_D o mas de sus pies y a YARD_THING_GAP de las cosas del suelo (ox, oy, n). Mejor en
+// su misma fila a unas dos celdas (asi llega andando de lado y la tiene a los pies), y hacia donde
+// mira. -1 si no hay ninguna.
+inline int yardFoodCell(const uint8_t *walk, float px, float py, int8_t face, const int16_t *ox, const int16_t *oy,
+                        int n) {
+  int from = yardCellAt(px, py);
+  if (from < 0 || !yardFree(walk, from)) from = yardNearestFreeCell(walk, px, py);
+  if (from < 0) return -1;
+  bool seen[YARD_CELLS];
+  yardReachable(walk, from, seen);
+  int best = -1;
+  float bs = 1e9f;
+  int pcy = yardCellCY(from);
+  for (int c = 0; c < YARD_CELLS; c++) {
+    if (!seen[c]) continue;
+    float cx = (float)yardCellCenter(yardCellCX(c)), cy = (float)yardCellCenter(yardCellCY(c));
+    float d = yardDist(cx, cy, px, py);
+    if (d < YARD_FOOD_MIN_D) continue;
+    bool clear = true;
+    for (int k = 0; k < n && clear; k++) clear = yardDist(cx, cy, ox[k], oy[k]) >= YARD_THING_GAP;
+    if (!clear) continue;
+    float s = fabsf(d - 70.0f) + 24.0f * (float)abs(yardCellCY(c) - pcy);
+    if ((cx - px) * face < 0) s += 6.0f;  // a su espalda, un poco peor
+    if (s < bs) {
+      bs = s;
+      best = c;
+    }
+  }
+  return best;
+}
+
+// suelta la comida en la celda `cell` (o a los pies del bicho con -1)
+inline void yardFoodDrop(YardFood &f, uint8_t kind, int cell, float px, float py, uint32_t now, uint32_t tag) {
+  f.phase = YF_FALL;
+  f.kind = kind;
+  f.cell = (int16_t)cell;
+  f.x = (int16_t)(cell >= 0 ? yardCellCenter(yardCellCX(cell)) : (int)px + 30);
+  f.y = (int16_t)(cell >= 0 ? yardCellCenter(yardCellCY(cell)) : (int)py + 4);
+  f.t0 = now;
+  f.tag = tag;
+}
+
+// lo que el planificador le pide al bicho mientras hay comida: quieto (cae, la ve, se la come) o nada
+// (va andando: el paseo lo lleva yardFoodStep)
+inline uint8_t yardFoodHold(const YardFood &f) {
+  return (f.phase == YF_NONE || f.phase == YF_WALK) ? YH_NONE : YH_STAY;
+}
+
+inline void yardFoodFace(YardPet &p, const YardFood &f) {
+  if (f.x > p.x + 2) p.face = 1;
+  else if (f.x < p.x - 2) p.face = -1;
+}
+
+inline void yardFoodStartEat(YardFood &f, YardPet &p, uint32_t now) {
+  f.phase = YF_EAT;
+  f.t0 = now;
+  p.mode = YM_STAY;
+  p.pathN = p.pathI = 0;
+  p.t0 = now;
+  yardFoodFace(p, f);
+}
+
+// un paso de la comida para el bicho i (despues de yardStep). true = se la acaba de comer: el juego
+// aplica ahora la comida (y f vuelve a YF_NONE)
+inline bool yardFoodStep(YardFood &f, YardWorld &w, const uint8_t *walk, int i, uint32_t now) {
+  if (f.phase == YF_NONE) return false;
+  YardPet &p = w.p[i];
+  uint32_t el = now - f.t0;
+  switch (f.phase) {
+    case YF_FALL:
+      if (el >= YARD_FOOD_FALL_MS) {
+        f.phase = YF_NOTICE;
+        f.t0 = now;
+      }
+      break;
+    case YF_NOTICE:
+      yardFoodFace(p, f);
+      if (el >= YARD_FOOD_NOTICE_MS) {
+        if (!p.walks || f.cell < 0 || yardFoodReached(p.x, p.y, f.x, f.y) || !yardWalkTo(w, walk, i, f.cell, now)) {
+          yardFoodStartEat(f, p, now);
+        } else {
+          f.phase = YF_WALK;
+          f.t0 = now;
+        }
+      }
+      break;
+    case YF_WALK:
+      if (yardFoodReached(p.x, p.y, f.x, f.y) || el >= YARD_FOOD_WALK_MAX_MS) yardFoodStartEat(f, p, now);
+      else if (p.mode != YM_WALK && !yardWalkTo(w, walk, i, f.cell, now)) yardFoodStartEat(f, p, now);
+      break;
+    case YF_EAT:
+      yardFoodFace(p, f);
+      if (el >= YARD_FOOD_EAT_MS) {
+        f.phase = YF_NONE;
+        return true;
+      }
+      break;
+  }
+  return false;
+}
