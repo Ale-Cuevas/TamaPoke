@@ -7203,18 +7203,37 @@ enum : uint8_t { BT_OFF = 0, BT_INTRO, BT_FIGHT, BT_END, BT_SWAP };  // (BT_END 
 // pantalla para cargar el especial, y el siguiente toque cerraba el resultado sin dejarlo ver.
 // La pista "toca: volver" aparece cuando ya se puede tocar.
 #define BT_END_LOCK_MS 1800
-#define BT_HORIZON 150
-#define BT_ME_X 140        // tu bicho: abajo a la izquierda
-#define BT_ME_GROUND 352
-#define BT_FOE_X 318       // el rival: arriba a la derecha
-#define BT_FOE_GROUND 198
-#define BT_ME_BOX_X 222    // cuadro de vida del aliado (con la tira del equipo dentro)...
-#define BT_ME_BOX_Y 258
-#define BT_FOE_BOX_X 80    // ...y el del rival (con su "1/3" o JEFE debajo)
-#define BT_FOE_BOX_Y 64
-#define BT_PIP_R 5         // tira del equipo: una pastilla por bicho
-#define BT_PIP_PITCH 16
-#define BT_PIP_DEAD 0x9492 // gris del caido
+// El patio (v2.0, fase Y1): panel oscuro con "Fase N" y el nombre de la fase arriba, los nombres y
+// las dos barras de vida (aliado verde a la izquierda, rival rojo a la derecha), una ventana
+// redondeada con la pelea sobre el bioma de la fase, el registro de dos lineas debajo, el medidor
+// del especial y la tira del equipo abajo. Toda la pantalla sigue cargando el especial.
+#define BT_NAME_Y 96       // nombres; debajo "cur/max" y el nivel, y la barra
+#define BT_HP_Y 138
+#define BT_HP_W 160
+#define BT_ME_HP_X 62
+#define BT_FOE_HP_X 244
+#define BT_WIN_X 44        // la ventana de la pelea
+#define BT_WIN_Y 158
+#define BT_WIN_W 378
+#define BT_WIN_H 156
+#define BT_WIN_R Y_CARD_RAD
+#define BT_HORIZON (BT_WIN_Y + 52)
+#define BT_ME_X 146        // tu bicho: abajo a la izquierda
+#define BT_ME_GROUND 302
+#define BT_FOE_X 314       // el rival: arriba a la derecha
+#define BT_FOE_GROUND 238
+#define BT_LOG_Y 322       // registro: dos lineas (la segunda atenuada)
+#define BT_LOG_GAP 22
+#define BT_PIP_Y 420       // tira del equipo: una pastilla por bicho
+#define BT_PIP_W 20
+#define BT_PIP_H 10
+#define BT_PIP_PITCH 28
+#define BT_PIP_DEAD Y_TEXT_DIM // contorno del caido
+#define BT_RES_HEAD_Y 100  // resultado: el titular, la ventana con el ganador y la tarjeta del premio
+#define BT_RES_WIN_Y 130
+#define BT_RES_WIN_H 124
+#define BT_RES_GROUND 242
+#define BT_RES_CARD_Y 264
 #define BT_NAME_LEN 13     // nombre de un aliado (apodo de 11 + margen)
 
 PmdMon foePmd;   // sprite del rival en curso
@@ -7451,8 +7470,72 @@ uint16_t battleShownHp(uint8_t side, uint32_t now) {
   return (uint16_t)(a + ((int32_t)b - a) * (int32_t)(dt - t0) / BT_HPBAR_MS);
 }
 
-// fondo del campo: cielo por la hora, el suelo del bioma de tu aliado en curso y dos tarimas
-void drawBattleField(int shake) {
+// recorte de la ventana de la pelea: los bichos (que entran andando desde fuera, se lanzan y se
+// hunden al caer) no salen de ella
+static int btClipX0 = 0, btClipY0 = 0, btClipX1 = 466, btClipY1 = 466;
+static void btSetClip(int x, int y, int w, int h) {
+  btClipX0 = x;
+  btClipY0 = y;
+  btClipX1 = x + w;
+  btClipY1 = y + h;
+}
+static void btFill(int x, int y, int w, int h, uint16_t c) {
+  if (x < btClipX0) { w -= btClipX0 - x; x = btClipX0; }
+  if (y < btClipY0) { h -= btClipY0 - y; y = btClipY0; }
+  if (x + w > btClipX1) w = btClipX1 - x;
+  if (y + h > btClipY1) h = btClipY1 - y;
+  if (w > 0 && h > 0) gfx->fillRect(x, y, w, h, c);
+}
+
+// drawPmdActM recortado a la ventana (mismo escalado y mismo anclaje por los pies)
+static void btPmd(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint8_t maxS) {
+  const PmdAct &a = m.acts[actId];
+  if (!a.frames) return;
+  uint8_t s = m.acts[PMD_IDLE].h ? 170 / m.acts[PMD_IDLE].h : 5;
+  if (s < 2) s = 2;
+  if (s > maxS) s = maxS;
+  while (s > 2 && a.h * s > 250) s--;  // acciones con frame grande (ataque)
+  uint8_t fi = pmdFrameAt(a, t, loop);
+  const uint8_t *fr = a.data + (uint32_t)fi * a.w * a.h;
+  int x0 = cx - a.w * s / 2, y0 = groundY - (a.base ? a.base : a.h) * s;
+  for (int r = 0; r < a.h; r++) {
+    int ry = y0 + r * s;
+    if (ry + s <= btClipY0) continue;
+    if (ry >= btClipY1) break;
+    const uint8_t *row = fr + r * a.w;
+    forRuns(a.w, [&](int c) { return indexedKey(row[c], sil); },
+            [&](int c0, int len, int k) { btFill(x0 + c0 * s, ry, len * s, s, sil ? INK_K : m.pal[k]); });
+  }
+}
+
+// drawThumb recortado a la ventana
+static void btThumb(const uint8_t *b, int x, int y, int s, bool sil) {
+  uint8_t w = b[0], h = b[1], n = b[2];
+  const uint8_t *pal = b + 3;
+  const uint8_t *d = pal + n * 2;
+  int ox = x + (GAL_CELL - w * s) / 2, oy = y + (GAL_CELL - h * s) / 2;
+  for (int r = 0; r < h; r++) {
+    const uint8_t *row = d + r * w;
+    forRuns(w, [&](int c) { return indexedKey(row[c], sil); },
+            [&](int c0, int len, int k) {
+              uint16_t col = sil ? INK_K : (uint16_t)(pal[k * 2] | (pal[k * 2 + 1] << 8));
+              btFill(ox + c0 * s, oy + r * s, len * s, s, col);
+            });
+  }
+}
+
+// el bioma de la fase: el del jefe (planta: bosque, agua: playa, fuego: volcan...)
+uint8_t battleBiome() {
+  uint8_t st = bt.run.stage < STAGE_COUNT ? bt.run.stage : 0;
+  int16_t boss = STAGES[st].bossDex;
+  uint8_t bio = (boss >= 1 && boss <= DEX_COUNT) ? DEX_TBL[boss].biome : 0;
+  return bio < BIOME_COUNT ? bio : 0;
+}
+
+// la ventana de la pelea (de BT_WIN_X a lo ancho, de y a y+h): cielo por la hora hasta hz, el suelo
+// del bioma de la fase y las tarimas (dos en la pelea; una en el centro, en el resultado)
+void drawBattleWindow(int y, int h, int hz, int shake, bool result) {
+  const int X = BT_WIN_X, W = BT_WIN_W;
   int hh = sceneHour();
   bool night = hh < 6 || hh >= 20;
   uint16_t top, bot;
@@ -7460,33 +7543,41 @@ void drawBattleField(int shake) {
   else if (hh < 8) { top = C565(0xd1, 0x6a, 0x86); bot = C565(0xf3, 0xb8, 0x7c); }
   else if (hh < 18){ top = C565(0x8f, 0xc8, 0xea); bot = C565(0xdc, 0xee, 0xe6); }
   else             { top = C565(0xc7, 0x5a, 0x4a); bot = C565(0xf0, 0xae, 0x64); }
-  for (int y = 0; y < BT_HORIZON; y += 8) gfx->fillRect(0, y, 466, 8, lerp565(top, bot, y, BT_HORIZON));
-  if (night)
-    for (auto &st : STARS) gfx->fillRect(st[0], st[1] / 2 + 20, 4, 4, UI_WHITE);
-  uint8_t bio = DEX_TBL[battleDex(0)].biome;
-  uint16_t soil = BIOME_SOIL[bio < BIOME_COUNT ? bio : 0];
+  uint16_t soil = BIOME_SOIL[battleBiome()];
   if (night) soil = lerp565(soil, C565(0x16, 0x1c, 0x30), 9, 16);
-  gfx->fillRect(0, BT_HORIZON, 466, 466 - BT_HORIZON, soil);
+  gfx->fillRoundRect(X, y, W, h, BT_WIN_R, soil);              // el suelo, con las esquinas de abajo
+  gfx->fillRoundRect(X, y, W, 2 * BT_WIN_R, BT_WIN_R, top);    // las de arriba, en el color del cielo
+  for (int yy = y + BT_WIN_R; yy < hz; yy += 6)
+    gfx->fillRect(X, yy, W, hz - yy < 6 ? hz - yy : 6, lerp565(top, bot, yy - y, hz - y));
+  gfx->drawFastHLine(X, hz, W, lerp565(soil, C565(0x10, 0x18, 0x20), 3, 16));  // el horizonte
+  if (night)
+    for (auto &st : STARS)
+      gfx->fillRect(X + 16 + st[0] * (W - 32) / 466, y + 8 + (st[1] - 90) * (hz - y - 18) / 140, 3, 3, UI_WHITE);
   uint16_t pad = lerp565(soil, C565(0x10, 0x18, 0x20), 4, 16);
-  gfx->fillEllipse(BT_FOE_X + shake, BT_FOE_GROUND - 4, 74, 15, pad);
-  gfx->fillEllipse(BT_ME_X + shake, BT_ME_GROUND - 4, 88, 17, pad);
+  if (result) {
+    gfx->fillEllipse(CX, BT_RES_GROUND - 4, 70, 12, pad);
+  } else {
+    gfx->fillEllipse(BT_FOE_X + shake, BT_FOE_GROUND - 3, 56, 11, pad);
+    gfx->fillEllipse(BT_ME_X + shake, BT_ME_GROUND - 3, 70, 13, pad);
+  }
 }
 
-// uno de los dos: su sprite PMD; si no lo hay, la miniatura; si tampoco, "?"
+// uno de los dos, recortado a la ventana: su sprite PMD; si no lo hay, la miniatura; si tampoco, "?"
 // maxS: tu bicho x3 y el rival x2 en el campo (los frames de ATTACK son grandes)
 void drawFighter(uint8_t side, uint8_t act, int x, int ground, uint32_t t, bool loop, bool sil, uint8_t maxS) {
   PmdMon &m = battleMon(side);
   int16_t dex = battleDex(side);
   if (m.loaded) {
     if (!m.has(act)) act = PMD_IDLE;
-    drawPmdActM(m, act, x, ground, t, loop, sil, maxS);
+    btPmd(m, act, x, ground, t, loop, sil, maxS);
     return;
   }
   const uint8_t *th = thumbs.get(dex);
   if (th) {
-    drawThumb(th, x - GAL_CELL / 2, ground - GAL_CELL, 2, sil);
+    btThumb(th, x - GAL_CELL / 2, ground - GAL_CELL, 2, sil);
     return;
   }
+  if (x < btClipX0 + 18 || x > btClipX1 - 18) return;
   gfx->setTextColor(UI_INK);
   setSize(6);
   setCur(x - 18, ground - 60);
@@ -7527,66 +7618,62 @@ void renderScreensaver() {
 }
 
 // tira del equipo: una pastilla por bicho, en orden, desde x (centro de la primera) a la altura y.
-// Llena = en pie, hueca y gris = caido; el que esta en el campo, con un aro.
+// Llena y verde = en pie, hueca y gris = caido; el que esta en el campo, con un aro blanco.
 void drawTeamPips(int x, int y, uint32_t now) {
   const StageRun &r = bt.run;
   for (uint8_t i = 0; i < r.teamN; i++) {
-    int px = x + i * BT_PIP_PITCH;
+    int px = x + i * BT_PIP_PITCH - BT_PIP_W / 2, py = y - BT_PIP_H / 2;
     bool cur = i == r.ally && bt.phase != BT_END;
     bool alive = (i == r.ally && bt.phase == BT_FIGHT) ? battleShownHp(0, now) > 0 : r.allyHp(i) > 0;
-    if (alive) {
-      gfx->fillCircle(px, y, BT_PIP_R, UI_BAR_BAD);
-      gfx->drawCircle(px, y, BT_PIP_R, UI_INK);
-    } else {
-      gfx->drawCircle(px, y, BT_PIP_R, BT_PIP_DEAD);
-      gfx->drawCircle(px, y, BT_PIP_R - 1, BT_PIP_DEAD);
-    }
-    if (cur && alive) gfx->drawCircle(px, y, BT_PIP_R + 2, UI_INK);
+    if (alive) gfx->fillRoundRect(px, py, BT_PIP_W, BT_PIP_H, BT_PIP_H / 2, Y_ACCENT_GO);
+    else gfx->drawRoundRect(px, py, BT_PIP_W, BT_PIP_H, BT_PIP_H / 2, BT_PIP_DEAD);
+    if (cur && alive) gfx->drawRoundRect(px - 3, py - 3, BT_PIP_W + 6, BT_PIP_H + 6, BT_PIP_H / 2 + 3, Y_TEXT);
   }
 }
 
-// cuadro de vida: nombre, nivel, barra (y en el tuyo los numeros y la tira del equipo)
-void drawHpBox(uint8_t side, int x, int y, uint16_t hp, uint32_t now) {
+// fondo del panel del combate en una sola pasada (yPanelBg pinta negro y luego el disco: el doble de
+// pixeles en cada frame de 85 ms). Fuera del disco no se ve: el marco redondo lo tapa.
+void btPanelBg() {
+  gfx->fillScreen(Y_PANEL_BG);
+}
+
+// cabecera de las pantallas del combate: "Fase N" y el nombre de la fase debajo
+void drawBattleHeader() {
+  char t[24];
+  snprintf(t, sizeof(t), T(S_STAGE_FMT), (unsigned)(bt.run.stage + 1));
+  yTitle(t, stageName(bt.run.stage));
+}
+
+// nombre, "cur/max", nivel y barra de uno de los dos: el aliado a la izquierda (verde), el rival a la
+// derecha (rojo) con el nombre pegado a su borde derecho
+void drawHpRow(uint8_t side, uint16_t hp) {
   const Fighter &f = bt.run.eng.f[side];
-  int h = side == 0 ? 70 : 54;
-  gfx->fillRoundRect(x, y, 182, h, 10, UI_WHITE);
-  gfx->drawRoundRect(x, y, 182, h, 10, UI_INK);
-  gfx->setTextColor(DEX_TBL[battleDex(side)].accent);
+  int x = side == 0 ? BT_ME_HP_X : BT_FOE_HP_X;
+  const char *nm = battleName(side);
+  gfx->setTextColor(Y_TEXT);
   setSize(2);
-  setCur(x + 10, y + 8);
-  printT(battleName(side));
+  setCur(side == 0 ? x : x + BT_HP_W - textW(nm, 2), BT_NAME_Y);
+  printT(nm);
+  yHpBar(x, BT_HP_Y, BT_HP_W, hp, f.maxHp, side == 0 ? Y_ACCENT_GO : Y_ACCENT_BAD);
   char lv[10];
   snprintf(lv, sizeof(lv), T(S_LVL_FMT), (unsigned)f.level);
-  gfx->setTextColor(UI_INK);
-  setCur(x + 10, y + 30);
+  gfx->setTextColor(Y_TEXT_DIM);
+  setSize(2);
+  setCur(x + BT_HP_W - textW(lv, 2), BT_HP_Y - 20);
   printT(lv);
-  int bx = x + 92, bw = 80, by = y + 32;
-  int fw = f.maxHp ? (int)((uint32_t)(bw - 4) * hp / f.maxHp) : 0;
-  uint32_t pct = f.maxHp ? (uint32_t)hp * 100 / f.maxHp : 0;
-  uint16_t col = pct > 50 ? UI_BAR_OK : pct > 20 ? UI_BAR_WARN : UI_BAR_BAD;
-  gfx->fillRoundRect(bx, by, bw, 12, 4, UI_TRACK);
-  if (fw > 0) gfx->fillRoundRect(bx + 2, by + 2, fw, 8, 3, col);
-  if (side == 0) {
-    char n[16];
-    snprintf(n, sizeof(n), "%u/%u", (unsigned)hp, (unsigned)f.maxHp);
-    setCur(x + 172 - textW(n, 2), y + 50);
-    printT(n);
-    drawTeamPips(x + 18, y + 56, now);
-  }
 }
 
-// bajo el cuadro del rival: cual de los tres es ("1/3", "2/3") o JEFE en rojo
-void drawFoeTag(int x, int y) {
+// arriba a la derecha de la ventana: cual de los tres rivales es ("1/3", "2/3") o JEFE en rojo
+void drawFoeTag() {
   char n[8];
   const char *s = n;
   bool boss = bt.run.isBoss();
   if (boss) s = T(S_BOSS);
   else snprintf(n, sizeof(n), "%u/%u", (unsigned)(bt.run.foeIdx + 1), (unsigned)STAGE_FOES);
   setSize(2);
-  int tw = textW(s, 2), w = tw + 16;
-  gfx->fillRoundRect(x, y, w, 24, 8, boss ? UI_BAR_BAD : UI_WHITE);
-  gfx->drawRoundRect(x, y, w, 24, 8, UI_INK);
-  gfx->setTextColor(boss ? UI_WHITE : UI_INK);
+  int tw = textW(s, 2), w = tw + 16, x = BT_WIN_X + BT_WIN_W - 8 - w, y = BT_WIN_Y + 8;
+  gfx->fillRoundRect(x, y, w, 24, 12, boss ? Y_ACCENT_BAD : Y_PANEL_BG);
+  gfx->setTextColor(Y_TEXT);
   setCur(x + 8, y + 5);
   printT(s);
 }
@@ -7597,8 +7684,9 @@ void drawFoeTag(int x, int y) {
 #define METER_H 12     // media altura
 #define METER_T 6      // grueso de cada brazo, en horizontal
 #define METER_PITCH 21
-#define METER_X 236    // la primera flecha; el cartel "Toca!" va detras de la ultima
-#define METER_Y 350
+#define METER_TAP_GAP 10  // de la punta de la ultima flecha al cartel "Toca!"
+#define METER_TAP_MIN 64  // ancho minimo del cartel
+#define METER_Y 380    // el medidor, centrado como grupo (flechas + cartel) bajo el registro
 void drawChevron(int x, int y, bool filled, uint16_t fill, uint16_t edge) {
   int tip = x + METER_W, notch = x + METER_W - METER_T;
   if (filled) {
@@ -7616,111 +7704,118 @@ void drawChevron(int x, int y, bool filled, uint16_t fill, uint16_t edge) {
 }
 
 // medidor del especial (v1.38): "> > > > >" y un cartel "Toca!" mientras los toques cargan.
-// Llenas laten cuando esta listo; bloqueado tras un especial, en gris y sin cartel.
+// Las cargadas en ambar, laten cuando esta listo; bloqueado tras un especial, huecas y sin cartel.
+// El grupo se centra siempre con el ancho del cartel, para que las flechas no se muevan.
 void drawSpecialMeter(uint32_t now) {
   const SpecialMeter &mt = bt.run.meter;
   bool armed = mt.armed(), locked = mt.locked();
+  const char *tap = T(S_TAP_BOX);
+  setSize(2);
+  // ancho minimo: con la fuente coreana textW() se queda corto (mide la tinta, no el avance)
+  int tw = textW(tap, 2), bw = tw + 16 < METER_TAP_MIN ? METER_TAP_MIN : tw + 16, bh = 28;
+  int arrows = (SPECIAL_TAPS - 1) * METER_PITCH + METER_W;
+  int x0 = CX - (arrows + METER_TAP_GAP + bw) / 2;
   for (int i = 0; i < SPECIAL_TAPS; i++) {
-    int x = METER_X + i * METER_PITCH;
+    int x = x0 + i * METER_PITCH;
     if (locked) {
-      drawChevron(x, METER_Y, false, 0, UI_TRACK);
+      drawChevron(x, METER_Y, false, 0, Y_CARD_HI);
     } else if (i < mt.pips) {
       uint16_t c = (armed && (now / 160) % 2) ? UI_WHITE : UI_BAR_WARN;
-      drawChevron(x, METER_Y, true, c, UI_INK);
+      drawChevron(x, METER_Y, true, c, c);
     } else {
-      drawChevron(x, METER_Y, true, UI_WHITE, UI_INK);
+      drawChevron(x, METER_Y, true, Y_CARD_HI, Y_CARD_HI);
     }
   }
   // el cartel: solo cuando un toque cuenta (ni lleno, ni bloqueado, ni con el combate decidido)
   if (locked || mt.pips >= SPECIAL_TAPS || bt.run.eng.over()) return;
-  const char *tap = T(S_TAP_BOX);
-  setSize(2);
-  // ancho minimo: con la fuente coreana textW() se queda corto (mide la tinta, no el avance)
-  int tw = textW(tap, 2), bw = tw + 16 < 64 ? 64 : tw + 16, bh = 28;
-  int bx = METER_X + (SPECIAL_TAPS - 1) * METER_PITCH + METER_W + 10, by = METER_Y - bh / 2;
-  gfx->fillRoundRect(bx, by, bw, bh, 8, UI_BAR_WARN);
-  gfx->drawRoundRect(bx, by, bw, bh, 8, UI_INK);
+  int bx = x0 + arrows + METER_TAP_GAP, by = METER_Y - bh / 2;
+  gfx->fillRoundRect(bx, by, bw, bh, bh / 2, UI_BAR_WARN);
   gfx->setTextColor(UI_INK);
   setCur(bx + (bw - tw) / 2, by + (bh - 14) / 2);
   printT(tap);
 }
 
-// tarjeta VS: el primer rival arriba, tu primer aliado abajo, cada mitad del color de su tipo; encima
-// la fase ("Fase 3 - Roca") y debajo la tira del equipo
+// tarjeta VS: la fase arriba ("Fase 3" / "Roca"), el primer rival en una tarjeta del color de su tipo,
+// el disco VS y tu primer aliado en la suya; debajo la tira del equipo
 void drawVsCard() {
-  uint16_t ink = UI_INK;
-  gfx->fillRect(0, 0, 466, CY - 6, lerp565(DEX_TBL[battleDex(1)].accent, UI_WHITE, 5, 8));
-  gfx->fillRect(0, CY + 6, 466, 466 - CY - 6, lerp565(DEX_TBL[battleDex(0)].accent, UI_WHITE, 5, 8));
-  gfx->fillRect(0, CY - 6, 466, 12, ink);
-  char head[40];
-  snprintf(head, sizeof(head), T(S_STAGE_FMT), (unsigned)(bt.run.stage + 1));
-  size_t hl = strlen(head);
-  snprintf(head + hl, sizeof(head) - hl, " - %s", stageName(bt.run.stage));
-  gfx->setTextColor(ink);
-  setSize(2);
-  setCur(centerX(head, 2), 54);
-  printT(head);
+  btPanelBg();
+  drawBattleHeader();
   char lv[10];
+  const int cx = 70, cw = 326, ch = 82;
   for (uint8_t side = 0; side < 2; side++) {
+    int y = side ? 108 : 276;
+    gfx->fillRoundRect(cx, y, cw, ch, Y_CARD_RAD, lerp565(DEX_TBL[battleDex(side)].accent, Y_CARD, 5, 8));
     const char *nm = battleName(side);
-    int y = side ? 100 : 292;
     setSize(3);
-    uint8_t ts = textW(nm, 3) <= 300 ? 3 : 2;
+    uint8_t ts = textW(nm, 3) <= cw - 24 ? 3 : 2;
     setSize(ts);
-    gfx->setTextColor(ink);
-    setCur(centerX(nm, ts), y);
+    gfx->setTextColor(Y_TEXT);
+    setCur(centerX(nm, ts), y + (ts == 3 ? 14 : 18));
     printT(nm);
     snprintf(lv, sizeof(lv), T(S_LVL_FMT), (unsigned)bt.run.eng.f[side].level);
-    gfx->setTextColor(ink);
+    gfx->setTextColor(Y_TEXT_DIM);
     setSize(2);
-    setCur(centerX(lv, 2), y + 38);
+    setCur(centerX(lv, 2), y + 52);
     printT(lv);
   }
-  drawTeamPips(CX - (bt.run.teamN - 1) * BT_PIP_PITCH / 2, 376, millis());
-  gfx->fillCircle(CX, CY, 46, UI_WHITE);
-  gfx->drawCircle(CX, CY, 46, ink);
-  gfx->drawCircle(CX, CY, 45, ink);
-  gfx->setTextColor(UI_BAR_BAD);
-  setSize(5);
-  setCur(CX - 29, CY - 18);
+  drawTeamPips(CX - (bt.run.teamN - 1) * BT_PIP_PITCH / 2, 392, millis());
+  gfx->fillCircle(CX, CY, 36, Y_ACCENT_BAD);
+  gfx->drawCircle(CX, CY, 36, Y_PANEL_BG);
+  gfx->drawCircle(CX, CY, 37, Y_PANEL_BG);
+  gfx->setTextColor(Y_TEXT);
+  setSize(4);
+  setCur(CX - textW("VS", 4) / 2, CY - 15);
   printT("VS");
+}
+
+// registro de dos lineas bajo la ventana: la primera en blanco (o en su color), la segunda atenuada
+// (salvo los avisos en rojo). Con una sola linea, va arriba.
+void drawBattleLog(const char *l1, uint16_t c1, const char *l2, uint16_t c2) {
+  if (!l1) {
+    l1 = l2;
+    c1 = c2 == Y_TEXT_DIM ? Y_TEXT : c2;
+    l2 = nullptr;
+  }
+  setSize(2);
+  if (l1) {
+    gfx->setTextColor(c1);
+    setCur(centerX(l1, 2), BT_LOG_Y);
+    printT(l1);
+  }
+  if (l2) {
+    gfx->setTextColor(c2);
+    setCur(centerX(l2, 2), BT_LOG_Y + BT_LOG_GAP);
+    printT(l2);
+  }
 }
 
 // rotulos del ultimo golpe (desde que llega hasta el siguiente)
 void drawBattleCaption(uint32_t now) {
   const char *l1 = nullptr, *l2 = nullptr;
-  uint16_t c1 = UI_INK, c2 = UI_INK;
+  uint16_t c1 = Y_TEXT, c2 = Y_TEXT_DIM;
+  bool hint = false;
   bool hit = bt.haveEv && now - bt.evAt >= BT_HIT_MS;
   if (!hit) {
-    if (!bt.haveEv && bt.phase == BT_FIGHT) { l2 = T(S_TAP_CHARGE); c2 = UI_TRACK; }  // pista hasta el primer golpe
+    if (!bt.haveEv && bt.phase == BT_FIGHT) { l2 = T(S_TAP_CHARGE); hint = true; }  // pista hasta el primer golpe
   } else if (!bt.ev.eff4) {
     l1 = T(S_NO_EFFECT);
   } else {
-    if (bt.ev.special) { l1 = T(S_SPECIAL); c1 = UI_BAR_BAD; }
+    if (bt.ev.special) { l1 = T(S_SPECIAL); c1 = Y_HILITE; }
     else if (bt.ev.crit) l1 = T(S_CRITICAL);
     if (bt.ev.eff4 >= 8) l2 = T(S_SUPER_EFF);
     else if (bt.ev.eff4 <= 2) l2 = T(S_NOT_EFF);
   }
   // muerte subita: este ataque o el que viene ya cuentan (la partida no sale de ella)
   if (bt.haveEv && bt.run.eng.attacks > 0 && bt.run.eng.attacks >= SUDDEN_DEATH_AT) {
-    if (!l1) { l1 = T(S_SUDDEN_DEATH); c1 = UI_BAR_BAD; }
-    else { l2 = T(S_SUDDEN_DEATH); c2 = UI_BAR_BAD; }
+    if (!l1) { l1 = T(S_SUDDEN_DEATH); c1 = Y_ACCENT_BAD; }
+    else { l2 = T(S_SUDDEN_DEATH); c2 = Y_ACCENT_BAD; }
   }
-  if (bt.haveEv && bt.ev.recoil && now - bt.evAt >= BT_RECOIL_MS) { l2 = T(S_RECOIL); c2 = UI_BAR_BAD; }
-  setSize(2);
-  if (l1) {
-    gfx->setTextColor(c1);
-    setCur(centerX(l1, 2), l2 ? 382 : 392);
-    printT(l1);
-  }
-  if (l2) {
-    gfx->setTextColor(c2);
-    setCur(centerX(l2, 2), l1 ? 404 : 392);
-    printT(l2);
-  }
+  if (bt.haveEv && bt.ev.recoil && now - bt.evAt >= BT_RECOIL_MS) { l2 = T(S_RECOIL); c2 = Y_ACCENT_BAD; }
+  if (hint && !l1) { l1 = l2; c1 = Y_TEXT_DIM; l2 = nullptr; }  // la pista se queda atenuada
+  drawBattleLog(l1, c1, l2, c2);
 }
 
-// cartel del relevo, donde va el medidor: "Siguiente rival" (y JEFE en grande si lo es) o "Adelante, X!"
+// el relevo, en el registro: "Siguiente rival" (y JEFE en rojo si lo es) o "Adelante, X!"
 void drawSwapCaption() {
   char go[40];
   const char *l1, *l2 = nullptr;
@@ -7731,25 +7826,7 @@ void drawSwapCaption() {
     snprintf(go, sizeof(go), T(S_GO_FMT), battleName(0));
     l1 = go;
   }
-  setSize(2);
-  int w1 = textW(l1, 2), w2 = 0;
-  if (l2) {
-    setSize(3);
-    w2 = textW(l2, 3);
-  }
-  int bw = (w1 > w2 ? w1 : w2) + 28, bh = l2 ? 66 : 38, by = l2 ? 354 : 364;
-  gfx->fillRoundRect(CX - bw / 2, by, bw, bh, 12, UI_WHITE);
-  gfx->drawRoundRect(CX - bw / 2, by, bw, bh, 12, UI_INK);
-  gfx->setTextColor(UI_INK);
-  setSize(2);
-  setCur(CX - w1 / 2, by + 12);
-  printT(l1);
-  if (l2) {
-    gfx->setTextColor(UI_BAR_BAD);
-    setSize(3);
-    setCur(CX - w2 / 2, by + 34);
-    printT(l2);
-  }
+  drawBattleLog(l1, Y_TEXT, l2, Y_ACCENT_BAD);
 }
 
 // Dibuja un frame del combate. false = se acaba de cerrar (render pinta la casa).
@@ -7835,7 +7912,10 @@ bool renderBattle() {
     }
   }
 
-  drawBattleField(shake);
+  btPanelBg();
+  drawBattleHeader();
+  drawBattleWindow(BT_WIN_Y, BT_WIN_H, BT_HORIZON, shake, false);
+  btSetClip(BT_WIN_X, BT_WIN_Y, BT_WIN_W, BT_WIN_H);
   // el rival primero (esta mas lejos); en pleno ataque, el atacante encima
   uint8_t order[2] = { 1, 0 };
   if (bt.haveEv && bt.phase == BT_FIGHT) {
@@ -7845,92 +7925,88 @@ bool renderBattle() {
   for (uint8_t side : order)
     if (!hidden[side])
       drawFighter(side, act[side], x[side] + shake, g[side], at[side], loop[side], sil[side], side == 0 ? 3 : 2);
-  drawHpBox(1, BT_FOE_BOX_X, BT_FOE_BOX_Y, battleShownHp(1, now), now);
-  drawFoeTag(BT_FOE_BOX_X + 10, BT_FOE_BOX_Y + 58);
-  drawHpBox(0, BT_ME_BOX_X, BT_ME_BOX_Y, battleShownHp(0, now), now);
+  if (flash) gfx->fillRoundRect(BT_WIN_X, BT_WIN_Y, BT_WIN_W, BT_WIN_H, BT_WIN_R, UI_WHITE);
+  drawFoeTag();
+  gfx->drawRoundRect(BT_WIN_X, BT_WIN_Y, BT_WIN_W, BT_WIN_H, BT_WIN_R, Y_CARD_HI);
+  drawHpRow(1, battleShownHp(1, now));
+  drawHpRow(0, battleShownHp(0, now));
   if (bt.phase == BT_FIGHT) {
     drawSpecialMeter(now);
     drawBattleCaption(now);
   } else if (bt.phase == BT_SWAP) {
     drawSwapCaption();
   }
-  if (flash) gfx->fillCircle(CX, CY, 231, UI_WHITE);
+  drawTeamPips(CX - (bt.run.teamN - 1) * BT_PIP_PITCH / 2, BT_PIP_Y, now);
   gfx->flush();
   return true;
 }
 
-// Resultado: el que quedo en pie posa en el centro (tu aliado si se supero, el rival si no), el
-// titulo arriba, el objeto del jefe debajo y lo que pago stageDone abajo: la insignia nueva, el
-// premio del equipo y la felicidad. Un toque, la tecla USER o BT_END_MS lo cierran.
+// Resultado: arriba la fase; el titular en verde (superada) o rojo (perdida); en la ventana posa el
+// que quedo en pie (tu aliado si se supero, el rival si no) y debajo, en una tarjeta, lo que pago
+// stageDone: el objeto del jefe, la insignia nueva, el premio del equipo y la felicidad. Un toque,
+// la tecla USER o BT_END_MS lo cierran.
 void drawBattleResult(uint32_t now) {
-  drawBattleField(0);
+  btPanelBg();
+  drawBattleHeader();
   uint32_t t = now - bt.t0;
-  drawFighter(bt.cleared ? 0 : 1, PMD_POSE, CX, 296, t, true, false, 4);
-  const char *l1 = T(bt.cleared ? S_STAGE_CLEAR : S_STAGE_LOST);
-  gfx->fillRoundRect(98, 50, 270, 50, 14, UI_BAR_WARN);
-  gfx->drawRoundRect(98, 50, 270, 50, 14, UI_INK);
-  gfx->setTextColor(UI_INK);
+  const char *head = T(bt.cleared ? S_STAGE_CLEAR : S_STAGE_LOST);
   setSize(3);
-  uint8_t ts = textW(l1, 3) <= 256 ? 3 : 2;
+  uint8_t ts = textW(head, 3) <= 330 ? 3 : 2;
   setSize(ts);
-  setCur(centerX(l1, ts), ts == 3 ? 64 : 68);
-  printT(l1);
-  // el objeto del jefe: una pildora bajo el titulo con la cajita y "Regalo en casa!" (lo que es se ve
-  // al abrirlo); con la casa vacia va a la mochila, y se ve el objeto con "MOCHILA"
+  gfx->setTextColor(bt.cleared ? Y_ACCENT_GO : Y_ACCENT_BAD);
+  setCur(centerX(head, ts), BT_RES_HEAD_Y + (ts == 3 ? 0 : 4));
+  printT(head);
+  drawBattleWindow(BT_RES_WIN_Y, BT_RES_WIN_H, BT_RES_WIN_Y + 44, 0, true);
+  btSetClip(BT_WIN_X, BT_RES_WIN_Y, BT_WIN_W, BT_RES_WIN_H);
+  drawFighter(bt.cleared ? 0 : 1, PMD_POSE, CX, BT_RES_GROUND, t, true, false, 3);
+  gfx->drawRoundRect(BT_WIN_X, BT_RES_WIN_Y, BT_WIN_W, BT_RES_WIN_H, BT_WIN_R, Y_CARD_HI);
+  // la tarjeta: solo lo que de verdad se dio. El objeto del jefe con la cajita y "Regalo en casa!" (lo
+  // que es se ve al abrirlo); con la casa vacia va a la mochila, y se ve el objeto con "MOCHILA"
+  const char *ln[4];
+  uint16_t lc[4];
+  const char *const *icon[4] = { nullptr, nullptr, nullptr, nullptr };
+  uint8_t n = 0;
   if (bt.rw.item < IT_COUNT) {
     bool bag = pet.isVacant();
-    const char *g = T(bag ? S_BACKPACK : S_BATTLE_GIFT);
-    setSize(2);
-    int w = 32 + 8 + textW(g, 2), gx = CX - w / 2;
-    gfx->fillRoundRect(gx - 12, 106, w + 24, 42, 14, UI_WHITE);
-    gfx->drawRoundRect(gx - 12, 106, w + 24, 42, 14, UI_INK);
-    drawMap(bag ? ITEM_ICON[bt.rw.item] : SPR_GIFT, 16, gx, 111, 2, false);
-    gfx->setTextColor(UI_BAR_BAD);
-    setCur(gx + 40, 121);
-    printT(g);
+    icon[n] = bag ? ITEM_ICON[bt.rw.item] : SPR_GIFT;
+    ln[n] = T(bag ? S_BACKPACK : S_BATTLE_GIFT);
+    lc[n++] = Y_HILITE;
   }
-  // lo demas, en un cuadro bajo el ganador (solo lo que de verdad se dio)
-  const char *ln[3];
-  uint16_t lc[3];
-  uint8_t n = 0;
-  if (bt.rw.newBadge) { ln[n] = T(S_NEW_BADGE); lc[n++] = UI_BAR_BAD; }
-  if (bt.rw.paid) { ln[n] = T(S_TEAM_REWARD); lc[n++] = UI_INK; }
+  if (bt.rw.newBadge) { icon[n] = BADGE_ICON[bt.run.stage]; ln[n] = T(S_NEW_BADGE); lc[n++] = Y_HILITE; }
+  if (bt.rw.paid) { ln[n] = T(S_TEAM_REWARD); lc[n++] = Y_TEXT; }
   char joy[40];
   if (bt.rw.joy) {
     snprintf(joy, sizeof(joy), T(S_PRACTICE_JOY_FMT), (unsigned)bt.rw.joy);
     ln[n] = joy;
-    lc[n++] = UI_BAR_OK;
+    lc[n++] = Y_ACCENT_GO;
   }
-  // y la pista "toca: volver" en su ultima fila, reservada desde el principio (el cuadro no crece)
+  // y la pista "toca: volver" en su ultima fila, reservada desde el principio (la tarjeta no crece)
   bool hint = t >= BT_END_LOCK_MS;
   if (!n && !hint) return;
   setSize(2);
   int bw = textW(T(S_BACK), 2), bh = 12 + 20;
   for (uint8_t i = 0; i < n; i++) {
-    bool badge = bt.rw.newBadge && i == 0;
-    int w = textW(ln[i], 2) + (badge ? 40 : 0);
+    int w = textW(ln[i], 2) + (icon[i] ? 40 : 0);
     if (w > bw) bw = w;
-    bh += badge ? 32 : 20;
+    bh += icon[i] ? 32 : 20;
   }
   bw += 28;
-  int y = 304;
-  gfx->fillRoundRect(CX - bw / 2, y, bw, bh, 14, UI_WHITE);
-  gfx->drawRoundRect(CX - bw / 2, y, bw, bh, 14, UI_INK);
+  int y = BT_RES_CARD_Y;
+  yCard(CX - bw / 2, y, bw, bh, false);
   int ly = y + 6;
   for (uint8_t i = 0; i < n; i++) {
-    bool badge = bt.rw.newBadge && i == 0;
-    int w = textW(ln[i], 2) + (badge ? 40 : 0), lx = CX - w / 2;
-    if (badge) {
-      drawMap(BADGE_ICON[bt.run.stage], 16, lx, ly, 2, false);
+    int w = textW(ln[i], 2) + (icon[i] ? 40 : 0), lx = CX - w / 2;
+    if (icon[i]) {
+      drawMap(icon[i], 16, lx, ly, 2, false);
       lx += 40;
     }
     gfx->setTextColor(lc[i]);
-    setCur(lx, ly + (badge ? 9 : 3));
+    setCur(lx, ly + (icon[i] ? 9 : 3));
     printT(ln[i]);
-    ly += badge ? 32 : 20;
+    ly += icon[i] ? 32 : 20;
   }
   if (hint) {  // ya se puede cerrar con un toque (v1.38)
-    gfx->setTextColor(UI_TRACK);
+    gfx->setTextColor(Y_TEXT_DIM);
     setCur(centerX(T(S_BACK), 2), ly + 3);
     printT(T(S_BACK));
   }
