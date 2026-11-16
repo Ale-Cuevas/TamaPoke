@@ -851,7 +851,9 @@ void Pet::nightMinute(int h, bool live) {
   if (sleeping) {
     nightAwakeMin = 0;
     if (bedHour(h)) nightSleep = true;  // una siesta que llega a la noche tambien amanece a las 8
-    if (nightSleep && !nightHour(h)) {  // por la mañana: se despierta solo (una siesta de tarde no)
+    // por la mañana: se despierta solo (una siesta de tarde no). Solo de WAKE_HOUR a EVENING_HOUR:
+    // acostado a las 20-21 ya es dormir de noche y no debe despertarse al minuto siguiente
+    if (nightSleep && h >= WAKE_HOUR && h < EVENING_HOUR) {
       sleeping = false;
       nightSleep = false;
       if (live) morningWake = true;

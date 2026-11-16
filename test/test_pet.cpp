@@ -2569,6 +2569,28 @@ TEST(night, por_la_manana_se_despierta_solo_y_suena) {
   CHECK(p.savePending());
 }
 
+TEST(night, acostado_a_las_21_sigue_dormido_hasta_las_8) {
+  Pet p;
+  makePet(p, 4);
+  p.lastSeenEpoch = at(20, 0);
+  p.toggleLight();
+  CHECK(p.nightSlept());
+  liveMinutes(p, 1);  // 20:01: antes se despertaba aqui, solo
+  CHECK(p.sleeping);
+  liveMinutes(p, 12 * 60 - 2);  // 07:59
+  CHECK(p.sleeping);
+  CHECK(!p.morningWake);
+  liveMinutes(p, 1);  // 08:00
+  CHECK(!p.sleeping);
+  CHECK(p.morningWake);
+  Pet q;  // a las 21:30, igual
+  makePet(q, 4);
+  q.lastSeenEpoch = at(21, 30);
+  q.toggleLight();
+  liveMinutes(q, 60);
+  CHECK(q.sleeping);
+}
+
 TEST(night, una_siesta_de_tarde_no_se_despierta_sola) {
   Pet p;
   makePet(p, 4);

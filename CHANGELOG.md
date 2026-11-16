@@ -8,6 +8,14 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+## [1.68] - 2026-11-15
+
+### Fixed
+
+- **A pet put to bed at 20:00-21:59 woke up by itself a minute later.** Going to bed from 20:00 counts as a night's
+  sleep, but the morning wake-up treated any hour before 22:00 as morning. It now only wakes up by itself from 08:00
+  to 19:59, so a pet put to bed in the evening sleeps through to 08:00 (also while the board is off).
+
 ## [1.67] - 2026-11-15
 
 ### Added
