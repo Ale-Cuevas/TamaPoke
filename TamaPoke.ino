@@ -47,6 +47,13 @@
 #include "zengame.h"  // cascada (v1.43): la barra de concentracion, la franja y los golpes de agua (logica pura)
 #include "dashgame.h" // carrera en trineo (v1.44): direccion, velocidad, filas de obstaculos y choques (logica pura)
 #include "yard_ui.h"  // el patio (v2.0): paleta, geometria y toques del kit de interfaz nuevo (logica pura)
+#include "yardbg.h"   // fondos del patio (v2.0): lector de TPY1, mascara de paso y tinte (logica pura)
+#include "yard.h"     // el patio (v2.0, Y2): los bichos que pasean por el mapa (logica pura)
+// la casa es el patio (v2.0): el mapa de arriba abajo con los bichos paseando. Con 0, la casa de
+// lado de siempre (se borra al fusionar la v2.0)
+#ifndef TP_YARD
+#define TP_YARD 1
+#endif
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
@@ -86,6 +93,17 @@ struct {
 } beh;
 uint32_t walkLast = 0;  // instante del ultimo paso del paseo (0 = ninguno aun)
 #define PET_GROUND 304  // linea de suelo de la mascota
+#if TP_YARD
+// el patio (v2.0, Y2): el bicho de casa (p[0]) y el primero de la caja (p[1], hibernando: solo pasea)
+YardWorld yardW;
+PmdMon yardBoxPmd;              // sprite del de la caja (si no hay, su miniatura)
+int8_t yardBoxSlot = -1;        // hueco de la caja que se ve en el patio (-1 = nadie)
+int16_t yardBoxDex = -2;
+bool yardBoxShiny = false;
+uint32_t yardBoxEpoch = 0;      // sdEpoch con que se cargo
+uint32_t yardLastStep = 0;      // ultimo paso del planificador (0 = ninguno aun)
+uint32_t gYardPetsUs = 0, gYardPetsMaxUs = 0;  // PERF: los bichos, sus cosas y el HUD
+#endif
 PmdMon galleryPmd;  // sprite grande de la vista detalle de la galeria (PMD/TPK2, legal)
 
 // galeria pokedex
@@ -884,6 +902,13 @@ void handleSerial() {
     wakeUI();
     Serial.printf("biome=%u%s\n", homeBiome(), gBiomeOverride >= 0 ? " (override)" : "");
     Serial.println("DONE");
+#if TP_YARD
+  } else if (line.startsWith("YARDBG")) {  // YARDBG <n>: fuerza el mapa n del patio (0 = el del bioma)
+    if (line.length() > 7) yardForceMap((uint8_t)line.substring(7).toInt());
+    wakeUI();
+    yardReport();
+    Serial.println("DONE");
+#endif
   } else if (line.startsWith("ORBIT")) {  // ORBIT <n>: fija la posicion de la orbita; ORBIT: la del reloj
     gOrbitForce = line.length() > 6 ? (int8_t)(line.substring(6).toInt() % ORBIT_POSITIONS) : -1;
     wakeUI();
@@ -903,6 +928,12 @@ void handleSerial() {
   } else if (line == "PERF") {  // cuanto tarda el paisaje (drawScene) en dibujarse, en us
     Serial.printf("scene=%luus max=%luus biome=%u fx=%luus fxmax=%luus\n", (unsigned long)gSceneUs,
                   (unsigned long)gSceneMaxUs, homeBiome(), (unsigned long)gFxUs, (unsigned long)gFxMaxUs);
+#if TP_YARD
+    // el patio: scene = copiar el mapa al lienzo (y re-expandirlo si cambio); pets = bichos, cosas y HUD
+    Serial.printf("yard=%d pets=%luus petsmax=%luus n=%u map=%u\n", yardHomeNow() ? 1 : 0, (unsigned long)gYardPetsUs,
+                  (unsigned long)gYardPetsMaxUs, yardPetsShown(), yardMapNow());
+    gYardPetsMaxUs = 0;
+#endif
     gSceneMaxUs = 0;
     gFxMaxUs = 0;
     Serial.println("DONE");
@@ -1208,6 +1239,14 @@ void handleSerial() {
 
 // ---------- entrada tactil ----------
 
+// pulsacion larga: sobre el bicho de casa y no sobre una caca (el patio: el que pasea, fuera del dock)
+bool holdOnPet(int16_t x, int16_t y) {
+#if TP_YARD
+  if (yardHomeNow()) return yardPetAt(x, y) == 0 && yardPoopAt(x, y) < 0 && yDockHit(x, y) < 0;
+#endif
+  return inPetZone(x, y) && poopAt(x, y) < 0;
+}
+
 bool inPetZone(int16_t x, int16_t y) {
   return x > 110 && x < 356 && y > 95 && y < 310;
 }
@@ -1328,7 +1367,7 @@ void handleTouch() {
     tYl = y;
     // pulsacion larga sin moverse sobre el bicho -> dialogo de soltar
     if (!holdFired && !swallowGesture && !yardDemoOpen && !galleryOpen && !boxOpen && !stagesOpen && !teamOpen && !cardOpen && !bagOpen && !kbOpen && !clockOpen && !menuKind && millis() - tStart > 3000 &&
-        abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && inPetZone(tX0, tY0) && poopAt(tX0, tY0) < 0 &&
+        abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && holdOnPet(tX0, tY0) &&
         !pet.isEgg() && !confirmUntil && !pet.busyEnding()) {
       confirmUntil = millis() + 10000;
       holdFired = true;
@@ -1604,6 +1643,15 @@ void onTap(int16_t x, int16_t y) {
     uint8_t kind = menuKind;
     bool live = timeLeft(menuUntil);
     menuKind = MENU_NONE;
+#if TP_YARD
+    // TEMP Y2: replaced by the panel branch. Cuidados con el menu de comida abierto: el de luz y bano
+    if (kind == MENU_FEED && live && yardHomeNow() && yDockHit(x, y) == 0) {
+      sfxPlay(SFX_TAP);
+      menuKind = MENU_CARE;
+      menuUntil = millis() + 6000;
+      return;
+    }
+#endif
     if (!live || y < 288 || y > 352) return;
     if (kind == MENU_FEED && x >= 101 && x < 365) {  // (x = 365 daba el objeto 4)
       int item = (x - 101) / 66;
@@ -1686,6 +1734,12 @@ void onTap(int16_t x, int16_t y) {
       y >= FAR_BTN_Y && y <= FAR_BTN_Y + FAR_BTN_H) {
     if (pet.wantFarewellButton()) { choiceKind = 2; choiceUntil = millis() + 12000; return; }
   }
+#if TP_YARD
+  if (yardHomeNow()) {  // el patio: el dock, las cacas, los regalos y los bichos
+    yardTap(x, y);
+    return;
+  }
+#endif
   for (int i = 0; i < 4; i++) {
     int dx = x - buttons[i].cx, dy = y - buttons[i].cy;
     if (dx * dx + dy * dy <= BTN_HIT * BTN_HIT) {
@@ -2447,10 +2501,17 @@ bool render() {
   }
   int h = sceneHour();
   gNight = pet.sleeping || h < 6 || h >= 20;
+  // el patio (v2.0): la casa con un bicho nacido es el mapa; el huevo, la casa vacia, la despedida y
+  // el Revivir siguen con su pantalla de siempre de momento (la Y3 lleva el huevo al patio)
+  bool yard = yardHomeNow();
+#if TP_YARD
+  if (!yard) yardW.p[0].on = yardW.p[1].on = false;
+#endif
   // drawScene cubre los 466x466 completos: sin fillScreen(NEGRO) previo para
   // que un flush DMA solapado nunca capture negro a medias (anti-parpadeo)
   uint32_t sceneT0 = micros();
-  drawScene(homeBiome(), millis(), gNight);
+  if (yard) yardDrawBg();  // el mapa ya expandido (en PSRAM), copiado al lienzo
+  else drawScene(homeBiome(), millis(), gNight);
   perfNote(micros() - sceneT0);
 
   if (pet.ceremony) {
@@ -2475,7 +2536,22 @@ bool render() {
   fxFrame(millis());
   uint32_t fxUs = micros() - fxT0;
 
-  if (pet.isVacant()) {
+  if (yard) {
+#if TP_YARD
+    uint32_t yT0 = micros();
+    renderYardHome(millis());  // los bichos, la caca, los regalos, el globo, la hora, la bateria y el dock
+    fxT0 = micros();
+    drawFxOverlays(millis());
+    uint32_t ov = micros() - fxT0;
+    fxUs += ov;
+    if (!fxBan) {  // con una celebracion encima, los botones grandes esperan a que acabe
+      if (pet.wantEvolveButton()) drawEvolveButton();
+      else if (pet.wantFarewellButton()) drawFarewellButton();
+    }
+    gYardPetsUs = micros() - yT0 - ov;
+    if (gYardPetsUs > gYardPetsMaxUs) gYardPetsMaxUs = gYardPetsUs;
+#endif
+  } else if (pet.isVacant()) {
     drawVacantHome();
   } else if (pet.isEgg()) {
     drawHeader(T(S_EGG_HDR), inkColor(), eggMsg());
@@ -2529,7 +2605,7 @@ bool render() {
     }
   }
 
-  if (pet.sleeping) {
+  if (pet.sleeping && !yard) {  // (el patio lo dice en el globo)
     gfx->setTextColor(UI_INK_NIGHT);
     setSize(3);
     setCur(320, 130);
@@ -4020,6 +4096,9 @@ void fxPose(uint8_t act, uint32_t now, uint32_t minMs) {
   beh.act = act;
   beh.t0 = now;
   beh.until = now + (ms < minMs ? minMs : ms);
+#if TP_YARD
+  yardGesture(yardW, 0, act, ms < minMs ? minMs : ms, now);  // el del patio, igual
+#endif
 }
 
 // cada frame de la pantalla principal, antes de dibujar: avanza la cola y los efectos
@@ -4077,9 +4156,42 @@ void fxPerfNote(uint32_t us) {
 
 // cabeza del bicho en pantalla, aproximada (donde van el "!", el entrenamiento y la pildora)
 int fxHeadY() {
+#if TP_YARD
+  if (yardW.p[0].on) return yardPetHeadY(0);
+#endif
   if (!pmd.loaded) return PET_CY - 60;
   int head = PET_GROUND - pmdIdleHeight() + 24;
   return head < 130 ? 130 : head;
+}
+
+// el bicho de casa esta en el patio (v2.0): los efectos salen de donde pasea
+bool petInYard() {
+#if TP_YARD
+  return yardW.p[0].on;
+#else
+  return false;
+#endif
+}
+
+// los pies del bicho de casa en pantalla: en el patio, donde pasea; si no, la escena de lado
+int petFootX() {
+#if TP_YARD
+  if (yardW.p[0].on) return (int)yardW.p[0].x;
+#endif
+  return (int)beh.x;
+}
+int petFootY() {
+#if TP_YARD
+  if (yardW.p[0].on) return (int)yardW.p[0].y;
+#endif
+  return PET_GROUND;
+}
+// alto del bicho de casa sobre sus pies (para los efectos que salen de el)
+int petBodyH() {
+#if TP_YARD
+  if (yardW.p[0].on) return petFootY() - yardPetHeadY(0);
+#endif
+  return pmd.loaded ? pmdIdleHeight() : 140;
 }
 
 // desplazamiento de un banner que entra desde arriba (0 al llegar a su sitio)
@@ -4120,14 +4232,15 @@ void drawConfetti(uint32_t e) {
 // subida de nivel: chispas que suben alrededor del bicho y la pildora "LEVEL UP!" con el
 // nivel; en el ultimo tramo, lo que gano en ATK/DEF/VEL
 void drawLevelUpFx(const FxEvent &ev, uint32_t e) {
-  int px = (int)beh.x;
+  int px = petFootX(), foot = petFootY(), rise = petBodyH() * 190 / 140;
+  int spread = petInYard() ? 24 : 44;
   if (e < 2000) {
     for (int i = 0; i < FX_SPARKS; i++) {
       uint32_t h = fxHash((uint32_t)i * 2654435761u + 7u);
       uint32_t ph = (e + h % 700) % 700;  // cada chispa sube en 0,7 s y vuelve a empezar
       int side = (i & 1) ? 1 : -1;
-      int x = px + side * (44 + (int)((h >> 8) % 64));
-      int y = PET_GROUND - 12 - (int)(ph * 190 / 700);
+      int x = px + side * (spread + (int)((h >> 8) % 64) * spread / 44);
+      int y = foot - 12 - (int)(ph * rise / 700);
       uint16_t c = (i % 3) ? C565(0xff, 0xdc, 0x4a) : UI_WHITE;
       gfx->fillRect(x - 1, y - 5, 3, 11, c);
       gfx->fillRect(x - 5, y - 1, 11, 3, c);
@@ -4327,11 +4440,17 @@ void drawFxOverlays(uint32_t now) {
     if (!x.on || !x.started) continue;
     float t = FxOverlays::t(x, now);
     if (x.kind == FXO_STAT) {  // "+25" que sube desde su barra
+#if TP_YARD
+      if (yardW.p[0].on) {  // el patio no tiene barras: "LIM +10" sube sobre el bicho, una fila por necesidad
+        yardStatPill(x.a, x.v, t);
+        continue;
+      }
+#endif
       int bx, by, bw;
       fxBarBox(x.a, &bx, &by, &bw);
       fxNumber(bx + bw / 2, by - 6 - (int)(t * 26), x.v, x.v > 0 ? UI_BAR_OK : UI_BAR_BAD);
     } else if (x.kind == FXO_BOND) {  // corazon pequeno con "+N", a la izquierda del bicho
-      int cx = (int)beh.x - 78, y = PET_GROUND - 150 - (int)(t * 40);
+      int cx = petFootX() - 78, y = petFootY() - petBodyH() * 150 / 140 - (int)(t * 40);
       drawMap(SPR_HEART, 32, cx - 34, y, 1, false);
       fxNumber(cx + 18, y + 6, x.v, UI_BAR_BAD);
     } else if (x.kind == FXO_TRAIN) {  // "ATK +3" sobre la cabeza, y un ataque
@@ -4350,7 +4469,7 @@ void drawFxOverlays(uint32_t now) {
       setCur(CX - w / 2, y);
       printT(s);
     } else if (x.kind == FXO_OOPS) {  // "!" en un bocadillo junto a la cabeza
-      int bx = (int)beh.x + 58, by = head - 40 + (int)(3 * sinf(now * 0.012f));
+      int bx = petFootX() + 58, by = head - 40 + (int)(3 * sinf(now * 0.012f));
       gfx->fillTriangle(bx - 14, by + 10, bx - 4, by + 16, bx - 22, by + 26, UI_WHITE);
       gfx->fillCircle(bx, by, 19, UI_WHITE);
       gfx->drawCircle(bx, by, 19, UI_INK);
@@ -5573,8 +5692,8 @@ void drawBoxAppear(uint32_t now) {
   const FxOverlay *o = fxo.find(FXO_BOX);
   if (!o) return;
   float t = FxOverlays::t(*o, now);
-  int cx = pet.isEgg() ? CX : (int)beh.x;
-  int cy = (pet.isEgg() || !pmd.loaded) ? PET_CY : PET_GROUND - pmdIdleHeight() / 2;
+  int cx = pet.isEgg() ? CX : petFootX();
+  int cy = (pet.isEgg() || (!pmd.loaded && petFootY() == PET_GROUND)) ? PET_CY : petFootY() - petBodyH() / 2;
   float k = 1.0f - t;
   int r = (int)(118 * k * k);
   if (r > 2) {
@@ -6636,11 +6755,12 @@ void startBath() {
   if (pet.isEgg() || pet.sleeping || pet.ceremony || bathUntil) return;
   bathUntil = millis() + 3000;
   bathPending = true;
-  int cx = (int)beh.x;
+  int cx = petFootX(), foot = petFootY(), body = petBodyH();
+  bool small = body < 120;  // el bicho del patio, mas pequeno: espuma mas junta y mas fina
   for (auto &b : bubbles) {
-    b.x = cx - 70 + random(140);
-    b.y = PET_GROUND - random(150);
-    b.r = 8 + random(16);
+    b.x = cx - (small ? 44 : 70) + random(small ? 88 : 140);
+    b.y = foot - random(small ? body + 10 : 150);
+    b.r = small ? 6 + random(11) : 8 + random(16);
     b.ph = random(64);
   }
 }
@@ -6655,12 +6775,7 @@ void drawBath() {
       pet.clean();
       fxNeeds(ns);  // "+60" de higiene
       // pose de alegria al quedar limpio
-      if (pmd.has(PMD_POSE)) {
-        beh.mode = 2;
-        beh.act = PMD_POSE;
-        beh.t0 = now;
-        beh.until = now + pmdActTotalMs(pmd.acts[PMD_POSE]) * 2;
-      }
+      if (pmd.has(PMD_POSE)) fxPose(PMD_POSE, now, pmdActTotalMs(pmd.acts[PMD_POSE]) * 2);
     }
     return;
   }
@@ -6719,6 +6834,12 @@ void drawPmdActM(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool
   if (sBase > maxS) sBase = maxS;
   uint8_t s = sBase;
   while (s > 2 && a.h * s > 250) s--;  // acciones con frame grande (ataque)
+  drawPmdActS(m, actId, cx, groundY, t, loop, sil, s);
+}
+// lo mismo a una escala fija s (el patio, v2.0: los bichos van mas pequenos que en la casa de lado)
+void drawPmdActS(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint8_t s) {
+  const PmdAct &a = m.acts[actId];
+  if (!a.frames) return;
   uint8_t fi = pmdFrameAt(a, t, loop);
   const uint8_t *fr = a.data + (uint32_t)fi * a.w * a.h;
   // anclar por los pies (a.base), no por el alto del lienzo: asi las acciones
