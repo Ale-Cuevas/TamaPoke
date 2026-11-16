@@ -88,6 +88,13 @@ new `web/sprites.pak` / `tools/send_sd.py`; old sprite files still work.
   - Badges sit on a light plate (their dark outlines vanished on the panel); unseen Pokédex entries are slate
     silhouettes; the use-item question uses green Use / red No pills.
 
+### Removed
+
+- **The old side-view home** (cream panel with four bars, four buttons, name and status lines, code-drawn biome
+  scenery behind the pet) and the `TP_YARD` build switch: the yard is the only home. The biome scenery is still
+  drawn behind the evolution, farewell and Revive scenes and in battles. A long press on an empty home no longer
+  opens the release dialog. The status lines only the old home used ("It's happy", "So full!"...) are gone.
+
 ## [1.68] - 2026-11-15
 
 ### Fixed
