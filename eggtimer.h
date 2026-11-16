@@ -1,7 +1,7 @@
 #pragma once
 // El huevo del patio (v2.0, fase Y3): eclosiona solo a las 2 h de tiempo real desde que se pone en el
-// patio, y cada sacudida de la placa (motion.h; una cada 30 s como mucho) le quita 5 min, hasta 2 h en
-// total: lo mas rapido son 2 h. El tiempo es el del RTC (epoch en segundos, como lastSeenEpoch), asi
+// patio, y cada sacudida de la placa (motion.h; una cada 30 s como mucho) le quita 5 min, hasta 1 h en
+// total: lo mas rapido es 1 h. El tiempo es el del RTC (epoch en segundos, como lastSeenEpoch), asi
 // que corre tambien con la placa apagada. Logica pura (test/test_eggtimer.cpp).
 //
 // placed: epoch en que se puso. 0 = no es un huevo del patio (el inicial y los del sistema de toques
