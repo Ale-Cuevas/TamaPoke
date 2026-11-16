@@ -27,6 +27,19 @@ Work in progress on `feature/yard`: the "yard" redesign (`docs/yard-prototype/DE
   here", and tints the palette for dawn, dusk and night. `tools/send_sd.py --yard` sends them to `/yard/NN.bin`;
   the board now accepts `PUT yard/...` and `LS` lists both folders.
 
+- **The yard home (phase Y2, `TP_YARD`, on by default).** The home is now a top-down map from the SD card
+  (`/yard/NN.bin`) picked by the species biome: meadow, quarry, forest, beach or ruins (maps 03-05 are new). Dawn,
+  dusk and night tint the map. Without the SD map: a flat ground in the biome colour. The home pet and the first
+  Box pet (still hibernating) wander on the walkable cells (`yard.h`), sleep where they stand and drift when the
+  board is tilted. The HUD is the clock, the battery and a 3-button dock: Care, Play, Bag. No more need bars,
+  name or status line: the pet says how it is in a speech bubble, cycling every second when several needs are low.
+  Poops drop where the pet stands and gifts lie on the grass; tap them as before. Tap the pet for its card (the
+  Box pet opens the Box). Serial `YARDBG n` forces a map (0 = by biome, 255 = fallback); `PERF` shows the yard
+  timings. The egg, the empty home and the farewell/Revive screens are unchanged for now.
+- **Care and Play panels.** The FOOD/PLAY/CARE popups became two dark panels opened from the dock: Care (berries,
+  cake, light, bath) and Play (ball, stages, sack, sled, waterfall). They don't close by themselves; a refused
+  card shakes inside the panel.
+
 ### Changed
 
 - **Menus on the dark panel (phase Y1).** Backpack, the 5 stat-card pages, the rename keyboard, the Box, the badges,
