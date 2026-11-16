@@ -834,6 +834,10 @@ static const std::vector<Scene> &scenes() {
        applyLangFont();
      } },
     { "card-profile-es", [] { pokemon(25, 13); pet.streak = 365; pet.bestStreak = 365; setLang(LANG_ES); applyLangFont(); cardOpen = true; cardPage = 0; } },
+    // v2.0: las 4 necesidades en el perfil (en el patio ya no hay barras)
+    { "card-profile-needs", [] { pokemon(25, 13); pet.fullness = 20; pet.joy = 45; pet.energy = 80; pet.hygiene = 10; cardOpen = true; cardPage = 0; } },
+    { "card-profile-needs-es", [] { pokemon(25, 13); pet.fullness = 20; pet.joy = 45; pet.energy = 80; pet.hygiene = 10;
+                                    setLang(LANG_ES); applyLangFont(); cardOpen = true; cardPage = 0; } },
     { "card-profile-nick", [] { pokemon(6, 36); pet.rename("SPARKY"); pet.shiny = true; cardOpen = true; cardPage = 0; } },
     { "card-medals-es", [] { pokemon(25, 13); pet.medals = MED_LV10 | MED_BERRY | MED_MARATHON; setLang(LANG_ES); applyLangFont(); cardOpen = true; cardPage = 2; } },
     { "card-progress-es", [] { pokemon(25, 13); setLang(LANG_ES); applyLangFont(); cardOpen = true; cardPage = 3; } },

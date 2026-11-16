@@ -7,6 +7,8 @@ Lee tools/yard/maps/NN-nombre.txt y su leyenda (tools/yard/legends/), compone un
   NN-nombre_preview.png   466x466 redondo (x2, recorte de 7, mascara, HUD de muestra)
   NN-nombre_debug.png     lo mismo con la rejilla, las celdas bloqueadas y las zonas del HUD
 
+Ambiente opcional en la cabecera del mapa: "hue: A-B T", "tint: RRGGBB N" (mezcla N %) y "mist: N [RRGGBB]".
+
   uv run --no-project --with pillow tools/pack_yard.py          # todos los mapas
   uv run --no-project --with pillow tools/pack_yard.py 01 03    # solo esos
   uv run --no-project --with pillow tools/pack_yard.py --no-preview
@@ -35,7 +37,7 @@ WALK_BYTES = (GRID * GRID + 7) // 8  # 29
 FRAME_INSET = 12             # nada se pisa a menos de 12 px del borde redondo
 # zonas del HUD en coordenadas del lienzo (x0, y0, x1, y1): hora + monedas, y el dock
 CLOCK_ZONE = (140, 20, 326, 110)
-DOCK_ZONE = (148, 376, 318, 440)
+DOCK_ZONE = (130, 376, 336, 440)   # = yard.h; el dock va cada 72 px (yard_ui.h)
 # colores del dock (yard_ui.h: Y_DOCK_CARE / PLAY / BAG)
 DOCK_COLS = ((0x2E, 0xC4, 0x8A), (0xF0, 0xA8, 0x30), (0x5E, 0x8F, 0xE0))
 
@@ -252,7 +254,62 @@ def compose(map_path, yard_dir, tilesets):
                 part = sheet.crop((e['c'] * TILE, e['r'] * TILE,
                                    (e['c'] + e['w']) * TILE, (e['r'] + e['h']) * TILE))
                 img.alpha_composite(part, (x * TILE, y * TILE))
-    return meta, img.convert('RGB'), blocked
+    return meta, atmosphere(img.convert('RGB'), meta, map_path, seed), blocked
+
+
+def _hex_rgb(tok, where):
+    m = re.fullmatch(r'#?([0-9a-fA-F]{6})', tok)
+    if not m:
+        raise MapError(f'{where}: bad colour {tok!r} (expected RRGGBB)')
+    v = int(m.group(1), 16)
+    return (v >> 16) & 255, (v >> 8) & 255, v & 255
+
+
+def atmosphere(img, meta, map_path, seed):
+    """Ambiente opcional del mapa, horneado en la imagen (el firmware no cambia):
+      hue: A-B T          los tonos entre A y B grados (p. ej. la hierba verde) pasan a rondar T
+      tint: RRGGBB N      mezcla toda la imagen un N % hacia ese color (p. ej. morado fantasmal)
+      mist: N [RRGGBB]    N jirones de niebla suaves (semilla fija), del color dado o lavanda
+    """
+    from PIL import Image, ImageDraw, ImageFilter
+    if 'hue' in meta:
+        m = re.fullmatch(r'(\d+)-(\d+)\s+(\d+)', meta['hue'])
+        if not m:
+            raise MapError(f'{map_path}: expected "hue: from-to target" (degrees)')
+        lo, hi, tgt = (int(v) for v in m.groups())
+        mid = (lo + hi) / 2
+        hsv = img.convert('HSV')
+        hd, sd, vd = (bytearray(c.tobytes()) for c in hsv.split())
+        for i, h in enumerate(hd):
+            deg = h * 360 / 256
+            if lo <= deg <= hi:   # el tono nuevo, mas apagado y algo mas oscuro (no un violeta chillon)
+                hd[i] = int(((tgt + (deg - mid) * 0.5) % 360) * 256 / 360)
+                sd[i] = sd[i] * 45 // 100
+                vd[i] = vd[i] * 80 // 100
+        chans = [Image.frombytes('L', img.size, bytes(c)) for c in (hd, sd, vd)]
+        img = Image.merge('HSV', chans).convert('RGB')
+    if 'tint' in meta:
+        toks = meta['tint'].split()
+        if len(toks) != 2 or not toks[1].isdigit() or not 0 <= int(toks[1]) <= 100:
+            raise MapError(f'{map_path}: expected "tint: RRGGBB percent"')
+        col = _hex_rgb(toks[0], map_path)
+        img = Image.blend(img, Image.new('RGB', img.size, col), int(toks[1]) / 100)
+    if 'mist' in meta:
+        toks = meta['mist'].split()
+        if not toks or not toks[0].isdigit() or len(toks) > 2:
+            raise MapError(f'{map_path}: expected "mist: count [RRGGBB]"')
+        col = _hex_rgb(toks[1], map_path) if len(toks) == 2 else (214, 196, 255)
+        rng = random.Random(seed * 7919 + 1)
+        alpha = Image.new('L', img.size, 0)
+        d = ImageDraw.Draw(alpha)
+        for _ in range(int(toks[0])):
+            # jirones alargados en horizontal, como niebla baja
+            cx, cy = rng.uniform(0, SRC), rng.uniform(20, SRC - 20)
+            rx, ry = rng.uniform(30, 60), rng.uniform(8, 16)
+            d.ellipse((cx - rx, cy - ry, cx + rx, cy + ry), fill=rng.randint(110, 170))
+        alpha = alpha.filter(ImageFilter.GaussianBlur(9))
+        img = Image.composite(Image.new('RGB', img.size, col), img, alpha)
+    return img
 
 
 def outside_or_hud(cx, cy):
@@ -345,7 +402,7 @@ def add_mock_hud(im, sprites):
     d.ellipse((205, 76, 223, 94), fill=(242, 194, 48), outline=(184, 134, 11), width=2)
     d.text((229, 74), '117', font=f_small, fill=(255, 255, 255), stroke_width=2, stroke_fill=(16, 18, 26))
     for i, col in enumerate(DOCK_COLS):
-        cx = CANVAS // 2 + (i - 1) * 56
+        cx = CANVAS // 2 + (i - 1) * 72
         d.ellipse((cx - 20, 404 - 19, cx + 24, 404 + 25), fill=(16, 18, 26))
         d.ellipse((cx - 22, 404 - 22, cx + 22, 404 + 22), fill=col, outline=(255, 255, 255), width=1)
     for spr, xy in sprites:

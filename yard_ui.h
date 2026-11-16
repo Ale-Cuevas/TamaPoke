@@ -49,14 +49,14 @@ constexpr uint16_t yRgb(uint32_t hex) {
 #define Y_BACK_R 20
 #define Y_BACK_HIT_R 28
 
-// dock de la casa: 3 circulos de r 22 en y 404, cada 56 px; se tocan en r 28.
+// dock de la casa: 3 circulos de r 22 en y 404, cada 72 px; se tocan en r 28.
 // Sin etiquetas: a tamano 1 no se leen y a tamano 2 "Mochila" (84 px) pisa al vecino;
 // los nombres (S_DOCK_*) son el titulo del panel que abre cada uno.
 #define Y_DOCK_N 3
 #define Y_DOCK_Y 404
 #define Y_DOCK_R 22
 #define Y_DOCK_HIT_R 28
-#define Y_DOCK_STEP 56
+#define Y_DOCK_STEP 72  // v2.0: 56 -> 72, 16 px muertos entre zonas de toque (se tocaba el vecino)
 inline int yDockX(int i) { return Y_CX + (i - 1) * Y_DOCK_STEP; }
 
 // flechas < > a los lados, a media altura; zonas de 60x120

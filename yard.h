@@ -94,7 +94,7 @@ inline void yardFallbackWalk(uint8_t *walk) {
       int dx = px - YBG_CANVAS / 2, dy = py - YBG_CANVAS / 2, r = YBG_CANVAS / 2 - 12;
       bool out = dx * dx + dy * dy > r * r;
       bool clock = px >= 140 && px <= 326 && py >= 20 && py <= 110;
-      bool dock = px >= 148 && px <= 318 && py >= 376 && py <= 440;
+      bool dock = px >= 130 && px <= 336 && py >= 376 && py <= 440;  // = DOCK_ZONE de tools/pack_yard.py
       if (out || clock || dock) {
         int k = yardCellIdx(cx, cy);
         walk[k >> 3] |= (uint8_t)(1 << (k & 7));

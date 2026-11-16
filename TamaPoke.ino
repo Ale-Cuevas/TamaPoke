@@ -168,6 +168,7 @@ uint32_t cakeHintUntil = 0;
 uint32_t tastesMsgUntil = 0;  // la baya favorita cambio al evolucionar (v1.57): "Sus gustos cambiaron!"   // tocar la tarta sin ninguna (v1.54): la cabecera dice donde se encuentra
 static_assert(S_IT_REVIVE - S_IT_GOLDEN == IT_REVIVE - IT_GOLDEN && IT_REVIVE + 1 == IT_COUNT, "nombres de objeto en el orden de IT_*");
 bool clockOpen = false;       // pantalla de ajuste de hora (deslizar abajo)
+static int barLabelGap();  // (mas abajo, con drawBar; la usan antes la ficha y el patio)
 #define YDEMO_PAGES 3
 bool yardDemoOpen = false;    // el patio (v2.0, Y0): muestra del kit de interfaz (serie YARDUI)
 uint8_t yardDemoPage = 0;     // 0 panel (tienda), 1 mundo (casa), 2 fase
@@ -4425,6 +4426,7 @@ void drawMedalBadge(int x, int y, int i) {
 
 // Ficha en el panel del patio (Y1): disco oscuro, titulo blanco, filas en tarjetas, puntos de
 // pagina claros y el boton redondo de volver. Las tarjetas de fila van de CARD_ROW_X a +CARD_ROW_W.
+#define UI_BAR_SATED_FWD 0xF474  // (UI_BAR_SATED se define mas abajo, con drawBar)
 #define CARD_ROW_X 70
 #define CARD_ROW_W 326
 #define CARD_DOTS_Y 374
@@ -4432,7 +4434,31 @@ void drawMedalBadge(int x, int y, int i) {
 // tarjeta de fila de alto h, centrada en un texto de tamano 2 que empieza en ty
 static void cardRow(int ty, int h) { yCard(CARD_ROW_X, ty + 7 - h / 2, CARD_ROW_W, h, false); }
 
-// pagina 0: perfil (retrato grande, identidad, racha, vinculo, baya)
+// una barra de necesidad en la tarjeta del perfil: etiqueta, pista oscura y relleno
+// verde / ambar / rojo (rosa con la tarta, como las barras de la casa de lado)
+static void cardNeedBar(int x, int y, StrId label, uint8_t val, bool sated) {
+  gfx->setTextColor(Y_TEXT);
+  setSize(2);
+  setCur(x, y);
+  printT(T(label));
+  int gap = barLabelGap();
+  int bx = x + gap + 4, bw = 144 - gap - 4;
+  uint16_t fill = sated ? UI_BAR_SATED_FWD : (val >= 50) ? UI_BAR_OK : (val >= 25) ? UI_BAR_WARN : UI_BAR_BAD;
+  gfx->fillRoundRect(bx, y + 1, bw, 12, 4, Y_CARD_HI);
+  int fw = (bw - 4) * val / 100;
+  if (fw > 0) gfx->fillRoundRect(bx + 2, y + 3, fw, 8, 3, fill);
+}
+
+// tarjeta con las 4 necesidades en 2x2 (COM FEL / ENE LIM), arriba en y0
+static void cardNeeds(int y0) {
+  yCard(CARD_ROW_X, y0, CARD_ROW_W, 60, false);
+  cardNeedBar(84, y0 + 10, S_BAR_FOOD, pet.fullness, pet.sated());
+  cardNeedBar(240, y0 + 10, S_BAR_JOY, pet.joy, false);
+  cardNeedBar(84, y0 + 36, S_BAR_ENE, pet.energy, false);
+  cardNeedBar(240, y0 + 36, S_BAR_HYG, pet.hygiene, false);
+}
+
+// pagina 0: perfil (retrato, identidad, necesidades, racha, vinculo, baya)
 void renderCardProfile() {
   const char *nm = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
   char head[32];
@@ -4457,14 +4483,18 @@ void renderCardProfile() {
     printT(par);
   }
 
-  // retrato grande animado
-  if (pmd.loaded) drawPmdAct(PMD_IDLE, CX, 200, millis(), true, false, 4);
+  // retrato animado (a escala 3 desde v2.0: debajo van las necesidades)
+  // con apodo hay subtitulo (la especie): a escala 2 un bicho alto no lo tapa
+  if (pmd.loaded) drawPmdAct(PMD_IDLE, CX, 158, millis(), true, false, pet.nick[0] ? 2 : 3);
+
+  // las 4 necesidades (v2.0): en el patio ya no hay barras, y al tocar al bicho se ve aqui
+  cardNeeds(166);
 
   // racha con llama, centradas como grupo en su tarjeta
   char rl[40];  // en japones pierde cifras con 30 a partir de 100 dias
   snprintf(rl, sizeof(rl), T(S_STREAK_FMT), pet.streak, pet.bestStreak);
   setSize(2);
-  const int ry = 222;
+  const int ry = 240;
   cardRow(ry, 32);
   int sx = CX - (24 + textW(rl, 2)) / 2, sy = ry - 3;
   gfx->fillTriangle(sx + 8, sy, sx + 1, sy + 18, sx + 15, sy + 18, UI_BAR_BAD);
@@ -4473,8 +4503,8 @@ void renderCardProfile() {
   setCur(sx + 24, ry);
   printT(rl);
 
-  cardRow(260, 32);
-  drawCardStat(258, T(S_VIN), pet.bond, 100, C565(0xd4, 0x52, 0x7e));
+  cardRow(276, 32);
+  drawCardStat(274, T(S_VIN), pet.bond, 100, C565(0xd4, 0x52, 0x7e));
 
   const char *berry = !pet.berryKnown ? T(S_BERRY_UNK)
                       : pet.lovesBerry(0) ? T(S_BERRY_RED)
@@ -4483,14 +4513,14 @@ void renderCardProfile() {
   char info[48];
   snprintf(info, sizeof(info), T(S_INFO_FMT), berry,
            (unsigned long)(pet.ageMinutes / 1440));
-  cardRow(298, 32);
+  cardRow(312, 32);
   gfx->setTextColor(Y_TEXT);
   setSize(2);
-  setCur(centerX(info, 2), 298);
+  setCur(centerX(info, 2), 312);
   printT(info);
 
   gfx->setTextColor(Y_TEXT_DIM);
-  setCur(centerX(T(S_RENAME_HINT), 2), 338);
+  setCur(centerX(T(S_RENAME_HINT), 2), 348);
   printT(T(S_RENAME_HINT));
 }
 

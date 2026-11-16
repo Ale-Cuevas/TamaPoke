@@ -1,6 +1,10 @@
 name: Ruins
 legend: sunnyside
 seed: 9
+# fantasmal: todo un poco morado y jirones de niebla lavanda
+hue: 60-170 275
+tint: 3a2060 22
+mist: 14
 ground:
 ggggggggggggggg
 ggggggggggggggg

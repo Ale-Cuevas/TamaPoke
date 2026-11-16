@@ -36,6 +36,10 @@ Work in progress on `feature/yard`: the "yard" redesign (`docs/yard-prototype/DE
   Poops drop where the pet stands and gifts lie on the grass; tap them as before. Tap the pet for its card (the
   Box pet opens the Box). Serial `YARDBG n` forces a map (0 = by biome, 255 = fallback); `PERF` shows the yard
   timings. The egg, the empty home and the farewell/Revive screens are unchanged for now.
+- **Tweaks after the first look on the board.** The ruins map (05, power plant and ruins biomes) is now a ghostly
+  purple with lavender mist (`tools/pack_yard.py` gained optional `hue:`, `tint:` and `mist:` lines per map). The
+  dock buttons are 72 px apart instead of 56, with a 16 px dead gap between their tap zones. The stat card's first
+  page shows the 4 need bars (food, joy, energy, hygiene) under the portrait, since the yard has no bars.
 - **Care and Play panels.** The FOOD/PLAY/CARE popups became two dark panels opened from the dock: Care (berries,
   cake, light, bath) and Play (ball, stages, sack, sled, waterfall). They don't close by themselves; a refused
   card shakes inside the panel.
