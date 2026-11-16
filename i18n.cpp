@@ -84,6 +84,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "TIENDA", "Comprar", "Usar", "Comprado!", "Cuidar", "Jugar", "Mochila",
     // el huevo del patio (v2.0, Y3)
     "Agitame!",
+    // la tienda de la mochila y los fondos (v2.0, Y4)
+    "Objetos", "Fondos", "Comprar %s?", "Faltan monedas", "Mochila llena",
+    "Pradera", "Cantera", "Bosque", "Playa", "Ruinas",
+    "En uso", "Casa", "No esta en la SD", "Toca para comprar",
   },
   // ---------------- EN ----------------
   {
@@ -162,6 +166,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "SHOP", "Buy", "Use", "Purchased!", "Care", "Play", "Bag",
     // el huevo del patio (v2.0, Y3)
     "Shake me!",
+    // la tienda de la mochila y los fondos (v2.0, Y4)
+    "Items", "Backgrounds", "Buy %s?", "Not enough coins", "Backpack full",
+    "Meadow", "Quarry", "Forest", "Beach", "Ruins",
+    "In use", "Home", "Not on SD card", "Tap to buy",
   },
   // ---------------- FR ----------------
   {
@@ -240,6 +248,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "BOUTIQUE", "Acheter", "Utiliser", "Achet\202!", "Soins", "Jouer", "Sac",
     // el huevo del patio (v2.0, Y3)
     "Secoue-moi!",
+    // la tienda de la mochila y los fondos (v2.0, Y4)
+    "Objets", "Fonds", "Acheter %s?", "Pas assez de pieces", "Sac plein",
+    "Prairie", "Carriere", "Foret", "Plage", "Ruines",
+    "Utilise", "Maison", "Pas sur la SD", "Touche: acheter",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -323,6 +335,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "LADEN", "Kaufen", "Nutzen", "Gekauft!", "Pflege", "Spielen", "Tasche",
     // el huevo del patio (v2.0, Y3)
     "Sch\201ttel mich!",
+    // la tienda de la mochila y los fondos (v2.0, Y4)
+    "Dinge", "Hintergruende", "%s kaufen?", "Zu wenig Muenzen", "Rucksack voll",
+    "Wiese", "Steinbruch", "Wald", "Strand", "Ruinen",
+    "Aktiv", "Zuhause", "Nicht auf SD", "Tippen: kaufen",
   },
   // ---------------- IT ----------------
   {
@@ -401,6 +417,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "NEGOZIO", "Compra", "Usa", "Comprato!", "Cura", "Gioca", "Zaino",
     // el huevo del patio (v2.0, Y3)
     "Scuotimi!",
+    // la tienda de la mochila y los fondos (v2.0, Y4)
+    "Oggetti", "Sfondi", "Comprare %s?", "Monete insufficienti", "Zaino pieno",
+    "Prato", "Cava", "Bosco", "Spiaggia", "Rovine",
+    "In uso", "Casa", "Non sulla SD", "Tocca per comprare",
   },
   // ---------------- PT ----------------
   {
@@ -479,6 +499,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "LOJA", "Comprar", "Usar", "Comprado!", "Cuidar", "Jogar", "Mochila",
     // el huevo del patio (v2.0, Y3)
     "Me sacode!",
+    // la tienda de la mochila y los fondos (v2.0, Y4)
+    "Itens", "Fundos", "Comprar %s?", "Faltam moedas", "Mochila cheia",
+    "Prado", "Pedreira", "Floresta", "Praia", "Ruinas",
+    "Em uso", "Casa", "Nao esta no SD", "Toque para comprar",
   },
   // ---------------- JA ----------------
   {
@@ -579,6 +603,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "ショップ", "かう", "つかう", "かったよ!", "おせわ", "あそぶ", "バッグ",
     // el huevo del patio (v2.0, Y3)
     "ゆらして!",
+    // la tienda de la mochila y los fondos (v2.0, Y4)
+    "どうぐ", "はいけい", "%sをかう?", "コインがたりない", "バッグがいっぱい",
+    "そうげん", "さいせきじょう", "もり", "ビーチ", "いせき",
+    "つかいちゅう", "ホーム", "SDカードにない", "タップでかう",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -662,6 +690,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "상점", "구매", "사용", "구매 완료!", "돌보기", "놀기", "가방",
     // el huevo del patio (v2.0, Y3)
     "흔들어 줘!",
+    // la tienda de la mochila y los fondos (v2.0, Y4)
+    "물건", "배경", "%s 살까요?", "코인이 부족해요", "가방이 가득 찼어요",
+    "초원", "채석장", "숲", "해변", "유적",
+    "사용 중", "집", "SD 카드에 없음", "눌러서 구매",
   },
 };
 

@@ -130,6 +130,10 @@ static void resetUi() {
   galleryOpen = cardOpen = bagOpen = kbOpen = clockOpen = gameOpen = sackOpen = zenOpen = dashOpen = false;
   yardDemoOpen = false;  // el patio (v2.0)
   yardDemoPage = 0;
+  bagTab = 0;  // la tienda y el selector de fondos (Y4b)
+  shopBuyId = shopToast = yardMapPreview = 0;
+  pet.yardOwned = 0;
+  pet.yardChosen = 0;
 #if TP_YARD
   // el patio (v2.0, Y2): bichos sin colocar, sin cosas en el suelo y el mapa del bioma
   yardW = YardWorld{};
@@ -515,6 +519,35 @@ static void yardWalkScene(uint8_t dex, int fromY, int toY) {
   yardWalkTo(yardW, yardWalk, 0, to, millis());
 }
 #endif
+
+// the Backpack's Shop tab with `coins` and a few items already owned (Y4b)
+static void shopOpen(uint16_t coins, std::initializer_list<uint8_t> have = { 0, 0, 0, 0, 0, 0, 0, 0, 0 }) {
+  pokemon(25, 13);
+  int i = 0;
+  for (uint8_t n : have) pet.items[i++] = n;
+  pet.coins = coins;
+  openBag();
+  bagTab = 1;
+}
+static void shopAsk(uint8_t id) {
+  shopBuyId = id + 1;
+  shopBuyUntil = millis() + 10000;
+}
+static void shopToastNow(uint8_t kind) {
+  shopToast = kind;
+  shopToastUntil = millis() + 1000;
+}
+// the background picker on map n
+static void pickerOpen(uint8_t n, uint16_t coins, uint8_t owned = 0) {
+  shopOpen(coins);
+  for (uint8_t m = 1; m <= YARD_MAPS; m++)
+    if (owned & (1u << m)) pet.yardOwned |= (uint16_t)(1u << m);
+  yardMapPreview = n;
+}
+static void es() {
+  setLang(LANG_ES);
+  applyLangFont();
+}
 
 struct Scene {
   const char *name;
@@ -926,6 +959,44 @@ static const std::vector<Scene> &scenes() {
        setLang(LANG_ES);
        applyLangFont();
      } },
+    // Y4b: the Backpack tabs, the Shop and the background picker
+    { "bag-tabs", [] { pokemon(25, 13); pet.coins = 1234; walker(1840, 52310, 2, { 2, 1, 0, 3, 1, 1, 2, 3, 3 }); openBag(); } },
+    { "bag-tabs-es", [] { pokemon(25, 13); pet.coins = 37; walker(1840, 52310, 2, { 2, 1, 0, 3, 1, 1, 2, 3, 3 }); openBag(); es(); } },
+    { "shop-rich", [] { shopOpen(500, { 2, 1, 0, 3, 1, 1, 2, 3, 3 }); } },
+    { "shop-poor", [] { shopOpen(35, { 0, 0, 0, 0, 0, 0, 0, 0, 1 }); } },
+    { "shop-mid", [] { shopOpen(100, { 9, 0, 0, 0, 0, 4, 0, 1, 0 }); } },
+    { "shop-rich-es", [] { shopOpen(500, { 2, 1, 0, 3, 1, 1, 2, 3, 3 }); es(); } },
+    { "shop-poor-es", [] { shopOpen(35); es(); } },
+    { "shop-confirm", [] { shopOpen(500); shopAsk(IT_RARECANDY); } },
+    { "shop-confirm-poor", [] { shopOpen(35); shopAsk(IT_REVIVE); } },
+    { "shop-confirm-es", [] { shopOpen(500); shopAsk(IT_RARECANDY); es(); } },
+    { "shop-toast-ok", [] { shopOpen(500, { 3, 0, 0, 0, 0, 0, 0, 0, 0 }); shopToastNow(SHT_OK); } },
+    { "shop-toast-full", [] { shopOpen(500, { 9, 0, 0, 0, 0, 0, 0, 0, 0 }); shopToastNow(SHT_FULL); } },
+    { "shop-toast-broke-es", [] { shopOpen(5); shopToastNow(SHT_BROKE); es(); } },
+    { "shop-toast-ok-es", [] { shopOpen(500); shopToastNow(SHT_OK); es(); } },
+    { "shop-bought", [] {  // through the real taps: card, Buy, then the new count
+       shopOpen(500, { 2, 0, 0, 0, 0, 0, 0, 0, 0 });
+       render();
+       int x, y;
+       bagSlotXY(0, x, y);
+       onTap(x + 30, y + 30);
+       render();
+       int xy, wy, xn, wn;
+       shopAskPills(T(S_BUY), xy, wy, xn, wn);
+       onTap(xy + wy / 2, BAG_ASK_PILL_Y + 14);
+     } },
+    { "picker-missing", [] { pickerOpen(4, 300); } },
+    { "picker-missing-es", [] { pickerOpen(4, 300); es(); } },
+    { "picker-owned", [] { pickerOpen(2, 50, 1 << 2); } },
+    { "picker-notowned", [] { pickerOpen(4, 300); } },
+    { "picker-broke", [] { pickerOpen(4, 10); } },
+    { "picker-using", [] { pickerOpen(pet.biomeMap(), 50); } },
+    { "picker-using-chosen", [] { pickerOpen(3, 50, 1 << 3); pet.yardChosen = 3; } },
+    { "picker-bought", [] { pickerOpen(3, 300); shopToastNow(SHT_OK); pet.buyMap(3); pet.chooseMap(3); } },
+    { "picker-owned-es", [] { pickerOpen(2, 50, 1 << 2); es(); } },
+    { "picker-notowned-es", [] { pickerOpen(4, 300); es(); } },
+    { "picker-broke-es", [] { pickerOpen(4, 10); shopToastNow(SHT_BROKE); es(); } },
+    { "picker-using-es", [] { pickerOpen(pet.biomeMap(), 50); es(); } },
     { "card-profile-es", [] { pokemon(25, 13); pet.streak = 365; pet.bestStreak = 365; setLang(LANG_ES); applyLangFont(); cardOpen = true; cardPage = 0; } },
     // v2.0: las 4 necesidades en el perfil (en el patio ya no hay barras)
     { "card-profile-needs", [] { pokemon(25, 13); pet.fullness = 20; pet.joy = 45; pet.energy = 80; pet.hygiene = 10; cardOpen = true; cardPage = 0; } },
