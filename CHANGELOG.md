@@ -36,6 +36,17 @@ Work in progress on `feature/yard`: the "yard" redesign (`docs/yard-prototype/DE
   Poops drop where the pet stands and gifts lie on the grass; tap them as before. Tap the pet for its card (the
   Box pet opens the Box). Serial `YARDBG n` forces a map (0 = by biome, 255 = fallback); `PERF` shows the yard
   timings. The egg, the empty home and the farewell/Revive screens are unchanged for now.
+- **World actions (phase Y3).**
+  - Pets walk up and down with their back or front sprite (new PMD actions 12 WalkUp and 13 WalkDown, stored after
+    the counted actions so older firmware still reads the new SD files). All sprites were re-packed (SD and
+    `web/sprites.pak` +12 %); Cubone and Ditto pick up upstream SpriteCollab updates.
+  - Food from the Care panel drops into the yard: the pet sees it ("!"), walks over, eats it, and only then the
+    berry or cake takes effect. One item at a time; it waits if you leave the yard, and is cancelled (nothing used)
+    if the pet falls asleep.
+  - Eggs sit in the yard and hatch 4 h after they are placed (real time, also while the board is off). Each shake
+    (once every 30 s) takes 5 min off, up to 2 h. Tapping the egg shows the time left or "Shake me!"; cracks show
+    with 2 h and 30 min left. The very first starter egg still hatches with 3 taps. New save keys `yegg` / `ysav`;
+    an egg already in progress from an older version finishes the old way. Serial `EGGT <min>`, `HATCH`.
 - **Tweaks after the first look on the board.** The ruins map (05, power plant and ruins biomes) is now a ghostly
   purple with lavender mist (`tools/pack_yard.py` gained optional `hue:`, `tint:` and `mist:` lines per map). The
   dock buttons are 72 px apart instead of 56, with a 16 px dead gap between their tap zones. The stat card's first
