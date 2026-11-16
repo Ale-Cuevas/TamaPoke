@@ -551,5 +551,54 @@ class TestPackYard(unittest.TestCase):
             self.py.decode_tpy1(b'TPY1\x01\xf0\xf0\x01' + bytes(10))
 
 
+_REAL_TILESETS = os.environ.get('TAMAPOKE_TILESETS', '/home/ale/projects/TamaPoke/tools/yard/tilesets')
+
+
+@unittest.skipUnless(_pil_ok(), 'Pillow no disponible')
+@unittest.skipUnless(os.path.isdir(os.path.join(_REAL_TILESETS, 'sunnyside')),
+                     'paquete Sunnyside no instalado (TAMAPOKE_TILESETS)')
+class TestYardMapsRealPack(unittest.TestCase):
+    """Empaqueta cada mapa de tools/yard/maps con el paquete de baldosas de verdad (no esta en git:
+    se salta si falta). Sin vistas previas: el resize de Pillow del sistema puede estar roto."""
+
+    # celdas sueltas (fuera de la zona grande) que ya tenian los mapas anteriores a esta prueba;
+    # los mapas nuevos no pueden tener ninguna
+    KNOWN_POCKETS = {'01-meadow': 2, '02-quarry': 6}
+
+    def regiones(self, walk):
+        libres = {(x, y) for y in range(15) for x in range(15)
+                  if not (walk[(y * 15 + x) // 8] >> ((y * 15 + x) % 8)) & 1}
+        tamanos = []
+        while libres:
+            pila = [libres.pop()]
+            n = 1
+            while pila:
+                x, y = pila.pop()
+                for v in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                    if v in libres:
+                        libres.remove(v)
+                        pila.append(v)
+                        n += 1
+            tamanos.append(n)
+        return sorted(tamanos, reverse=True)
+
+    def test_todos_los_mapas(self):
+        import pack_yard
+        yard = os.path.join(ROOT, 'tools', 'yard')
+        maps = pack_yard.map_files(yard, [])
+        self.assertGreaterEqual(len(maps), 5)
+        for mp in maps:
+            with self.subTest(mapa=mp.stem):
+                meta, img, blocked = pack_yard.compose(mp, yard, _REAL_TILESETS)
+                data, colores = pack_yard.encode_tpy1(img, blocked)
+                self.assertLessEqual(colores, 256)
+                self.assertLessEqual(len(data), 60 * 1024)
+                _, walk, _ = pack_yard.decode_tpy1(data)
+                regiones = self.regiones(walk)
+                self.assertGreaterEqual(regiones[0], 40, f'zona para pasear: {regiones}')
+                self.assertLessEqual(sum(regiones[1:]), self.KNOWN_POCKETS.get(mp.stem, 0),
+                                     f'celdas sueltas fuera de la zona grande: {regiones}')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
