@@ -1,5 +1,5 @@
 #pragma once
-// El huevo del patio (v2.0, fase Y3): eclosiona solo a las 4 h de tiempo real desde que se pone en el
+// El huevo del patio (v2.0, fase Y3): eclosiona solo a las 2 h de tiempo real desde que se pone en el
 // patio, y cada sacudida de la placa (motion.h; una cada 30 s como mucho) le quita 5 min, hasta 2 h en
 // total: lo mas rapido son 2 h. El tiempo es el del RTC (epoch en segundos, como lastSeenEpoch), asi
 // que corre tambien con la placa apagada. Logica pura (test/test_eggtimer.cpp).
@@ -10,9 +10,9 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define EGG_HATCH_MIN 240           // 4 h de tiempo real
+#define EGG_HATCH_MIN 120           // 2 h de tiempo real (era 4 h: se hacia muy largo)
 #define EGG_SHAKE_MIN 5             // lo que quita una sacudida
-#define EGG_SHAKE_CAP 120           // como mucho 2 h en total
+#define EGG_SHAKE_CAP 60            // como mucho 1 h en total: lo mas rapido, 1 h
 #define EGG_SHAKE_COOLDOWN_MS 30000 // entre dos sacudidas que cuentan
 #define EGG_EPOCH_MIN 1000000000UL  // 2001: menos que esto no es una hora de verdad
 #define EGG_NO_CLOCK 1UL            // puesto sin hora (se fecha al saberla)

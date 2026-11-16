@@ -3,7 +3,7 @@
 #include <Preferences.h>
 #include "growth.h"  // ritmo de los niveles (v1.35): cuanto cuesta cada uno
 #include "box.h"     // la caja (v1.37): el registro de un bicho guardado
-#include "eggtimer.h" // el huevo del patio (v2.0, Y3): 4 h de tiempo real, las sacudidas lo adelantan
+#include "eggtimer.h" // el huevo del patio (v2.0, Y3): 2 h de tiempo real, las sacudidas lo adelantan
 
 // 1 tick = 1 minuto de juego. Baja este valor para probar mas rapido
 // (p. ej. 5000UL = las estadisticas caen 12x mas rapido).
@@ -375,7 +375,7 @@ public:
   bool hatchFromBag();  // casa vacia: el boton "Abrir un huevo" (uno de la mochila a casa)
   uint8_t eggCracks() const { return yardEgg() ? eggCracksFor(eggMinutesLeft()) : eggTaps; }
   // el huevo del patio (v2.0, Y3; eggtimer.h). La UI pone timedEggs (TP_YARD) antes de begin(): cada huevo
-  // que llega a casa se pone en el patio y eclosiona solo a las 4 h reales (las sacudidas lo adelantan,
+  // que llega a casa se pone en el patio y eclosiona solo a las 2 h reales (las sacudidas lo adelantan,
   // hasta 2 h). El inicial y uno a medias del sistema de antes (sin "yegg") siguen con los 3 toques.
   bool timedEggs = false;
   bool yardEgg() const { return timedEggs && isEgg() && !vacant && !starterPick && eggPlaced; }

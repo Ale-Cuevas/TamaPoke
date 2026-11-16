@@ -302,7 +302,7 @@ void Pet::tick() {
   ageMinutes++;
 
   if (isEgg()) {
-    if (yardEgg()) {  // el del patio (Y3): a las 4 h reales menos lo que le quitaron las sacudidas
+    if (yardEgg()) {  // el del patio (Y3): a las 2 h reales menos lo que le quitaron las sacudidas
       eggClockStamp();
       if (eggMinutesLeft() == 0) hatch();
     } else if (ageMinutes >= 3) {
