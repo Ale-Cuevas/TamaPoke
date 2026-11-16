@@ -1,0 +1,35 @@
+name: Ruins
+legend: sunnyside
+seed: 9
+ground:
+ggggggggggggggg
+ggggggggggggggg
+ggggggggggggggg
+ggggggggggggggg
+ggggggggggggggg
+gggggddddddgggg
+ggggdddddddgggg
+ggggddddddddggg
+ggggdddddddgggg
+gggggddddddgggg
+ggggggggggggggg
+ggggggggggggggg
+ggggggggggggggg
+ggggggggggggggg
+ggggggggggggggg
+objects:
+...............
+...t.......T...
+...............
+..B............
+.<VV.......VV|.
+.Q..........q..
+...............
+.....r.........
+.........r..m..
+B...........+..
+..X+.......n...
+...........W...
+.n<V..........t
+...............
+...............

@@ -1,0 +1,35 @@
+name: Beach
+legend: sunnyside
+seed: 5
+ground:
+vvvvvvvvvvvvvvv
+vvvvvvvvvvvvvvv
+vvvvvvvvvvvvvvv
+vvvvvvvvvvvvvvv
+yyyyyyyyyyyyyyy
+yyyyyyyyyyyyyyy
+yyyyyyyyyyyyyyy
+yyyyyyyyyyyyyyy
+yyyyyyyyyyyyyyy
+yyyyyyyyyyyyyyy
+yyyyyyyyyyyyyyy
+vvvvvvvvvvvvvvv
+vvvvvvvvvvvvvvv
+vvvvvvvvvvvvvvv
+vvvvvvvvvvvvvvv
+objects:
+...............
+...*.......*...
+.*...........*.
+_______________
+.R..........r..
+............R..
+...x.......e...
+.........c.....
+..e............
+.H...r.....x...
+...c.........b.
+~~~~P~~~~~~~~~~
+.*.....*.....*.
+....*......*...
+...............
