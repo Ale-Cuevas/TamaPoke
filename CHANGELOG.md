@@ -8,6 +8,16 @@ keeps your Pokémon.
 
 ## [Unreleased]
 
+Work in progress on `feature/yard`: the "yard" redesign (`docs/yard-prototype/DESIGN_YARD_UI.md`), released as 2.0.
+
+### Added
+
+- **Yard UI kit (phase Y0).** The dark-panel and world-HUD pieces of the new look (`yard_ui.h` + "kit del patio" in
+  the sketch): panel disc, title, cards, pills, coin badge, chevrons, pager, round back button, 3-button dock,
+  green toast, speech bubble and HP bar. Every tap zone is at least 48 px and inside the round frame (host test).
+  A demo screen shows them (serial `YARDUI [0-2]`: shop panel, home HUD, stage); nothing else changes yet.
+  The dock is icons only: labels are unreadable at size 1 and overlap at size 2 ("Mochila").
+
 ## [1.68] - 2026-11-15
 
 ### Fixed

@@ -46,6 +46,7 @@
 #include "ballgame.h" // minijuego de la pokeball: velocidad segun la puntuacion y la fisica (logica pura)
 #include "zengame.h"  // cascada (v1.43): la barra de concentracion, la franja y los golpes de agua (logica pura)
 #include "dashgame.h" // carrera en trineo (v1.44): direccion, velocidad, filas de obstaculos y choques (logica pura)
+#include "yard_ui.h"  // el patio (v2.0): paleta, geometria y toques del kit de interfaz nuevo (logica pura)
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
@@ -138,6 +139,9 @@ uint32_t cakeHintUntil = 0;
 uint32_t tastesMsgUntil = 0;  // la baya favorita cambio al evolucionar (v1.57): "Sus gustos cambiaron!"   // tocar la tarta sin ninguna (v1.54): la cabecera dice donde se encuentra
 static_assert(S_IT_REVIVE - S_IT_GOLDEN == IT_REVIVE - IT_GOLDEN && IT_REVIVE + 1 == IT_COUNT, "nombres de objeto en el orden de IT_*");
 bool clockOpen = false;       // pantalla de ajuste de hora (deslizar abajo)
+#define YDEMO_PAGES 3
+bool yardDemoOpen = false;    // el patio (v2.0, Y0): muestra del kit de interfaz (serie YARDUI)
+uint8_t yardDemoPage = 0;     // 0 panel (tienda), 1 mundo (casa), 2 fase
 int clockH = 12, clockM = 0;  // hora en edicion
 
 // escena de bano: espuma sobre el bicho y limpieza al reventar
@@ -974,6 +978,12 @@ void handleSerial() {
   } else if (line == "STAGEDAY") {  // los premios del jefe de hoy, otra vez
     pet.clearStageDay();
     Serial.println("DONE");
+  } else if (line == "YARDUI" || line.startsWith("YARDUI ")) {  // YARDUI [pagina]: muestra del kit del patio (v2.0)
+    wakeUI();
+    yardDemoPage = line.length() > 7 ? (uint8_t)(line.substring(7).toInt() % YDEMO_PAGES) : 0;
+    yardDemoOpen = true;
+    Serial.printf("yardui page=%u\n", yardDemoPage);
+    Serial.println("DONE");
   } else if (line == "BADGES" || line.startsWith("BADGES ")) {  // BADGES <mascara>: las insignias (0-255)
     if (line.length() > 7) pet.setBadges((uint8_t)line.substring(7).toInt());
     Serial.printf("badges=%u hoy=%u equipo=%lu,%lu,%lu,%lu\n", pet.badgeMask(), pet.stageRewardMask(),
@@ -1316,7 +1326,7 @@ void handleTouch() {
     tXl = x;
     tYl = y;
     // pulsacion larga sin moverse sobre el bicho -> dialogo de soltar
-    if (!holdFired && !swallowGesture && !galleryOpen && !boxOpen && !stagesOpen && !teamOpen && !cardOpen && !bagOpen && !kbOpen && !clockOpen && !menuKind && millis() - tStart > 3000 &&
+    if (!holdFired && !swallowGesture && !yardDemoOpen && !galleryOpen && !boxOpen && !stagesOpen && !teamOpen && !cardOpen && !bagOpen && !kbOpen && !clockOpen && !menuKind && millis() - tStart > 3000 &&
         abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && inPetZone(tX0, tY0) && poopAt(tX0, tY0) < 0 &&
         !pet.isEgg() && !confirmUntil && !pet.busyEnding()) {
       confirmUntil = millis() + 10000;
@@ -1357,6 +1367,10 @@ void onSwipeV(int dir) {
 // deslizar: dir +1 = hacia la derecha
 void onSwipe(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
+  if (yardDemoOpen) {  // muestra del kit: pasa de pagina como las flechas
+    yardDemoPage = (uint8_t)((yardDemoPage + YDEMO_PAGES + (dir > 0 ? -1 : 1)) % YDEMO_PAGES);
+    return;
+  }
   if (gameOpen || sackOpen || zenOpen || dashOpen || bagOpen || kbOpen || clockOpen || battleOpen()) return;
   if (pet.isDying()) return;  // v1.60: el dialogo del Revivir no se esquiva
   if (cardOpen) {  // dentro de la ficha: cambiar entre las CARD_PAGES paginas
@@ -1448,6 +1462,10 @@ void onBack() {
   wakeUI();
   if (pet.awaitingStarter()) return;  // hay que elegir inicial
   if (pet.isDying()) return;          // v1.60: el dialogo del Revivir no se cierra con USER
+  if (yardDemoOpen) {
+    yardDemoOpen = false;
+    return;
+  }
   if (sackOpen) {                     // abandona (sin premio si aun corre el tiempo)
     sackOpen = false;
     return;
@@ -1506,6 +1524,10 @@ void onTap(int16_t x, int16_t y) {
         break;
       }
     }
+    return;
+  }
+  if (yardDemoOpen) {
+    yardDemoTap(x, y);
     return;
   }
   if (galleryOpen) {
@@ -2280,7 +2302,7 @@ static bool staticScreen() {
   if (galleryOpen || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen()) return false;  // la galeria gestiona su propio repintado
   if (stagesOpen || teamOpen) return !timeLeft(stShakeUntil);  // menus quietos, salvo la casilla que tiembla
   if (boxOpen) return !boxMove && !timeLeft(boxShakeUntil);  // la caja, quieta salvo la luz o un hueco que tiembla
-  if (kbOpen || clockOpen || bagOpen) return true;
+  if (yardDemoOpen || kbOpen || clockOpen || bagOpen) return true;
   return cardOpen && cardPage != 0;  // la pagina 0 tiene el retrato animado
 }
 uint32_t walkStepsToday();
@@ -2292,6 +2314,8 @@ static uint32_t screenKey() {
   h = mixKey(h, gBright);                      // el aviso de brillo va encima de todo
   h = mixKey(h, timeLeft(briToastUntil) > 0);  // y al irse tiene que repintarse
   h = mixKey(h, gOrbitStep);                   // la orbita la mueve: hay que volver a mandarla
+  h = mixKey(h, yardDemoOpen ? 100u + yardDemoPage : 0u);
+  h = mixKey(h, gLang);
   if (stagesOpen || teamOpen) {
     mixStageKey(h);
   } else if (boxOpen) {
@@ -2359,6 +2383,10 @@ bool render() {
   }
   if (pet.awaitingStarter()) {  // primera partida: elegir inicial (prioridad total)
     renderStarterSelect();
+    return true;
+  }
+  if (yardDemoOpen) {  // muestra del kit del patio (serie YARDUI)
+    renderYardDemo();
     return true;
   }
   if (galleryOpen) {
@@ -5871,6 +5899,254 @@ void drawBattery(int x) {
     int fw = (w - 4) * pc / 100;
     if (fw > 0) gfx->fillRect(x + 2, y + 2, fw, h - 4, col);
   }
+}
+
+// =================== kit del patio (v2.0, fase Y0; geometria en yard_ui.h) ===================
+// Piezas de la interfaz nueva. Los paneles son un disco casi negro con tarjetas; el mundo
+// lleva el texto con sombra para leerse sobre el mapa. Pantalla de muestra: serie YARDUI.
+
+void yPanelBg() {
+  gfx->fillScreen(0x0000);  // fuera del disco: negro (el marco redondo lo tapa igualmente)
+  gfx->fillCircle(Y_CX, Y_CY, Y_PANEL_R, Y_PANEL_BG);
+}
+
+// texto con sombra de 2 px, para encima del mapa
+void yShadowText(int x, int y, const char *s, uint8_t size, uint16_t col) {
+  setSize(size);
+  gfx->setTextColor(Y_SHADOW);
+  setCur(x + 2, y + 2);
+  printT(s);
+  gfx->setTextColor(col);
+  setCur(x, y);
+  printT(s);
+}
+
+void yTitle(const char *t, const char *sub) {
+  gfx->setTextColor(Y_TEXT);
+  setSize(3);
+  setCur(centerX(t, 3), Y_TITLE_Y);
+  printT(t);
+  if (sub && *sub) {
+    gfx->setTextColor(Y_TEXT_DIM);
+    setSize(2);
+    setCur(centerX(sub, 2), Y_SUB_Y);
+    printT(sub);
+  }
+}
+
+void yCard(int x, int y, int w, int h, bool hi) {
+  gfx->fillRoundRect(x, y, w, h, Y_CARD_RAD, hi ? Y_CARD_HI : Y_CARD);
+}
+
+int yPillWidth(const char *label) {
+  setSize(2);
+  return yPillW(textW(label, 2));
+}
+
+// pastilla redondeada con el texto en blanco; devuelve su ancho
+int yPill(int x, int y, const char *label, uint16_t col) {
+  int w = yPillWidth(label);
+  gfx->fillRoundRect(x, y, w, Y_PILL_H, Y_PILL_H / 2, col);
+  gfx->setTextColor(Y_TEXT);
+  setSize(2);
+  setCur(x + (w - textW(label, 2)) / 2, y + (Y_PILL_H - 14) / 2);
+  printT(label);
+  return w;
+}
+
+// moneda: disco dorado con el canto oscuro y un brillo
+void yCoin(int cx, int cy, int r) {
+  gfx->fillCircle(cx, cy, r, Y_COIN_DARK);
+  gfx->fillCircle(cx - 1, cy - 1, r - 2, Y_COIN);
+  gfx->fillRect(cx - 1, cy - r / 2, 2, r, Y_COIN_DARK);  // la raya del centro
+}
+
+// moneda + numero, centrados como grupo en cx; shadow = sobre el mapa
+void yCoinBadge(int cx, int y, uint32_t n, bool shadow) {
+  char s[12];
+  snprintf(s, sizeof(s), "%lu", (unsigned long)n);
+  setSize(2);
+  int tw = textW(s, 2), w = 18 + 6 + tw, x = cx - w / 2;
+  if (shadow) gfx->fillCircle(x + 9 + 2, y + 7 + 2, 9, Y_SHADOW);
+  yCoin(x + 9, y + 7, 9);
+  if (shadow) yShadowText(x + 24, y, s, 2, Y_TEXT);
+  else {
+    gfx->setTextColor(Y_TEXT);
+    setCur(x + 24, y);
+    printT(s);
+  }
+}
+
+static void yChevron(int cx, int cy, int dir, uint16_t col) {
+  // dos trazos de 4 px: "<" (dir -1) o ">" (dir +1)
+  for (int t = -2; t <= 1; t++) {
+    gfx->drawLine(cx - dir * 5 + t, cy - Y_CHEV_HALF, cx + dir * 5 + t, cy, col);
+    gfx->drawLine(cx + dir * 5 + t, cy, cx - dir * 5 + t, cy + Y_CHEV_HALF, col);
+  }
+}
+
+void yChevrons(bool showL, bool showR) {
+  if (showL) yChevron(Y_CHEV_LX, Y_CY, -1, Y_TEXT);
+  if (showR) yChevron(Y_CHEV_RX, Y_CY, 1, Y_TEXT);
+}
+
+void yPager(int cur, int n, int y) {
+  char s[12];
+  snprintf(s, sizeof(s), "%d/%d", cur + 1, n);
+  gfx->setTextColor(Y_TEXT_DIM);
+  setSize(2);
+  setCur(centerX(s, 2), y);
+  printT(s);
+}
+
+// boton redondo de volver con una flecha curva blanca
+void yBackBtn() {
+  gfx->fillCircle(Y_BACK_X, Y_BACK_Y, Y_BACK_R, Y_BACK);
+  // arco de 3/4 de vuelta (de las 12 en sentido horario hasta las 9) y la punta arriba a la izquierda
+  for (int a = -90; a <= 180; a += 8) {
+    float r = a * (float)PI / 180.0f;
+    gfx->fillCircle(Y_BACK_X + (int)lroundf(cosf(r) * 8), Y_BACK_Y + 2 + (int)lroundf(sinf(r) * 8), 1, Y_TEXT);
+  }
+  gfx->fillTriangle(Y_BACK_X - 1, Y_BACK_Y - 12, Y_BACK_X - 1, Y_BACK_Y - 1, Y_BACK_X - 8, Y_BACK_Y - 6, Y_TEXT);
+}
+
+// dock de la casa: 3 circulos de color con su icono y una sombra debajo
+void yDock(const YDockItem *items, int pressed) {
+  for (int i = 0; i < Y_DOCK_N; i++) {
+    int cx = yDockX(i), cy = Y_DOCK_Y + (i == pressed ? 2 : 0);
+    gfx->fillCircle(cx + 2, Y_DOCK_Y + 3, Y_DOCK_R, Y_SHADOW);
+    gfx->fillCircle(cx, cy, Y_DOCK_R, items[i].off ? (uint16_t)0x8410 : items[i].col);
+    gfx->drawCircle(cx, cy, Y_DOCK_R, Y_TEXT);
+    drawMap(items[i].icon, 16, cx - 16, cy - 16, 2, false);
+  }
+}
+
+// aviso verde encima de una fila (tarjeta), con el texto centrado
+void yToast(int x, int y, int w, int h, const char *text) {
+  gfx->fillRoundRect(x, y, w, h, Y_CARD_RAD, Y_ACCENT_GO);
+  gfx->setTextColor(Y_TEXT);
+  setSize(2);
+  setCur(x + (w - (int)textW(text, 2)) / 2, y + (h - 14) / 2);
+  printT(text);
+}
+
+// globo de dialogo blanco con la cola hacia abajo; (cx, tipY) = la punta de la cola
+void yBubble(int cx, int tipY, const char *text) {
+  setSize(2);
+  int tw = textW(text, 2), w = tw + 20, h = 30;
+  int x = cx - w / 2;
+  if (x < 20) x = 20;
+  if (x + w > 446) x = 446 - w;
+  int y = tipY - 8 - h;
+  gfx->fillRoundRect(x + 2, y + 2, w, h, 10, Y_SHADOW);
+  gfx->fillRoundRect(x, y, w, h, 10, Y_TEXT);
+  gfx->fillTriangle(cx - 7, y + h - 1, cx + 7, y + h - 1, cx, tipY, Y_TEXT);
+  gfx->setTextColor(UI_INK);
+  setCur(x + 10, y + (h - 14) / 2);
+  printT(text);
+}
+
+// barra de vida de 10 px con "cur/max" encima, a la izquierda
+void yHpBar(int x, int y, int w, int cur, int max, uint16_t col) {
+  char s[16];
+  snprintf(s, sizeof(s), "%d/%d", cur, max);
+  gfx->setTextColor(Y_TEXT);
+  setSize(2);
+  setCur(x, y - 20);
+  printT(s);
+  gfx->fillRoundRect(x, y, w, Y_HP_H, Y_HP_H / 2, Y_CARD_HI);
+  int fw = max > 0 ? w * (cur < 0 ? 0 : cur > max ? max : cur) / max : 0;
+  if (fw >= Y_HP_H) gfx->fillRoundRect(x, y, fw, Y_HP_H, Y_HP_H / 2, col);
+}
+
+// ---- pantalla de muestra del kit (serie YARDUI [pagina]): 0 panel, 1 mundo, 2 fase ----
+// fila de la tienda de muestra: icono, nombre, precio y pastilla de comprar
+static void yDemoShopRow(int y, const char *const *icon, const char *name, int price) {
+  const int x = 70, w = 326, h = 64;
+  yCard(x, y, w, h, false);
+  drawMap(icon, 16, x + 12, y + 16, 2, false);
+  gfx->setTextColor(Y_TEXT);
+  setSize(2);
+  setCur(x + 56, y + 12);
+  printT(name);
+  yCoin(x + 63, y + 45, 7);
+  char s[8];
+  snprintf(s, sizeof(s), "%d", price);
+  gfx->setTextColor(Y_TEXT_DIM);
+  setCur(x + 76, y + 38);
+  printT(s);
+  int pw = yPillWidth(T(S_BUY));
+  yPill(x + w - 12 - pw, y + (h - Y_PILL_H) / 2, T(S_BUY), Y_ACCENT_GO);
+}
+
+static void yDemoShop() {
+  yPanelBg();
+  yTitle(T(S_SHOP), nullptr);
+  yCoinBadge(Y_CX, Y_SUB_Y, 37, false);
+  gfx->drawFastHLine(150, 100, 166, Y_CARD_HI);
+  yDemoShopRow(118, SPR_ICON_GOLDEN, T(S_IT_GOLDEN), 10);
+  yDemoShopRow(194, SPR_ICON_CAKE, T(S_IT_CAKE), 40);
+  yDemoShopRow(270, SPR_ICON_REVIVE, T(S_IT_REVIVE), 80);
+  yToast(70, 194, 326, 64, T(S_PURCHASED));
+  yChevrons(true, true);
+  yPager(1, 3, 352);
+  yBackBtn();
+}
+
+static void yDemoWorld() {
+  // un prado de cuadros de 32 px (lo que mide una baldosa de 16 a escala 2) en dos verdes
+  for (int ty = 0; ty < 466; ty += 32)
+    for (int tx = 0; tx < 466; tx += 32)
+      gfx->fillRect(tx, ty, 32, 32, ((tx + ty) / 32) & 1 ? C565(0x8c, 0xc6, 0x5a) : C565(0x80, 0xbc, 0x52));
+  drawBattery(Y_CX - BAT_ICON_W / 2);
+  yShadowText(centerX("12:30", 5), 30, "12:30", 5, Y_TEXT);
+  yCoinBadge(Y_CX, 76, 117, true);
+  // el bicho de muestra: un huevo con su sombra, y su globo con el estado
+  gfx->fillEllipse(Y_CX, 262, 26, 8, C565(0x5a, 0x8a, 0x3c));
+  drawMap(SPR_ICON_EGG, 16, Y_CX - 32, 200, 4, false);
+  yBubble(Y_CX, 192, T(S_HUNGRY));
+  YDockItem dock[Y_DOCK_N] = {
+    { SPR_ICON_CARE, Y_DOCK_CARE, false },
+    { SPR_ICON_PLAY, Y_DOCK_PLAY, false },
+    { SPR_ICON_BAG, Y_DOCK_BAG, false },
+  };
+  yDock(dock, -1);
+}
+
+static void yDemoStage() {
+  yPanelBg();
+  char t[24];
+  snprintf(t, sizeof(t), T(S_STAGE_FMT), 1u);
+  yTitle(t, stageName(0));
+  yHpBar(60, 128, 156, 48, 52, Y_ACCENT_GO);
+  yHpBar(250, 128, 156, 98, 100, Y_ACCENT_BAD);
+  // ventana de la pelea (la fase Y1 pondra aqui el bioma y los dos bichos)
+  gfx->fillRoundRect(60, 152, 346, 136, Y_CARD_RAD, C565(0x80, 0xbc, 0x52));
+  gfx->drawRoundRect(60, 152, 346, 136, Y_CARD_RAD, Y_CARD_HI);
+  gfx->setTextColor(Y_TEXT);
+  setSize(2);
+  setCur(centerX(T(S_SUPER_EFF), 2), 302);
+  printT(T(S_SUPER_EFF));
+  gfx->setTextColor(Y_TEXT_DIM);
+  setCur(centerX(T(S_CRITICAL), 2), 326);
+  printT(T(S_CRITICAL));
+  yBackBtn();
+}
+
+void renderYardDemo() {
+  if (yardDemoPage == 0) yDemoShop();
+  else if (yardDemoPage == 1) yDemoWorld();
+  else yDemoStage();
+  gfx->flush();
+}
+
+void yardDemoTap(int16_t x, int16_t y) {
+  if (yBackHit(x, y)) {
+    yardDemoOpen = false;
+    return;
+  }
+  int c = yChevronHit(x, y);
+  if (c) yardDemoPage = (uint8_t)((yardDemoPage + YDEMO_PAGES + c) % YDEMO_PAGES);
 }
 
 void drawHeader(const char *name, uint16_t nameColor, const char *msg) {

@@ -128,6 +128,8 @@ static void resetUi() {
   beh = decltype(beh){};
   walkLast = 0;
   galleryOpen = cardOpen = bagOpen = kbOpen = clockOpen = gameOpen = sackOpen = zenOpen = dashOpen = false;
+  yardDemoOpen = false;  // el patio (v2.0)
+  yardDemoPage = 0;
   zenSerialHold = -1;
   dashSerialSteerOn = false;
   dashTrailN = 0;
@@ -445,6 +447,13 @@ static const std::vector<Scene> &scenes() {
        pet.lastSeenEpoch = epochAt(10);
      } },
     { "home", [] { pokemon(25, 13); } },
+    // el patio (v2.0, fase Y0): el kit de interfaz nuevo, en sus tres paginas de muestra
+    { "yard-ui-shop", [] { pokemon(25, 13); yardDemoOpen = true; yardDemoPage = 0; } },
+    { "yard-ui-world", [] { pokemon(25, 13); yardDemoOpen = true; yardDemoPage = 1; } },
+    { "yard-ui-stage", [] { pokemon(25, 13); yardDemoOpen = true; yardDemoPage = 2; } },
+    { "yard-ui-shop-es", [] { pokemon(25, 13); yardDemoOpen = true; yardDemoPage = 0; setLang(LANG_ES); applyLangFont(); } },
+    { "yard-ui-world-es", [] { pokemon(25, 13); yardDemoOpen = true; yardDemoPage = 1; setLang(LANG_ES); applyLangFont(); } },
+    { "yard-ui-stage-es", [] { pokemon(25, 13); yardDemoOpen = true; yardDemoPage = 2; setLang(LANG_ES); applyLangFont(); } },
     { "home-dusk", [] { pokemon(7, 19); } },
     { "home-night", [] { pokemon(133, 23); pet.sleeping = true; } },
     { "home-forest", [] { pokemon(1, 9); pet.dbgSetPoops(2); pet.fullness = 20; } },

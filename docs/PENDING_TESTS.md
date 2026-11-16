@@ -73,6 +73,7 @@ Write the result on each line: a tick, or what you saw.
 | 64 | v1.66 battle types and hit size: a dual-type pet attacks with its stronger type ("Super effective!" when its second type is the one that is strong), big hits reach up to 60 % of the foe's HP (70 % with a special); EN and ES | [Battle stages](DEVICE_TESTS.md#battle-stages-v165) | pending |
 | 65 | v1.67 sudden death: in a long fight (a low-level tanky team, `STAGE 1`), from attack 21 "Sudden death!" shows, each attack hurts its attacker 10 % after the foe's bar drops ("Recoil!"), a recoil KO hands the win to the other side; EN and ES | [Battle stages](DEVICE_TESTS.md#battle-stages-v165) | pending |
 | 66 | v1.68 evening bed: put the pet to bed by touch (light button) between 20:00 and 21:59, it stays asleep (not awake a minute later) and wakes by itself at 08:00 | [Night routine](DEVICE_TESTS.md#night-routine-v163) | pending |
+| 67 | feature/yard Y0 kit: serial `YARDUI 0/1/2`; panel black is truly off, text readable at arm's length, chevrons and back button easy to hit, `<` `>` and swipes change page, USER or back closes; EN and ES | [Yard design](yard-prototype/DESIGN_YARD_UI.md) | pending |
 
 Questions only the board can answer:
 - Where is the USB-C port relative to the screen's top? Bottom edge (buttons on top).

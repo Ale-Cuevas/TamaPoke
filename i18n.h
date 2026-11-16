@@ -108,6 +108,8 @@ enum StrId : uint8_t {
   // stages: la lista de fases, el equipo, los carteles de la pelea y las insignias
   S_STAGES, S_BADGES, S_PICK_TEAM, S_START, S_BOSS, S_LOCKED, S_STAGE_CLEAR, S_STAGE_LOST,
   S_NEXT_RIVAL, S_GO_FMT, S_NEW_BADGE, S_LV_RANGE_FMT, S_TEAM_REWARD, S_REWARD_TODAY, S_STAGE_FMT,
+  // el patio (v2.0): la tienda, sus botones y las etiquetas del dock (Cuidar / Jugar / Mochila)
+  S_SHOP, S_BUY, S_USE, S_PURCHASED, S_DOCK_CARE, S_DOCK_PLAY, S_DOCK_BAG,
   STR_COUNT
 };
 

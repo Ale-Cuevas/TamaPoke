@@ -80,6 +80,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Fases", "Insignias", "Elige tu equipo", "Empezar", "JEFE", "Bloqueada", "Fase superada!", "Derrotado...",
     "Siguiente rival", "Adelante, %s!", "Nueva insignia!", "Nv.%u-%u", "Equipo: +1 h, +v\241nculo",
     "Premio disponible", "Fase %u",
+    // el patio (v2.0)
+    "TIENDA", "Comprar", "Usar", "Comprado!", "Cuidar", "Jugar", "Mochila",
   },
   // ---------------- EN ----------------
   {
@@ -154,6 +156,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Stages", "Badges", "Pick your team", "Start", "BOSS", "Locked", "Stage clear!", "Defeated...",
     "Next rival", "Go, %s!", "New badge!", "Lv.%u-%u", "Team: +1 h, +bond",
     "Reward ready", "Stage %u",
+    // el patio (v2.0)
+    "SHOP", "Buy", "Use", "Purchased!", "Care", "Play", "Bag",
   },
   // ---------------- FR ----------------
   {
@@ -228,6 +232,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Phases", "Insignes", "Choisis ton \202quipe", "Commencer", "BOSS", "Verrouill\202", "Phase r\202ussie!", "Battu...",
     "Prochain rival", "Allez, %s!", "Nouvel insigne!", "Niv.%u-%u", "\220quipe: +1 h, +lien",
     "R\202compense pr\202te", "Phase %u",
+    // el patio (v2.0)
+    "BOUTIQUE", "Acheter", "Utiliser", "Achet\202!", "Soins", "Jouer", "Sac",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -307,6 +313,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Stufen", "Abzeichen", "W\204hle dein Team", "Start", "BOSS", "Gesperrt", "Stufe geschafft!", "Besiegt...",
     "N\204chster Gegner", "Los, %s!", "Neues Abzeichen!", "Lv.%u-%u", "Team: +1 Std, +Bindung",
     "Belohnung bereit", "Stufe %u",
+    // el patio (v2.0)
+    "LADEN", "Kaufen", "Nutzen", "Gekauft!", "Pflege", "Spielen", "Tasche",
   },
   // ---------------- IT ----------------
   {
@@ -381,6 +389,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Fasi", "Distintivi", "Scegli la squadra", "Via", "BOSS", "Bloccata", "Fase superata!", "Sconfitto...",
     "Prossimo rivale", "Vai, %s!", "Nuovo distintivo!", "Lv.%u-%u", "Squadra: +1 h, +legame",
     "Premio pronto", "Fase %u",
+    // el patio (v2.0)
+    "NEGOZIO", "Compra", "Usa", "Comprato!", "Cura", "Gioca", "Zaino",
   },
   // ---------------- PT ----------------
   {
@@ -455,6 +465,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Fases", "Ins\241gnias", "Escolhe a tua equipa", "Iniciar", "CHEFE", "Bloqueada", "Fase conclu\241da!", "Derrotado...",
     "Pr\242ximo rival", "Vai, %s!", "Nova ins\241gnia!", "Niv.%u-%u", "Equipa: +1 h, +la\207o",
     "Pr\202mio pronto", "Fase %u",
+    // el patio (v2.0)
+    "LOJA", "Comprar", "Usar", "Comprado!", "Cuidar", "Jogar", "Mochila",
   },
   // ---------------- JA ----------------
   {
@@ -551,6 +563,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "ステージ", "バッジ", "チームをえらぶ", "スタート", "ボス", "ロックちゅう", "ステージクリア!", "まけた...",
     "つぎのあいて", "いけ、%s!", "あたらしいバッジ!", "Lv.%u-%u", "チーム: +1じかん、+なかよし",
     "ごほうびあり", "ステージ%u",
+    // el patio (v2.0)
+    "ショップ", "かう", "つかう", "かったよ!", "おせわ", "あそぶ", "バッグ",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -630,6 +644,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "스테이지", "배지", "팀을 고르세요", "시작", "보스", "잠김", "스테이지 클리어!", "패배...",
     "다음 상대", "가자, %s!", "새 배지!", "Lv.%u-%u", "팀: +1시간, +유대",
     "보상 준비됨", "스테이지 %u",
+    // el patio (v2.0)
+    "상점", "구매", "사용", "구매 완료!", "돌보기", "놀기", "가방",
   },
 };
 
