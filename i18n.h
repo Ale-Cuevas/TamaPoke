@@ -112,6 +112,10 @@ enum StrId : uint8_t {
   S_SHOP, S_BUY, S_USE, S_PURCHASED, S_DOCK_CARE, S_DOCK_PLAY, S_DOCK_BAG,
   // el huevo del patio (v2.0, Y3): la pista de agitarlo (en el globo, con lo que le falta)
   S_EGG_SHAKE,
+  // la tienda de la mochila y los fondos (v2.0, Y4)
+  S_TAB_ITEMS, S_BACKGROUNDS, S_BUY_FMT, S_NOT_ENOUGH, S_BAG_FULL,
+  S_MAP_1, S_MAP_2, S_MAP_3, S_MAP_4, S_MAP_5,
+  S_USING, S_HOME, S_NOT_ON_SD, S_SHOP_HINT,
   STR_COUNT
 };
 

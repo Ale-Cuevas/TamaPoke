@@ -50,6 +50,7 @@
 #include "yard_ui.h"  // el patio (v2.0): paleta, geometria y toques del kit de interfaz nuevo (logica pura)
 #include "yardbg.h"   // fondos del patio (v2.0): lector de TPY1, mascara de paso y tinte (logica pura)
 #include "yard.h"     // el patio (v2.0, Y2): los bichos que pasean por el mapa (logica pura)
+#include "shop.h"     // la tienda de la mochila y el selector de fondos (v2.0, Y4b): logica pura
 // (eggtimer.h, el huevo del patio de la Y3, llega con pet.h)
 // la casa es el patio (v2.0): el mapa de arriba abajo con los bichos paseando. Con 0, la casa de
 // lado de siempre (se borra al fusionar la v2.0)
@@ -172,6 +173,15 @@ uint8_t cardPage = 0;         // 0 perfil, 1 combate, 2 medallas, 3 progreso, 4 
 bool bagOpen = false;         // mochila (v1.53): su boton en la fila de abajo, antes la pagina de paseo de la ficha
 uint8_t itemConfirm = 0;      // mochila: objeto a confirmar + 1 (0 = ninguno)
 uint32_t itemConfirmUntil = 0;
+// la tienda de la mochila y el selector de fondos (v2.0, Y4b)
+uint8_t bagTab = 0;           // 0 = Objetos, 1 = Tienda
+uint8_t shopBuyId = 0;        // tienda: objeto a comprar + 1 (0 = ninguno)
+uint32_t shopBuyUntil = 0;
+uint8_t shopToast = 0;        // aviso verde / rojo (SHT_*) y hasta cuando
+uint32_t shopToastUntil = 0;
+uint8_t yardMapPreview = 0;   // selector de fondos abierto en el mapa n (1..YARD_MAPS); solo RAM; 0 = cerrado
+enum : uint8_t { SHT_NONE = 0, SHT_OK, SHT_BROKE, SHT_FULL };
+#define SHOP_TOAST_MS 1500UL
 uint32_t bagReviveHintUntil = 0;  // la pista del Revivir en la mochila (v1.59)
 uint32_t revivedMsgUntil = 0;     // "Revivido!" en el estado tras usar un Revivir (v1.60)
 bool foundShown = false;      // el ultimo frame enseno un hallazgo: un toque lo cierra
@@ -1235,6 +1245,28 @@ void handleSerial() {
     Serial.printf("coins=%u earnedToday=%u/%u owned=0x%X chosen=%u biome=%u\n", pet.coins, pet.coinsEarnedToday(),
                   ECO_DAILY_CAP, pet.yardOwned, pet.yardChosen, pet.biomeMap());
     Serial.println("DONE");
+  } else if (line == "SHOP" || line.startsWith("BUY")) {  // SHOP: la tienda; BUY <idObjeto> / BUYMAP <n>: comprar (pruebas)
+    if (line.startsWith("BUYMAP") && line.length() > 7) {
+      uint8_t n = (uint8_t)line.substring(7).toInt();
+      bool ok = pet.buyMap(n);
+      if (ok) pet.chooseMap(pickerChoice(n, pet.biomeMap()));
+      Serial.printf("buymap %u -> %s\n", n, ok ? "ok" : "no");
+    } else if (line.startsWith("BUY ")) {
+      uint8_t id = (uint8_t)line.substring(4).toInt();
+      ShopBuy r = shopCheckItem(id, pet.coins, id < IT_COUNT ? pet.items[id] : 0, ITEM_MAX);
+      bool ok = r == SB_OK && pet.buyItem(id);
+      Serial.printf("buy %u -> %s\n", id, ok ? "ok" : r == SB_FULL ? "full" : r == SB_NOT_SOLD ? "not sold" : "no coins");
+    }
+    wakeUI();
+    Serial.printf("coins=%u tab=%u\n", pet.coins, bagTab);
+    for (int k = 0; k < SHOP_ITEMS; k++) {
+      uint8_t id = SHOP_ORDER[k];
+      Serial.printf("  item %u %s price=%u have=%u\n", id, T((StrId)(S_IT_GOLDEN + id)), priceOfItem(id), pet.items[id]);
+    }
+    for (uint8_t n = 1; n <= YARD_MAPS; n++)
+      Serial.printf("  map %u %s price=%u owned=%d chosen=%d wanted=%d%s\n", n, T((StrId)(S_MAP_1 + n - 1)), priceOfMap(n),
+                    pet.ownsMap(n), pet.yardChosen == n, pet.yardMapWanted() == n, n == pet.biomeMap() ? " (home)" : "");
+    Serial.println("DONE");
   } else if (line == "STATS") {
     Serial.printf("spec=%d nv=%u com=%u fel=%u ene=%u lim=%u desc=%u sd=%d mon=%d bat=%d usb=%d rtc=%u\n",
                   pet.speciesId, pet.level(), pet.fullness, pet.joy, pet.energy,
@@ -1449,7 +1481,11 @@ void onSwipe(int dir) {
     yardDemoPage = (uint8_t)((yardDemoPage + YDEMO_PAGES + (dir > 0 ? -1 : 1)) % YDEMO_PAGES);
     return;
   }
-  if (gameOpen || sackOpen || zenOpen || dashOpen || bagOpen || panelKind || kbOpen || clockOpen || battleOpen()) return;
+  if (bagOpen) {  // v2.0 (Y4b): Objetos <-> Tienda, las paginas de la tienda y los mapas del selector
+    bagSwipe(dir);
+    return;
+  }
+  if (gameOpen || sackOpen || zenOpen || dashOpen || panelKind || kbOpen || clockOpen || battleOpen()) return;
   if (pet.isDying()) return;  // v1.60: el dialogo del Revivir no se esquiva
   if (cardOpen) {  // dentro de la ficha: cambiar entre las CARD_PAGES paginas
     int p = (int)cardPage + (dir > 0 ? -1 : 1);  // izquierda avanza
@@ -1581,8 +1617,10 @@ void onBack() {
   if (kbOpen) { kbOpen = false; return; }        // descarta el nombre y vuelve a la ficha
   if (clockOpen) { clockOpen = false; return; }  // sin aplicar la hora, como al deslizar
   if (pet.ceremony) return;                      // durante la despedida no hay vuelta atras
+  if (bagOpen && yardMapPreview) { yardMapPreview = 0; return; }  // selector de fondos -> tienda
+  if (bagOpen && shopBuyId) { shopBuyId = 0; return; }             // "comprar?": NO
   if (bagOpen && itemConfirm) { itemConfirm = 0; return; }  // "usar objeto?": NO
-  if (bagOpen) { bagOpen = false; return; }
+  if (bagOpen) { closeBag(); return; }
   if (cardOpen) { cardOpen = false; return; }
   if (gameOpen) { gameOpen = false; return; }    // abandona sin premio, como tocar la cabecera
   if (choiceKind) { choiceKind = 0; return; }    // ni evoluciona ni rechaza: el boton sigue ahi
@@ -2373,7 +2411,11 @@ static uint32_t screenKey() {
   } else if (bagOpen) {
     for (uint8_t n : pet.items) h = mixKey(h, n);
     for (uint32_t v : { (uint32_t)pet.eggsOwned(), (uint32_t)itemConfirm, (uint32_t)pet.sleeping, (uint32_t)gLang,
-                        (uint32_t)(timeLeft(bagReviveHintUntil) > 0) })
+                        (uint32_t)(timeLeft(bagReviveHintUntil) > 0),
+                        // v2.0 (Y4b): pestana, tienda, aviso, selector de fondos y lo que lo cambia
+                        (uint32_t)bagTab, (uint32_t)shopBuyId, (uint32_t)shopToast, (uint32_t)yardMapPreview,
+                        (uint32_t)pet.coins, (uint32_t)pet.yardOwned, (uint32_t)pet.yardChosen,
+                        (uint32_t)pet.biomeMap(), (uint32_t)(yardMapPreview ? sceneHour() : 0) })
       h = mixKey(h, v);
   } else if (kbOpen) {
     h = mixKey(h, nameLen);
@@ -2406,6 +2448,8 @@ uint32_t lastScreenKey = 0;
 // Dibuja un frame y devuelve true si lo ha volcado al panel.
 bool render() {
   if (itemConfirm && !timeLeft(itemConfirmUntil)) itemConfirm = 0;  // antes de la clave: asi se repinta
+  if (shopBuyId && !timeLeft(shopBuyUntil)) shopBuyId = 0;          // (lo mismo, "comprar?" y el aviso de la tienda)
+  if (shopToast && !timeLeft(shopToastUntil)) shopToast = 0;
   if (boxAsk && !timeLeft(boxAskUntil)) boxAsk = 0;                  // (lo mismo, el dialogo de la caja)
   foundShown = false;  // lo vuelve a poner drawWalkNews() si el hallazgo sigue en pantalla
   if (saverOn()) {  // 2 min sin tocar: salvapantallas, encima de cualquier pantalla
@@ -4823,7 +4867,7 @@ void renderCardWalk() {
 #define BAG_SLOT_H 76
 #define BAG_GAP 8
 #define BAG_X (CX - (BAG_COLS * BAG_SLOT_W + (BAG_COLS - 1) * BAG_GAP) / 2)
-#define BAG_Y 96  // panel del patio (Y1): el titulo arriba; la pestana de la tienda (Y4) ira entre los dos
+#define BAG_Y 98  // panel del patio (Y1/Y4b): las dos pestanas y las monedas arriba, la rejilla debajo
 #define BAG_HINT_Y (BAG_Y + BAG_ROWS * BAG_SLOT_H + (BAG_ROWS - 1) * BAG_GAP + 14)
 #define BAG_REVIVE_HINT_MS 3000UL  // tocar el Revivir: dice para que sirve (no se usa a mano)
 // "usar objeto?" (Y1): una tarjeta que tapa la rejilla entera, con dos pastillas, Usar (verde) y NO
@@ -4854,13 +4898,331 @@ static void bagAskPills(int &xUse, int &wUse, int &xNo, int &wNo) {
 
 void openBag() {
   bagOpen = true;
+  bagTab = 0;
   itemConfirm = 0;
+  shopBuyId = 0;
+  shopToast = 0;
+  yardMapPreview = 0;
   bagReviveHintUntil = 0;
 }
 
+// cerrar la mochila del todo (el selector de fondos suelta su mapa de prueba: el patio recarga el suyo)
+void closeBag() {
+  bagOpen = false;
+  itemConfirm = 0;
+  shopBuyId = 0;
+  shopToast = 0;
+  yardMapPreview = 0;
+}
+
+// ---------- pestanas y tienda (v2.0, Y4b) ----------
+#define BAG_TAB_Y 44      // las pastillas Objetos / Tienda (a y 44 el disco deja 229 px de ancho)
+#define BAG_TAB_GAP 10
+#define BAG_COIN_Y 78     // las monedas, centradas bajo las pestanas
+#define SHOP_BG_SLOT 7    // el 8o hueco: la tarjeta "Fondos", de ancho doble
+#define SHOP_PRICE_OFF yRgb(0x5A5E74)  // precio que no se puede pagar
+#define PICK_TOAST_Y 282
+#define PICK_PAGER_Y 322
+#define PICK_PILL_Y 350
+
+static void bagTabPills(int &xI, int &wI, int &xS, int &wS) {
+  wI = yPillWidth(T(S_TAB_ITEMS));
+  wS = yPillWidth(T(S_SHOP));
+  xI = CX - (wI + BAG_TAB_GAP + wS) / 2;
+  xS = xI + wI + BAG_TAB_GAP;
+}
+
+static void drawBagTabs() {
+  int xI, wI, xS, wS;
+  bagTabPills(xI, wI, xS, wS);
+  yPill(xI, BAG_TAB_Y, T(S_TAB_ITEMS), bagTab == 0 ? Y_BACK : Y_CARD);
+  yPill(xS, BAG_TAB_Y, T(S_SHOP), bagTab == 1 ? Y_BACK : Y_CARD);
+  yCoinBadge(CX, BAG_COIN_Y, pet.coins, false);
+}
+
+// moneda pequena + precio, centrados como grupo en cx (y = arriba del texto)
+static void shopPrice(int cx, int y, uint16_t price, uint16_t col) {
+  char s[8];
+  snprintf(s, sizeof(s), "%u", (unsigned)price);
+  setSize(2);
+  int tw = textW(s, 2), w = 14 + 5 + tw, x = cx - w / 2;
+  yCoin(x + 7, y + 7, 7);
+  gfx->setTextColor(col);
+  setCur(x + 19, y);
+  printT(s);
+}
+
+// aviso (verde: comprado; rojo: no se pudo) con texto centrado
+static void shopDrawToast(int y) {
+  if (!shopToast) return;
+  const char *t = shopToast == SHT_OK ? T(S_PURCHASED) : shopToast == SHT_BROKE ? T(S_NOT_ENOUGH) : T(S_BAG_FULL);
+  setSize(2);
+  int w = textW(t, 2) + 32;
+  yToastC(CX - w / 2, y, w, 32, t, shopToast == SHT_OK ? Y_ACCENT_GO : Y_ACCENT_BAD);
+}
+
+static void shopSetToast(uint8_t kind) {
+  shopToast = kind;
+  shopToastUntil = millis() + SHOP_TOAST_MS;
+}
+
+// una tarjeta de la tienda: icono, cuanto hay (x3) y el precio, gris si no se puede pagar
+static void shopCell(int k, uint8_t id) {
+  int x, y;
+  bagSlotXY(k, x, y);
+  uint8_t n = pet.items[id];
+  uint16_t pr = priceOfItem(id);
+  bool can = shopCheckItem(id, pet.coins, n, ITEM_MAX) == SB_OK;
+  yCard(x, y, BAG_SLOT_W, BAG_SLOT_H, false);
+  drawMap(ITEM_ICON[id], 16, x + 6, y + 6, 2, false);
+  char c[6];
+  snprintf(c, sizeof(c), "x%u", n);
+  gfx->setTextColor(n >= ITEM_MAX ? UI_BAR_WARN : n ? Y_TEXT : Y_TEXT_DIM);
+  setSize(2);
+  setCur(x + 42, y + 13);
+  printT(c);
+  shopPrice(x + BAG_SLOT_W / 2, y + 50, pr, can ? Y_TEXT : SHOP_PRICE_OFF);
+}
+
+#if TP_YARD
+// la tarjeta "Fondos": un paisaje en miniatura y su nombre
+static void shopBgCell() {
+  int x, y;
+  bagSlotXY(SHOP_BG_SLOT, x, y);
+  int w = 2 * BAG_SLOT_W + BAG_GAP;
+  yCard(x, y, w, BAG_SLOT_H, false);
+  gfx->fillRoundRect(x + 16, y + 8, w - 32, 34, 6, Y_BACK);
+  gfx->fillCircle(x + w - 40, y + 20, 6, Y_COIN);
+  gfx->fillRoundRect(x + 16, y + 26, w - 32, 16, 6, Y_ACCENT_GO);
+  const char *t = T(S_BACKGROUNDS);
+  gfx->setTextColor(Y_TEXT);
+  setSize(2);
+  setCur(x + (w - textW(t, 2)) / 2, y + 50);
+  printT(t);
+}
+#endif
+
+static void shopAskPills(const char *yes, int &xY, int &wY, int &xN, int &wN) {
+  wY = yPillWidth(yes);
+  wN = yPillWidth(T(S_NO));
+  xY = CX - (wY + BAG_ASK_PILL_GAP + wN) / 2;
+  xN = xY + wY + BAG_ASK_PILL_GAP;
+}
+
+static void renderShop() {
+  for (int k = 0; k < SHOP_ITEMS; k++) shopCell(k, SHOP_ORDER[k]);
+#if TP_YARD
+  shopBgCell();
+#endif
+  if (shopToast) {
+    shopDrawToast(BAG_HINT_Y - 8);
+  } else {
+    setSize(2);
+    gfx->setTextColor(Y_TEXT_DIM);
+    setCur(centerX(T(S_SHOP_HINT), 2), BAG_HINT_Y);
+    printT(T(S_SHOP_HINT));
+  }
+  if (shopBuyId) {  // "comprar?": la tarjeta tapa la rejilla
+    uint8_t it = shopBuyId - 1;
+    uint16_t pr = priceOfItem(it);
+    bool can = shopCheckItem(it, pet.coins, pet.items[it], ITEM_MAX) == SB_OK;
+    yCard(BAG_ASK_X, BAG_ASK_Y, BAG_ASK_W, BAG_ASK_H, true);
+    drawMap(ITEM_ICON[it], 16, CX - 32, BAG_ASK_Y + 30, 4, false);
+    char q[48];
+    snprintf(q, sizeof(q), T(S_BUY_FMT), T((StrId)(S_IT_GOLDEN + it)));
+    gfx->setTextColor(Y_TEXT);
+    setSize(2);
+    setCur(centerX(q, 2), BAG_ASK_Y + 108);
+    printT(q);
+    shopPrice(CX, BAG_ASK_Y + 140, pr, can ? Y_TEXT : SHOP_PRICE_OFF);
+    int xy, wy, xn, wn;
+    shopAskPills(T(S_BUY), xy, wy, xn, wn);
+    yPill(xy, BAG_ASK_PILL_Y, T(S_BUY), can ? Y_ACCENT_GO : SHOP_PRICE_OFF);
+    yPill(xn, BAG_ASK_PILL_Y, T(S_NO), Y_ACCENT_BAD);
+  }
+}
+
+// el selector de fondos: el mapa a pantalla completa tal como lo dibuja el patio
+#if TP_YARD
+static void pickerChevrons(uint8_t n) {
+  if (n > 1) {
+    yChevron(Y_CHEV_LX + 2, Y_CY + 2, -1, Y_SHADOW);
+    yChevron(Y_CHEV_LX, Y_CY, -1, Y_TEXT);
+  }
+  if (n < YARD_MAPS) {
+    yChevron(Y_CHEV_RX + 2, Y_CY + 2, 1, Y_SHADOW);
+    yChevron(Y_CHEV_RX, Y_CY, 1, Y_TEXT);
+  }
+}
+
+// la pastilla de abajo: ancho y pintado segun su estado; el ancho tambien sirve para tocarla
+static int pickerPillW(PickerPill st, uint8_t n) {
+  if (st == PK_BUY || st == PK_BROKE) {
+    char s[8];
+    snprintf(s, sizeof(s), "%u", (unsigned)priceOfMap(n));
+    setSize(2);
+    return 14 + 6 + textW(s, 2) + 2 * Y_PILL_PAD + 4;
+  }
+  return yPillWidth(st == PK_USING ? T(S_USING) : T(S_USE));
+}
+
+static void pickerDrawPill(PickerPill st, uint8_t n) {
+  int w = pickerPillW(st, n), x = CX - w / 2, y = PICK_PILL_Y;
+  gfx->fillRoundRect(x + 2, y + 2, w, Y_PILL_H, Y_PILL_H / 2, Y_SHADOW);
+  if (st == PK_BUY || st == PK_BROKE) {
+    gfx->fillRoundRect(x, y, w, Y_PILL_H, Y_PILL_H / 2, st == PK_BUY ? Y_ACCENT_GO : Y_CARD_HI);
+    char s[8];
+    snprintf(s, sizeof(s), "%u", (unsigned)priceOfMap(n));
+    yCoin(x + Y_PILL_PAD + 9, y + Y_PILL_H / 2, 7);
+    gfx->setTextColor(st == PK_BUY ? Y_TEXT : SHOP_PRICE_OFF);
+    setSize(2);
+    setCur(x + Y_PILL_PAD + 22, y + (Y_PILL_H - 14) / 2);
+    printT(s);
+  } else if (st == PK_USE) {
+    yPill(x, y, T(S_USE), Y_ACCENT_GO);
+  } else {
+    yPill(x, y, T(S_USING), Y_CARD_HI);
+  }
+}
+
+static void renderPicker() {
+  uint8_t n = yardMapPreview;
+  yardDrawBg();  // honra yardMapPreview: carga el mapa n (o el de respaldo si falta)
+  bool ok = yardMapNow() == n;  // el que de verdad se ve
+  const char *name = T((StrId)(S_MAP_1 + n - 1));
+  if (!ok) yPanelBg();  // sin el .bin (o sin SD): un panel oscuro con el aviso
+  yShadowText(centerX(name, 3), Y_TITLE_Y, name, 3, Y_TEXT);
+  if (n == pet.biomeMap()) {
+    const char *h = T(S_HOME);
+    yShadowText(centerX(h, 2), Y_SUB_Y, h, 2, Y_ACCENT_GO);
+  }
+  if (!ok) {
+    const char *m = T(S_NOT_ON_SD);
+    yShadowText(centerX(m, 2), Y_CY - 7, m, 2, Y_TEXT_DIM);
+  }
+  pickerChevrons(n);
+  char pg[12];
+  snprintf(pg, sizeof(pg), "%u/%d", n, YARD_MAPS);
+  yShadowText(centerX(pg, 2), PICK_PAGER_Y, pg, 2, Y_TEXT);
+  pickerDrawPill(pickerPill(n, pet.yardMapWanted(), pet.ownsMap(n), pet.coins), n);
+  shopDrawToast(PICK_TOAST_Y);
+  yBackBtn();
+  gfx->flush();
+}
+
+static void pickerTap(int16_t x, int16_t y) {
+  uint8_t n = yardMapPreview;
+  if (yBackHit(x, y)) {
+    yardMapPreview = 0;
+    return;
+  }
+  int c = yChevronHit(x, y);
+  if (c) {
+    uint8_t m = pickerStep(n, c);
+    if (m) {
+      yardMapPreview = m;
+      shopToast = 0;
+      sfxPlay(SFX_TAP);
+    }
+    return;
+  }
+  PickerPill st = pickerPill(n, pet.yardMapWanted(), pet.ownsMap(n), pet.coins);
+  int w = pickerPillW(st, n);
+  if (!yPillHit(x, y, CX - w / 2, PICK_PILL_Y, w)) return;
+  uint8_t biome = pet.biomeMap();
+  if (st == PK_USE) {
+    pet.chooseMap(pickerChoice(n, biome));
+    sfxPlay(SFX_LEVEL);
+  } else if (st == PK_BUY) {
+    if (pet.buyMap(n)) {
+      pet.chooseMap(pickerChoice(n, biome));
+      shopSetToast(SHT_OK);
+      sfxPlay(SFX_LEVELUP);
+    } else {
+      shopSetToast(SHT_BROKE);
+      sfxPlay(SFX_DENY);
+    }
+  } else if (st == PK_BROKE) {
+    shopSetToast(SHT_BROKE);
+    sfxPlay(SFX_DENY);
+  }
+}
+#endif  // TP_YARD
+
+// toques en la tienda: una tarjeta pide confirmacion (Comprar / NO); "Fondos" abre el selector
+static void shopTap(int16_t x, int16_t y) {
+  if (shopBuyId) {  // solo la pastilla de Comprar compra; cualquier otro toque es NO
+    uint8_t it = shopBuyId - 1;
+    shopBuyId = 0;
+    int xy, wy, xn, wn;
+    shopAskPills(T(S_BUY), xy, wy, xn, wn);
+    if (!timeLeft(shopBuyUntil) || !yPillHit(x, y, xy, BAG_ASK_PILL_Y, wy)) return;
+    ShopBuy r = shopCheckItem(it, pet.coins, pet.items[it], ITEM_MAX);
+    if (r == SB_OK && pet.buyItem(it)) {
+      shopSetToast(SHT_OK);
+      sfxPlay(SFX_LEVELUP);
+    } else {
+      shopSetToast(r == SB_FULL ? SHT_FULL : SHT_BROKE);
+      sfxPlay(SFX_DENY);
+    }
+    return;
+  }
+  for (int k = 0; k < SHOP_ITEMS; k++) {
+    int sx, sy;
+    bagSlotXY(k, sx, sy);
+    if (!yInRect(x, y, sx, sy, BAG_SLOT_W, BAG_SLOT_H)) continue;
+    shopBuyId = SHOP_ORDER[k] + 1;
+    shopBuyUntil = millis() + 10000;
+    shopToast = 0;
+    sfxPlay(SFX_TAP);
+    return;
+  }
+#if TP_YARD
+  int bx, by;
+  bagSlotXY(SHOP_BG_SLOT, bx, by);
+  if (yInRect(x, y, bx, by, 2 * BAG_SLOT_W + BAG_GAP, BAG_SLOT_H)) {
+    uint8_t w = pet.yardMapWanted();
+    yardMapPreview = w >= 1 && w <= YARD_MAPS ? w : 1;  // se abre en el que se usa
+    shopToast = 0;
+    sfxPlay(SFX_TAP);
+  }
+#endif
+}
+
+// deslizar dentro de la mochila: en el selector, de mapa en mapa; en la tienda y en Objetos, de pestana a
+// pestana (izquierda = la siguiente)
+void bagSwipe(int dir) {
+  if (yardMapPreview) {
+    uint8_t m = pickerStep(yardMapPreview, dir > 0 ? -1 : 1);
+    if (m) {
+      yardMapPreview = m;
+      shopToast = 0;
+    }
+    return;
+  }
+  if (itemConfirm || shopBuyId) return;  // con una pregunta abierta, no
+  uint8_t t = dir > 0 ? 0 : 1;
+  if (t != bagTab) {
+    bagTab = t;
+    shopToast = 0;
+  }
+}
+
 void renderBag() {
+#if TP_YARD
+  if (yardMapPreview) {
+    renderPicker();
+    return;
+  }
+#endif
   yPanelBg();
-  yTitle(T(S_BACKPACK), nullptr);
+  drawBagTabs();
+  if (bagTab == 1) {
+    renderShop();
+    yBackBtn();
+    gfx->flush();
+    return;
+  }
 
   // una tarjeta por objeto, con su cuenta; el amuleto, enmarcado si se lleva. Sin ninguno, la
   // tarjeta queda hundida (solo el borde) y el icono en silueta.
@@ -4924,6 +5286,16 @@ void renderBag() {
 // toques en la mochila: una casilla pide confirmacion; el boton de volver (o fuera de la rejilla)
 // la cierra
 void bagTap(int16_t x, int16_t y) {
+#if TP_YARD
+  if (yardMapPreview) {
+    pickerTap(x, y);
+    return;
+  }
+#endif
+  if (bagTab == 1 && shopBuyId) {
+    shopTap(x, y);
+    return;
+  }
   if (itemConfirm) {  // solo la pastilla de Usar usa el objeto; cualquier otro toque es NO
     uint8_t it = itemConfirm - 1;
     itemConfirm = 0;
@@ -4935,7 +5307,7 @@ void bagTap(int16_t x, int16_t y) {
         fxNeeds(ns);
         sfxPlay(it == IT_GOLDEN || it == IT_CAKE ? SFX_EAT : SFX_LEVEL);
         // a la pantalla principal a verlo: comer, subir de nivel o entrenar (v1.30, "ATK +3")
-        bagOpen = false;
+        closeBag();
       } else {
         sfxPlay(SFX_DENY);
       }
@@ -4943,7 +5315,20 @@ void bagTap(int16_t x, int16_t y) {
     return;
   }
   if (yBackHit(x, y)) {  // como la tecla USER
-    bagOpen = false;
+    closeBag();
+    return;
+  }
+  int xI, wI, xS, wS;  // las pestanas
+  bagTabPills(xI, wI, xS, wS);
+  uint8_t tab = yPillHit(x, y, xI, BAG_TAB_Y, wI) ? 1 : yPillHit(x, y, xS, BAG_TAB_Y, wS) ? 2 : 0;
+  if (tab) {
+    if (bagTab != tab - 1) sfxPlay(SFX_TAP);
+    bagTab = tab - 1;
+    shopToast = 0;
+    return;
+  }
+  if (bagTab == 1) {
+    shopTap(x, y);
     return;
   }
   for (int k = 0; k < (int)BAG_SLOTS; k++) {
@@ -4963,7 +5348,7 @@ void bagTap(int16_t x, int16_t y) {
     }
     return;  // un toque en una casilla nunca cierra la mochila
   }
-  bagOpen = false;
+  closeBag();
 }
 
 // puntos de pagina de la ficha en colores claros (sobre el panel oscuro)
@@ -6303,13 +6688,14 @@ void yDock(const YDockItem *items, int pressed) {
 }
 
 // aviso verde encima de una fila (tarjeta), con el texto centrado
-void yToast(int x, int y, int w, int h, const char *text) {
-  gfx->fillRoundRect(x, y, w, h, Y_CARD_RAD, Y_ACCENT_GO);
+void yToastC(int x, int y, int w, int h, const char *text, uint16_t col) {
+  gfx->fillRoundRect(x, y, w, h, Y_CARD_RAD, col);
   gfx->setTextColor(Y_TEXT);
   setSize(2);
   setCur(x + (w - (int)textW(text, 2)) / 2, y + (h - 14) / 2);
   printT(text);
 }
+void yToast(int x, int y, int w, int h, const char *text) { yToastC(x, y, w, h, text, Y_ACCENT_GO); }
 
 // globo de dialogo blanco con la cola hacia abajo; (cx, tipY) = la punta de la cola
 void yBubble(int cx, int tipY, const char *text) {
@@ -6735,7 +7121,8 @@ static bool yardTryMap(uint8_t n) {
 // carga el mapa que toca (el del bioma, o el forzado); se mira cada frame, solo lee al cambiar
 void yardEnsureMap() {
   uint8_t b = homeBiome();
-  uint8_t want = yardMapForced ? yardMapForced : (pet.yardChosen && pet.ownsMap(pet.yardChosen) ? pet.yardChosen : YARD_MAP_FOR_BIOME[b < BIOME_COUNT ? b : 0]);
+  // el selector de fondos (Y4b) manda sobre lo elegido, solo mientras esta abierto
+  uint8_t want = yardMapForced ? yardMapForced : yardMapPreview ? yardMapPreview : (pet.yardChosen && pet.ownsMap(pet.yardChosen) ? pet.yardChosen : YARD_MAP_FOR_BIOME[b < BIOME_COUNT ? b : 0]);
   if (want == yardMapWant && yardMapEpoch == sdEpoch) return;
   yardMapWant = want;
   yardMapEpoch = sdEpoch;
@@ -7770,7 +8157,8 @@ void closeForDying() {
   }
   if (boxOpen && boxMove == BOXMV_NONE) closeBox();
   closeStages();
-  kbOpen = clockOpen = bagOpen = cardOpen = false;
+  kbOpen = clockOpen = cardOpen = false;
+  closeBag();
   itemConfirm = 0;
   choiceKind = 0;
   confirmUntil = 0;

@@ -300,6 +300,7 @@ class TestBuffersDeTexto(unittest.TestCase):
         'S_FAREWELL_BTN': ('nombre_o_apodo',),
         'S_DYING_FMT': ('nombre_o_apodo',),  # v1.60 (S_RUNAWAY_BTN ya no tiene %s)
         'S_USE_FMT': ('objeto',),
+        'S_BUY_FMT': ('objeto',),
         # la caja (v1.37): S_NOW_FMT tambien recibe "HUEVO", mas corto que cualquier nombre
         'S_STORE_Q_FMT': ('nombre_o_apodo',),
         'S_WAKE_Q_FMT': ('nombre_o_apodo',),
