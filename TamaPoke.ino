@@ -1198,6 +1198,42 @@ void handleSerial() {
   } else if (line.startsWith("FACEDOWN")) {  // FACEDOWN: boca abajo; FACEDOWN 0: la levantan
     onFaceDown(!(line.length() > 9 && line.substring(9).toInt() == 0));
     Serial.println("DONE");
+  } else if (line == "TRAVELEND") {  // TRAVELEND: el viaje termina ya (y se cobra)
+    pet.travelFinishNow();
+    travelReport();
+    Serial.println("DONE");
+  } else if (line == "TRAVELT" || line.startsWith("TRAVELT ")) {  // TRAVELT <min>: el viaje salio hace <min> minutos mas
+    if (line.length() > 8) {
+      long m = line.substring(8).toInt();
+      pet.dbgTravelElapsed((uint32_t)(m < 0 ? 0 : m));
+      wakeUI();
+    }
+    travelReport();
+    Serial.println("DONE");
+  } else if (line == "TRAVEL" || line.startsWith("TRAVEL ")) {  // TRAVEL [hueco mapa duracion]: ver / empezar un viaje
+    if (line.length() > 7) {
+      int sl = -1, de = 0, ti = 0;
+      if (sscanf(line.c_str() + 7, "%d %d %d", &sl, &de, &ti) == 3) {
+        bool ok = sl >= 0 && sl < 256 && de >= 0 && de < 256 && ti >= 0 && ti < 256 &&
+                  pet.startTravel((uint8_t)sl, (uint8_t)de, (uint8_t)ti);
+        Serial.printf("travel start %d %d %d -> %s\n", sl, de, ti, ok ? "ok" : "no");
+        wakeUI();
+      } else {
+        Serial.println("travel: TRAVEL <hueco 0-5> <mapa 1-5> <duracion 0-2 (1 h, 3 h, 8 h)>");
+      }
+    }
+    travelReport();
+    Serial.println("DONE");
+  } else if (line == "SOUV" || line.startsWith("SOUV ")) {  // SOUV [mascara]: los recuerdos; con mascara (0x.. o decimal), la pone
+    if (line.length() > 5) {
+      pet.setSouvenirMask((uint32_t)strtoul(line.c_str() + 5, nullptr, 0));
+      wakeUI();
+    }
+    Serial.printf("souvenirs %u/%u mask=0x%X\n", pet.souvenirCount(), SOUV_COUNT, (unsigned)pet.souvenirMask());
+    for (uint8_t i = 0; i < SOUV_COUNT; i++)
+      Serial.printf("  %2u map %u rar %u %s%s\n", i, souvenirDest(i), souvenirRarity(i), T((StrId)(S_SOUV_0 + i)),
+                    pet.hasSouvenir(i) ? "  [have]" : "");
+    Serial.println("DONE");
   } else if (line.startsWith("COINS")) {  // COINS [n]: pone las monedas en n (0..9999); sin n, solo las muestra
     if (line.length() > 6) {
       long n = line.substring(6).toInt();
@@ -1247,6 +1283,10 @@ void handleSerial() {
                   pet.items[IT_REVIVE], pet.lastEnd);
     Serial.printf("coins=%u earnedToday=%u/%u maps owned=0x%X chosen=%u wanted=%u\n", pet.coins,
                   pet.coinsEarnedToday(), ECO_DAILY_CAP, pet.yardOwned, pet.yardChosen, pet.yardMapWanted());
+    Serial.printf("travel %s slot=%d map=%u tier=%u left=%lus souvenirs=%u/%u mask=0x%X pending=%d\n",
+                  pet.travelling() ? "away" : "none", pet.travelling() ? (int)pet.travelSlot() : -1, pet.travelDest(),
+                  pet.travelTier(), (unsigned long)pet.travelSecondsLeft(), pet.souvenirCount(), SOUV_COUNT,
+                  (unsigned)pet.souvenirMask(), pet.travelResultPending() ? 1 : 0);
     Serial.printf("rec ball=%u bag=%u zen=%u.%u dash=%u\n", pet.gameHi, pet.strHi, pet.zenHi / 10, pet.zenHi % 10, pet.dashHi);
     // crecimiento (v1.35, growth.h): de el sale el nivel; la edad va aparte
     Serial.printf("grow=%lu lv=%u into=%u/%u age=%lu\n", (unsigned long)pet.growMin, pet.level(),
@@ -5877,6 +5917,30 @@ void eggReport() {
 }
 
 // comando BOX: la caja por serie (uid, especie, nivel, CRC) y el huevo de la incubadora
+// TRAVEL (Y5): el viaje de ahora, lo que falta y la coleccion
+void travelReport() {
+  if (pet.travelling()) {
+    Serial.printf("travel away slot=%u map=%u tier=%u start=%lu seed=%08lx left=%lus elapsed=%um\n", pet.travelSlot(),
+                  pet.travelDest(), pet.travelTier(), (unsigned long)pet.travelStartEpoch(), (unsigned long)pet.travelSeed(),
+                  (unsigned long)pet.travelSecondsLeft(), pet.travelMinutesElapsed());
+    for (uint8_t i = 0; i < travelEventCount(pet.travelTier()); i++) {
+      uint16_t off;
+      uint8_t tpl, arg;
+      travelEvent(pet.travelSeed(), pet.travelDest(), pet.travelTier(), i, &off, &tpl, &arg);
+      Serial.printf("  event %u at %02u:%02u tpl=%u arg=%u %s\n", i, off / 60, off % 60, tpl, arg,
+                    off <= pet.travelMinutesElapsed() ? "(seen)" : "");
+    }
+  } else {
+    Serial.println("travel none");
+  }
+  TravelResult r;
+  if (pet.peekTravelResult(&r))
+    Serial.printf("  result: %s map=%u tier=%u coins=%u(dup %u) grow=+%u lv %u->%u item=%d%s souv=%d%s\n", r.nick, r.dest,
+                  r.tier, r.coins, r.dupCoins, r.growMin, r.lvBefore, r.lvAfter, r.item == TRV_NONE ? -1 : r.item,
+                  r.itemLost ? " LOST" : "", r.souvenir == TRV_NONE ? -1 : r.souvenir, r.dup ? " DUP" : "");
+  Serial.printf("  souvenirs %u/%u mask=0x%X\n", pet.souvenirCount(), SOUV_COUNT, (unsigned)pet.souvenirMask());
+}
+
 void boxReport() {
   Serial.printf("active uid=%08lX spec=%d lv=%u egg=%d vacant=%d eggHeld=%d eggT=%d eggShiny=%d box=%u/%u bagEggs=%u\n",
                 (unsigned long)pet.uid, pet.speciesId, pet.isEgg() ? 0 : pet.level(),
@@ -5975,7 +6039,7 @@ static void teamBuildCands() {
   teamCandN = 0;
   if (!pet.isEgg()) teamCand[teamCandN++] = { pet.uid, (int8_t)TEAM_HOME };
   for (uint8_t k = 0; k < BOX_SLOTS; k++)
-    if (pet.boxState(k) == BOX_OK) teamCand[teamCandN++] = { pet.boxRecord(k).uid, (int8_t)k };
+    if (pet.boxState(k) == BOX_OK && !pet.slotTravelling(k)) teamCand[teamCandN++] = { pet.boxRecord(k).uid, (int8_t)k };
 }
 
 static bool teamIsPicked(uint32_t uid) {
@@ -7060,7 +7124,7 @@ void yardSyncPets() {
   h.walks = pmd.has(PMD_WALKL) || pmd.has(PMD_WALKR);
   int8_t slot = -1;
   for (uint8_t k = 0; k < BOX_SLOTS && slot < 0; k++)
-    if (pet.boxState(k) == BOX_OK) slot = (int8_t)k;
+    if (pet.boxState(k) == BOX_OK && !pet.slotTravelling(k)) slot = (int8_t)k;  // el que esta de viaje (Y5) no se ve
   YardPet &b = yardW.p[1];
   if (slot < 0) {
     b.on = false;
@@ -8393,7 +8457,7 @@ void drawVacantHome() {
     printT(line);
   }
   bool boxed = false;
-  for (uint8_t k = 0; k < BOX_SLOTS; k++) boxed |= pet.boxState(k) == BOX_OK;
+  for (uint8_t k = 0; k < BOX_SLOTS; k++) boxed |= pet.boxState(k) == BOX_OK && !pet.slotTravelling(k);
   if (boxed) {
     gfx->setTextColor(UI_TRACK);
     setCur(centerX(T(S_NOEGG_BOX), 2), 378);
@@ -8594,7 +8658,7 @@ void startStageAuto(uint8_t stage) {
   uint8_t n = 0;
   if (pet.uid && pet.teamCanFight(pet.uid)) ids[n++] = pet.uid;
   for (uint8_t k = 0; k < BOX_SLOTS && n < TEAM_MAX; k++)
-    if (pet.boxState(k) == BOX_OK) ids[n++] = pet.boxRecord(k).uid;
+    if (pet.boxState(k) == BOX_OK && !pet.slotTravelling(k)) ids[n++] = pet.boxRecord(k).uid;
   startStage(stage, ids, n);
 }
 

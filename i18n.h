@@ -116,6 +116,9 @@ enum StrId : uint8_t {
   S_TAB_ITEMS, S_BACKGROUNDS, S_BUY_FMT, S_NOT_ENOUGH, S_BAG_FULL,
   S_MAP_1, S_MAP_2, S_MAP_3, S_MAP_4, S_MAP_5,
   S_USING, S_NOT_ON_SD, S_SHOP_HINT,
+  // los viajes del patio (v2.0, Y5): los 25 recuerdos (el primero + su id, 0..24) y las 13 plantillas de sucesos (el primero + la plantilla; travel.h)
+  S_SOUV_0, S_SOUV_1, S_SOUV_2, S_SOUV_3, S_SOUV_4, S_SOUV_5, S_SOUV_6, S_SOUV_7, S_SOUV_8, S_SOUV_9, S_SOUV_10, S_SOUV_11, S_SOUV_12, S_SOUV_13, S_SOUV_14, S_SOUV_15, S_SOUV_16, S_SOUV_17, S_SOUV_18, S_SOUV_19, S_SOUV_20, S_SOUV_21, S_SOUV_22, S_SOUV_23, S_SOUV_24,
+  S_TRV_EV_0, S_TRV_EV_1, S_TRV_EV_2, S_TRV_EV_3, S_TRV_EV_4, S_TRV_EV_5, S_TRV_EV_6, S_TRV_EV_7, S_TRV_EV_8, S_TRV_EV_9, S_TRV_EV_10, S_TRV_EV_11, S_TRV_EV_12,
   STR_COUNT
 };
 
