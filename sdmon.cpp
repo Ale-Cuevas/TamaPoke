@@ -146,6 +146,7 @@ bool sdBegin() {
   if (sdReady) {
     Serial.printf("SD montada: %llu MB\n", SD_MMC.cardSize() / (1024ULL * 1024ULL));
     SD_MMC.mkdir("/mons");
+    SD_MMC.mkdir("/yard");  // fondos del patio (v2.0): /yard/NN.bin, de tools/pack_yard.py
   } else {
     Serial.println("SD no detectada (el juego usa los sprites de flash)");
   }
@@ -227,7 +228,7 @@ void SdMon::unload() {
 // ---------------------------------------------------------------------------
 // Protocolo de carga por USB (para llenar la SD sin sacarla de la placa):
 //   PUT <ruta> <bytes>\n  + datos crudos   -> "OK" ... "DONE"
-//   LS\n                                   -> listado de /mons
+//   LS\n                                   -> listado de /mons y /yard
 // Usar con tools/send_sd.py
 // ---------------------------------------------------------------------------
 
@@ -241,11 +242,11 @@ bool sdSerialCommand(const String &line) {
       return true;
     }
     if (!path.startsWith("/")) path = "/" + path;
-    // acota la escritura a /mons/: la ruta llega tal cual de la linea serie, sin
-    // sanear, asi que un PUT manipulado podria escribir en cualquier sitio de la
+    // acota la escritura a /mons/ y /yard/: la ruta llega tal cual de la linea serie,
+    // sin sanear, asi que un PUT manipulado podria escribir en cualquier sitio de la
     // tarjeta. Los dos clientes reales (tools/send_sd.py y web/index.html) ya
-    // mandan nombres con el prefijo mons/.
-    if (!path.startsWith("/mons/") || path.indexOf("..") >= 0) {
+    // mandan nombres con el prefijo mons/ (o yard/, los fondos del patio, v2.0).
+    if (!(path.startsWith("/mons/") || path.startsWith("/yard/")) || path.indexOf("..") >= 0) {
       Serial.println("ERR");
       return true;
     }
@@ -284,11 +285,12 @@ bool sdSerialCommand(const String &line) {
     Serial.println("DONE");
     return true;
   } else if (line == "LS") {
-    File dir = SD_MMC.open("/mons");
-    if (dir) {
+    for (const char *d : { "/mons", "/yard" }) {
+      File dir = SD_MMC.open(d);
+      if (!dir) continue;
       File e;
       while ((e = dir.openNextFile())) {
-        Serial.printf("%s %u\n", e.name(), (uint32_t)e.size());
+        Serial.printf("%s/%s %u\n", d + 1, e.name(), (uint32_t)e.size());
         e.close();
       }
       dir.close();

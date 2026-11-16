@@ -17,6 +17,15 @@ Work in progress on `feature/yard`: the "yard" redesign (`docs/yard-prototype/DE
   green toast, speech bubble and HP bar. Every tap zone is at least 48 px and inside the round frame (host test).
   A demo screen shows them (serial `YARDUI [0-2]`: shop panel, home HUD, stage); nothing else changes yet.
   The dock is icons only: labels are unreadable at size 1 and overlap at size 2 ("Mochila").
+- **Yard backgrounds pipeline (phase Y1b).** `tools/pack_yard.py` turns text maps (`tools/yard/maps/NN-name.txt`,
+  15x15 tiles) and a legend (`tools/yard/legends/sunnyside.txt`) into `TPY1` files: a 240x240 indexed image, its
+  RGB565 palette and a 15x15 walk mask (objects, water, the round edge and the HUD zones are blocked), plus a round
+  preview and a debug image. Two maps so far (01 meadow, 02 quarry, about 58 KB each). The Sunnyside World tile pack
+  is not in git (its licence forbids repackaging): unzip it into `tools/yard/tilesets/sunnyside/`. Run the script with
+  `uv run --no-project --with pillow` (Debian's Pillow on Python 3.14 crashes in `resize`).
+  `yardbg.h` reads and checks the files on the board, expands them to the 466x466 canvas, answers "can a pet stand
+  here", and tints the palette for dawn, dusk and night. `tools/send_sd.py --yard` sends them to `/yard/NN.bin`;
+  the board now accepts `PUT yard/...` and `LS` lists both folders.
 
 ## [1.68] - 2026-11-15
 
