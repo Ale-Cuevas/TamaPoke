@@ -45,10 +45,6 @@ inline PickerPill pickerPill(uint8_t n, uint8_t wanted, bool owned, uint16_t coi
   return coins >= priceOfMap(n) ? PK_BUY : PK_BROKE;
 }
 
-// que guardar al elegir el mapa n: el del bioma del bicho es "automatico" (0), para que al evolucionar
-// a otro bioma el patio lo siga
-inline uint8_t pickerChoice(uint8_t n, uint8_t biomeMap) { return n == biomeMap ? 0 : n; }
-
 // el siguiente mapa al navegar (sin dar la vuelta): 0 si no hay mas
 inline uint8_t pickerStep(uint8_t n, int dir) {
   int m = (int)n + dir;

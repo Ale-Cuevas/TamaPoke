@@ -940,7 +940,7 @@ void handleSerial() {
     Serial.printf("biome=%u%s\n", homeBiome(), gBiomeOverride >= 0 ? " (override)" : "");
     Serial.println("DONE");
 #if TP_YARD
-  } else if (line.startsWith("YARDBG")) {  // YARDBG <n>: fuerza el mapa n del patio (0 = el del bioma, 255 = sin mapa)
+  } else if (line.startsWith("YARDBG")) {  // YARDBG <n>: fuerza el mapa n del patio (0 = el elegido, 255 = sin mapa)
     if (line.length() > 7) yardForceMap((uint8_t)line.substring(7).toInt());
     wakeUI();
     yardReport();
@@ -1242,14 +1242,14 @@ void handleSerial() {
       pet.setCoins((uint16_t)(n < 0 ? 0 : (n > COIN_MAX ? COIN_MAX : n)));
       wakeUI();
     }
-    Serial.printf("coins=%u earnedToday=%u/%u owned=0x%X chosen=%u biome=%u\n", pet.coins, pet.coinsEarnedToday(),
-                  ECO_DAILY_CAP, pet.yardOwned, pet.yardChosen, pet.biomeMap());
+    Serial.printf("coins=%u earnedToday=%u/%u owned=0x%X chosen=%u\n", pet.coins, pet.coinsEarnedToday(),
+                  ECO_DAILY_CAP, pet.yardOwned, pet.yardChosen);
     Serial.println("DONE");
   } else if (line == "SHOP" || line.startsWith("BUY")) {  // SHOP: la tienda; BUY <idObjeto> / BUYMAP <n>: comprar (pruebas)
     if (line.startsWith("BUYMAP") && line.length() > 7) {
       uint8_t n = (uint8_t)line.substring(7).toInt();
       bool ok = pet.buyMap(n);
-      if (ok) pet.chooseMap(pickerChoice(n, pet.biomeMap()));
+      if (ok) pet.chooseMap(n);
       Serial.printf("buymap %u -> %s\n", n, ok ? "ok" : "no");
     } else if (line.startsWith("BUY ")) {
       uint8_t id = (uint8_t)line.substring(4).toInt();
@@ -1265,7 +1265,7 @@ void handleSerial() {
     }
     for (uint8_t n = 1; n <= YARD_MAPS; n++)
       Serial.printf("  map %u %s price=%u owned=%d chosen=%d wanted=%d%s\n", n, T((StrId)(S_MAP_1 + n - 1)), priceOfMap(n),
-                    pet.ownsMap(n), pet.yardChosen == n, pet.yardMapWanted() == n, n == pet.biomeMap() ? " (home)" : "");
+                    pet.ownsMap(n), pet.yardChosen == n, pet.yardMapWanted() == n, n == YARD_MAP_START ? " (start)" : "");
     Serial.println("DONE");
   } else if (line == "STATS") {
     Serial.printf("spec=%d nv=%u com=%u fel=%u ene=%u lim=%u desc=%u sd=%d mon=%d bat=%d usb=%d rtc=%u\n",
@@ -1283,8 +1283,8 @@ void handleSerial() {
     Serial.printf("ngl=%u dth=%u dying=%d dym=%u degg=%d revive=%u lend=%u\n", pet.neglectMinutes(),
                   pet.deathMinutes(), pet.isDying() ? 1 : 0, pet.dyingMinutes(), pet.deathEggSpecies(),
                   pet.items[IT_REVIVE], pet.lastEnd);
-    Serial.printf("coins=%u earnedToday=%u/%u maps owned=0x%X chosen=%u biome=%u wanted=%u\n", pet.coins,
-                  pet.coinsEarnedToday(), ECO_DAILY_CAP, pet.yardOwned, pet.yardChosen, pet.biomeMap(), pet.yardMapWanted());
+    Serial.printf("coins=%u earnedToday=%u/%u maps owned=0x%X chosen=%u wanted=%u\n", pet.coins,
+                  pet.coinsEarnedToday(), ECO_DAILY_CAP, pet.yardOwned, pet.yardChosen, pet.yardMapWanted());
     Serial.printf("rec ball=%u bag=%u zen=%u.%u dash=%u\n", pet.gameHi, pet.strHi, pet.zenHi / 10, pet.zenHi % 10, pet.dashHi);
     // crecimiento (v1.35, growth.h): de el sale el nivel; la edad va aparte
     Serial.printf("grow=%lu lv=%u into=%u/%u age=%lu\n", (unsigned long)pet.growMin, pet.level(),
@@ -2415,7 +2415,7 @@ static uint32_t screenKey() {
                         // v2.0 (Y4b): pestana, tienda, aviso, selector de fondos y lo que lo cambia
                         (uint32_t)bagTab, (uint32_t)shopBuyId, (uint32_t)shopToast, (uint32_t)yardMapPreview,
                         (uint32_t)pet.coins, (uint32_t)pet.yardOwned, (uint32_t)pet.yardChosen,
-                        (uint32_t)pet.biomeMap(), (uint32_t)(yardMapPreview ? sceneHour() : 0) })
+                        (uint32_t)pet.yardMapWanted(), (uint32_t)(yardMapPreview ? sceneHour() : 0) })
       h = mixKey(h, v);
   } else if (kbOpen) {
     h = mixKey(h, nameLen);
@@ -5092,10 +5092,6 @@ static void renderPicker() {
   const char *name = T((StrId)(S_MAP_1 + n - 1));
   if (!ok) yPanelBg();  // sin el .bin (o sin SD): un panel oscuro con el aviso
   yShadowText(centerX(name, 3), Y_TITLE_Y, name, 3, Y_TEXT);
-  if (n == pet.biomeMap()) {
-    const char *h = T(S_HOME);
-    yShadowText(centerX(h, 2), Y_SUB_Y, h, 2, Y_ACCENT_GO);
-  }
   if (!ok) {
     const char *m = T(S_NOT_ON_SD);
     yShadowText(centerX(m, 2), Y_CY - 7, m, 2, Y_TEXT_DIM);
@@ -5129,13 +5125,12 @@ static void pickerTap(int16_t x, int16_t y) {
   PickerPill st = pickerPill(n, pet.yardMapWanted(), pet.ownsMap(n), pet.coins);
   int w = pickerPillW(st, n);
   if (!yPillHit(x, y, CX - w / 2, PICK_PILL_Y, w)) return;
-  uint8_t biome = pet.biomeMap();
   if (st == PK_USE) {
-    pet.chooseMap(pickerChoice(n, biome));
+    pet.chooseMap(n);
     sfxPlay(SFX_LEVEL);
   } else if (st == PK_BUY) {
     if (pet.buyMap(n)) {
-      pet.chooseMap(pickerChoice(n, biome));
+      pet.chooseMap(n);
       shopSetToast(SHT_OK);
       sfxPlay(SFX_LEVELUP);
     } else {
@@ -7079,8 +7074,8 @@ void yardEggInfo() {
 static_assert(YBG_CANVAS == UI_SIZE, "el mapa se copia tal cual al lienzo");
 
 // ---- el fondo ----
-// mapa de cada bioma: economy.h (YARD_MAP_FOR_BIOME), con el elegido por el jugador (pet.yardChosen) por encima
-static_assert(ECO_BIOMES == BIOME_COUNT, "un mapa por bioma");
+// el mapa del patio es del jugador (Pet::yardMapWanted: el elegido, o el prado del principio), igual para
+// todos los bichos
 #define YARD_MAP_FALLBACK 1  // si falta el del bioma; si falta este tambien, el suelo liso
 #define YARD_MAP_NONE 255    // YARDBG 255: el suelo liso a proposito (para verlo)
 
@@ -7088,7 +7083,7 @@ uint8_t *yardFile = nullptr;       // el .bin entero en PSRAM (yardView.px apunt
 YardBgView yardView;
 uint16_t *yardBg = nullptr;        // 466x466 RGB565 ya tintado, en PSRAM (434 KB)
 uint8_t yardWalk[YBG_WALK_BYTES];  // la mascara de paso (solo la zona conectada mas grande)
-uint8_t yardMapForced = 0;         // YARDBG <n>; 0 = el del bioma
+uint8_t yardMapForced = 0;         // YARDBG <n>; 0 = el elegido
 uint8_t yardMapWant = 0;           // el pedido la ultima vez (0 = ninguno aun)
 uint8_t yardMapLoaded = 0;         // el cargado; 0 = el suelo liso de respaldo
 uint32_t yardMapEpoch = 0;
@@ -7120,9 +7115,8 @@ static bool yardTryMap(uint8_t n) {
 
 // carga el mapa que toca (el del bioma, o el forzado); se mira cada frame, solo lee al cambiar
 void yardEnsureMap() {
-  uint8_t b = homeBiome();
   // el selector de fondos (Y4b) manda sobre lo elegido, solo mientras esta abierto
-  uint8_t want = yardMapForced ? yardMapForced : yardMapPreview ? yardMapPreview : (pet.yardChosen && pet.ownsMap(pet.yardChosen) ? pet.yardChosen : YARD_MAP_FOR_BIOME[b < BIOME_COUNT ? b : 0]);
+  uint8_t want = yardMapForced ? yardMapForced : yardMapPreview ? yardMapPreview : pet.yardMapWanted();
   if (want == yardMapWant && yardMapEpoch == sdEpoch) return;
   yardMapWant = want;
   yardMapEpoch = sdEpoch;

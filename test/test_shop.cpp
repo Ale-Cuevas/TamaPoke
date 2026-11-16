@@ -37,9 +37,7 @@ TEST(shop, la_pastilla_del_selector) {
   CHECK_EQ(pickerPill(YARD_MAPS + 1, 2, false, 999), PK_NONE);
 }
 
-TEST(shop, elegir_el_del_bioma_es_automatico) {
-  CHECK_EQ(pickerChoice(4, 4), (uint8_t)0);
-  CHECK_EQ(pickerChoice(3, 4), (uint8_t)3);
+TEST(shop, navegar_los_mapas) {
   CHECK_EQ(pickerStep(1, -1), (uint8_t)0);
   CHECK_EQ(pickerStep(1, 1), (uint8_t)2);
   CHECK_EQ(pickerStep(YARD_MAPS, 1), (uint8_t)0);
@@ -55,16 +53,14 @@ TEST(shop, comprar_y_usar_un_mapa_con_el_pet) {
   if (p.awaitingStarter()) p.chooseStarter(4);
   p.eggTap(); p.eggTap(); p.eggTap();
   p.setCoins(500);
-  uint8_t biome = p.biomeMap();
-  uint8_t other = biome == 3 ? 4 : 3;
-  CHECK_EQ(pickerPill(biome, p.yardMapWanted(), p.ownsMap(biome), p.coins), PK_USING);
+  uint8_t start = YARD_MAP_START, other = 3;
+  CHECK_EQ(pickerPill(start, p.yardMapWanted(), p.ownsMap(start), p.coins), PK_USING);
   CHECK_EQ(pickerPill(other, p.yardMapWanted(), p.ownsMap(other), p.coins), PK_BUY);
   CHECK(p.buyMap(other));
-  p.chooseMap(pickerChoice(other, biome));
+  p.chooseMap(other);
   CHECK_EQ(p.yardMapWanted(), other);
   CHECK_EQ(pickerPill(other, p.yardMapWanted(), p.ownsMap(other), p.coins), PK_USING);
-  CHECK_EQ(pickerPill(biome, p.yardMapWanted(), p.ownsMap(biome), p.coins), PK_USE);
-  p.chooseMap(pickerChoice(biome, biome));  // de vuelta al del bioma: automatico
-  CHECK_EQ(p.yardChosen, (uint8_t)0);
-  CHECK_EQ(p.yardMapWanted(), biome);
+  CHECK_EQ(pickerPill(start, p.yardMapWanted(), p.ownsMap(start), p.coins), PK_USE);
+  p.chooseMap(start);  // de vuelta al prado
+  CHECK_EQ(p.yardMapWanted(), start);
 }

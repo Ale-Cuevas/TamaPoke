@@ -1408,11 +1408,9 @@ bool Pet::buyItem(uint8_t itemId) {
   return true;
 }
 
-uint8_t Pet::biomeMap() const { return yardMapForBiome(isEgg() ? 0 : DEX_TBL[speciesId].biome); }
-
 bool Pet::ownsMap(uint8_t n) const {
   if (n < 1 || n > YARD_MAPS) return false;
-  return (yardOwned & (1u << n)) || n == biomeMap();
+  return (yardOwned & (1u << n)) || n == YARD_MAP_START;
 }
 
 bool Pet::buyMap(uint8_t n) {

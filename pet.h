@@ -463,8 +463,8 @@ public:
 
   // --- monedas (v2.0, Y4; economy.h). Las claves de la NVS que faltan valen 0 (partidas de antes)
   uint16_t coins = 0;          // "cn": la cartera, 0..COIN_MAX
-  uint16_t yardOwned = 0;      // "ybgO": bit n = mapa n comprado (el del bioma del bicho es siempre suyo)
-  uint8_t yardChosen = 0;      // "ybg": 0 = el del bioma; si no, el mapa n (solo uno que se tenga)
+  uint16_t yardOwned = 0;      // "ybgO": bit n = mapa n comprado (del jugador, sirve para todos los bichos)
+  uint8_t yardChosen = 0;      // "ybg": 0 = el inicial (YARD_MAP_START); si no, el mapa n (solo uno que se tenga)
   // suma n; capped = cuenta para el tope diario (ECO_DAILY_CAP; minijuegos y estadios repetidos), si no
   // (primeras veces, metas de pasos) entra entera. Devuelve lo que de verdad entro (tope diario y COIN_MAX)
   uint16_t addCoins(uint16_t n, bool capped);
@@ -472,12 +472,11 @@ public:
   bool spendCoins(uint16_t n);  // false si no hay tantas (no toca nada); guarda
   // comprar un objeto de la mochila: false si no se vende, no hay monedas o no cabe (ITEM_MAX); guarda
   bool buyItem(uint8_t itemId);
-  bool ownsMap(uint8_t n) const;  // 1..YARD_MAPS: comprado, o el del bioma del bicho
+  bool ownsMap(uint8_t n) const;  // 1..YARD_MAPS: comprado, o el inicial (el prado)
   bool buyMap(uint8_t n);         // false si ya es suyo, no existe o no hay monedas; guarda
-  void chooseMap(uint8_t n);      // 0 = el del bioma; un mapa que no es suyo se ignora; guarda
-  uint8_t biomeMap() const;       // el mapa del bioma del bicho de casa (huevo: el prado)
+  void chooseMap(uint8_t n);      // 0 = el inicial; un mapa que no es suyo se ignora; guarda
   // el mapa que toca de verdad: el elegido si es suyo, si no el del bioma
-  uint8_t yardMapWanted() const { return yardChosen && ownsMap(yardChosen) ? yardChosen : biomeMap(); }
+  uint8_t yardMapWanted() const { return yardChosen && ownsMap(yardChosen) ? yardChosen : YARD_MAP_START; }
   uint16_t coinsEarnedToday() const;  // lo contado hoy para el tope diario
   uint16_t lastCoins = 0;        // lo ganado en el ultimo minijuego (la UI lo ensena; no se guarda)
   uint16_t goalBannerCoins = 0;  // monedas de las metas cruzadas desde el ultimo banner (takeGoalBanner)

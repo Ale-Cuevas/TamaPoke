@@ -34,7 +34,7 @@ Work in progress on `feature/yard`: the "yard" redesign (`docs/yard-prototype/DE
   board is tilted. The HUD is the clock, the battery and a 3-button dock: Care, Play, Bag. No more need bars,
   name or status line: the pet says how it is in a speech bubble, cycling every second when several needs are low.
   Poops drop where the pet stands and gifts lie on the grass; tap them as before. Tap the pet for its card (the
-  Box pet opens the Box). Serial `YARDBG n` forces a map (0 = by biome, 255 = fallback); `PERF` shows the yard
+  Box pet opens the Box). Serial `YARDBG n` forces a map (0 = the chosen one, 255 = fallback); `PERF` shows the yard
   timings. The egg, the empty home and the farewell/Revive screens are unchanged for now.
 - **World actions (phase Y3).**
   - Pets walk up and down with their back or front sprite (new PMD actions 12 WalkUp and 13 WalkDown, stored after
@@ -63,8 +63,10 @@ Work in progress on `feature/yard`: the "yard" redesign (`docs/yard-prototype/DE
   - The Bag has two tabs, ITEMS and SHOP (tap or swipe). The Shop sells golden berries 30, cake 40, protein, iron
     and carbos 60, Revive 80 and rare candy 150 (eggs and the charm are not sold), with a confirm card, a
     "Purchased!" toast, and "Not enough coins" / "Backpack full" when it can't.
-  - Backgrounds: a picker previews each yard map on the whole screen (`<` `>` or swipe). The species' own map is
-    free ("Home"); the others cost 100-250. Choosing the home map again follows the biome after an evolution.
+  - Backgrounds: a picker previews each yard map on the whole screen (`<` `>` or swipe). Backgrounds belong to the
+    player, not the pet: everyone starts with the meadow, and a map bought (150-250) stays yours with every pet
+    and egg that lives at home. The yard shows the chosen map; it no longer follows the species biome (first
+    built with the biome map free for each pet; changed after the board test, so maps feel like progress).
   - New save keys `cn`, `cnD`, `cnT`, `ybg`, `ybgO` (an old save starts at 0 coins). Serial `COINS [n]`, `SHOP`,
     `BUY <item>`, `BUYMAP <n>`; `STATS` shows coins and maps.
 

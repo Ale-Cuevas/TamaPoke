@@ -87,7 +87,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // la tienda de la mochila y los fondos (v2.0, Y4)
     "OBJETOS", "Fondos", "Comprar %s?", "Faltan monedas", "Mochila llena",
     "Pradera", "Cantera", "Bosque", "Playa", "Ruinas",
-    "En uso", "Casa", "No esta en la SD", "Toca para comprar",
+    "En uso", "No esta en la SD", "Toca para comprar",
   },
   // ---------------- EN ----------------
   {
@@ -169,7 +169,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // la tienda de la mochila y los fondos (v2.0, Y4)
     "ITEMS", "Backgrounds", "Buy %s?", "Not enough coins", "Backpack full",
     "Meadow", "Quarry", "Forest", "Beach", "Ruins",
-    "In use", "Home", "Not on SD card", "Tap to buy",
+    "In use", "Not on SD card", "Tap to buy",
   },
   // ---------------- FR ----------------
   {
@@ -251,7 +251,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // la tienda de la mochila y los fondos (v2.0, Y4)
     "OBJETS", "Fonds", "Acheter %s?", "Pas assez de pieces", "Sac plein",
     "Prairie", "Carriere", "Foret", "Plage", "Ruines",
-    "Utilise", "Maison", "Pas sur la SD", "Touche: acheter",
+    "Utilise", "Pas sur la SD", "Touche: acheter",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -338,7 +338,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // la tienda de la mochila y los fondos (v2.0, Y4)
     "DINGE", "Hintergruende", "%s kaufen?", "Zu wenig Muenzen", "Rucksack voll",
     "Wiese", "Steinbruch", "Wald", "Strand", "Ruinen",
-    "Aktiv", "Zuhause", "Nicht auf SD", "Tippen: kaufen",
+    "Aktiv", "Nicht auf SD", "Tippen: kaufen",
   },
   // ---------------- IT ----------------
   {
@@ -420,7 +420,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // la tienda de la mochila y los fondos (v2.0, Y4)
     "OGGETTI", "Sfondi", "Comprare %s?", "Monete insufficienti", "Zaino pieno",
     "Prato", "Cava", "Bosco", "Spiaggia", "Rovine",
-    "In uso", "Casa", "Non sulla SD", "Tocca per comprare",
+    "In uso", "Non sulla SD", "Tocca per comprare",
   },
   // ---------------- PT ----------------
   {
@@ -502,7 +502,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // la tienda de la mochila y los fondos (v2.0, Y4)
     "ITENS", "Fundos", "Comprar %s?", "Faltam moedas", "Mochila cheia",
     "Prado", "Pedreira", "Floresta", "Praia", "Ruinas",
-    "Em uso", "Casa", "Nao esta no SD", "Toque para comprar",
+    "Em uso", "Nao esta no SD", "Toque para comprar",
   },
   // ---------------- JA ----------------
   {
@@ -606,7 +606,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // la tienda de la mochila y los fondos (v2.0, Y4)
     "どうぐ", "はいけい", "%sをかう?", "コインがたりない", "バッグがいっぱい",
     "そうげん", "さいせきじょう", "もり", "ビーチ", "いせき",
-    "つかいちゅう", "ホーム", "SDカードにない", "タップでかう",
+    "つかいちゅう", "SDカードにない", "タップでかう",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -693,7 +693,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // la tienda de la mochila y los fondos (v2.0, Y4)
     "물건", "배경", "%s 살까요?", "코인이 부족해요", "가방이 가득 찼어요",
     "초원", "채석장", "숲", "해변", "유적",
-    "사용 중", "집", "SD 카드에 없음", "눌러서 구매",
+    "사용 중", "SD 카드에 없음", "눌러서 구매",
   },
 };
 

@@ -59,16 +59,13 @@ TEST(economy, precios) {
   CHECK_EQ(priceOfItem(IT_COUNT), (uint16_t)0);
   CHECK_EQ(priceOfItem(200), (uint16_t)0);
   CHECK_EQ(priceOfMap(0), (uint16_t)0);
-  CHECK_EQ(priceOfMap(1), (uint16_t)100);
+  CHECK_EQ(priceOfMap(1), (uint16_t)0);  // el prado es el inicial: no se vende
   CHECK_EQ(priceOfMap(2), (uint16_t)150);
   CHECK_EQ(priceOfMap(3), (uint16_t)150);
   CHECK_EQ(priceOfMap(4), (uint16_t)200);
   CHECK_EQ(priceOfMap(5), (uint16_t)250);
   CHECK_EQ(priceOfMap(6), (uint16_t)0);
-  CHECK_EQ(yardMapForBiome(0), (uint8_t)1);
-  CHECK_EQ(yardMapForBiome(1), (uint8_t)4);
-  CHECK_EQ(yardMapForBiome(8), (uint8_t)5);
-  CHECK_EQ(yardMapForBiome(99), (uint8_t)1);  // fuera de rango: el prado
+  CHECK_EQ(YARD_MAP_START, 1);
 }
 
 // ---------------------------------------------------------------- ganar y el tope
@@ -203,11 +200,11 @@ TEST(economy, mochila_llena_no_compra) {
 TEST(economy, mapas) {
   Pet p;
   eBorn(p);
-  uint8_t own = p.biomeMap();
-  CHECK(own >= 1 && own <= YARD_MAPS);
-  CHECK(p.ownsMap(own));  // el del bioma es siempre suyo
+  uint8_t own = YARD_MAP_START;
+  CHECK(p.ownsMap(own));  // el inicial es de todo el mundo
   CHECK(!p.buyMap(own));  // y no se compra
-  uint8_t other = own == 1 ? 2 : 1;
+  for (uint8_t n = 2; n <= YARD_MAPS; n++) CHECK(!p.ownsMap(n));  // nada mas: ni el del bioma
+  uint8_t other = 4;
   CHECK(!p.ownsMap(other));
   CHECK(!p.ownsMap(0));
   CHECK(!p.ownsMap(6));
@@ -225,16 +222,35 @@ TEST(economy, mapas) {
   p.chooseMap(other);
   CHECK_EQ(p.yardChosen, other);
   CHECK_EQ(p.yardMapWanted(), other);
-  p.chooseMap(0);  // automatico
+  p.chooseMap(0);  // 0: el inicial
   CHECK_EQ(p.yardChosen, (uint8_t)0);
   CHECK_EQ(p.yardMapWanted(), own);
+}
+
+// los mapas son del jugador: otro bicho en casa (otra especie, otro bioma) sigue teniendo lo comprado
+// y ve el mismo patio
+TEST(economy, los_mapas_valen_para_todos_los_bichos) {
+  Pet p;
+  eBorn(p);
+  p.addCoins(500, false);
+  CHECK(p.buyMap(3));
+  p.chooseMap(3);
+  int16_t first = p.speciesId;
+  for (int16_t s = 0; s < 40; s++) {
+    if (s == first) continue;
+    p.speciesId = s;  // como si otro bicho ocupara la casa
+    CHECK(p.ownsMap(3));
+    CHECK(p.ownsMap(YARD_MAP_START));
+    CHECK(!p.ownsMap(5));
+    CHECK_EQ(p.yardMapWanted(), (uint8_t)3);
+  }
 }
 
 // ---------------------------------------------------------------- guardado
 TEST(economy, la_nvs_guarda_y_un_guardado_viejo_carga_a_cero) {
   Pet p;
   eBorn(p);
-  uint8_t own = p.biomeMap(), other = own == 3 ? 4 : 3;
+  uint8_t other = 3;
   p.addCoins(120, true);
   p.addCoins(500, false);
   CHECK(p.buyMap(other));
@@ -266,7 +282,7 @@ TEST(economy, la_nvs_guarda_y_un_guardado_viejo_carga_a_cero) {
   CHECK_EQ(r.yardChosen, (uint8_t)0);
   r.lastSeenEpoch = ET;
   CHECK_EQ(r.coinsEarnedToday(), (uint16_t)0);
-  CHECK_EQ(r.yardMapWanted(), r.biomeMap());
+  CHECK_EQ(r.yardMapWanted(), (uint8_t)YARD_MAP_START);  // un guardado viejo empieza en el prado
 }
 
 TEST(economy, una_eleccion_de_un_mapa_no_suyo_guardada_se_ignora) {
@@ -275,11 +291,11 @@ TEST(economy, una_eleccion_de_un_mapa_no_suyo_guardada_se_ignora) {
   {
     Preferences nv;
     nv.begin("tamapoke", false);
-    nv.putUChar("ybg", (uint8_t)(p.biomeMap() == 5 ? 4 : 5));  // a mano, sin comprar
+    nv.putUChar("ybg", 5);  // a mano, sin comprar
     nv.end();
   }
   Pet q;
   q.begin();
   CHECK(q.yardChosen != 0);
-  CHECK_EQ(q.yardMapWanted(), q.biomeMap());  // no es suyo: el del bioma
+  CHECK_EQ(q.yardMapWanted(), (uint8_t)YARD_MAP_START);  // no es suyo: el inicial
 }

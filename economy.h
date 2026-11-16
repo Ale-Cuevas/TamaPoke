@@ -61,22 +61,10 @@ static const uint16_t ECO_ITEM_PRICE[ECO_ITEMS] = {
 };
 inline uint16_t priceOfItem(uint8_t itemId) { return itemId < ECO_ITEMS ? ECO_ITEM_PRICE[itemId] : 0; }
 
-// Mapas del patio 1..5 (los .bin de la SD: 01 prado, 02 cantera, 03 bosque, 04 playa, 05 ruinas)
+// Mapas del patio 1..5 (los .bin de la SD: 01 prado, 02 cantera, 03 bosque, 04 playa, 05 ruinas).
+// Son del jugador, no del bicho: se empieza con el prado y lo comprado vale para todos los bichos.
 #define YARD_MAPS 5
-static const uint16_t ECO_MAP_PRICE[YARD_MAPS] = { 100, 150, 150, 200, 250 };
-inline uint16_t priceOfMap(uint8_t n) { return n >= 1 && n <= YARD_MAPS ? ECO_MAP_PRICE[n - 1] : 0; }  // 0 = no existe
+#define YARD_MAP_START 1  // el prado: de todo el mundo desde el principio, no se vende
+static const uint16_t ECO_MAP_PRICE[YARD_MAPS] = { 0, 150, 150, 200, 250 };
+inline uint16_t priceOfMap(uint8_t n) { return n >= 1 && n <= YARD_MAPS ? ECO_MAP_PRICE[n - 1] : 0; }  // 0 = no se vende
 
-// mapa de cada bioma (dex.h: biome, 9 paisajes). El del propio bioma del bicho es siempre suyo
-#define ECO_BIOMES 9
-static const uint8_t YARD_MAP_FOR_BIOME[ECO_BIOMES] = {
-  1,  // 0 pradera
-  4,  // 1 playa
-  3,  // 2 bosque
-  2,  // 3 volcan (la cantera)
-  2,  // 4 montana
-  2,  // 5 nieve
-  5,  // 6 central electrica
-  1,  // 7 pantano
-  5,  // 8 ruinas
-};
-inline uint8_t yardMapForBiome(uint8_t biome) { return YARD_MAP_FOR_BIOME[biome < ECO_BIOMES ? biome : 0]; }
