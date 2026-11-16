@@ -9,8 +9,8 @@ Lang gLang = LANG_DEFAULT;
 static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
   // ---------------- ES ----------------
   {
-    "Est\240 evolucionando!", "Nam nam!", "Le gusta!", "Tiene hambre!", "Necesita un ba\244o!",
-    "Est\240 agotado...", "Est\240 triste...", "Est\240 rellenito...", "Es SHINY!!", "Est\240 feliz",
+    "Nam nam!", "Le gusta!", "Tiene hambre!", "Necesita un ba\244o!",
+    "Est\240 agotado...", "Est\240 triste...",
     "GRACIAS! Hasta siempre", "Ha muerto...", "Adi\242s! Se despide...",
     "HUEVO", "Huevo legendario!?", "Huevo raro!", "Toca el huevo...", "Se mueve!", "Est\240 a punto!",
     "POKEDEX %u/151",
@@ -63,7 +63,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // v1.53: la mochila con su boton: como se usa y dormido solo se mira
     "Toca un objeto para usarlo", "Duerme: solo mirar",
     // v1.54: la tarta: lleno durante 3 h, y tocarla sin ninguna
-    "Est\240 lleno!", "Sin tarta: camina o combate",
+    "Sin tarta: camina o combate",
     // v1.56: el botin de un combate ganado, que espera envuelto en casa
     "Regalo en casa!",
     // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
@@ -91,8 +91,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
   },
   // ---------------- EN ----------------
   {
-    "Evolving!", "Yum yum!", "It likes it!", "It's hungry!", "Needs a bath!",
-    "Worn out...", "Feeling sad...", "A bit chubby...", "It's SHINY!!", "It's happy",
+    "Yum yum!", "It likes it!", "It's hungry!", "Needs a bath!",
+    "Worn out...", "Feeling sad...",
     "THANKS! Farewell", "It has passed away...", "Bye! Waving goodbye...",
     "EGG", "Legendary egg!?", "Rare egg!", "Tap the egg...", "It moves!", "Almost there!",
     "POKEDEX %u/151",
@@ -145,7 +145,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // v1.53: la mochila con su boton: como se usa y dormido solo se mira
     "Tap an item to use it", "Asleep: just looking",
     // v1.54: la tarta: lleno durante 3 h, y tocarla sin ninguna
-    "So full!", "No cake: walk or battle",
+    "No cake: walk or battle",
     // v1.56: el botin de un combate ganado, que espera envuelto en casa
     "A gift at home!",
     // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
@@ -173,8 +173,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
   },
   // ---------------- FR ----------------
   {
-    "Il \202volue!", "Miam miam!", "Il aime \207a!", "Il a faim!", "Besoin d'un bain!",
-    "\220puis\202...", "Triste...", "Un peu rond...", "C'est SHINY!!", "Il est content",
+    "Miam miam!", "Il aime \207a!", "Il a faim!", "Besoin d'un bain!",
+    "\220puis\202...", "Triste...",
     "MERCI! Adieu", "Il est mort...", "Au revoir!",
     "OEUF", "Oeuf l\202gendaire!?", "Oeuf rare!", "Touche l'oeuf...", "Il bouge!", "Presque l\205!",
     "POKEDEX %u/151",
@@ -227,7 +227,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // v1.53: la mochila con su boton: como se usa y dormido solo se mira
     "Touche un objet pour l'utiliser", "Il dort : on regarde",
     // v1.54: la tarta: lleno durante 3 h, y tocarla sin ninguna
-    "Bien rempli !", "Pas de g\203teau: marche",
+    "Pas de g\203teau: marche",
     // v1.56: el botin de un combate ganado, que espera envuelto en casa
     "Cadeau \205 la maison!",
     // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
@@ -260,8 +260,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
   //   \204 a   \224 o   \201 u   \216 A   \231 O   \232 U   \341 ss
   // Un byte por caracter: strlen() sigue midiendo bien y el centrado no cambia.
   {
-    "Entwickelt sich!", "Mampf mampf!", "Gef\204llt ihm!", "Hat Hunger!", "Braucht ein Bad!",
-    "Ersch\224pft...", "Traurig...", "Etwas rundlich...", "Es ist SHINY!!", "Es ist froh",
+    "Mampf mampf!", "Gef\204llt ihm!", "Hat Hunger!", "Braucht ein Bad!",
+    "Ersch\224pft...", "Traurig...",
     "DANKE! Leb wohl", "Es ist gestorben...", "Tsch\201ss! Winkt",
     "EI", "Legend\204res Ei!?", "Seltenes Ei!", "Ber\201hre das Ei...", "Es bewegt sich!", "Fast so weit!",
     "POKEDEX %u/151",
@@ -314,7 +314,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // v1.53: la mochila con su boton: como se usa y dormido solo se mira
     "Tippe ein Item zum Benutzen", "Es schl\204ft: nur ansehen",
     // v1.54: la tarta: lleno durante 3 h, y tocarla sin ninguna
-    "Pappsatt!", "Kein Kuchen: lauf oder k\204mpf",
+    "Kein Kuchen: lauf oder k\204mpf",
     // v1.56: el botin de un combate ganado, que espera envuelto en casa
     "Geschenk daheim!",
     // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
@@ -342,8 +342,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
   },
   // ---------------- IT ----------------
   {
-    "Si evolve!", "Gnam gnam!", "Gli piace!", "Ha fame!", "Vuole un bagno!",
-    "Esausto...", "Triste...", "Un po' cicciotto...", "E' SHINY!!", "E' felice",
+    "Gnam gnam!", "Gli piace!", "Ha fame!", "Vuole un bagno!",
+    "Esausto...", "Triste...",
     "GRAZIE! Addio", "E' morto...", "Ciao! Saluta",
     "UOVO", "Uovo leggendario!?", "Uovo raro!", "Tocca l'uovo...", "Si muove!", "Ci siamo quasi!",
     "POKEDEX %u/151",
@@ -396,7 +396,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // v1.53: la mochila con su boton: como se usa y dormido solo se mira
     "Tocca un oggetto per usarlo", "Dorme: solo guardare",
     // v1.54: la tarta: lleno durante 3 h, y tocarla sin ninguna
-    "Che sazio!", "Niente torta: cammina",
+    "Niente torta: cammina",
     // v1.56: el botin de un combate ganado, que espera envuelto en casa
     "Regalo a casa!",
     // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
@@ -424,8 +424,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
   },
   // ---------------- PT ----------------
   {
-    "Evoluindo!", "Nham nham!", "Ele gosta!", "Est\240 com fome!", "Precisa de banho!",
-    "Exausto...", "Triste...", "Um pouco gordinho...", "\220 SHINY!!", "Est\240 feliz",
+    "Nham nham!", "Ele gosta!", "Est\240 com fome!", "Precisa de banho!",
+    "Exausto...", "Triste...",
     "OBRIGADO! Adeus", "Morreu...", "Tchau! Acena",
     "OVO", "Ovo lend\240rio!?", "Ovo raro!", "Toque no ovo...", "Mexe-se!", "Quase l\240!",
     "POKEDEX %u/151",
@@ -478,7 +478,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // v1.53: la mochila con su boton: como se usa y dormido solo se mira
     "Toque um item para usar", "Dormindo: s\242 olhar",
     // v1.54: la tarta: lleno durante 3 h, y tocarla sin ninguna
-    "T\240 cheio!", "Sem bolo: ande ou lute",
+    "Sem bolo: ande ou lute",
     // v1.56: el botin de un combate ganado, que espera envuelto en casa
     "Presente em casa!",
     // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
@@ -506,8 +506,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
   },
   // ---------------- JA ----------------
   {
-    "しんかした！", "おいしい！", "うれしそう！", "おなかすいた！", "おふろにいれて！",
-    "つかれた...", "かなしい...", "ちょっとふとった...", "いろちがい！！", "ごきげん！",
+    "おいしい！", "うれしそう！", "おなかすいた！", "おふろにいれて！",
+    "つかれた...", "かなしい...",
     "ありがとう！ またね", "しんでしまった...", "バイバイ！",
 
     "たまご", "でんせつのたまご！？", "めずらしいたまご！", "たまごをタッチ...", "うごいた！", "もうすぐ！",
@@ -582,7 +582,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // v1.53: la mochila con su boton: como se usa y dormido solo se mira
     "タッチして つかう", "ねてる: みるだけ",
     // v1.54: la tarta: lleno durante 3 h, y tocarla sin ninguna
-    "おなか いっぱい!", "ケーキなし: あるこう",
+    "ケーキなし: あるこう",
     // v1.56: el botin de un combate ganado, que espera envuelto en casa
     "いえに プレゼント!",
     // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
@@ -615,8 +615,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
   // reordenar %u/%s aqui sin tocar el punto de llamada intercambiaria en
   // silencio que valor cae en que hueco.
   {
-    "진화 중!", "냠냠!", "마음에 들어해요!", "배고파요!", "목욕이 필요해요!",
-    "지쳤어요...", "슬퍼해요...", "조금 통통해요...", "이로치예요!!", "행복해요",
+    "냠냠!", "마음에 들어해요!", "배고파요!", "목욕이 필요해요!",
+    "지쳤어요...", "슬퍼해요...",
     "고마워요! 안녕", "세상을 떠났어요...", "잘 가! 손을 흔들며...",
     "알", "전설의 알!?", "희귀한 알!", "알을 톡톡...", "움직여요!", "거의 다 됐어요!",
     "도감 %u/151",
@@ -669,7 +669,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // v1.53: la mochila con su boton: como se usa y dormido solo se mira
     "눌러서 사용", "자는 중: 보기만",
     // v1.54: la tarta: lleno durante 3 h, y tocarla sin ninguna
-    "배불러!", "케이크 없음: 걷기",
+    "케이크 없음: 걷기",
     // v1.56: el botin de un combate ganado, que espera envuelto en casa
     "집에 선물!",
     // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)

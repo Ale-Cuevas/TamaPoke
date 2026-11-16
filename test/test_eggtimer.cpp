@@ -242,7 +242,7 @@ TEST(yardegg, el_de_la_incubadora_conserva_su_hora) {
   CHECK_EQ(p.eggPlacedEpoch(), placed);
 }
 
-// sin el patio (TP_YARD=0) todo sigue como antes: 3 toques o solo a los 3 min
+// sin timedEggs (los huevos del patio apagados) todo sigue como antes: 3 toques o solo a los 3 min
 TEST(yardegg, sin_patio_como_siempre) {
   Pet p;
   mockClearForcedRandom();
