@@ -663,6 +663,30 @@ static const std::vector<Scene> &scenes() {
        galleryPmd.load(25, false);
        galleryDirty = true;
      } },
+    // yard panel restyle (v2.0, Y1): Spanish, an unseen detail, and the new tap zones (chevrons, back)
+    { "gallery-es", [] { pokemon(25, 13); setLang(LANG_ES); applyLangFont(); galleryOpen = true; galleryDirty = true; } },
+    { "gallery-detail-es", [] {
+       pokemon(25, 13);
+       setLang(LANG_ES);
+       applyLangFont();
+       galleryOpen = true;
+       galleryDirty = true;
+       galleryTap(GAL_X + 3 * GAL_GC + 10, GAL_Y + 10);  // cell 4, Charmander (registered)
+     } },
+    { "gallery-detail-unseen", [] {
+       pokemon(25, 13);
+       galleryOpen = true;
+       galleryDirty = true;
+       galleryTap(GAL_X + GAL_GC + 10, GAL_Y + 10);  // cell 2, Ivysaur (not registered)
+     } },
+    { "gallery-chev-tap", [] { pokemon(25, 13); galleryOpen = true; galleryDirty = true; onTap(Y_CHEV_RX, Y_CY); } },
+    { "gallery-last", [] {  // page 10: 7 cells, no right chevron
+       pokemon(25, 13);
+       galleryOpen = true;
+       galleryDirty = true;
+       for (int i = 0; i < 12; i++) onTap(Y_CHEV_RX, Y_CY);
+     } },
+    { "gallery-back-tap", [] { pokemon(25, 13); galleryOpen = true; galleryDirty = true; onTap(Y_BACK_X, Y_BACK_Y); } },
     { "minigame", [] { pokemon(25, 13); startGame(); gameScore = 7; }, 9 },
     { "sack", [] { pokemon(66, 13); startSack(); sackHits = 12; }, 3 },
     { "home-ja", [] { pokemon(25, 13); setLang(LANG_JA); applyLangFont(); } },
@@ -836,6 +860,33 @@ static const std::vector<Scene> &scenes() {
     { "badges-3-es", [] { pokemon(25, 13); stageSetup(0x07, 0, true); openBox(); boxPage = 1; } },
     { "badges-8", [] { pokemon(25, 13); stageSetup(0xFF, 0, false); openBox(); boxPage = 1; } },
     { "badges-8-es", [] { pokemon(25, 13); stageSetup(0xFF, 0, true); openBox(); boxPage = 1; } },
+    { "box-chev-tap", [] { pokemon(25, 13); stageSetup(0x07, 0, false); boxThree(); openBox(); onTap(Y_CHEV_RX, Y_CY); } },
+    { "box-chev-back-tap", [] {  // badges, then < back to the box
+       pokemon(25, 13);
+       boxThree();
+       openBox();
+       boxPage = 1;
+       onTap(Y_CHEV_LX, Y_CY);
+     } },
+    { "box-back-tap", [] { pokemon(25, 13); boxThree(); openBox(); onTap(Y_BACK_X, Y_BACK_Y); } },
+    { "box-wake-ask-es", [] {
+       pokemon(25, 13);
+       setLang(LANG_ES);
+       applyLangFont();
+       boxThree();
+       openBox();
+       onTap(BOX_X + BOX_CW + 10, BOX_Y + BOX_CH + 10);  // slot 4 (BLAZE): "despertar?"
+     } },
+    { "box-store-ask-es", [] { pokemon(25, 13); setLang(LANG_ES); applyLangFont(); boxThree(); openBox(); boxAsk = 3; boxAskUntil = millis() + 10000; } },
+    { "box-held-es", [] {
+       eggNow();
+       setLang(LANG_ES);
+       applyLangFont();
+       boxThree();
+       pet.wake(1);
+       ensureMon();
+       openBox();
+     } },
     { "box-ja", [] { pokemon(25, 13); setLang(LANG_JA); applyLangFont(); boxThree(); openBox(); } },
     { "box-ko", [] { pokemon(25, 13); setLang(LANG_KO); applyLangFont(); boxThree(); openBox(); boxAsk = 5; boxAskUntil = millis() + 10000; } },
     { "box-de", [] { pokemon(25, 13); setLang(LANG_DE); applyLangFont(); boxThree(); boxPet(5, 2, 17); openBox(); } },
