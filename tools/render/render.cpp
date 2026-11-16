@@ -130,6 +130,18 @@ static void resetUi() {
   galleryOpen = cardOpen = bagOpen = kbOpen = clockOpen = gameOpen = sackOpen = zenOpen = dashOpen = false;
   yardDemoOpen = false;  // el patio (v2.0)
   yardDemoPage = 0;
+#if TP_YARD
+  // el patio (v2.0, Y2): bichos sin colocar, sin cosas en el suelo y el mapa del bioma
+  yardW = YardWorld{};
+  yardLastStep = 0;
+  yardPoopHave = 0;
+  yardPoopBooted = false;
+  yardGiftN = 0;
+  yardGiftTapped = -1;
+  yardBubblePrev = yardBubbleLatched = nullptr;
+  yardBubbleUntil = 0;
+  if (yardMapForced) yardForceMap(0);
+#endif
   zenSerialHold = -1;
   dashSerialSteerOn = false;
   dashTrailN = 0;
@@ -154,8 +166,12 @@ static void resetUi() {
   pet.setBadges(0);
   pet.clearStageDay();
   pet.setTeam(nullptr, 0);
-  menuUntil = confirmUntil = choiceUntil = bathUntil = poopPuffUntil = 0;
-  menuKind = MENU_NONE;
+  confirmUntil = choiceUntil = bathUntil = poopPuffUntil = 0;
+  panelKind = PANEL_NONE;  // paneles Cuidar / Jugar (v2.0, Y2)
+  wasPressed = holdFired = swallowGesture = false;
+  pet.berryKnown = false;  // (v1.57) la favorita no pasa de una escena a otra
+  panelShakeIdx = -1;
+  panelShakeUntil = 0;
   closeBattle();
   bt = decltype(bt){};
   pet.setBadges(0);      // estadios: sin insignias, nada cobrado hoy y sin equipo guardado
@@ -230,6 +246,20 @@ static void walker(uint32_t today, uint32_t total, uint8_t finds, std::initializ
   pet.goalTier = 0;
   while (pet.goalTier < STEP_GOAL_TIERS && today >= STEP_GOALS[pet.goalTier]) pet.goalTier++;
   if (pet.goalTier) pet.goalDay = pet.dayNumber();
+}
+
+// a tap (or a finger held down) on card i of the open Care / Play panel (v2.0, Y2)
+static void panelTapCard(uint8_t i) {
+  int x, y, w, h;
+  panelCard(panelKind, i, x, y, w, h);
+  onTap(x + w / 2, y + h / 2);
+}
+static void panelHold(uint8_t i) {
+  int x, y, w, h;
+  panelCard(panelKind, i, x, y, w, h);
+  tX0 = tXl = x + w / 2;
+  tY0 = tYl = y + h / 2;
+  wasPressed = true;
 }
 
 // a hatched pet of the given species, healthy, `hour` o'clock
@@ -447,6 +477,43 @@ static const std::vector<Scene> &scenes() {
        pet.lastSeenEpoch = epochAt(10);
      } },
     { "home", [] { pokemon(25, 13); } },
+#if TP_YARD
+    // el patio (v2.0, Y2): la casa es el mapa. Pradera de dia, de noche, al atardecer, la cantera, sin mapa,
+    // con un bicho de la caja, cacas, regalos, el globo que pasa de una necesidad a otra, dormido y el dock
+    { "yard-home", [] { pokemon(25, 13); yardForceMap(1); } },
+    { "yard-home-night", [] { pokemon(133, 22); } },
+    { "yard-home-dusk", [] { pokemon(1, 19); } },
+    { "yard-home-quarry", [] { pokemon(74, 11); } },
+    { "yard-home-fallback", [] { pokemon(25, 13); yardForceMap(YARD_MAP_NONE); } },
+    { "yard-home-fallback-night", [] { pokemon(7, 23); pet.sleeping = true; yardForceMap(YARD_MAP_NONE); } },
+    { "yard-home-two", [] { pokemon(25, 13); yardForceMap(1); boxPet(0, 7, 12); }, 60 },
+    { "yard-home-two-quarry", [] { pokemon(74, 15); boxPet(0, 133, 20, true); }, 120 },
+    { "yard-home-poop", [] { pokemon(1, 10); pet.dbgSetPoops(3); pet.hygiene = 40; } },
+    { "yard-poop-tap", [] { pokemon(1, 10); pet.dbgSetPoops(3); pet.hygiene = 40; render();
+                            onTap(yardPoopX[1], yardPoopY[1] - 20); }, 3 },
+    { "yard-home-gifts", [] { pokemon(25, 13); yardForceMap(1); for (int i = 0; i < 5; i++) pet.addGift(IT_CAKE); } },
+    { "yard-bubble-cycle-0", [] { pokemon(25, 13); yardForceMap(1); pet.fullness = 10; pet.hygiene = 12; gHostMillis = 200000 - 85; } },
+    { "yard-bubble-cycle-1", [] { pokemon(25, 13); yardForceMap(1); pet.fullness = 10; pet.hygiene = 12; gHostMillis = 201000 - 85; } },
+    { "yard-bubble-cycle-0-es", [] { pokemon(25, 13); yardForceMap(1); pet.fullness = 10; pet.hygiene = 12; gHostMillis = 200000 - 85;
+                                     lang(LANG_ES); } },
+    { "yard-bubble-cycle-1-es", [] { pokemon(25, 13); yardForceMap(1); pet.fullness = 10; pet.hygiene = 12; gHostMillis = 201000 - 85;
+                                     lang(LANG_ES); } },
+    { "yard-home-asleep", [] { pokemon(25, 23); pet.sleeping = true; yardForceMap(1); boxPet(0, 7, 12); } },
+    { "yard-home-asleep-es", [] { pokemon(25, 23); pet.sleeping = true; yardForceMap(1); lang(LANG_ES); } },
+    { "yard-sleepy-es", [] { pokemon(25, 22); yardForceMap(1); lang(LANG_ES); } },
+    { "yard-abandoned-es", [] { pokemon(4, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.bond = 60; lang(LANG_ES); } },
+    { "yard-heart", [] { pokemon(133, 12); pet.feedBerry(0); gHostMillis += EAT_ANIM_MS + 100; }, 2 },
+    { "yard-bath", [] { pokemon(25, 13); yardForceMap(1); startBath(); }, 8 },
+    { "yard-release-ask", [] { pokemon(25, 13); yardForceMap(1); confirmUntil = millis() + 5000; } },
+    { "yard-evolve-btn", [] { pokemon(4, 11); pet.setLevel(18); pet.trAtk = pet.trDef = pet.trSpe = 40; } },
+    { "yard-farewell-btn", [] { pokemon(55, 15); pet.dbgSetAge(FAREWELL_AGE_MIN + 60); pet.addGift(IT_CAKE); } },
+    { "yard-dock-care", [] { pokemon(25, 13); yardForceMap(1); render(); onTap(yDockX(0), Y_DOCK_Y); } },
+    { "yard-dock-play", [] { pokemon(25, 13); yardForceMap(1); render(); onTap(yDockX(1), Y_DOCK_Y); } },
+    { "yard-dock-care-es", [] { pokemon(25, 13); yardForceMap(1); lang(LANG_ES); render(); onTap(yDockX(0), Y_DOCK_Y); } },
+    { "yard-tap-pet", [] { pokemon(25, 13); yardForceMap(1); render(); onTap((int)yardW.p[0].x, (int)yardW.p[0].y - 20); } },
+    { "yard-tilt", [] { pokemon(25, 13); yardForceMap(1); gStubTiltSide = -1; }, 80 },
+    { "yard-orbit", [] { pokemon(25, 13); yardForceMap(1); OrbitShift o = orbitShift(6); roundCanvas->setShift(o.dx, o.dy); }, 2 },
+#endif
     // el patio (v2.0, fase Y0): el kit de interfaz nuevo, en sus tres paginas de muestra
     { "yard-ui-shop", [] { pokemon(25, 13); yardDemoOpen = true; yardDemoPage = 0; } },
     { "yard-ui-world", [] { pokemon(25, 13); yardDemoOpen = true; yardDemoPage = 1; } },
@@ -515,11 +582,11 @@ static const std::vector<Scene> &scenes() {
     { "home-ruins", [] { pokemon(92, 14); } },
     { "home-ruins-night", [] { pokemon(63, 23); } },
     { "minigame-swamp", [] { pokemon(23, 13); startGame(); gameScore = 3; }, 4 },
-    { "feed", [] { pokemon(133, 12); menuKind = MENU_FEED; menuUntil = millis() + 6000; } },
-    { "play-menu", [] { pokemon(133, 12); menuKind = MENU_PLAY; menuUntil = millis() + 6000; } },
+    { "feed", [] { pokemon(133, 12); openCarePanel(); } },
+    { "play-menu", [] { pokemon(133, 12); openPlayPanel(); } },
     // v1.53: the Care button (sleep | clean) and the Backpack screen
-    { "care-menu", [] { pokemon(133, 12); pet.dbgSetPoops(2); menuKind = MENU_CARE; menuUntil = millis() + 6000; } },
-    { "care-menu-asleep", [] { pokemon(133, 23); pet.sleeping = true; menuKind = MENU_CARE; menuUntil = millis() + 6000; } },
+    { "care-menu", [] { pokemon(133, 12); pet.dbgSetPoops(2); openCarePanel(); } },
+    { "care-menu-asleep", [] { pokemon(133, 23); pet.sleeping = true; openCarePanel(); } },
     { "bag", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 1, 1, 2, 3, 3 }); openBag(); } },
     // v1.59: the Revive (9th slot, 3x3 grid); a tap on it says what it's for (it isn't used by hand)
     { "bag-revive-hint", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 1, 1, 2, 3, 3 }); openBag(); bagTap(CX + 86, 94 + 2 * 90 + 40); } },
@@ -527,7 +594,7 @@ static const std::vector<Scene> &scenes() {
                                  setLang(LANG_ES); applyLangFont(); } },
     // v1.54: the cake in the food menu (with how many are left, grey with none), the pink FOOD bar while
     // it lasts, and a tap on it with none
-    { "feed-cake", [] { pokemon(133, 12); pet.items[IT_CAKE] = 3; menuKind = MENU_FEED; menuUntil = millis() + 6000; } },
+    { "feed-cake", [] { pokemon(133, 12); pet.items[IT_CAKE] = 3; openCarePanel(); } },
     { "home-sated", [] { pokemon(133, 12); pet.items[IT_CAKE] = 1; pet.eatCake(); gHostMillis += EAT_ANIM_MS + 100; }, 2 },
     { "home-sated-es", [] { pokemon(133, 12); pet.items[IT_CAKE] = 1; pet.eatCake(); gHostMillis += EAT_ANIM_MS + 100;
                             setLang(LANG_ES); applyLangFont(); }, 2 },
@@ -541,9 +608,34 @@ static const std::vector<Scene> &scenes() {
     { "gift-full", [] { pokemon(25, 13); gHostMillis += 3000; pet.items[IT_GOLDEN] = ITEM_MAX; pet.addGift(IT_GOLDEN); openGiftTap(); }, 6 },
     { "gifts-farewell-btn", [] { pokemon(55, 15); pet.dbgSetAge(FAREWELL_AGE_MIN + 60); pet.addGift(IT_CAKE); pet.addGift(IT_CAKE); pet.addGift(IT_CAKE); } },
     // v1.57: a star on the favourite berry once it's known; "Its tastes changed!" after an evolution that changed it
-    { "feed-star", [] { pokemon(133, 12); pet.berryKnown = true; pet.items[IT_CAKE] = 2; menuKind = MENU_FEED; menuUntil = millis() + 6000; } },
-    { "feed-star-red", [] { pokemon(25, 12); pet.berryKnown = true; menuKind = MENU_FEED; menuUntil = millis() + 6000; } },
-    { "feed-star-night", [] { pokemon(7, 21); pet.berryKnown = true; menuKind = MENU_FEED; menuUntil = millis() + 6000; } },
+    { "feed-star", [] { pokemon(133, 12); pet.berryKnown = true; pet.items[IT_CAKE] = 2; openCarePanel(); } },
+    { "feed-star-red", [] { pokemon(25, 12); pet.berryKnown = true; openCarePanel(); } },
+    { "feed-star-night", [] { pokemon(7, 21); pet.berryKnown = true; openCarePanel(); } },
+    // v2.0 (Y2): the Care and Play panels that replace the popups, in Spanish, and their taps
+    { "feed-es", [] { pokemon(133, 12); openCarePanel(); setLang(LANG_ES); applyLangFont(); } },
+    { "feed-star-es", [] { pokemon(133, 12); pet.berryKnown = true; pet.items[IT_CAKE] = 2; openCarePanel(); setLang(LANG_ES); applyLangFont(); } },
+    { "care-menu-asleep-es", [] { pokemon(133, 23); pet.sleeping = true; openCarePanel(); setLang(LANG_ES); applyLangFont(); } },
+    { "play-menu-es", [] { pokemon(133, 12); openPlayPanel(); setLang(LANG_ES); applyLangFont(); } },
+    { "play-menu-no-imu-es", [] { pokemon(133, 12); gStubImuPresent = false; openPlayPanel(); setLang(LANG_ES); applyLangFont(); } },
+    { "care-no-cake", [] { pokemon(133, 12); openCarePanel(); panelTapCard(CP_CAKE); } },
+    { "care-no-cake-es", [] { pokemon(133, 12); openCarePanel(); setLang(LANG_ES); applyLangFont(); panelTapCard(CP_CAKE); } },
+    { "care-pressed", [] { pokemon(133, 12); pet.items[IT_CAKE] = 1; openCarePanel(); panelHold(CP_BLUE); } },
+    { "play-pressed", [] { pokemon(133, 12); openPlayPanel(); panelHold(PP_SACK); } },
+    { "care-asleep-deny", [] { pokemon(133, 23); pet.sleeping = true; openCarePanel(); panelTapCard(CP_GREEN); } },
+    { "care-tap-berry", [] { pokemon(133, 12); openCarePanel(); panelTapCard(CP_RED); }, 3 },
+    { "care-tap-cake", [] { pokemon(133, 12); pet.items[IT_CAKE] = 2; openCarePanel(); panelTapCard(CP_CAKE); }, 3 },
+    { "care-tap-light", [] { pokemon(133, 21); openCarePanel(); panelTapCard(CP_LIGHT); }, 2 },
+    { "care-tap-wake", [] { pokemon(133, 23); pet.sleeping = true; openCarePanel(); panelTapCard(CP_LIGHT); }, 2 },
+    { "care-tap-bath", [] { pokemon(133, 12); pet.dbgSetPoops(1); openCarePanel(); panelTapCard(CP_BATH); }, 4 },
+    { "play-tap-ball", [] { pokemon(133, 12); openPlayPanel(); panelTapCard(PP_BALL); }, 2 },
+    { "play-tap-stages", [] { pokemon(133, 12); openPlayPanel(); panelTapCard(PP_BATTLE); } },
+    { "play-tap-sack", [] { pokemon(133, 12); openPlayPanel(); panelTapCard(PP_SACK); }, 2 },
+    { "play-tap-zen", [] { pokemon(7, 13); openPlayPanel(); panelTapCard(PP_ZEN); }, 2 },
+    { "play-tap-dash", [] { pokemon(123, 13); openPlayPanel(); panelTapCard(PP_DASH); }, 2 },
+    { "play-no-imu-deny", [] { pokemon(133, 12); gStubImuPresent = false; openPlayPanel(); panelTapCard(PP_DASH); } },
+    { "play-asleep-box", [] { pokemon(133, 23); pet.sleeping = true; boxThree(); openPlayPanel(); } },
+    { "panel-back", [] { pokemon(133, 12); openPlayPanel(); onTap(Y_BACK_X, Y_BACK_Y); } },
+    { "panel-user-key", [] { pokemon(133, 12); openCarePanel(); onBack(); } },
     { "tastes-changed", [] { pokemon(5, 12); tastesMsgUntil = millis() + 6000; } },
     { "tastes-changed-es", [] { pokemon(5, 12); tastesMsgUntil = millis() + 6000; setLang(LANG_ES); applyLangFont(); } },
     { "no-cake", [] { pokemon(133, 12); gHostMillis += 3000; /* past an earlier scene's heart */ cakeHintUntil = millis() + 2500; fxo.push(FXO_DENY, 0, 0, millis()); } },
@@ -571,7 +663,7 @@ static const std::vector<Scene> &scenes() {
     { "dash-result", [] { dashPlaying(123, 13, 0, 6000); dash.dodged = 61; dashNewHi = true; dashGainShown = 15; dash.hits = 3;
                           dashOverUntil = millis() + 4000; } },
     { "dash-ja", [] { dashPlaying(123, 13, 0, 6000); dashRunStart = millis(); setLang(LANG_JA); applyLangFont(); } },
-    { "play-menu-no-imu", [] { pokemon(133, 12); gStubImuPresent = false; menuKind = MENU_PLAY; menuUntil = millis() + 6000; } },
+    { "play-menu-no-imu", [] { pokemon(133, 12); gStubImuPresent = false; openPlayPanel(); } },
     // the waterfall (v1.43): intro, in the band, below (spray), above, a surge on its way, the result
     { "zen-intro", [] { pokemon(7, 13); startZen(); } },
     { "zen-band", [] { zenPlaying(7, 13, 52); } },

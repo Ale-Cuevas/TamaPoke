@@ -55,6 +55,10 @@ struct SdThumbs {
 };
 extern SdThumbs thumbs;
 
+// mapa del patio (v2.0, Y2): /yard/NN.bin entero en PSRAM (lo valida yardBgParse). nullptr si no
+// hay SD, no existe, o mide mas de maxLen; quien lo pide lo libera con free()
+uint8_t *sdReadYardMap(uint8_t n, size_t maxLen, size_t *len);
+
 bool sdBegin();                 // monta la SD (SDMMC 1-bit), true si hay tarjeta
 bool sdSerialCommand(const String &line);  // PUT/LS por USB; true si la maneja
 extern bool sdReady;

@@ -153,6 +153,24 @@ bool sdBegin() {
   return sdReady;
 }
 
+uint8_t *sdReadYardMap(uint8_t n, size_t maxLen, size_t *len) {
+  *len = 0;
+  if (!sdReady) return nullptr;
+  char path[20];
+  snprintf(path, sizeof(path), "/yard/%02u.bin", n);
+  File f = SD_MMC.open(path, FILE_READ);
+  if (!f) return nullptr;
+  size_t size = f.size();
+  uint8_t *buf = (size && size <= maxLen) ? (uint8_t *)ps_malloc(size) : nullptr;
+  if (buf && f.read(buf, size) != size) {
+    free(buf);
+    buf = nullptr;
+  }
+  f.close();
+  if (buf) *len = size;
+  return buf;
+}
+
 bool SdMon::load(uint8_t dexNum, bool shiny) {
   unload();
   if (!sdReady) return false;
