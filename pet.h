@@ -3,6 +3,7 @@
 #include <Preferences.h>
 #include "growth.h"  // ritmo de los niveles (v1.35): cuanto cuesta cada uno
 #include "box.h"     // la caja (v1.37): el registro de un bicho guardado
+#include "economy.h" // las monedas del patio (Y4): lo que se gana y lo que cuesta
 #include "eggtimer.h" // el huevo del patio (v2.0, Y3): 2 h de tiempo real, las sacudidas lo adelantan
 
 // 1 tick = 1 minuto de juego. Baja este valor para probar mas rapido
@@ -198,6 +199,7 @@ struct StageReward {
   uint8_t item;   // el objeto del jefe (envuelto en casa), o IT_COUNT
   uint8_t joy;    // felicidad dada al bicho de casa (la del combate de practica: una vez por hora)
   uint8_t pets;   // bichos del equipo que recibieron el premio
+  uint16_t coins; // monedas que entraron (50 la primera vez, 10 las repeticiones del dia; 0 si no hubo)
 };
 
 // medallas del individuo (bitmask)
@@ -459,6 +461,27 @@ public:
   int careBonus() const;  // mejora del huevo por racha + vinculo
   int shinyOdds(bool charm) const;  // denominador de la tirada shiny del huevo
 
+  // --- monedas (v2.0, Y4; economy.h). Las claves de la NVS que faltan valen 0 (partidas de antes)
+  uint16_t coins = 0;          // "cn": la cartera, 0..COIN_MAX
+  uint16_t yardOwned = 0;      // "ybgO": bit n = mapa n comprado (el del bioma del bicho es siempre suyo)
+  uint8_t yardChosen = 0;      // "ybg": 0 = el del bioma; si no, el mapa n (solo uno que se tenga)
+  // suma n; capped = cuenta para el tope diario (ECO_DAILY_CAP; minijuegos y estadios repetidos), si no
+  // (primeras veces, metas de pasos) entra entera. Devuelve lo que de verdad entro (tope diario y COIN_MAX)
+  uint16_t addCoins(uint16_t n, bool capped);
+  void setCoins(uint16_t n) { coins = n > COIN_MAX ? COIN_MAX : n; save(); }  // serie COINS (pruebas)
+  bool spendCoins(uint16_t n);  // false si no hay tantas (no toca nada); guarda
+  // comprar un objeto de la mochila: false si no se vende, no hay monedas o no cabe (ITEM_MAX); guarda
+  bool buyItem(uint8_t itemId);
+  bool ownsMap(uint8_t n) const;  // 1..YARD_MAPS: comprado, o el del bioma del bicho
+  bool buyMap(uint8_t n);         // false si ya es suyo, no existe o no hay monedas; guarda
+  void chooseMap(uint8_t n);      // 0 = el del bioma; un mapa que no es suyo se ignora; guarda
+  uint8_t biomeMap() const;       // el mapa del bioma del bicho de casa (huevo: el prado)
+  // el mapa que toca de verdad: el elegido si es suyo, si no el del bioma
+  uint8_t yardMapWanted() const { return yardChosen && ownsMap(yardChosen) ? yardChosen : biomeMap(); }
+  uint16_t coinsEarnedToday() const;  // lo contado hoy para el tope diario
+  uint16_t lastCoins = 0;        // lo ganado en el ultimo minijuego (la UI lo ensena; no se guarda)
+  uint16_t goalBannerCoins = 0;  // monedas de las metas cruzadas desde el ultimo banner (takeGoalBanner)
+
   // --- pasos y mochila (Tarea 1). addSteps() nunca escribe en flash: marca el
   // guardado pendiente y el loop lo vuelca con la pantalla atenuada.
   void addSteps(uint32_t n, uint32_t day);  // n pasos contados; day = dayNumber() (0 = sin reloj)
@@ -491,9 +514,11 @@ public:
   // devuelve la meta (1..STEP_GOAL_TIERS) del banner, la mas alta si se cruzaron varias; 0 = ninguno
   // levels (opcional): niveles que dieron las metas desde el ultimo banner (0 si se cruzaron
   // dormido); el banner los ensena como "+N Lv"
-  uint8_t takeGoalBanner(uint8_t *levels = nullptr) {
+  uint8_t takeGoalBanner(uint8_t *levels = nullptr, uint16_t *coinsOut = nullptr) {
     uint8_t g = goalBanner;
     if (levels) *levels = goalBannerLv;
+    if (coinsOut) *coinsOut = goalBannerCoins;
+    goalBannerCoins = 0;
     goalBanner = 0;
     goalBannerLv = 0;
     return g;
@@ -605,6 +630,8 @@ private:
   // Se guardan ("ngl", "dth"): un reinicio no los pone a cero
   uint8_t neglectMin = 0, deathMin = 0;
   bool dying = false;          // "dying": se esta muriendo, el dialogo espera
+  uint32_t coinDay = 0;        // "cnD": dia del contador del tope diario
+  uint16_t coinToday = 0;      // "cnT": monedas con tope ganadas ese dia
   uint8_t dyingMin = 0;        // "dym" (v1.64): minutos muriendose, hacia REVIVE_LIMIT_MIN
   int16_t deathEgg = 0;        // "degg": sorteado al empezar a morirse (un reinicio no lo repite)
   // la noche (v1.63): "nslp" se durmio de noche (se despierta solo a las WAKE_HOUR); "bedn" la ultima
