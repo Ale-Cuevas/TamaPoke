@@ -37,13 +37,20 @@ bool PmdMon::load(uint8_t dexNum, bool shiny) {
 
   const uint8_t *p = blob + 7 + palCount * 2;
   const uint8_t *end = blob + size;
-  for (uint8_t i = 0; i < nActs && p + 4 <= end; i++) {
+  // las nActs contadas y luego la cola de acciones extra (ids >= 12, WalkU/WalkD): el firmware
+  // viejo solo lee las contadas. Un id desconocido se salta; un registro roto en las contadas
+  // invalida el fichero, en la cola solo corta la lectura
+  for (uint16_t i = 0; p + 4 <= end; i++) {
+    bool counted = i < nActs;
     uint8_t id = p[0], w = p[1], h = p[2], nf = p[3];
     p += 4;
-    if (id >= PMD_NACTS || nf > 24) { unload(); return false; }
     // valida que ms[] y los datos del frame caben en el blob (archivo truncado)
     uint32_t bytes = (uint32_t)nf * 2 + (uint32_t)w * h * nf;
-    if (w == 0 || h == 0 || nf == 0 || p + bytes > end) { unload(); return false; }
+    if (nf > 24 || w == 0 || h == 0 || nf == 0 || p + bytes > end) {
+      if (counted) { unload(); return false; }
+      break;
+    }
+    if (id >= PMD_NACTS) { p += bytes; continue; }
     PmdAct &a = acts[id];
     a.w = w;
     a.h = h;

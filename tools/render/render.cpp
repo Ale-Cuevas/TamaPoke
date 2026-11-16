@@ -460,6 +460,21 @@ static void stageResult(uint8_t ally, uint8_t foe, uint8_t allyPct, uint8_t foeP
   gHostMillis += ms;
 }
 
+#if TP_YARD
+// el de casa andando en el patio (Y3): desde la celda libre mas cercana a (CX, fromY) hasta la mas cercana
+// a (CX, toY); los frames de la escena lo llevan un trecho por el camino
+static void yardWalkScene(uint8_t dex, int fromY, int toY) {
+  pokemon(dex, 13);
+  yardForceMap(1);
+  render();  // mete al bicho en el patio
+  int from = yardNearestFreeCell(yardWalk, CX, fromY), to = yardNearestFreeCell(yardWalk, CX, toY);
+  YardPet &p = yardW.p[0];
+  p.x = (float)yardCellCenter(yardCellCX(from));
+  p.y = (float)yardCellCenter(yardCellCY(from));
+  yardWalkTo(yardW, yardWalk, 0, to, millis());
+}
+#endif
+
 struct Scene {
   const char *name;
   std::function<void()> setup;
@@ -510,6 +525,10 @@ static const std::vector<Scene> &scenes() {
     { "yard-dock-care", [] { pokemon(25, 13); yardForceMap(1); render(); onTap(yDockX(0), Y_DOCK_Y); } },
     { "yard-dock-play", [] { pokemon(25, 13); yardForceMap(1); render(); onTap(yDockX(1), Y_DOCK_Y); } },
     { "yard-dock-care-es", [] { pokemon(25, 13); yardForceMap(1); lang(LANG_ES); render(); onTap(yDockX(0), Y_DOCK_Y); } },
+    { "yard-walk-up", [] { yardWalkScene(25, 330, 120); }, 6 },
+    { "yard-walk-down", [] { yardWalkScene(25, 150, 360); }, 6 },
+    { "yard-walk-up-charmander", [] { yardWalkScene(4, 330, 120); }, 6 },
+    { "yard-walk-down-charmander", [] { yardWalkScene(4, 150, 360); }, 6 },
     { "yard-tap-pet", [] { pokemon(25, 13); yardForceMap(1); render(); onTap((int)yardW.p[0].x, (int)yardW.p[0].y - 20); } },
     { "yard-tilt", [] { pokemon(25, 13); yardForceMap(1); gStubTiltSide = -1; }, 80 },
     { "yard-orbit", [] { pokemon(25, 13); yardForceMap(1); OrbitShift o = orbitShift(6); roundCanvas->setShift(o.dx, o.dy); }, 2 },

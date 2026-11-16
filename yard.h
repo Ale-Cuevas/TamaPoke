@@ -524,3 +524,26 @@ inline bool yardPetHit(int x, int y, float px, float py, int w, int h) {
   if (h < 48) h = 48;
   return x >= px - half && x <= px + half && y >= py - h - 8 && y <= py + 12;
 }
+
+// ---------- hacia donde anda (sprite del paseo, Y3) ----------
+// el patio se ve desde arriba: andando mas en vertical que en horizontal (|dy| > |dx|) se usa el
+// sprite de espaldas (sube) o de frente (baja); si no, el de lado. Sin sprite de arriba/abajo (sprites
+// viejos de la SD), el de lado segun hacia donde miraba (face)
+enum : uint8_t { YW_LEFT = 0, YW_RIGHT, YW_UP, YW_DOWN };
+inline uint8_t yardWalkDir(float dx, float dy, int8_t face, bool hasUp, bool hasDown) {
+  if (fabsf(dy) > fabsf(dx)) {
+    if (dy < 0 && hasUp) return YW_UP;
+    if (dy > 0 && hasDown) return YW_DOWN;
+  }
+  return face < 0 ? YW_LEFT : YW_RIGHT;
+}
+
+// hacia donde va ahora: del bicho a su punto del camino (0, 0 si no tiene camino)
+inline void yardHeading(const YardPet &p, float *dx, float *dy) {
+  *dx = *dy = 0;
+  if (p.pathI >= p.pathN) return;
+  float tx, ty;
+  yardWaypoint(p, &tx, &ty);
+  *dx = tx - p.x;
+  *dy = ty - p.y;
+}
