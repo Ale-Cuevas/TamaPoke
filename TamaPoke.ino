@@ -4908,9 +4908,14 @@ void keyboardTap(int16_t x, int16_t y) {
 
 // ---------- galeria pokedex ----------
 
-#define GAL_X 73
-#define GAL_Y 84
-#define GAL_CELL 80
+#define GAL_CELL 80  // celda de drawThumb (la usan tambien el combate y el selector de equipo)
+// rejilla de la Pokedex en el panel del patio (v2.0, Y1): 4x4 celdas de 72 px, entre las flechas
+// (zonas hasta x 64 y desde x 402) y por encima del contador "1/10" y del boton de volver
+#define GAL_X 89
+#define GAL_Y 82
+#define GAL_GC 72
+#define GAL_PAGER_Y 374
+#define GAL_SIL C565(0x50, 0x55, 0x70)  // silueta de un no registrado, sobre la tarjeta oscura
 
 // dibuja una miniatura centrada en su celda; sil=true la pinta en tinta
 void drawThumb(const uint8_t *b, int x, int y, int s, bool sil) {
@@ -4929,34 +4934,76 @@ void drawThumb(const uint8_t *b, int x, int y, int s, bool sil) {
   }
 }
 
+// miniatura de thumbs.bin centrada en (cx, cy) a escala s; sil = silueta en el color silCol
+// (en el panel oscuro la tinta INK_K de drawThumb no se ve). clip > 0: no pasa de un cuadrado de
+// ese lado centrado en (cx, cy) (los mas grandes se saldrian un poco de su tarjeta)
+static void galThumb(const uint8_t *b, int cx, int cy, int s, bool sil, uint16_t silCol, int clip = 0) {
+  uint8_t w = b[0], h = b[1], n = b[2];
+  const uint8_t *pal = b + 3;
+  const uint8_t *d = pal + n * 2;
+  int ox = cx - w * s / 2, oy = cy - h * s / 2;
+  int lx = clip ? cx - clip / 2 : -9999, rx = clip ? cx + clip / 2 : 9999;
+  int ty = clip ? cy - clip / 2 : -9999, by = clip ? cy + clip / 2 : 9999;
+  for (int r = 0; r < h; r++) {
+    int y0 = oy + r * s, y1 = y0 + s;
+    if (y0 < ty) y0 = ty;
+    if (y1 > by) y1 = by;
+    if (y1 <= y0) continue;
+    const uint8_t *row = d + r * w;
+    forRuns(w, [&](int c) { return indexedKey(row[c], sil); },
+            [&](int c0, int len, int k) {
+              uint16_t col = sil ? silCol : (uint16_t)(pal[k * 2] | (pal[k * 2 + 1] << 8));
+              int x0 = ox + c0 * s, x1 = x0 + len * s;
+              if (x0 < lx) x0 = lx;
+              if (x1 > rx) x1 = rx;
+              if (x1 > x0) gfx->fillRect(x0, y0, x1 - x0, y1 - y0, col);
+            });
+  }
+}
+
+// silueta quieta del sprite PMD (primer cuadro de reposo) en el color col, con la misma
+// escala y el mismo anclaje que drawPmdActM
+static void galPmdSil(PmdMon &m, int cx, int groundY, uint8_t maxS, uint16_t col) {
+  const PmdAct &a = m.acts[PMD_IDLE];
+  if (!a.frames) return;
+  uint8_t s = a.h ? 170 / a.h : 5;
+  if (s < 2) s = 2;
+  if (s > maxS) s = maxS;
+  while (s > 2 && a.h * s > 250) s--;
+  int x0 = cx - a.w * s / 2, y0 = groundY - (a.base ? a.base : a.h) * s;
+  for (int r = 0; r < a.h; r++) {
+    const uint8_t *row = a.data + r * a.w;
+    forRuns(a.w, [&](int c) { return indexedKey(row[c], true); },
+            [&](int c0, int len, int k) { gfx->fillRect(x0 + c0 * s, y0 + r * s, len * s, s, col); });
+  }
+}
+
 void renderGallery() {
   if (galleryDetail) {  // vista detalle: se redibuja siempre (animada)
-    gfx->fillScreen(RGB565_BLACK);
-    gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+    yPanelBg();
     const DexEntry &d = DEX_TBL[galleryDetail];
     bool reg = pet.isRegistered(galleryDetail);
     char head[32];
     snprintf(head, sizeof(head), "N.%03d %s%s", galleryDetail,
              pet.isShinyRegistered(galleryDetail) ? "*" : "", reg ? dexName(galleryDetail) : "???");
-    gfx->setTextColor(reg ? d.accent : UI_INK);
+    // el color del tipo, aclarado para leerse sobre el disco oscuro
+    gfx->setTextColor(reg ? lerp565(d.accent, Y_TEXT, 6, 16) : Y_TEXT);
     // auto-encoge nombres largos (no caben a t3), midiendo en vez de contar
     // bytes; 13 caracteres a tamano 3 son los 234 px de antes.
     setSize(3);
     int gts = (textW(head, 3) <= 234) ? 3 : 2;
     setSize(gts);
-    setCur(centerX(head, gts), gts == 3 ? 56 : 60);
+    setCur(centerX(head, gts), gts == 3 ? Y_TITLE_Y + 8 : Y_TITLE_Y + 12);
     printT(head);
     if (galleryPmd.loaded) {
       // animado y a color si esta registrado; silueta estatica si no (estilo "?")
-      drawPmdActM(galleryPmd, PMD_IDLE, CX, 300, reg ? millis() : 0, true, !reg, 6);
+      if (reg) drawPmdActM(galleryPmd, PMD_IDLE, CX, 300, millis(), true, false, 6);
+      else galPmdSil(galleryPmd, CX, 300, 6, GAL_SIL);
     } else {
       const uint8_t *t = thumbs.get(galleryDetail);
-      if (t) drawThumb(t, CX - GAL_CELL, 135, 4, !reg);
+      if (t) galThumb(t, CX, 215, 4, !reg, GAL_SIL);
     }
-    gfx->setTextColor(UI_INK);
-    setSize(2);
-    setCur(centerX(T(S_DETAIL_BACK), 2), 408);
-    printT(T(S_DETAIL_BACK));
+    yBackBtn();  // tocar en cualquier sitio vuelve a la rejilla, como antes
     gfx->flush();
     return;
   }
@@ -4964,62 +5011,67 @@ void renderGallery() {
   if (!galleryDirty) return;  // la rejilla es estatica
   galleryDirty = false;
 
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  yPanelBg();
   char head[24];
   snprintf(head, sizeof(head), T(S_POKEDEX_FMT), pet.registeredCount());
-  gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(head, 3), 36);
-  printT(head);
+  yTitle(head, nullptr);
 
   for (int r = 0; r < 4; r++) {
     for (int c = 0; c < 4; c++) {
       int16_t dex = galleryPage * 16 + r * 4 + c + 1;
       if (dex > 151) break;
-      int x = GAL_X + c * GAL_CELL, y = GAL_Y + r * GAL_CELL;
+      int x = GAL_X + c * GAL_GC, y = GAL_Y + r * GAL_GC;
+      bool reg = pet.isRegistered(dex);
+      yCard(x + 3, y + 3, GAL_GC - 6, GAL_GC - 6, false);
       const uint8_t *t = thumbs.get(dex);
       if (t) {
-        drawThumb(t, x, y, 2, !pet.isRegistered(dex));
+        galThumb(t, x + GAL_GC / 2, y + GAL_GC / 2, 2, !reg, GAL_SIL, GAL_GC - 8);
         if (pet.isShinyRegistered(dex)) {
           gfx->setTextColor(UI_BAR_WARN);
           setSize(2);
-          setCur(x + 62, y + 4);
+          setCur(x + GAL_GC - 17, y + 7);
           printT("*");
         }
       } else {
         char num[6];
         snprintf(num, sizeof(num), "%d", dex);
-        gfx->setTextColor(UI_TRACK);
+        gfx->setTextColor(Y_TEXT_DIM);
         setSize(2);
-        setCur(x + 24, y + 32);
+        setCur(x + (GAL_GC - textW(num, 2)) / 2, y + GAL_GC / 2 - 7);
         printT(num);
       }
     }
   }
-  // puntos de pagina
-  for (int i = 0; i < 10; i++) {
-    if (i == galleryPage) gfx->fillCircle(170 + i * 14, 436, 4, UI_INK);
-    else gfx->drawCircle(170 + i * 14, 436, 3, UI_INK);
-  }
+  yChevrons(galleryPage > 0, galleryPage < 9);
+  yPager(galleryPage, 10, GAL_PAGER_Y);
+  yBackBtn();
   gfx->flush();
 }
 
 void galleryTap(int16_t x, int16_t y) {
-  if (galleryDetail) {  // volver a la rejilla
+  if (galleryDetail) {  // volver a la rejilla (tambien el boton de volver)
     galleryDetail = 0;
     galleryPmd.unload();
     galleryDirty = true;
     return;
   }
-  if (y < 72) {  // tocar la cabecera = salir
+  if (y < 72 || yBackHit(x, y)) {  // la cabecera o el boton de volver = salir
     galleryOpen = false;
     galleryPmd.unload();
     return;
   }
+  int ch = yChevronHit(x, y);  // las flechas: como deslizar (sin salir por la izquierda de la 1)
+  if (ch) {
+    int np = galleryPage + ch;
+    if (np >= 0 && np <= 9 && np != galleryPage) {
+      galleryPage = np;
+      galleryDirty = true;
+    }
+    return;
+  }
   // mismo motivo que en el teclado: filtrar antes de dividir
   if (x < GAL_X || y < GAL_Y) return;
-  int c = (x - GAL_X) / GAL_CELL, r = (y - GAL_Y) / GAL_CELL;
+  int c = (x - GAL_X) / GAL_GC, r = (y - GAL_Y) / GAL_GC;
   if (c > 3 || r > 3) return;
   int16_t dex = galleryPage * 16 + r * 4 + c + 1;
   if (dex > 151) return;
@@ -5034,13 +5086,17 @@ void galleryTap(int16_t x, int16_t y) {
 // como queda, y con el en pantalla se escribe en la NVS (40-180 ms en la placa, con el sprite). Luego se
 // vuelve a casa, donde el que queda activo sale de una luz (FXO_BOX).
 
-#define BOX_X 47       // rejilla de 3x2 huecos de 124x110 (las esquinas quedan ~8 px dentro del circulo)
-#define BOX_Y 92
-#define BOX_CW 124
-#define BOX_CH 110
-#define BOX_NOW_Y 350  // centro de la fila "Ahora: ..."
-#define BOX_DOTS_Y 404 // puntos de pagina (v1.65), bajo la fila "Ahora:"
-#define BOX_SLEEP_BG C565(0xe2, 0xe5, 0xf4)  // fondo de un hueco ocupado: azulado, duermen
+// panel del patio (v2.0, Y1): rejilla de 3x2 huecos de 112x106 entre las flechas < > (sus zonas
+// llegan a x 64 y empiezan en x 402), la fila "Ahora:" en su tarjeta, el contador "1/2" y el boton
+// de volver abajo
+#define BOX_X 65
+#define BOX_Y 84
+#define BOX_CW 112
+#define BOX_CH 106
+#define BOX_NOW_Y 330   // centro de la fila "Ahora: ..."
+#define BOX_PAGER_Y 366 // contador de pagina "1/2" (v1.65 eran puntos), bajo la fila "Ahora:"
+#define BOX_Z_INK Y_BACK  // la "z" de los que duermen
+#define BOX_DLG_LINE C565(0x4a, 0x4f, 0x6a)  // borde del dialogo, sobre el disco oscuro
 #define BOX_LIGHT C565(0xff, 0xe7, 0x9f)     // halo dorado de la luz
 
 int boxCellX(uint8_t k) { return BOX_X + (k % 3) * BOX_CW; }
@@ -5133,27 +5189,30 @@ void drawThumbFit(const uint8_t *b, int cx, int cy, int maxW, int maxH, bool dim
 }
 
 // un hueco: miniatura dormida (con su "z" y la estrella si es shiny), nombre y nivel; "?" si esta
-// danado; vacio, con un "+" si el activo se puede guardar. hide = su miniatura se fue con la luz
+// danado; vacio, con un "+" si el activo se puede guardar. hide = su miniatura se fue con la luz.
+// Panel del patio (v2.0, Y1): el ocupado es una tarjeta; el elegido (el del dialogo), la tarjeta
+// clara; el vacio, solo el contorno
 void drawBoxSlot(uint8_t k, uint8_t st, const PetRecord *r, bool hide, int dx) {
   int x = boxCellX(k) + 4 + dx, y = boxCellY(k) + 4, w = BOX_CW - 8, h = BOX_CH - 8;
   int cx = x + w / 2;
+  bool sel = boxAsk == k + 1;
   if (st == BOX_OK && r) {
-    gfx->fillRoundRect(x, y, w, h, 12, BOX_SLEEP_BG);
-    gfx->drawRoundRect(x, y, w, h, 12, UI_INK);
+    uint16_t bg = sel ? Y_CARD_HI : Y_CARD;
+    yCard(x, y, w, h, sel);
     if (!hide) {
       const uint8_t *t = thumbs.get(r->speciesId);
       if (t) {
-        drawThumbFit(t, cx, y + 34, w - 40, 58, true, BOX_SLEEP_BG);
+        drawThumbFit(t, cx, y + 32, w - 40, 56, false, bg);
       } else {  // sin thumbs.bin: el numero, como la Pokedex
         char num[6];
         snprintf(num, sizeof(num), "%d", r->speciesId);
-        gfx->setTextColor(UI_TRACK);
+        gfx->setTextColor(Y_TEXT_DIM);
         setSize(3);
-        setCur(cx - textW(num, 3) / 2, y + 22);
+        setCur(cx - textW(num, 3) / 2, y + 20);
         printT(num);
       }
     }
-    gfx->setTextColor(0x4C98);  // "z": duerme
+    gfx->setTextColor(BOX_Z_INK);  // "z": duerme
     setSize(2);
     setCur(x + w - 18, y + 6);
     printT("z");
@@ -5162,38 +5221,42 @@ void drawBoxSlot(uint8_t k, uint8_t st, const PetRecord *r, bool hide, int dx) {
       setCur(x + 7, y + 6);
       printT("*");
     }
-    gfx->setTextColor(UI_INK);
-    printTight(recName(*r), cx, y + 68, w - 6);
+    gfx->setTextColor(Y_TEXT);
+    printTight(recName(*r), cx, y + 62, w - 6);
     char lv[16];
     snprintf(lv, sizeof(lv), T(S_LVL_FMT), (unsigned)levelFor(r->growMin));
+    gfx->setTextColor(Y_TEXT_DIM);
     setSize(2);
-    setCur(cx - textW(lv, 2) / 2, y + 86);
+    setCur(cx - textW(lv, 2) / 2, y + 80);
     printT(lv);
     return;
   }
   if (st == BOX_DAMAGED) {
-    gfx->drawRoundRect(x, y, w, h, 12, UI_BAR_BAD);
-    gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, 11, UI_BAR_BAD);
-    gfx->setTextColor(UI_BAR_BAD);
+    yCard(x, y, w, h, false);
+    gfx->drawRoundRect(x, y, w, h, Y_CARD_RAD, Y_ACCENT_BAD);
+    gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, Y_CARD_RAD - 1, Y_ACCENT_BAD);
+    gfx->setTextColor(Y_ACCENT_BAD);
     setSize(4);
-    setCur(cx - textW("?", 4) / 2, y + 18);
+    setCur(cx - textW("?", 4) / 2, y + 16);
     printT("?");
-    printTight(T(S_BOX_DAMAGED), cx, y + 74, w - 4);
+    printTight(T(S_BOX_DAMAGED), cx, y + 70, w - 4);
     return;
   }
-  gfx->drawRoundRect(x, y, w, h, 12, UI_TRACK);
-  gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, 11, UI_TRACK);
+  if (sel) yCard(x, y, w, h, true);
+  gfx->drawRoundRect(x, y, w, h, Y_CARD_RAD, Y_CARD_HI);
+  gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, Y_CARD_RAD - 1, Y_CARD_HI);
   if (pet.canStore(k)) {  // aqui cabe el activo
-    gfx->fillRoundRect(cx - 14, y + 34, 28, 6, 3, UI_TRACK);
-    gfx->fillRoundRect(cx - 3, y + 23, 6, 28, 3, UI_TRACK);
+    gfx->fillRoundRect(cx - 14, y + 32, 28, 6, 3, Y_TEXT_DIM);
+    gfx->fillRoundRect(cx - 3, y + 21, 6, 28, 3, Y_TEXT_DIM);
   }
-  gfx->setTextColor(UI_TRACK);
-  printTight(T(S_BOX_EMPTY), cx, y + 74, w - 4);
+  gfx->setTextColor(Y_TEXT_DIM);
+  printTight(T(S_BOX_EMPTY), cx, y + 70, w - 4);
 }
 
 // fila del activo: su miniatura (o el huevo) y "Ahora: <nombre>"; con un huevo esperando a su turno,
 // el huevo dormido a la derecha. Deja en boxNowCx el centro de la miniatura (de ahi sale la luz).
-// vacant = la casa vacia (v1.39): "Ahora: Vacio", con la silueta del huevo en gris
+// vacant = la casa vacia (v1.39): "Ahora: Vacio", con la silueta del huevo en gris.
+// En el panel del patio la fila va en su tarjeta
 void drawBoxNow(const PetRecord *r, bool hide, bool held, bool vacant) {
   char line[48];
   snprintf(line, sizeof(line), T(S_NOW_FMT), r ? recName(*r) : T(vacant ? S_BOX_EMPTY : S_EGG_HDR));
@@ -5202,25 +5265,26 @@ void drawBoxNow(const PetRecord *r, bool hide, bool held, bool vacant) {
   int total = 48 + tw + (held ? 46 : 0);
   int x = CX - total / 2;
   boxNowCx = x + 20;
+  yCard(x - 14, BOX_NOW_Y - 22, total + 28, 44, false);
   if (!hide) {
     if (r) {
       const uint8_t *t = thumbs.get(r->speciesId);
-      if (t) drawThumbFit(t, boxNowCx, BOX_NOW_Y, 58, 58, false, UI_BG_DAY);
+      if (t) drawThumbFit(t, boxNowCx, BOX_NOW_Y, 58, 40, false, Y_CARD);
     } else if (vacant) {
-      drawMapTint(SPR_EGG, SPRITE_H, boxNowCx - 16, BOX_NOW_Y - 16, 1, UI_TRACK);
+      drawMapTint(SPR_EGG, SPRITE_H, boxNowCx - 16, BOX_NOW_Y - 16, 1, Y_TEXT_DIM);
     } else {
       drawMap(SPR_EGG, SPRITE_H, boxNowCx - 16, BOX_NOW_Y - 16, 1, false);
     }
   }
-  gfx->setTextColor(UI_INK);
+  gfx->setTextColor(Y_TEXT);
   setCur(x + 48, BOX_NOW_Y - 7);
   printT(line);
   if (held) {  // el huevo que espera (FR-BOX.5): no se ha perdido
     int ex = x + 48 + tw + 10;
-    drawMapTint(SPR_EGG, SPRITE_H, ex, BOX_NOW_Y - 16, 1, UI_TRACK);
-    gfx->setTextColor(0x4C98);
+    drawMapTint(SPR_EGG, SPRITE_H, ex, BOX_NOW_Y - 16, 1, Y_TEXT_DIM);
+    gfx->setTextColor(BOX_Z_INK);
     setSize(2);
-    setCur(ex + 26, BOX_NOW_Y - 22);
+    setCur(ex + 26, BOX_NOW_Y - 20);
     printT("z");
   }
 }
@@ -5285,28 +5349,29 @@ void drawBoxAsk() {
     // (v1.55: un huevo envuelto tambien: freeHome lo desenvuelve y llega a casa)
     if (!pet.eggHeld() && !pet.items[IT_EGG] && !pet.giftEggs()) snprintf(note, sizeof(note), "%s", T(S_NO_EGG_NOTE));
   }
-  gfx->fillRoundRect(73, 160, 320, 160, 16, UI_WHITE);
-  gfx->drawRoundRect(73, 160, 320, 160, 16, UI_INK);
-  gfx->setTextColor(UI_INK);
+  // panel del patio: tarjeta oscura con borde, sombra debajo; SI verde y NO rojo en el mismo sitio
+  gfx->fillRoundRect(77, 166, 320, 160, 16, Y_SHADOW);
+  gfx->fillRoundRect(73, 160, 320, 160, 16, Y_CARD);
+  gfx->drawRoundRect(73, 160, 320, 160, 16, BOX_DLG_LINE);
+  gfx->setTextColor(Y_TEXT);
   printTight(q, CX, note[0] ? 182 : 198, 296);
   if (note[0]) {
-    gfx->setTextColor(BOX_NOTE_INK);
+    gfx->setTextColor(Y_TEXT_DIM);
     printTight(note, CX, 214, 296);
   }
   setSize(2);
-  gfx->fillRoundRect(118, 252, 100, 52, 12, UI_BAR_OK);
-  gfx->setTextColor(UI_WHITE);
+  gfx->fillRoundRect(118, 252, 100, 52, 12, Y_ACCENT_GO);
+  gfx->setTextColor(Y_TEXT);
   setCur(118 + (100 - textW(T(S_YES), 2)) / 2, 270);
   printT(T(S_YES));
-  gfx->fillRoundRect(248, 252, 100, 52, 12, UI_BAR_BAD);
+  gfx->fillRoundRect(248, 252, 100, 52, 12, Y_ACCENT_BAD);
   setCur(248 + (100 - textW(T(S_NO), 2)) / 2, 270);
   printT(T(S_NO));
 }
 
 void renderBox() {
   uint32_t now = millis();
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  yPanelBg();  // panel del patio (v2.0, Y1): siempre oscuro
   if (boxPage == 1) {  // las insignias (v1.65)
     renderBadges();
     gfx->flush();
@@ -5329,10 +5394,7 @@ void renderBox() {
   if (outcome && boxMove == BOXMV_WAKE) used--;
   char head[32];
   snprintf(head, sizeof(head), T(S_BOX_FMT), used, (unsigned)BOX_SLOTS);
-  gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(head, 3), 36);
-  printT(head);
+  yTitle(head, nullptr);
   bool hatched = !pet.isEgg();
   PetRecord act;
   memset(&act, 0, sizeof(act));
@@ -5387,7 +5449,9 @@ void renderBox() {
     }
   }
 
-  drawPageDots(2, 0, BOX_DOTS_Y);
+  yPager(0, 2, BOX_PAGER_Y);
+  yChevrons(false, !boxAsk && !boxMove);  // > las insignias, como deslizar a la derecha
+  yBackBtn();
   if (boxAsk) drawBoxAsk();
   gfx->flush();
 }
@@ -5420,8 +5484,17 @@ void boxTap(int16_t x, int16_t y) {
     if (timeLeft(boxAskUntil) && x >= 118 && x <= 218 && y >= 252 && y <= 304) boxStartMove(k);
     return;
   }
-  if (y < 72) {  // tocar la cabecera = salir, como en la Pokedex
+  if (y < 72 || yBackHit(x, y)) {  // la cabecera o el boton de volver = salir, como en la Pokedex
     closeBox();
+    return;
+  }
+  int ch = yChevronHit(x, y);  // las flechas: como deslizar entre la caja y las insignias
+  if (ch > 0 && boxPage == 0) {
+    boxPage = 1;
+    return;
+  }
+  if (ch < 0 && boxPage == 1) {
+    boxPage = 0;
     return;
   }
   if (boxPage != 0) return;  // las insignias no tienen nada que tocar
@@ -5591,6 +5664,7 @@ void boxFill() {
 #define BADGE_CELL_W 96     // pagina de insignias: 4x2 de 64 px (escala 4)
 #define BADGE_ROW_Y 118
 #define BADGE_ROW_H 128
+#define BADGE_PLATE C565(0xe8, 0xea, 0xf2)  // placa de una insignia ganada (panel del patio, Y1)
 
 // un bicho que puede ir al equipo: el de casa (slot TEAM_HOME) o uno de la caja
 struct TeamCand {
@@ -5883,24 +5957,26 @@ void teamTap(int16_t x, int16_t y) {
 void renderBadges() {
   char head[32];
   snprintf(head, sizeof(head), "%s %u/%u", T(S_BADGES), (unsigned)pet.badgeCount(), (unsigned)STAGE_COUNT);
-  gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(head, 3), 36);
-  printT(head);
+  yTitle(head, nullptr);  // el disco oscuro ya lo pinta renderBox
   int x0 = CX - (4 * BADGE_CELL_W) / 2;
   for (uint8_t i = 0; i < STAGE_COUNT; i++) {
     int cx = x0 + (i % 4) * BADGE_CELL_W + BADGE_CELL_W / 2, y = BADGE_ROW_Y + (i / 4) * BADGE_ROW_H;
     bool got = pet.hasBadge(i);
+    // panel del patio (v2.0, Y1): cada insignia en su tarjeta; la ganada, en color sobre una
+    // placa clara (su contorno oscuro no se leeria sobre la tarjeta); la que falta, en silueta
+    yCard(cx - 40, y - 8, 80, 80, got);
     if (got) {
-      gfx->fillRoundRect(cx - 38, y - 6, 76, 76, 14, UI_WHITE);
+      gfx->fillRoundRect(cx - 35, y - 3, 70, 70, 10, BADGE_PLATE);
       drawMap(BADGE_ICON[i], 16, cx - 32, y, 4, false);
     } else {
-      drawMapTint(BADGE_ICON[i], 16, cx - 32, y, 4, UI_TRACK);
+      drawMapTint(BADGE_ICON[i], 16, cx - 32, y, 4, BOX_DLG_LINE);
     }
-    gfx->setTextColor(got ? UI_INK : STG_LOCK_INK);
-    printTight(got ? stageName(i) : "???", cx, y + 78, BADGE_CELL_W - 2);
+    gfx->setTextColor(got ? Y_TEXT : Y_TEXT_DIM);
+    printTight(got ? stageName(i) : "???", cx, y + 80, BADGE_CELL_W - 8);  // 8 px entre nombres vecinos
   }
-  drawPageDots(2, 1, BOX_DOTS_Y);
+  yPager(1, 2, BOX_PAGER_Y);
+  yChevrons(true, false);  // < la caja, como deslizar a la izquierda
+  yBackBtn();
 }
 
 #define BAT_ICON_W 27  // 24 de cuerpo + 3 de borne
