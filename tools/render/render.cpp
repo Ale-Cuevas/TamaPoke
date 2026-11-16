@@ -130,6 +130,18 @@ static void resetUi() {
   galleryOpen = cardOpen = bagOpen = kbOpen = clockOpen = gameOpen = sackOpen = zenOpen = dashOpen = false;
   yardDemoOpen = false;  // el patio (v2.0)
   yardDemoPage = 0;
+#if TP_YARD
+  // el patio (v2.0, Y2): bichos sin colocar, sin cosas en el suelo y el mapa del bioma
+  yardW = YardWorld{};
+  yardLastStep = 0;
+  yardPoopHave = 0;
+  yardPoopBooted = false;
+  yardGiftN = 0;
+  yardGiftTapped = -1;
+  yardBubblePrev = yardBubbleLatched = nullptr;
+  yardBubbleUntil = 0;
+  if (yardMapForced) yardForceMap(0);
+#endif
   zenSerialHold = -1;
   dashSerialSteerOn = false;
   dashTrailN = 0;
@@ -465,6 +477,43 @@ static const std::vector<Scene> &scenes() {
        pet.lastSeenEpoch = epochAt(10);
      } },
     { "home", [] { pokemon(25, 13); } },
+#if TP_YARD
+    // el patio (v2.0, Y2): la casa es el mapa. Pradera de dia, de noche, al atardecer, la cantera, sin mapa,
+    // con un bicho de la caja, cacas, regalos, el globo que pasa de una necesidad a otra, dormido y el dock
+    { "yard-home", [] { pokemon(25, 13); yardForceMap(1); } },
+    { "yard-home-night", [] { pokemon(133, 22); } },
+    { "yard-home-dusk", [] { pokemon(1, 19); } },
+    { "yard-home-quarry", [] { pokemon(74, 11); } },
+    { "yard-home-fallback", [] { pokemon(25, 13); yardForceMap(YARD_MAP_NONE); } },
+    { "yard-home-fallback-night", [] { pokemon(7, 23); pet.sleeping = true; yardForceMap(YARD_MAP_NONE); } },
+    { "yard-home-two", [] { pokemon(25, 13); yardForceMap(1); boxPet(0, 7, 12); }, 60 },
+    { "yard-home-two-quarry", [] { pokemon(74, 15); boxPet(0, 133, 20, true); }, 120 },
+    { "yard-home-poop", [] { pokemon(1, 10); pet.dbgSetPoops(3); pet.hygiene = 40; } },
+    { "yard-poop-tap", [] { pokemon(1, 10); pet.dbgSetPoops(3); pet.hygiene = 40; render();
+                            onTap(yardPoopX[1], yardPoopY[1] - 20); }, 3 },
+    { "yard-home-gifts", [] { pokemon(25, 13); yardForceMap(1); for (int i = 0; i < 5; i++) pet.addGift(IT_CAKE); } },
+    { "yard-bubble-cycle-0", [] { pokemon(25, 13); yardForceMap(1); pet.fullness = 10; pet.hygiene = 12; gHostMillis = 200000 - 85; } },
+    { "yard-bubble-cycle-1", [] { pokemon(25, 13); yardForceMap(1); pet.fullness = 10; pet.hygiene = 12; gHostMillis = 201000 - 85; } },
+    { "yard-bubble-cycle-0-es", [] { pokemon(25, 13); yardForceMap(1); pet.fullness = 10; pet.hygiene = 12; gHostMillis = 200000 - 85;
+                                     lang(LANG_ES); } },
+    { "yard-bubble-cycle-1-es", [] { pokemon(25, 13); yardForceMap(1); pet.fullness = 10; pet.hygiene = 12; gHostMillis = 201000 - 85;
+                                     lang(LANG_ES); } },
+    { "yard-home-asleep", [] { pokemon(25, 23); pet.sleeping = true; yardForceMap(1); boxPet(0, 7, 12); } },
+    { "yard-home-asleep-es", [] { pokemon(25, 23); pet.sleeping = true; yardForceMap(1); lang(LANG_ES); } },
+    { "yard-sleepy-es", [] { pokemon(25, 22); yardForceMap(1); lang(LANG_ES); } },
+    { "yard-abandoned-es", [] { pokemon(4, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.bond = 60; lang(LANG_ES); } },
+    { "yard-heart", [] { pokemon(133, 12); pet.feedBerry(0); gHostMillis += EAT_ANIM_MS + 100; }, 2 },
+    { "yard-bath", [] { pokemon(25, 13); yardForceMap(1); startBath(); }, 8 },
+    { "yard-release-ask", [] { pokemon(25, 13); yardForceMap(1); confirmUntil = millis() + 5000; } },
+    { "yard-evolve-btn", [] { pokemon(4, 11); pet.setLevel(18); pet.trAtk = pet.trDef = pet.trSpe = 40; } },
+    { "yard-farewell-btn", [] { pokemon(55, 15); pet.dbgSetAge(FAREWELL_AGE_MIN + 60); pet.addGift(IT_CAKE); } },
+    { "yard-dock-care", [] { pokemon(25, 13); yardForceMap(1); render(); onTap(yDockX(0), Y_DOCK_Y); } },
+    { "yard-dock-play", [] { pokemon(25, 13); yardForceMap(1); render(); onTap(yDockX(1), Y_DOCK_Y); } },
+    { "yard-dock-care-es", [] { pokemon(25, 13); yardForceMap(1); lang(LANG_ES); render(); onTap(yDockX(0), Y_DOCK_Y); } },
+    { "yard-tap-pet", [] { pokemon(25, 13); yardForceMap(1); render(); onTap((int)yardW.p[0].x, (int)yardW.p[0].y - 20); } },
+    { "yard-tilt", [] { pokemon(25, 13); yardForceMap(1); gStubTiltSide = -1; }, 80 },
+    { "yard-orbit", [] { pokemon(25, 13); yardForceMap(1); OrbitShift o = orbitShift(6); roundCanvas->setShift(o.dx, o.dy); }, 2 },
+#endif
     // el patio (v2.0, fase Y0): el kit de interfaz nuevo, en sus tres paginas de muestra
     { "yard-ui-shop", [] { pokemon(25, 13); yardDemoOpen = true; yardDemoPage = 0; } },
     { "yard-ui-world", [] { pokemon(25, 13); yardDemoOpen = true; yardDemoPage = 1; } },

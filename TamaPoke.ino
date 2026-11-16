@@ -105,6 +105,15 @@ uint32_t yardBoxEpoch = 0;      // sdEpoch con que se cargo
 uint32_t yardLastStep = 0;      // ultimo paso del planificador (0 = ninguno aun)
 uint32_t gYardPetsUs = 0, gYardPetsMaxUs = 0;  // PERF: los bichos, sus cosas y el HUD
 #endif
+// como se dibuja cada bicho del patio (aqui arriba: el conversor .ino pone los prototipos antes que
+// el resto): el PMD a escala fija, el sprite B/N, el de flash o la miniatura de la caja
+enum : uint8_t { YB_NONE = 0, YB_PMD, YB_TPK1, YB_FLASH, YB_THUMB };
+struct YardBody {
+  uint8_t kind;
+  uint8_t s;   // escala
+  int16_t w;   // ancho visible
+  int16_t h;   // alto visible, de los pies a la cabeza
+};
 PmdMon galleryPmd;  // sprite grande de la vista detalle de la galeria (PMD/TPK2, legal)
 
 // galeria pokedex
@@ -897,7 +906,7 @@ void handleSerial() {
     Serial.printf("biome=%u%s\n", homeBiome(), gBiomeOverride >= 0 ? " (override)" : "");
     Serial.println("DONE");
 #if TP_YARD
-  } else if (line.startsWith("YARDBG")) {  // YARDBG <n>: fuerza el mapa n del patio (0 = el del bioma)
+  } else if (line.startsWith("YARDBG")) {  // YARDBG <n>: fuerza el mapa n del patio (0 = el del bioma, 255 = sin mapa)
     if (line.length() > 7) yardForceMap((uint8_t)line.substring(7).toInt());
     wakeUI();
     yardReport();
@@ -4043,7 +4052,7 @@ void fxPerfNote(uint32_t us) {
 // cabeza del bicho en pantalla, aproximada (donde van el "!", el entrenamiento y la pildora)
 int fxHeadY() {
 #if TP_YARD
-  if (yardW.p[0].on) return yardPetHeadY(0);
+  if (yardW.p[0].on) return yardPetHeadY(0) - 14;  // por encima del globo del estado
 #endif
   if (!pmd.loaded) return PET_CY - 60;
   int head = PET_GROUND - pmdIdleHeight() + 24;
@@ -6487,6 +6496,736 @@ void yardDemoTap(int16_t x, int16_t y) {
   int c = yChevronHit(x, y);
   if (c) yardDemoPage = (uint8_t)((yardDemoPage + YDEMO_PAGES + c) % YDEMO_PAGES);
 }
+
+// =================== el patio: la casa (v2.0, fase Y2) ===================
+// La casa con un bicho nacido es un mapa de arriba abajo (/yard/NN.bin, yardbg.h) por el que
+// pasean el bicho de casa y el primero de la caja (yard.h). Encima, la hora, la bateria y el dock
+// (Cuidar / Jugar / Mochila); el estado sale en un globo sobre el bicho, y las cacas y los regalos
+// estan en el suelo. El huevo, la casa vacia, la despedida y el Revivir siguen con su pantalla.
+
+bool yardHomeNow() {
+#if TP_YARD
+  return !pet.awaitingStarter() && !pet.ceremony && !pet.isDying() && !pet.isVacant() && !pet.isEgg();
+#else
+  return false;
+#endif
+}
+
+#if TP_YARD
+static_assert(YBG_CANVAS == UI_SIZE, "el mapa se copia tal cual al lienzo");
+
+// ---- el fondo ----
+// mapa de cada bioma (dex.h: biome). Un mapa nuevo se usa cambiando su numero en esta tabla
+static const uint8_t YARD_MAP_FOR_BIOME[BIOME_COUNT] = {
+  1,  // 0 pradera
+  4,  // 1 playa
+  3,  // 2 bosque
+  2,  // 3 volcan (la cantera)
+  2,  // 4 montana
+  2,  // 5 nieve
+  5,  // 6 central electrica
+  1,  // 7 pantano
+  5,  // 8 ruinas
+};
+#define YARD_MAP_FALLBACK 1  // si falta el del bioma; si falta este tambien, el suelo liso
+#define YARD_MAP_NONE 255    // YARDBG 255: el suelo liso a proposito (para verlo)
+
+uint8_t *yardFile = nullptr;       // el .bin entero en PSRAM (yardView.px apunta dentro)
+YardBgView yardView;
+uint16_t *yardBg = nullptr;        // 466x466 RGB565 ya tintado, en PSRAM (434 KB)
+uint8_t yardWalk[YBG_WALK_BYTES];  // la mascara de paso (solo la zona conectada mas grande)
+uint8_t yardMapForced = 0;         // YARDBG <n>; 0 = el del bioma
+uint8_t yardMapWant = 0;           // el pedido la ultima vez (0 = ninguno aun)
+uint8_t yardMapLoaded = 0;         // el cargado; 0 = el suelo liso de respaldo
+uint32_t yardMapEpoch = 0;
+int32_t yardBgKey = -1;            // tinte + mapa + bioma de lo que hay en yardBg
+char yardWhy[48] = "";             // por que no se cargo el pedido (YARDBG)
+
+uint8_t yardMapNow() { return yardMapLoaded; }
+
+static bool yardTryMap(uint8_t n) {
+  size_t len = 0;
+  uint8_t *d = sdReadYardMap(n, YBG_FILE_MAX, &len);
+  if (!d) {
+    snprintf(yardWhy, sizeof(yardWhy), "missing /yard/%02u.bin", n);
+    return false;
+  }
+  YbgErr e = yardBgParse(d, len, &yardView);
+  if (e != YBG_OK) {
+    free(d);
+    snprintf(yardWhy, sizeof(yardWhy), "bad /yard/%02u.bin (err %u)", n, (unsigned)e);
+    return false;
+  }
+  if (yardFile) free(yardFile);
+  yardFile = d;
+  memcpy(yardWalk, yardView.walk, YBG_WALK_BYTES);
+  yardKeepLargestRegion(yardWalk);
+  yardMapLoaded = n;
+  return true;
+}
+
+// carga el mapa que toca (el del bioma, o el forzado); se mira cada frame, solo lee al cambiar
+void yardEnsureMap() {
+  uint8_t b = homeBiome();
+  uint8_t want = yardMapForced ? yardMapForced : YARD_MAP_FOR_BIOME[b < BIOME_COUNT ? b : 0];
+  if (want == yardMapWant && yardMapEpoch == sdEpoch) return;
+  yardMapWant = want;
+  yardMapEpoch = sdEpoch;
+  yardBgKey = -1;
+  yardWhy[0] = 0;
+  if (want == YARD_MAP_NONE) {
+    snprintf(yardWhy, sizeof(yardWhy), "forced");
+  } else if (!sdReady) {
+    snprintf(yardWhy, sizeof(yardWhy), "no SD");
+  } else if (yardTryMap(want)) {
+    Serial.printf("yard map %02u\n", want);
+    return;
+  } else if (want != YARD_MAP_FALLBACK) {
+    char first[48];
+    snprintf(first, sizeof(first), "%s", yardWhy);
+    if (yardTryMap(YARD_MAP_FALLBACK)) {
+      snprintf(yardWhy, sizeof(yardWhy), "%s, using %02u", first, YARD_MAP_FALLBACK);
+      Serial.printf("yard map %02u (%s)\n", YARD_MAP_FALLBACK, yardWhy);
+      return;
+    }
+  }
+  if (yardFile) free(yardFile);
+  yardFile = nullptr;
+  yardMapLoaded = 0;
+  yardFallbackWalk(yardWalk);
+  Serial.printf("yard map fallback (%s)\n", yardWhy);
+}
+
+static void yBufRect(uint16_t *b, int x, int y, int w, int h, uint16_t c) {
+  if (x < 0) { w += x; x = 0; }
+  if (y < 0) { h += y; y = 0; }
+  if (x + w > YBG_CANVAS) w = YBG_CANVAS - x;
+  if (y + h > YBG_CANVAS) h = YBG_CANVAS - y;
+  for (int j = 0; j < h; j++)
+    for (int i = 0; i < w; i++) b[(y + j) * YBG_CANVAS + x + i] = c;
+}
+
+// sin mapa: suelo liso del color del bioma, en cuadros de una celda apenas distintos, y unas matas
+void yardPaintFallback(uint16_t *b, uint8_t biome, YardTint t) {
+  uint16_t soil = BIOME_SOIL[biome < BIOME_COUNT ? biome : 0];
+  const uint16_t ink = C565(0x10, 0x18, 0x20);
+  uint16_t base = yardTint565(soil, t), alt = yardTint565(lerp565(soil, ink, 1, 16), t);
+  uint16_t dk = yardTint565(lerp565(soil, ink, 6, 16), t), lt = yardTint565(lerp565(soil, 0xFFFF, 6, 16), t);
+  for (int cy = 0; cy < YBG_GRID; cy++)
+    for (int cx = 0; cx < YBG_GRID; cx++)
+      yBufRect(b, cx * YBG_CELL - YBG_CROP, cy * YBG_CELL - YBG_CROP, YBG_CELL, YBG_CELL, (cx + cy) & 1 ? alt : base);
+  uint32_t seed = 0x7a4d11u;
+  auto rnd = [&](int n) { seed = seed * 1664525u + 1013904223u; return (int)((seed >> 16) % (uint32_t)n); };
+  for (int k = 0; k < 34; k++) {
+    int x = 30 + rnd(406), y = 30 + rnd(406);
+    int dx = x - 233, dy = y - 233;
+    if (dx * dx + dy * dy > 205 * 205) continue;
+    if ((x >= 130 && x <= 336 && y <= 116) || (x >= 140 && x <= 326 && y >= 370)) continue;  // bajo el HUD, liso
+    if (k % 4 == 3) {  // una piedrecita
+      yBufRect(b, x, y, 6, 4, lt);
+      yBufRect(b, x + 2, y + 4, 6, 2, dk);
+      continue;
+    }
+    yBufRect(b, x, y - 10, 2, 10, dk);  // una mata: tres briznas
+    yBufRect(b, x - 4, y - 6, 2, 6, dk);
+    yBufRect(b, x + 4, y - 7, 2, 7, dk);
+    yBufRect(b, x - 2, y - 12, 2, 2, lt);
+  }
+}
+
+// re-expande el fondo si cambio el mapa, el bioma o el tinte (una vez, no por frame)
+void yardEnsureBg() {
+  yardEnsureMap();
+  YardTint tint = yardTintAt((uint8_t)sceneHour(), pet.sleeping);
+  uint8_t biome = homeBiome();
+  int32_t key = (int32_t)tint | (yardMapLoaded << 2) | (biome << 10);
+  if (key == yardBgKey) return;
+  if (!yardBg) yardBg = (uint16_t *)ps_malloc((size_t)YBG_CANVAS * YBG_CANVAS * 2);
+  if (!yardBg) return;  // sin PSRAM: yardDrawBg pinta el suelo liso cada frame
+  yardBgKey = key;
+  if (yardFile) {
+    static uint16_t pal[256];
+    yardTintPalette(yardView.pal, pal, yardView.palCount, tint);
+    yardBgExpand(yardView.px, pal, yardBg);
+  } else {
+    yardPaintFallback(yardBg, biome, tint);
+  }
+}
+
+void yardDrawBg() {
+  yardEnsureBg();
+  if (yardBg) memcpy(gfx->getFramebuffer(), yardBg, (size_t)YBG_CANVAS * YBG_CANVAS * 2);
+  else gfx->fillScreen(yardTint565(BIOME_SOIL[homeBiome() % BIOME_COUNT], yardTintAt((uint8_t)sceneHour(), pet.sleeping)));
+}
+
+void yardForceMap(uint8_t n) {
+  yardMapForced = n;
+  yardMapWant = 0;  // se vuelve a leer
+  yardEnsureBg();
+}
+
+void yardReport() {
+  Serial.printf("yardbg want=%u loaded=%u%s%s forced=%u free=%d pets=%u\n", yardMapWant, yardMapLoaded,
+                yardWhy[0] ? " why=" : "", yardWhy, yardMapForced, yardFreeCount(yardWalk), yardPetsShown());
+}
+
+// ---- los bichos ----
+
+// el alto visible del PMD en reposo (de su primera fila con algo a los pies) da la escala del patio:
+// unos 60-100 px, la mitad que en la casa de lado, para que quepan dos bichos
+YardBody yardPmdBody(PmdMon &m) {
+  YardBody b = { YB_PMD, 2, 40, 60 };
+  const PmdAct &a = m.acts[PMD_IDLE];
+  if (!a.frames) return b;
+  int top = a.h, x0 = a.w, x1 = -1;
+  for (int r = 0; r < a.h; r++)
+    for (int c = 0; c < a.w; c++)
+      if (a.data[r * a.w + c] != 0xFF) {
+        if (r < top) top = r;
+        if (c < x0) x0 = c;
+        if (c > x1) x1 = c;
+      }
+  int vh = (a.base ? a.base : a.h) - top, vw = x1 >= x0 ? x1 - x0 + 1 : a.w;
+  if (vh < 1) vh = a.h;
+  b.s = vh <= 16 ? 3 : (vh * 2 <= 104 ? 2 : 1);  // casi todos a 2; los muy pequenos a 3, los enormes a 1
+  b.h = (int16_t)(vh * b.s);
+  b.w = (int16_t)(vw * b.s);
+  return b;
+}
+
+YardBody yardBodyOf(int i) {
+  YardBody b = { YB_NONE, 2, 40, 48 };
+  if (i == 0) {
+    if (pmd.loaded) return yardPmdBody(pmd);
+    if (mon.loaded) {
+      b.kind = YB_TPK1;
+      b.s = mon.h * 2 <= 110 ? 2 : 1;
+      b.w = (int16_t)(mon.w * b.s * 3 / 4);
+      b.h = (int16_t)(mon.h * b.s);
+    } else if (flashIdxForDex(pet.speciesId) >= 0) {
+      b.kind = YB_FLASH;
+      b.w = 52;
+      b.h = 58;
+    }
+  } else {
+    if (yardBoxPmd.loaded) return yardPmdBody(yardBoxPmd);
+    if (thumbs.get(yardBoxDex)) {
+      b.kind = YB_THUMB;
+      b.w = 56;
+      b.h = 60;
+    }
+  }
+  return b;
+}
+
+int yardPetHeadY(int i) { return (int)yardW.p[i].y - yardBodyOf(i).h; }
+
+uint8_t yardPetsShown() {
+  uint8_t n = 0;
+  for (int i = 0; i < yardW.n; i++) n += yardW.p[i].on;
+  return n;
+}
+
+// gesto al azar (los de la casa de lado: Pose, Nod, Breath; Hop salta mucho y Sit mira atras)
+bool yardPickGesture(uint8_t i, uint8_t *act, uint32_t *ms) {
+  PmdMon &m = i == 0 ? pmd : yardBoxPmd;
+  static const uint8_t flair[] = { PMD_POSE, PMD_NOD, PMD_BREATH };
+  uint8_t pick[3], n = 0;
+  for (uint8_t f : flair)
+    if (m.has(f)) pick[n++] = f;
+  if (!n) return false;
+  *act = pick[random(n)];
+  *ms = pmdActTotalMs(m.acts[*act]);
+  return true;
+}
+
+// quien esta en el patio: el de casa, y el primero de la caja (cargando su sprite si cambio)
+void yardSyncPets() {
+  yardW.n = 2;
+  yardW.pickGesture = yardPickGesture;
+  YardPet &h = yardW.p[0];
+  if (!h.on) {
+    if (yardW.rng.s == 1) yardW.rng.s = (uint32_t)random(1, 0x7fffffff);
+    h = YardPet{};
+    h.on = true;
+    // donde se veia el bicho en la casa de lado (y donde nace del huevo): abajo del centro
+    int c = yardNearestFreeCell(yardWalk, CX, PET_GROUND);
+    if (c >= 0) {
+      h.x = (float)yardCellCenter(yardCellCX(c));
+      h.y = (float)yardCellCenter(yardCellCY(c));
+    } else {
+      yardPlace(yardW, yardWalk, 0);
+    }
+    yardLastStep = 0;
+  }
+  h.walks = pmd.has(PMD_WALKL) || pmd.has(PMD_WALKR);
+  int8_t slot = -1;
+  for (uint8_t k = 0; k < BOX_SLOTS && slot < 0; k++)
+    if (pet.boxState(k) == BOX_OK) slot = (int8_t)k;
+  YardPet &b = yardW.p[1];
+  if (slot < 0) {
+    b.on = false;
+    if (yardBoxPmd.loaded) yardBoxPmd.unload();
+    yardBoxDex = -2;
+    yardBoxSlot = -1;
+    return;
+  }
+  const PetRecord &r = pet.boxRecord((uint8_t)slot);
+  bool sh = (r.flags & REC_SHINY) != 0;
+  if (r.speciesId != yardBoxDex || sh != yardBoxShiny || yardBoxEpoch != sdEpoch) {
+    yardBoxDex = r.speciesId;
+    yardBoxShiny = sh;
+    yardBoxEpoch = sdEpoch;
+    yardBoxPmd.unload();
+    if (r.speciesId >= 1 && r.speciesId <= DEX_COUNT) yardBoxPmd.load((uint8_t)r.speciesId, sh);
+  }
+  yardBoxSlot = slot;
+  if (!b.on) {
+    b = YardPet{};
+    b.on = true;
+    yardPlace(yardW, yardWalk, 1);
+  }
+  b.walks = yardBoxPmd.has(PMD_WALKL) || yardBoxPmd.has(PMD_WALKR);
+}
+
+// un paso del planificador: lo que pide el juego (dormir, comer, triste...) y la inclinacion
+void yardTick(uint32_t now) {
+  uint32_t dt = yardLastStep ? now - yardLastStep : 100;
+  uint32_t cap = frameIntervalMs(powerCtx(now)) + 100;  // otra pantalla de por medio no es un paso largo
+  if (dt > cap) dt = cap;
+  yardLastStep = now;
+  uint8_t hold[YARD_PETS_MAX] = { YH_NONE, YH_NONE, YH_NONE };
+  PetMood m = pet.mood();
+  if (pet.sleeping) hold[0] = YH_SLEEP;
+  else if (pet.evolving() || fxHatchHidesPet(now) || bathUntil || pet.emote() != EMOTE_NONE ||
+           (m == MOOD_EATING && pmd.has(PMD_EAT)) || (m == MOOD_SAD && pmd.has(PMD_HURT)))
+    hold[0] = YH_STAY;
+  hold[1] = pet.sleeping ? YH_SLEEP : YH_NONE;  // el de la caja se duerme con el de casa
+  int8_t tilt = (imuPresent() && !bathUntil && pet.emote() == EMOTE_NONE) ? imuTiltSide() : 0;
+  yardStep(yardW, yardWalk, now, dt, hold, tilt);
+}
+
+// sombra: el suelo de debajo, oscurecido (un 25 %) en una elipse
+void yardShadow(int cx, int cy, int w) {
+  int rx = w * 2 / 5, ry;
+  if (rx < 10) rx = 10;
+  ry = rx / 3 < 4 ? 4 : rx / 3;
+  uint16_t *fb = gfx->getFramebuffer();
+  for (int dy = -ry; dy <= ry; dy++) {
+    int y = cy + dy;
+    if (y < 0 || y >= YBG_CANVAS) continue;
+    int span = (int)(rx * sqrtf(1.0f - (float)(dy * dy) / (ry * ry)));
+    for (int x = cx - span; x <= cx + span; x++) {
+      if (x < 0 || x >= YBG_CANVAS) continue;
+      uint16_t &c = fb[y * YBG_CANVAS + x];
+      c = (uint16_t)(((c >> 1) & 0x7BEF) + ((c >> 2) & 0x39E7));
+    }
+  }
+}
+
+void yardDrawPet(int i, uint32_t now) {
+  YardPet &p = yardW.p[i];
+  YardBody b = yardBodyOf(i);
+  int x = (int)p.x + (i == 0 ? dizzyWobble(now) : 0), y = (int)p.y;
+  yardShadow(x, y, b.w);
+  if (b.kind == YB_PMD) {
+    PmdMon &m = i == 0 ? pmd : yardBoxPmd;
+    uint8_t act = PMD_IDLE;
+    bool loop = true;
+    if (p.mode == YM_SLEEP) act = PMD_SLEEP;
+    else if (p.mode == YM_STAY && i == 0) {
+      PetMood md = pet.mood();
+      act = md == MOOD_EATING ? PMD_EAT : md == MOOD_SAD ? PMD_HURT : PMD_IDLE;
+    } else if (p.mode == YM_WALK) act = p.face > 0 ? PMD_WALKR : PMD_WALKL;
+    else if (p.mode == YM_GESTURE) {
+      act = p.act;
+      loop = false;
+    }
+    if (!m.has(act)) act = PMD_IDLE;
+    drawPmdActS(m, act, x, y, now - p.t0, loop || act == PMD_IDLE, false, b.s);
+  } else if (b.kind == YB_TPK1) {
+    int s = b.s, w = mon.w * s;
+    uint16_t fm = mon.frameMs ? mon.frameMs : 100;
+    uint16_t fi = pet.sleeping ? 0 : (now / fm) % mon.frames;
+    const uint8_t *fr = mon.data + (uint32_t)fi * mon.w * mon.h;
+    int x0 = x - w / 2, y0 = y - mon.h * s;
+    for (int r = 0; r < mon.h; r++) {
+      const uint8_t *row = fr + r * mon.w;
+      forRuns(mon.w, [&](int c) { return indexedKey(row[c], false); },
+              [&](int c0, int len, int k) { gfx->fillRect(x0 + c0 * s, y0 + r * s, len * s, s, mon.pal[k]); });
+    }
+  } else if (b.kind == YB_FLASH) {
+    const Species &sp = SPECIES[flashIdxForDex(pet.speciesId)];
+    drawMap(sp.sprite, SPRITE_H, x - 32, y - 62, 2, false);
+  } else if (b.kind == YB_THUMB) {
+    drawThumbFit(thumbs.get(yardBoxDex), x, y - b.h / 2, 80, 80, false, 0);
+  } else {  // sin sprite ninguno
+    yShadowText(x - 9, y - 40, "?", 4, Y_TEXT);
+  }
+  if (i != 0) return;
+  int head = y - b.h;
+  if (pet.showHeart()) drawMap(SPR_HEART, 32, x + b.w / 2 - 6, head - 18, 1, false);
+  uint8_t e = pet.emote();
+  if (e == EMOTE_ANGRY) drawAngerMark(x + b.w / 2 + 6, head + 4);
+  else if (e == EMOTE_DIZZY) drawDizzyStars(x, head - 8, now);
+}
+
+void yardDrawPets(uint32_t now) {
+  uint8_t order[YARD_PETS_MAX];
+  int n = yardDrawOrder(yardW, order);
+  bool hatching = drawHatchFx(now);  // el huevo aun se rompe en el centro: el de casa no se ve
+  for (int k = 0; k < n; k++) {
+    int i = order[k];
+    if (i == 0 && (hatching || pet.evolving())) continue;
+    yardDrawPet(i, now);
+  }
+  if (pet.evolving()) drawEvolveFX(now);  // la evolucion, grande en el centro como siempre
+}
+
+// bicho bajo el dedo (el de encima primero): 0 el de casa, 1 el de la caja, -1 ninguno
+int yardPetAt(int16_t x, int16_t y) {
+  uint8_t order[YARD_PETS_MAX];
+  int n = yardDrawOrder(yardW, order);
+  for (int k = n - 1; k >= 0; k--) {
+    int i = order[k];
+    YardBody b = yardBodyOf(i);
+    if (yardPetHit(x, y, yardW.p[i].x, yardW.p[i].y, b.w, b.h)) return i;
+  }
+  return -1;
+}
+
+// ---- las cosas del suelo: cacas y regalos ----
+// Las cacas guardadas siguen siendo un numero (y sus huecos, pet.poopSlots); su sitio en el patio
+// solo vive en RAM: una nueva cae junto a los pies del bicho, y al arrancar se reparten al azar
+int16_t yardPoopX[POOP_MAX], yardPoopY[POOP_MAX];
+uint8_t yardPoopHave = 0;   // huecos con sitio
+bool yardPoopBooted = false;
+#define YARD_GIFTS_SHOWN 3
+int16_t yardGiftX[YARD_GIFTS_SHOWN], yardGiftY[YARD_GIFTS_SHOWN];
+uint8_t yardGiftN = 0;
+int8_t yardGiftTapped = -1;  // el que se toco: es el que desaparece al abrirse
+
+// lo que ya hay en el suelo (para no amontonar)
+static int yardThings(int16_t *ox, int16_t *oy, int skipPoop) {
+  int n = 0;
+  for (int i = 0; i < POOP_MAX; i++)
+    if ((yardPoopHave & (1 << i)) && i != skipPoop) {
+      ox[n] = yardPoopX[i];
+      oy[n++] = yardPoopY[i];
+    }
+  for (int i = 0; i < yardGiftN; i++) {
+    ox[n] = yardGiftX[i];
+    oy[n++] = yardGiftY[i];
+  }
+  return n;
+}
+
+void yardSyncThings() {
+  int16_t ox[POOP_MAX + YARD_GIFTS_SHOWN], oy[POOP_MAX + YARD_GIFTS_SHOWN];
+  uint8_t m = pet.poopSlots();
+  for (int i = 0; i < POOP_MAX; i++) {
+    uint8_t bit = 1 << i;
+    if (!(m & bit)) {
+      yardPoopHave &= ~bit;
+      continue;
+    }
+    bool have = yardPoopHave & bit;
+    if (have && yardSpotOk(yardWalk, yardPoopX[i], yardPoopY[i])) continue;
+    yardPoopHave &= ~bit;
+    int n = yardThings(ox, oy, i), x, y;
+    bool ok = (yardPoopBooted && !have && yardW.p[0].on)
+                  ? yardDropSpot(yardWalk, yardW.p[0].x, yardW.p[0].y, ox, oy, n, &x, &y)  // recien hecha: a sus pies
+                  : yardFreeSpot(yardW, yardWalk, yardW.rng, ox, oy, n, &x, &y);        // al arrancar o con otro mapa
+    if (!ok) continue;
+    yardPoopX[i] = (int16_t)x;
+    yardPoopY[i] = (int16_t)y;
+    yardPoopHave |= bit;
+  }
+  yardPoopBooted = true;
+  uint8_t want = pet.giftCount() < YARD_GIFTS_SHOWN ? pet.giftCount() : YARD_GIFTS_SHOWN;
+  while (yardGiftN > want) {  // se abrio uno: se va el tocado
+    int k = (yardGiftTapped >= 0 && yardGiftTapped < yardGiftN) ? yardGiftTapped : yardGiftN - 1;
+    for (int j = k; j + 1 < yardGiftN; j++) {
+      yardGiftX[j] = yardGiftX[j + 1];
+      yardGiftY[j] = yardGiftY[j + 1];
+    }
+    yardGiftN--;
+    yardGiftTapped = -1;
+  }
+  for (int i = 0; i < yardGiftN; i++)  // otro mapa: el que quede en algo bloqueado se mueve
+    if (!yardSpotOk(yardWalk, yardGiftX[i], yardGiftY[i])) {
+      for (int j = i; j + 1 < yardGiftN; j++) {
+        yardGiftX[j] = yardGiftX[j + 1];
+        yardGiftY[j] = yardGiftY[j + 1];
+      }
+      yardGiftN--;
+      i--;
+    }
+  while (yardGiftN < want) {
+    int n = yardThings(ox, oy, -1), x, y;
+    if (!yardFreeSpot(yardW, yardWalk, yardW.rng, ox, oy, n, &x, &y)) break;
+    yardGiftX[yardGiftN] = (int16_t)x;
+    yardGiftY[yardGiftN++] = (int16_t)y;
+  }
+}
+
+void yardDrawThings(uint32_t now) {
+  // SPR_POOP (32x32) a escala 2, como en la casa de lado: la tinta ~32x40 con los pies del monton en y
+  for (int i = 0; i < POOP_MAX; i++)
+    if (yardPoopHave & (1 << i)) drawMap(SPR_POOP, 32, yardPoopX[i] - 34, yardPoopY[i] - 58, 2, false);
+  uint32_t left = timeLeft(poopPuffUntil);
+  if (left && poopPuffSlot >= 0) {  // la que se acaba de limpiar: destellos donde estaba
+    int cx = yardPoopX[poopPuffSlot], cy = yardPoopY[poopPuffSlot] - 20;
+    int r = 4 + (int)((POOP_PUFF_MS - left) / 30);
+    for (int k = 0; k < 4; k++) {
+      int sx = cx + ((k & 1) ? r : -r), sy = cy + ((k & 2) ? r : -r);
+      uint16_t col = (k % 2) ? UI_BAR_WARN : UI_WHITE;
+      gfx->fillRect(sx - 4, sy - 1, 9, 3, col);
+      gfx->fillRect(sx - 1, sy - 4, 3, 9, col);
+    }
+  }
+  for (int i = 0; i < yardGiftN; i++) {
+    int bob = (int)lroundf(2.0f * sinf(now * 0.004f + i * 2.1f));
+    yardShadow(yardGiftX[i], yardGiftY[i], 30);
+    drawMap(SPR_GIFT, 16, yardGiftX[i] - 16, yardGiftY[i] - 30 + bob, 2, false);
+  }
+  if (pet.giftCount() > YARD_GIFTS_SHOWN && yardGiftN) {
+    char t[6];
+    snprintf(t, sizeof(t), "+%u", (unsigned)(pet.giftCount() - YARD_GIFTS_SHOWN));
+    int k = yardGiftN - 1;
+    yShadowText(yardGiftX[k] + 18, yardGiftY[k] - 30, t, 2, Y_TEXT);
+  }
+}
+
+#define YARD_THING_HIT_R 28
+int yardPoopAt(int16_t x, int16_t y) {
+  for (int i = 0; i < POOP_MAX; i++) {
+    if (!(yardPoopHave & (1 << i))) continue;
+    int dx = x - yardPoopX[i], dy = y - (yardPoopY[i] - 20);
+    if (dx * dx + dy * dy <= YARD_THING_HIT_R * YARD_THING_HIT_R) return i;
+  }
+  return -1;
+}
+int yardGiftAt(int16_t x, int16_t y) {
+  for (int i = 0; i < yardGiftN; i++) {
+    int dx = x - yardGiftX[i], dy = y - (yardGiftY[i] - 14);
+    if (dx * dx + dy * dy <= YARD_THING_HIT_R * YARD_THING_HIT_R) return i;
+  }
+  return -1;
+}
+
+// ---- el globo sobre el bicho ----
+// lo que pasa ahora mismo (uno solo, por orden de importancia), o nullptr
+const char *yardEventMsg() {
+  if (timeLeft(cakeHintUntil)) return T(S_NO_CAKE);
+  if (timeLeft(tastesMsgUntil) && !pet.sleeping) return T(S_TASTES);
+  if (bathUntil) return "Splish splash!";
+  if (pet.emote() == EMOTE_ANGRY) return T(S_GRUMPY);
+  if (pet.emote() == EMOTE_DIZZY) return T(S_DIZZY);
+  if (pet.sleeping) return "Zzz...";
+  if (timeLeft(revivedMsgUntil)) return T(S_REVIVED);
+  if (pet.eating()) return T(S_EATING);
+  if (pet.showHeart()) return T(S_LIKES);
+  return nullptr;
+}
+
+// las necesidades bajas, todas (el globo pasa de una a otra cada segundo)
+int yardNeedList(const char **out) {
+  int n = 0;
+  if (pet.neglected()) {  // abandono (v1.60): solo eso
+    out[n++] = T(pet.bond > 0 ? S_ABANDONED : S_WEAK);
+    return n;
+  }
+  if (pet.sleepy()) out[n++] = T(S_SLEEPY);
+  if (pet.fullness < 25) out[n++] = T(S_HUNGRY);
+  if (pet.hygiene < 25) out[n++] = T(S_NEEDS_BATH);
+  if (pet.energy < 25) out[n++] = T(S_EXHAUSTED);
+  if (pet.joy < 25) out[n++] = T(S_SAD);
+  return n;
+}
+
+// globo blanco con la cola hacia (cx, tipY), dentro del circulo (como yBubble, que solo acota la x)
+void yardBubbleAt(int cx, int tipY, const char *text) {
+  setSize(2);
+  int tw = textW(text, 2), w = tw + 20, h = 30;
+  const int R = 214;  // radio util para el globo (el marco redondo y la orbita)
+  if (tipY < 52) tipY = 52;
+  int top, hc;
+  for (;;) {  // baja hasta que el globo cabe a lo ancho a su altura
+    top = tipY - 8 - h;
+    int dy = top < Y_CY ? Y_CY - top : top + h - Y_CY;
+    hc = dy < R ? (int)sqrtf((float)(R * R - dy * dy)) : 0;
+    if (2 * hc >= w || tipY > 300) break;
+    tipY += 4;
+  }
+  int x = cx - w / 2;
+  if (x < Y_CX - hc) x = Y_CX - hc;
+  if (x + w > Y_CX + hc) x = Y_CX + hc - w;
+  int tail = cx < x + 14 ? x + 14 : cx > x + w - 14 ? x + w - 14 : cx;
+  gfx->fillRoundRect(x + 2, top + 2, w, h, 10, Y_SHADOW);
+  gfx->fillRoundRect(x, top, w, h, 10, Y_TEXT);
+  gfx->fillTriangle(tail - 7, top + h - 1, tail + 7, top + h - 1, tail, tipY, Y_TEXT);
+  gfx->setTextColor(UI_INK);
+  setCur(x + 10, top + (h - 14) / 2);
+  printT(text);
+}
+
+const char *yardBubblePrev = nullptr, *yardBubbleLatched = nullptr;
+uint32_t yardBubbleUntil = 0;
+void yardDrawBubble(uint32_t now) {
+  if (pet.evolving() || fxHatchHidesPet(now)) return;
+  const char *ev = yardEventMsg();
+  if (ev && ev != yardBubblePrev) {  // un suceso nuevo: se queda al menos Y_BUBBLE_MS aunque acabe antes
+    yardBubbleLatched = ev;
+    yardBubbleUntil = now + Y_BUBBLE_MS;
+  }
+  yardBubblePrev = ev;
+  const char *txt = ev ? ev : (timeLeft(yardBubbleUntil) ? yardBubbleLatched : nullptr);
+  if (!txt) {
+    const char *needs[6];
+    int n = yardNeedList(needs);
+    int k = yardCycleIndex(n, now, Y_BUBBLE_CYCLE_MS);
+    if (k >= 0) txt = needs[k];
+  }
+  if (!txt) return;
+  yardBubbleAt((int)yardW.p[0].x, yardPetHeadY(0) - 4, txt);
+}
+
+// "LIM +10": lo que cambio una necesidad, subiendo sobre el bicho (el patio no tiene barras)
+void yardStatPill(uint8_t a, int16_t v, float t) {
+  char s[24];
+  snprintf(s, sizeof(s), v > 0 ? "%s +%d" : "%s %d", T((StrId)(S_BAR_FOOD + (a & 3))), v);
+  setSize(2);
+  int w = textW(s, 2) + 16;
+  int cx = petFootX(), y = yardPetHeadY(0) - 70 - (a & 1) * 28 - (int)(t * 26);
+  if (y < 44) y = 44;
+  if (cx - w / 2 < 40) cx = 40 + w / 2;
+  if (cx + w / 2 > 426) cx = 426 - w / 2;
+  gfx->fillRoundRect(cx - w / 2, y - 4, w, 24, 8, v > 0 ? Y_ACCENT_GO : Y_ACCENT_BAD);
+  gfx->setTextColor(Y_TEXT);
+  setCur(cx - w / 2 + 8, y);
+  printT(s);
+}
+
+// ---- el HUD: bateria, hora y dock ----
+// la bateria sobre el mapa: contorno doble claro con sombra (drawBattery es para el fondo crema)
+void drawBatteryHud(int x, int y) {
+  int pc = batPercent();
+  if (pc < 0) return;
+  const int w = 24, h = 12;
+  bool charging = batCharging();
+  uint16_t col = charging ? UI_BAR_OK : (pc >= 40) ? Y_TEXT : (pc >= 15) ? UI_BAR_WARN : UI_BAR_BAD;
+  for (int k = 0; k < 2; k++) {  // la sombra y luego el dibujo
+    int ox = k ? 0 : 2;
+    uint16_t c = k ? col : Y_SHADOW;
+    gfx->drawRoundRect(x + ox, y + ox, w, h, 3, c);
+    gfx->drawRoundRect(x + ox + 1, y + ox + 1, w - 2, h - 2, 2, c);
+    gfx->fillRect(x + ox + w, y + ox + 3, 3, h - 6, c);
+  }
+  if (charging) {
+    uint16_t bolt = C565(0xff, 0xd9, 0x4a);
+    int bx = x + w / 2;
+    gfx->fillTriangle(bx + 3, y + 2, bx - 4, y + 7, bx + 1, y + 7, bolt);
+    gfx->fillTriangle(bx - 1, y + 6, bx + 4, y + 6, bx - 3, y + 11, bolt);
+  } else {
+    int fw = (w - 6) * pc / 100;
+    if (fw > 0) gfx->fillRect(x + 3, y + 3, fw, h - 6, col);
+  }
+}
+
+// boton del dock -> boton de la fila vieja, para los efectos de pulsar y temblar (fx.h)
+static int yardDockFx(int d) { return d == 0 ? BTN_CARE : d == 1 ? 1 : BTN_BAG; }
+// dormido: Cuidar (despertarlo) y la Mochila (mirar) siguen; Jugar solo con bichos en la caja (fases)
+static bool yardDockOff(int d) { return d == 1 && pet.sleeping && !pet.boxHasPets(); }
+
+#define YARD_CLOCK_Y 30  // la hora a tamano 5 (40 px de alto); debajo queda sitio para las monedas (Y4)
+#define YARD_BAT_Y 12
+void yardDrawHud() {
+  drawBatteryHud(Y_CX - BAT_ICON_W / 2, YARD_BAT_Y);
+  uint32_t e = pet.lastSeenEpoch;
+  if (e) {  // sin hora del reloj no se inventa una
+    char t[8];
+    snprintf(t, sizeof(t), "%02u:%02u", (unsigned)((e / 3600) % 24), (unsigned)((e / 60) % 60));
+    yShadowText(centerX(t, 5), YARD_CLOCK_Y, t, 5, Y_TEXT);
+  }
+  YDockItem dock[Y_DOCK_N] = {
+    { SPR_ICON_CARE, Y_DOCK_CARE, yardDockOff(0) },
+    { SPR_ICON_PLAY, Y_DOCK_PLAY, yardDockOff(1) },
+    { SPR_ICON_BAG, Y_DOCK_BAG, yardDockOff(2) },
+  };
+  int pressed = -1;
+  for (int d = 0; d < Y_DOCK_N; d++)
+    if (fxo.find(FXO_PRESS, yardDockFx(d))) pressed = d;
+  yDock(dock, pressed);
+}
+
+// ---- un frame de la casa (el fondo ya esta copiado) ----
+void renderYardHome(uint32_t now) {
+  yardSyncPets();
+  yardTick(now);
+  yardSyncThings();
+  yardDrawThings(now);
+  yardDrawPets(now);
+  drawBath();               // la espuma, sobre el bicho
+  drawBoxAppear(now);       // recien guardado o despertado: sale de una luz
+  yardDrawBubble(now);
+  yardDrawHud();
+}
+
+// ---- toques ----
+void yardTap(int16_t x, int16_t y) {
+  int d = yDockHit(x, y);
+  if (d >= 0) {
+    Serial.printf("DOCK %d\n", d);
+    fxo.push(FXO_PRESS, yardDockFx(d), 0, millis());
+    if (yardDockOff(d)) {
+      sfxPlay(SFX_DENY);
+      fxo.push(FXO_DENY, yardDockFx(d), 0, millis());
+      return;
+    }
+    sfxPlay(SFX_TAP);
+    if (d == 0) openCarePanel();
+    else if (d == 1) openPlayPanel();
+    else openBag();
+    return;
+  }
+  int pp = yardPoopAt(x, y);  // una caca: fuera con un toque (como en la casa de lado)
+  if (pp >= 0) {
+    FxNeedSnap ns = fxSnap();
+    if (pet.cleanPoop(pp)) {
+      Serial.printf("POOP clean %d\n", pp);
+      sfxPlay(SFX_TAP);
+      fxNeeds(ns);
+      poopPuffSlot = pp;
+      poopPuffUntil = millis() + POOP_PUFF_MS;
+    } else {
+      sfxPlay(SFX_DENY);
+    }
+    return;
+  }
+  int g = yardGiftAt(x, y);
+  if (g >= 0) {
+    yardGiftTapped = (int8_t)g;
+    openGiftTap();
+    return;
+  }
+  int who = yardPetAt(x, y);
+  if (who == 0) {  // el de casa: su ficha
+    Serial.println("PET card");
+    sfxPlay(SFX_TAP);
+    cardOpen = true;
+    cardPage = 0;
+  } else if (who == 1) {  // el de la caja: la caja (su ficha esta ahi)
+    Serial.println("PET box");
+    if (boxCanOpen()) {
+      sfxPlay(SFX_TAP);
+      openBox();
+    } else {
+      sfxPlay(SFX_DENY);
+    }
+  }
+}
+#endif  // TP_YARD
 
 void drawHeader(const char *name, uint16_t nameColor, const char *msg) {
   // Fila de estado: la bateria y, con el bicho en pantalla, la racha a su lado,

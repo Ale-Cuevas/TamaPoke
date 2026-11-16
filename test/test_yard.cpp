@@ -224,7 +224,7 @@ TEST(yard, sitio_para_una_caca_y_un_regalo) {
     int x, y;
     CHECK(yardDropSpot(walk, px, py, ox, oy, n, &x, &y));
     CHECK(yardSpotOk(walk, x, y));
-    for (int j = 0; j < n; j++) CHECK(yardDist(x, y, ox[j], oy[j]) >= 26);
+    for (int j = 0; j < n; j++) CHECK(yardDist(x, y, ox[j], oy[j]) >= YARD_THING_GAP);
     ox[n] = (int16_t)x;
     oy[n++] = (int16_t)y;
   }
@@ -263,4 +263,21 @@ TEST(yard, celda_libre_mas_cercana) {
   int c = yardNearestFreeCell(walk, yardCellCenter(7), yardCellCenter(7));  // el estanque
   CHECK(yardFree(walk, c));
   CHECK_EQ(abs(yardCellCX(c) - 7) + abs(yardCellCY(c) - 7), 2);
+}
+
+TEST(yard, solo_la_zona_conectada_mas_grande) {
+  uint8_t walk[YBG_WALK_BYTES];
+  yardFallbackWalk(walk);
+  int before = yardFreeCount(walk);
+  // una celda suelta en (10, 4) rodeada de bloqueadas
+  block(walk, 9, 4); block(walk, 11, 4); block(walk, 10, 3); block(walk, 10, 5);
+  CHECK(yardFree(walk, yardCellIdx(10, 4)));
+  int n = yardKeepLargestRegion(walk);
+  CHECK(!yardFree(walk, yardCellIdx(10, 4)));
+  CHECK_EQ(n, before - 5);
+  CHECK_EQ(yardFreeCount(walk), n);
+  // todo lo que queda se alcanza desde el centro
+  uint8_t path[YARD_PATH_MAX];
+  for (int c = 0; c < YARD_CELLS; c++)
+    if (yardFree(walk, c) && c != yardCellIdx(7, 7)) CHECK(yardPath(walk, yardCellIdx(7, 7), c, path, YARD_PATH_MAX) > 0);
 }

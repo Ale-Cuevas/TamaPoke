@@ -25,6 +25,7 @@
 #define YARD_WALK_MAX_MS 25000   // un paseo que no llega (otro bicho en medio) se deja
 #define YARD_TILT_REST_MS 800    // al nivelar la placa, quieto un momento
 #define YARD_PATH_MAX 64
+#define YARD_THING_GAP 36      // px entre dos cosas del suelo (cacas de 32 px)
 #define YARD_CELLS (YBG_GRID * YBG_GRID)
 
 // modo de un bicho
@@ -105,6 +106,42 @@ inline int yardFreeCount(const uint8_t *walk) {
   int n = 0;
   for (int k = 0; k < YARD_CELLS; k++) n += yardFree(walk, k);
   return n;
+}
+
+// deja libre solo la zona conectada (4 vecinos) mas grande: las celdas sueltas o los rincones cerrados
+// del mapa se marcan como bloqueados, asi nada aparece ni pasea donde no se puede llegar. Devuelve
+// cuantas celdas quedan libres
+inline int yardKeepLargestRegion(uint8_t *walk) {
+  uint8_t comp[YARD_CELLS];
+  uint8_t q[YARD_CELLS];
+  memset(comp, 0, sizeof(comp));
+  int best = 0, bestN = 0, id = 0;
+  static const int8_t D[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+  for (int c0 = 0; c0 < YARD_CELLS; c0++) {
+    if (comp[c0] || !yardFree(walk, c0) || id == 255) continue;
+    id++;
+    int qh = 0, qt = 0;
+    q[qt++] = (uint8_t)c0;
+    comp[c0] = (uint8_t)id;
+    while (qh < qt) {
+      int c = q[qh++];
+      for (auto &d : D) {
+        int nx = yardCellCX(c) + d[0], ny = yardCellCY(c) + d[1];
+        if (yardCellBlocked(walk, nx, ny)) continue;
+        int k = yardCellIdx(nx, ny);
+        if (comp[k]) continue;
+        comp[k] = (uint8_t)id;
+        q[qt++] = (uint8_t)k;
+      }
+    }
+    if (qt > bestN) {
+      bestN = qt;
+      best = id;
+    }
+  }
+  for (int c = 0; c < YARD_CELLS; c++)
+    if (comp[c] && comp[c] != best) walk[c >> 3] |= (uint8_t)(1 << (c & 7));
+  return bestN;
 }
 
 // camino de celdas (4 vecinos) de `from` a `to`, sin incluir `from`; devuelve su largo (0 si no
@@ -418,7 +455,7 @@ inline void yardStep(YardWorld &w, const uint8_t *walk, uint32_t now, uint32_t d
   }
 }
 
-// un punto del suelo cerca de (x, y) donde dejar algo (una caca): libre y a 26 px o mas de las
+// un punto del suelo cerca de (x, y) donde dejar algo (una caca): libre y a YARD_THING_GAP o mas de las
 // otras cosas (ox, oy, n). Prueba a los lados de los pies y si no, el centro de la celda libre mas
 // cercana. false si no hay ninguno.
 inline bool yardDropSpot(const uint8_t *walk, float x, float y, const int16_t *ox, const int16_t *oy, int n, int *rx,
@@ -426,10 +463,10 @@ inline bool yardDropSpot(const uint8_t *walk, float x, float y, const int16_t *o
   auto ok = [&](float px, float py) {
     if (!yardSpotOk(walk, px, py) || !yardSpotOk(walk, px - 12, py) || !yardSpotOk(walk, px + 12, py)) return false;
     for (int k = 0; k < n; k++)
-      if (yardDist(px, py, ox[k], oy[k]) < 26) return false;
+      if (yardDist(px, py, ox[k], oy[k]) < YARD_THING_GAP) return false;
     return true;
   };
-  static const int8_t TRY[6][2] = { { -30, 6 }, { 30, 6 }, { -30, -10 }, { 30, -10 }, { 0, 20 }, { -50, 14 } };
+  static const int8_t TRY[6][2] = { { -38, 6 }, { 38, 6 }, { -38, -12 }, { 38, -12 }, { 0, 24 }, { -60, 14 } };
   for (auto &t : TRY)
     if (ok(x + t[0], y + t[1])) {
       *rx = (int)(x + t[0]);
