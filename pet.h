@@ -3,6 +3,7 @@
 #include <Preferences.h>
 #include "growth.h"  // ritmo de los niveles (v1.35): cuanto cuesta cada uno
 #include "box.h"     // la caja (v1.37): el registro de un bicho guardado
+#include "eggtimer.h" // el huevo del patio (v2.0, Y3): 4 h de tiempo real, las sacudidas lo adelantan
 
 // 1 tick = 1 minuto de juego. Baja este valor para probar mas rapido
 // (p. ej. 5000UL = las estadisticas caen 12x mas rapido).
@@ -372,7 +373,21 @@ public:
   uint8_t openGift(bool *full = nullptr);
   bool addGift(uint8_t it);  // un regalo nuevo (serie GIFT y pruebas); false = cola llena
   bool hatchFromBag();  // casa vacia: el boton "Abrir un huevo" (uno de la mochila a casa)
-  uint8_t eggCracks() const { return eggTaps; }
+  uint8_t eggCracks() const { return yardEgg() ? eggCracksFor(eggMinutesLeft()) : eggTaps; }
+  // el huevo del patio (v2.0, Y3; eggtimer.h). La UI pone timedEggs (TP_YARD) antes de begin(): cada huevo
+  // que llega a casa se pone en el patio y eclosiona solo a las 4 h reales (las sacudidas lo adelantan,
+  // hasta 2 h). El inicial y uno a medias del sistema de antes (sin "yegg") siguen con los 3 toques.
+  bool timedEggs = false;
+  bool yardEgg() const { return timedEggs && isEgg() && !vacant && !starterPick && eggPlaced; }
+  uint16_t eggMinutesLeft() const { return eggMinutesLeft(lastSeenEpoch); }
+  uint16_t eggMinutesLeft(uint32_t epoch) const { return ::eggMinutesLeft(eggPlaced, epoch, eggSaved); }
+  uint8_t eggSavedMinutes() const { return eggSaved; }
+  uint32_t eggPlacedEpoch() const { return eggPlaced; }
+  void dbgEggElapsed(uint32_t min);  // serie EGGT <min>: como si se hubiera puesto hace min minutos
+  void hatchNow();                   // serie HATCH: el huevo de casa eclosiona ya (tambien el del patio)
+  void dbgEggSaved(uint8_t m) { eggSaved = m > EGG_SHAKE_CAP ? EGG_SHAKE_CAP : m; }  // renderizador
+  void dbgClearAnims() { eatUntil = heartUntil = evolveUntil = 0; emoteKind = EMOTE_NONE; }  // renderizador
+  void dbgEggClear() { eggPlaced = 0; eggSaved = 0; eggTaps = 0; }  // renderizador: cada escena, sin huevo del patio ni grietas
   bool eating() const { return timeLeft(eatUntil) > 0; }
   bool showHeart() const { return timeLeft(heartUntil) > 0; }
   bool evolving() const { return timeLeft(evolveUntil) > 0; }
@@ -520,7 +535,9 @@ public:
 
   // --- trucos del IMU (Tarea 2): sin guardado inmediato
   void wakeGrumpy();     // agitar con el bicho dormido: se despierta de mal humor
-  void shaken();         // agitar con el bicho despierto: se marea (o el huevo se tambalea)
+  // agitar con el bicho despierto: se marea (o el huevo se tambalea). true: era el huevo del patio y la
+  // sacudida conto (le quito EGG_SHAKE_MIN minutos)
+  bool shaken();
   void sleepDeferred();  // boca abajo de noche: a dormir (toggleLight sin guardar al momento)
   uint8_t emote() const { return timeLeft(emoteUntil) ? emoteKind : (uint8_t)EMOTE_NONE; }
   float emoteT() const { return 1.0f - (float)timeLeft(emoteUntil) / (float)EMOTE_MS; }
@@ -570,6 +587,14 @@ private:
   int16_t eggTarget = 1;       // dex oculto que saldra del huevo
   bool eggShiny = false;       // sorpresa sorteada al crear el huevo
   uint8_t eggTaps = 0;
+  // el huevo del patio (Y3): "yegg" cuando se puso (epoch; 0 = no es del patio) y "ysav" los minutos
+  // que le quitaron las sacudidas. Las sacudidas solo marcan el guardado (nunca save(): congela ~1 s)
+  uint32_t eggPlaced = 0;
+  uint8_t eggSaved = 0;
+  uint32_t eggShakeMs = 0;  // la ultima sacudida que conto (solo RAM)
+  bool eggShakeHave = false;
+  void placeEgg();          // el huevo de casa pasa a ser del patio, puesto ahora
+  void eggClockStamp();     // puesto sin hora: se fecha en cuanto se sabe
   uint8_t mistakeCooldown = 0;
   uint8_t ticksSinceSave = 0;
   bool pendingSave = false;     // guardado periodico pendiente de volcar

@@ -50,6 +50,7 @@
 #include "yard_ui.h"  // el patio (v2.0): paleta, geometria y toques del kit de interfaz nuevo (logica pura)
 #include "yardbg.h"   // fondos del patio (v2.0): lector de TPY1, mascara de paso y tinte (logica pura)
 #include "yard.h"     // el patio (v2.0, Y2): los bichos que pasean por el mapa (logica pura)
+// (eggtimer.h, el huevo del patio de la Y3, llega con pet.h)
 // la casa es el patio (v2.0): el mapa de arriba abajo con los bichos paseando. Con 0, la casa de
 // lado de siempre (se borra al fusionar la v2.0)
 #ifndef TP_YARD
@@ -104,6 +105,16 @@ bool yardBoxShiny = false;
 uint32_t yardBoxEpoch = 0;      // sdEpoch con que se cargo
 uint32_t yardLastStep = 0;      // ultimo paso del planificador (0 = ninguno aun)
 uint32_t gYardPetsUs = 0, gYardPetsMaxUs = 0;  // PERF: los bichos, sus cosas y el HUD
+// fase Y3 (acciones en el mundo): la comida que cae al patio (una a la vez; yard.h) y el huevo del patio
+YardFood yardFood;
+uint32_t yardHeartPopAt = 0;          // al acabarse la comida sale un corazon
+int16_t yardEggX = -1, yardEggY = 0;  // donde esta el huevo (los pies; solo RAM, -1 = sin sitio aun)
+uint32_t yardEggTapAt = 0;            // tocado: se tambalea y dice lo que falta
+uint32_t yardEggInfoUntil = 0;        // el globo del huevo (tras un toque o una sacudida que conto)
+#define YARD_EGG_S 3                  // el huevo del patio, a escala 3 (~51x69 px de tinta)
+#define YARD_EGG_MID (13 * YARD_EGG_S)  // de sus pies al centro del sprite
+int yardDropFood(uint8_t kind);       // (en la seccion del patio) 1 cae, 0 ya hay una, -1 sin patio
+const uint8_t *yardWalkNow();         // la mascara de paso con el huevo (seccion del patio)
 #endif
 // como se dibuja cada bicho del patio (aqui arriba: el conversor .ino pone los prototipos antes que
 // el resto): el PMD a escala fija, el sprite B/N, el de flash o la miniatura de la caja
@@ -430,6 +441,7 @@ void setup() {
   // de arranque, pero solo cuenta al encender: despues es una entrada normal
   pinMode(BOARD_BTN_BOOT, INPUT);
 
+  pet.timedEggs = TP_YARD;  // Y3: los huevos se ponen en el patio y eclosionan a las 4 h (sin patio, a toques)
   pet.begin();
   sdBegin();
   thumbs.load();
@@ -638,7 +650,7 @@ void onShake() {
   if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen()) return;
   if (galleryOpen || boxOpen || stagesOpen || teamOpen || cardOpen || bagOpen || kbOpen || clockOpen) return;  // el bicho no esta en pantalla
   if (pet.sleeping) pet.wakeGrumpy();
-  else pet.shaken();  // tambien el huevo: se tambalea
+  else if (pet.shaken()) yardEggInfo();  // tambien el huevo: se tambalea (el del patio dice lo que le queda)
 }
 
 // Boca abajo y quieta 3 s (FR-2.2): de noche el bicho se va a dormir; de dia solo
@@ -790,8 +802,19 @@ void handleSerial() {
   if (line.length() == 0) return;
   if (sdSerialCommand(line)) return;
 
-  if (line == "HATCH") {
-    pet.eggTap(); pet.eggTap(); pet.eggTap();
+  if (line == "HATCH") {  // el huevo de casa eclosiona ya (tambien el del patio)
+    pet.hatchNow();
+    Serial.println("DONE");
+  } else if (line == "EGGT" || line.startsWith("EGGT ")) {  // EGGT <min>: el huevo del patio, puesto hace min minutos
+    if (line.length() > 5) {
+      long m = line.substring(5).toInt();
+      pet.dbgEggElapsed((uint32_t)(m < 0 ? 0 : m));
+      yardEggInfo();
+      wakeUI();
+    }
+    Serial.printf("egg yard=%d placed=%lu left=%u saved=%u cracks=%u\n", pet.yardEgg() ? 1 : 0,
+                  (unsigned long)pet.eggPlacedEpoch(), pet.yardEgg() ? pet.eggMinutesLeft() : 0, pet.eggSavedMinutes(),
+                  pet.eggCracks());
     Serial.println("DONE");
   } else if (line.startsWith("SPEC ")) {
     int n = line.substring(5).toInt();
@@ -1665,6 +1688,12 @@ void onTap(int16_t x, int16_t y) {
     return;
   }
   if (pet.isEgg()) {
+#if TP_YARD
+    if (yardHomeNow()) {  // el huevo en el patio (Y3): el dock, el huevo y el de la caja
+      yardTap(x, y);
+      return;
+    }
+#endif
     pet.eggTap();
     sfxPlay(SFX_TAP);
     return;
@@ -2451,8 +2480,8 @@ bool render() {
   }
   int h = sceneHour();
   gNight = pet.sleeping || h < 6 || h >= 20;
-  // el patio (v2.0): la casa con un bicho nacido es el mapa; el huevo, la casa vacia, la despedida y
-  // el Revivir siguen con su pantalla de siempre de momento (la Y3 lleva el huevo al patio)
+  // el patio (v2.0): la casa con un bicho o un huevo (Y3) es el mapa; la casa vacia, la despedida y el
+  // Revivir siguen con su pantalla de siempre de momento
   bool yard = yardHomeNow();
 #if TP_YARD
   if (!yard) yardW.p[0].on = yardW.p[1].on = false;
@@ -2460,8 +2489,12 @@ bool render() {
   // drawScene cubre los 466x466 completos: sin fillScreen(NEGRO) previo para
   // que un flush DMA solapado nunca capture negro a medias (anti-parpadeo)
   uint32_t sceneT0 = micros();
-  if (yard) yardDrawBg();  // el mapa ya expandido (en PSRAM), copiado al lienzo
-  else drawScene(homeBiome(), millis(), gNight);
+  if (yard) {
+    yardDrawBg();  // el mapa ya expandido (en PSRAM), copiado al lienzo
+  } else {
+    drawScene(homeBiome(), millis(), gNight);
+    hatchAt(CX, PET_CY, 5);  // la eclosion de la casa de lado, en el centro (el patio pone la suya)
+  }
   perfNote(micros() - sceneT0);
 
   if (pet.ceremony) {
@@ -4279,6 +4312,25 @@ bool fxHatchHidesPet(uint32_t now) {
   return false;
 }
 
+// donde se rompe el huevo (drawHatchFx): el centro del sprite y su escala. La pantalla del huevo, en el
+// centro a escala 5; el patio (Y3) lo pone donde esta su huevo, a escala 3 (hatchAt)
+int gHatchX = CX, gHatchY = PET_CY, gHatchS = 5;
+void hatchAt(int cx, int cy, int s) {
+  gHatchX = cx;
+  gHatchY = cy;
+  gHatchS = s;
+}
+
+// el huevo con el centro del sprite en (cx, cy), a escala s y con sus grietas
+void drawEggAt(int cx, int cy, int s, uint8_t cracks) {
+  int x = cx - 16 * s, y = cy - 16 * s;
+  drawMap(SPR_EGG, SPRITE_H, x, y, s, false);
+  if (cracks >= 1)
+    for (auto &c : CRACK1) gfx->fillRect(x + c[0] * s, y + c[1] * s, s, s, INK_K);
+  if (cracks >= 2)
+    for (auto &c : CRACK2) gfx->fillRect(x + c[0] * s, y + c[1] * s, s, s, INK_K);
+}
+
 // el huevo de la pantalla principal (y el de la eclosion), desplazado dx, con sus grietas
 void drawEggSprite(int dx, uint8_t cracks) {
   int s = 5, x = CX - 16 * s + dx, y = PET_CY - 16 * s;
@@ -4296,9 +4348,11 @@ bool drawHatchFx(uint32_t now) {
   if (!h) return false;
   float t = FxOverlays::t(*h, now);
   static uint32_t soundFor = 0, poseFor = 0;
+  // escala del sitio (5 en la pantalla del huevo): el destello y la cascara, en proporcion
+  const int S = gHatchS, HX = gHatchX, HY = gHatchY;
   if (t < 0.55f) {
     float k = t / 0.55f;
-    drawEggSprite((int)(k * 10 * sinf(now * 0.06f)), 2);
+    drawEggAt(HX + (int)(k * 2 * S * sinf(now * 0.06f)), HY, S, 2);
     return true;
   }
   if (soundFor != h->start) {
@@ -4307,12 +4361,12 @@ bool drawHatchFx(uint32_t now) {
   }
   if (t < 0.75f) {
     float k = (t - 0.55f) / 0.2f;
-    gfx->fillCircle(CX, PET_CY, 40 + (int)(k * 110), UI_WHITE);
+    gfx->fillCircle(HX, HY, (40 + (int)(k * 110)) * S / 5, UI_WHITE);
     const uint16_t shell = C565(0xf6, 0xea, 0xc2);
     for (int i = 0; i < 10; i++) {  // trozos de cascara volando (y cayendo), girando
       float a = i * 0.628f + 0.3f;
-      int d = 120 + (int)(k * 90);
-      int sx = CX + (int)(cosf(a) * d), sy = PET_CY + (int)(sinf(a) * d * 0.7f) + (int)(k * k * 70);
+      int d = (120 + (int)(k * 90)) * (S + 2) / 7;
+      int sx = HX + (int)(cosf(a) * d), sy = HY + (int)(sinf(a) * d * 0.7f) + (int)(k * k * 70);
       float r = a + k * 5.0f;
       int x1 = sx + (int)(cosf(r) * 12), y1 = sy + (int)(sinf(r) * 12);
       int x2 = sx + (int)(cosf(r + 2.3f) * 10), y2 = sy + (int)(sinf(r + 2.3f) * 10);
@@ -4327,6 +4381,17 @@ bool drawHatchFx(uint32_t now) {
     fxPose(PMD_POSE, now, 0);
   }
   return false;
+}
+
+// "!" en un bocadillo blanco (el del descuido, FXO_OOPS, y el de ver la comida del patio), con la punta hacia (bx - 22, by + 26)
+void drawExclaim(int bx, int by) {
+  gfx->fillTriangle(bx - 14, by + 10, bx - 4, by + 16, bx - 22, by + 26, UI_WHITE);
+  gfx->fillCircle(bx, by, 19, UI_WHITE);
+  gfx->drawCircle(bx, by, 19, UI_INK);
+  gfx->setTextColor(UI_BAR_BAD);
+  setSize(3);
+  setCur(bx - 7, by - 11);
+  printT("!");
 }
 
 // efectos pequenos de la pantalla principal (los botones los pinta drawButtons)
@@ -4365,17 +4430,10 @@ void drawFxOverlays(uint32_t now) {
       setCur(CX - w / 2, y);
       printT(s);
     } else if (x.kind == FXO_OOPS) {  // "!" en un bocadillo junto a la cabeza
-      int bx = petFootX() + 58, by = head - 40 + (int)(3 * sinf(now * 0.012f));
-      gfx->fillTriangle(bx - 14, by + 10, bx - 4, by + 16, bx - 22, by + 26, UI_WHITE);
-      gfx->fillCircle(bx, by, 19, UI_WHITE);
-      gfx->drawCircle(bx, by, 19, UI_INK);
-      gfx->setTextColor(UI_BAR_BAD);
-      setSize(3);
-      setCur(bx - 7, by - 11);
-      printT("!");
+      drawExclaim(petFootX() + 58, head - 40 + (int)(3 * sinf(now * 0.012f)));
     } else if (x.kind == FXO_HATCH && t >= 0.75f) {  // aro de luz que se abre al nacer
       float k = (t - 0.75f) / 0.25f;
-      for (int r = 0; r < 3; r++) gfx->drawCircle(CX, PET_CY, 120 + (int)(k * 110) + r * 3, UI_WHITE);
+      for (int r = 0; r < 3; r++) gfx->drawCircle(gHatchX, gHatchY, (120 + (int)(k * 110)) * gHatchS / 5 + r * 3, UI_WHITE);
     }
   }
 }
@@ -5619,6 +5677,12 @@ void drawBoxAppear(uint32_t now) {
   float t = FxOverlays::t(*o, now);
   int cx = pet.isEgg() ? CX : petFootX();
   int cy = (pet.isEgg() || (!pmd.loaded && petFootY() == PET_GROUND)) ? PET_CY : petFootY() - petBodyH() / 2;
+#if TP_YARD
+  if (pet.isEgg() && yardHomeNow() && yardEggX >= 0) {  // el huevo del patio (Y3): donde esta
+    cx = yardEggX;
+    cy = yardEggY - YARD_EGG_MID;
+  }
+#endif
   float k = 1.0f - t;
   int r = (int)(118 * k * k);
   if (r > 2) {
@@ -6267,6 +6331,10 @@ void openPlayPanel() {
 static bool panelItemOn(uint8_t kind, uint8_t i) {
   bool awake = !pet.sleeping && !pet.isEgg();
   if (kind == PANEL_CARE) {
+#if TP_YARD
+    // Y3: la comida cae al patio, una a la vez: con una en el suelo, las demas esperan
+    if ((i <= CP_CAKE) && yardFood.phase != YF_NONE) return false;
+#endif
     if (i == CP_CAKE) return awake && pet.items[IT_CAKE];
     if (i == CP_LIGHT) return true;
     if (i == CP_BATH) return awake && !bathUntil;  // dormido no se bana, y el bano no se repite a medias
@@ -6396,6 +6464,25 @@ static void carePanelTap(int i) {
     sfxPlay(SFX_TAP);
     startBath();
   } else {
+#if TP_YARD
+    // Y3: la comida cae al patio y el bicho va a por ella; Pet la aplica al comersela (yardFoodEaten).
+    // La tarta se mira ya (canUseItem) pero no se gasta hasta entonces
+    if (i == CP_CAKE && !pet.canUseItem(IT_CAKE)) {
+      panelDeny(i);
+      return;
+    }
+    int r = yardDropFood(i == CP_CAKE ? 3 : (uint8_t)i);
+    if (r == 0) {  // ya hay una en el suelo
+      panelDeny(i);
+      return;
+    }
+    if (r > 0) {
+      sfxPlay(SFX_TAP);
+      panelKind = PANEL_NONE;  // a casa a verlo
+      return;
+    }
+    // -1: sin bicho en el patio (no deberia pasar): como siempre, al momento
+#endif
     FxNeedSnap ns = fxSnap();
     if (i == CP_CAKE) {
       if (!pet.eatCake()) {  // (con tartas: en una ceremonia)
@@ -6531,13 +6618,32 @@ void yardDemoTap(int16_t x, int16_t y) {
 // La casa con un bicho nacido es un mapa de arriba abajo (/yard/NN.bin, yardbg.h) por el que
 // pasean el bicho de casa y el primero de la caja (yard.h). Encima, la hora, la bateria y el dock
 // (Cuidar / Jugar / Mochila); el estado sale en un globo sobre el bicho, y las cacas y los regalos
-// estan en el suelo. El huevo, la casa vacia, la despedida y el Revivir siguen con su pantalla.
+// estan en el suelo. La casa vacia, la despedida y el Revivir siguen con su pantalla.
+//
+// Fase Y3 (acciones en el mundo):
+// - Comer: la baya o la tarta del panel Cuidar cae al suelo cerca del bicho, el bicho la ve ("!"), va
+//   andando, se la come (Eat) y solo entonces Pet la aplica (con su "+N", su sonido y un corazon). Una a
+//   la vez: con una en el suelo, las tarjetas de comida se apagan. Si deja el patio (otra pantalla, un
+//   juego, un combate) la comida le espera en el suelo y sigue al volver; si ya no puede comer (se
+//   duerme, ceremonia, se muere, otro bicho en casa) desaparece sin gastarse nada: la tarta solo se
+//   descuenta al comersela.
+// - El huevo esta en el patio (el de la caja pasea a su alrededor) y eclosiona solo a las 4 h reales;
+//   cada sacudida (una cada 30 s) le quita 5 min, hasta 2 h (eggtimer.h). Tocarlo lo tambalea y dice lo
+//   que falta. El inicial (y uno a medias del sistema de antes) tambien se ve aqui, pero se abre con 3
+//   toques como siempre.
 
 bool yardHomeNow() {
 #if TP_YARD
-  return !pet.awaitingStarter() && !pet.ceremony && !pet.isDying() && !pet.isVacant() && !pet.isEgg();
+  return !pet.awaitingStarter() && !pet.ceremony && !pet.isDying() && !pet.isVacant();
 #else
   return false;
+#endif
+}
+
+// el globo del huevo del patio, un rato (tras un toque, una sacudida que conto o EGGT)
+void yardEggInfo() {
+#if TP_YARD
+  yardEggInfoUntil = millis() + 2600;
 #endif
 }
 
@@ -6774,12 +6880,15 @@ void yardSyncPets() {
   yardW.n = 2;
   yardW.pickGesture = yardPickGesture;
   YardPet &h = yardW.p[0];
-  if (!h.on) {
-    if (yardW.rng.s == 1) yardW.rng.s = (uint32_t)random(1, 0x7fffffff);
+  if (yardW.rng.s == 1) yardW.rng.s = (uint32_t)random(1, 0x7fffffff);
+  if (pet.isEgg()) {  // el huevo (Y3): en casa aun no hay nadie que pasee
+    h.on = false;
+  } else if (!h.on) {
     h = YardPet{};
     h.on = true;
-    // donde se veia el bicho en la casa de lado (y donde nace del huevo): abajo del centro
-    int c = yardNearestFreeCell(yardWalk, CX, PET_GROUND);
+    // donde se veia el bicho en la casa de lado, abajo del centro; recien nacido, donde estaba su huevo
+    int c = yardEggX >= 0 ? yardNearestFreeCell(yardWalk, yardEggX, yardEggY)
+                          : yardNearestFreeCell(yardWalk, CX, PET_GROUND);
     if (c >= 0) {
       h.x = (float)yardCellCenter(yardCellCX(c));
       h.y = (float)yardCellCenter(yardCellCY(c));
@@ -6813,26 +6922,73 @@ void yardSyncPets() {
   if (!b.on) {
     b = YardPet{};
     b.on = true;
-    yardPlace(yardW, yardWalk, 1);
+    yardPlace(yardW, yardWalkNow(), 1);
   }
   b.walks = yardBoxPmd.has(PMD_WALKL) || yardBoxPmd.has(PMD_WALKR);
+}
+
+// la mascara de paso de ahora: la del mapa y, con el huevo en el suelo (Y3), su celda bloqueada (el de
+// la caja pasea a su alrededor, no por encima)
+const uint8_t *yardWalkNow() {
+  if (!pet.isEgg() || yardEggX < 0) return yardWalk;
+  static uint8_t w[YBG_WALK_BYTES];
+  memcpy(w, yardWalk, sizeof(w));
+  int c = yardCellAt(yardEggX, yardEggY - YBG_CELL / 2);
+  if (c >= 0) w[c >> 3] |= (uint8_t)(1 << (c & 7));
+  return w;
+}
+
+// la comida (Y3): ya se la ha comido. Ahora Pet la aplica, como antes al tocar la tarjeta: sus "+N", su
+// sonido y, si le encanta o es la tarta, su corazon (si no, sale uno pequeno igual)
+void yardFoodEaten(uint8_t kind) {
+  FxNeedSnap ns = fxSnap();
+  bool ok;
+  if (kind == 3) {
+    ok = pet.eatCake();  // (sin tartas ya, p. ej. gastada desde la mochila: no se gasta nada)
+  } else {
+    pet.feedBerry(kind);
+    ok = pet.eating();
+  }
+  Serial.printf("FOOD eaten kind=%u ok=%d\n", kind, ok ? 1 : 0);
+  if (!ok) return;
+  fxNeeds(ns);
+  sfxPlay(SFX_EAT);
+  yardHeartPopAt = millis();
 }
 
 // un paso del planificador: lo que pide el juego (dormir, comer, triste...) y la inclinacion
 void yardTick(uint32_t now) {
   uint32_t dt = yardLastStep ? now - yardLastStep : 100;
   uint32_t cap = frameIntervalMs(powerCtx(now)) + 100;  // otra pantalla de por medio no es un paso largo
-  if (dt > cap) dt = cap;
+  if (dt > cap) {
+    yardFood.t0 += dt - cap;  // fuera del patio la comida espera en el suelo, en la misma fase
+    dt = cap;
+  }
   yardLastStep = now;
+  // la comida del suelo (Y3): si ya no puede comer, desaparece sin gastarse nada (aun no se aplico)
+  if (yardFood.phase != YF_NONE &&
+      (!yardW.p[0].on || pet.sleeping || pet.isEgg() || pet.busyEnding() || pet.uid != yardFood.tag)) {
+    Serial.println("FOOD cancelled");
+    yardFood.phase = YF_NONE;
+  }
   uint8_t hold[YARD_PETS_MAX] = { YH_NONE, YH_NONE, YH_NONE };
   PetMood m = pet.mood();
   if (pet.sleeping) hold[0] = YH_SLEEP;
   else if (pet.evolving() || fxHatchHidesPet(now) || bathUntil || pet.emote() != EMOTE_NONE ||
            (m == MOOD_EATING && pmd.has(PMD_EAT)) || (m == MOOD_SAD && pmd.has(PMD_HURT)))
     hold[0] = YH_STAY;
+  bool foodWaits = hold[0] != YH_NONE;  // otra cosa lo tiene quieto: la comida espera
+  if (!foodWaits && yardFood.phase != YF_NONE) hold[0] = yardFoodHold(yardFood);
   hold[1] = pet.sleeping ? YH_SLEEP : YH_NONE;  // el de la caja se duerme con el de casa
-  int8_t tilt = (imuPresent() && !bathUntil && pet.emote() == EMOTE_NONE) ? imuTiltSide() : 0;
-  yardStep(yardW, yardWalk, now, dt, hold, tilt);
+  int8_t tilt = (imuPresent() && !bathUntil && pet.emote() == EMOTE_NONE && yardFood.phase == YF_NONE) ? imuTiltSide() : 0;
+  const uint8_t *walk = yardWalkNow();
+  yardStep(yardW, walk, now, dt, hold, tilt);
+  if (yardFood.phase == YF_FALL || (!foodWaits && yardFood.phase != YF_NONE)) {  // (la caida no espera)
+    uint8_t kind = yardFood.kind;
+    if (yardFoodStep(yardFood, yardW, walk, 0, now)) yardFoodEaten(kind);
+  } else if (foodWaits) {
+    yardFood.t0 += dt;  // su fase no avanza mientras tanto
+  }
 }
 
 // sombra: el suelo de debajo, oscurecido (un 25 %) en una elipse
@@ -6875,6 +7031,7 @@ void yardDrawPet(int i, uint32_t now) {
     else if (p.mode == YM_STAY && i == 0) {
       PetMood md = pet.mood();
       act = md == MOOD_EATING ? PMD_EAT : md == MOOD_SAD ? PMD_HURT : PMD_IDLE;
+      if (yardFood.phase == YF_EAT) act = PMD_EAT;  // Y3: el bocado a la comida del suelo
     } else if (p.mode == YM_WALK) act = yardWalkAct(m, p);
     else if (p.mode == YM_GESTURE) {
       act = p.act;
@@ -6909,15 +7066,116 @@ void yardDrawPet(int i, uint32_t now) {
   else if (e == EMOTE_DIZZY) drawDizzyStars(x, head - 8, now);
 }
 
+// ---- la comida que cae y el huevo (fase Y3) ----
+static const char *const *const YARD_FOOD_ICON[4] = { SPR_ICON_FOOD, SPR_ICON_BERRY_B, SPR_ICON_BERRY_G, SPR_ICON_CAKE };
+
+// la comida en el suelo: cae desde arriba con un bote, espera, y en el bocado se encoge y se va
+void yardDrawFood(uint32_t now) {
+  const YardFood &f = yardFood;
+  if (f.phase == YF_NONE) return;
+  uint32_t el = now - f.t0;
+  int lift = 0, s = 2;
+  if (f.phase == YF_FALL) {
+    float t = (float)el / YARD_FOOD_FALL_MS;
+    if (t > 1) t = 1;
+    if (t < 0.7f) {  // la caida (acelera)
+      float k = 1.0f - t / 0.7f;
+      lift = (int)(170 * k * k);
+    } else {  // un bote
+      lift = (int)(16 * sinf((t - 0.7f) / 0.3f * (float)PI));
+    }
+  } else if (f.phase == YF_EAT) {
+    float t = (float)el / YARD_FOOD_EAT_MS;
+    if (t > 0.75f) return;  // ya se la comio
+    if (t > 0.4f) s = 1;     // a bocados: mas pequena
+  }
+  int sw = 26 - lift / 10;  // la sombra crece al acercarse al suelo
+  if (sw > 6) yardShadow(f.x, f.y, sw);
+  drawMap(YARD_FOOD_ICON[f.kind & 3], 16, f.x - 8 * s, f.y - 15 * s - lift, s, false);
+}
+
+// lo de encima del bicho de casa por la comida: el "!" al verla, y el corazon que sale al acabarsela
+void yardDrawFoodFx(uint32_t now) {
+  if (!yardW.p[0].on) return;
+  YardPet &p = yardW.p[0];
+  int head = yardPetHeadY(0), w = yardBodyOf(0).w;
+  uint32_t el = now - yardFood.t0;
+  if (yardFood.phase == YF_NOTICE || (yardFood.phase == YF_WALK && el < 450))
+    drawExclaim((int)p.x + w / 2 + 14, head - 12 + (int)(3 * sinf(now * 0.012f)));
+  uint32_t pop = now - yardHeartPopAt;
+  if (yardHeartPopAt && pop < 1000 && !pet.showHeart()) {  // (le encanta o la tarta: ya sale el suyo)
+    int y = head + 4 - (int)(pop * 30 / 1000);  // al lado de la cabeza (encima va el globo "Nam nam!")
+    drawMap(SPR_HEART, 32, (int)p.x + w / 2 + 2, y, 1, false);
+  }
+}
+
+// el huevo en el patio: tambalea al sacudir la placa (como en su pantalla) o al tocarlo; un destello si
+// es raro. Mientras se rompe lo dibuja drawHatchFx
+void yardDrawEgg(uint32_t now) {
+  if (!pet.isEgg() || yardEggX < 0) return;
+  int dx = 0;
+  if (pet.emote() == EMOTE_WOBBLE) dx = (int)(10.0f * (1.0f - pet.emoteT()) * sinf(now * 0.035f));
+  uint32_t te = now - yardEggTapAt;
+  if (yardEggTapAt && te < 600) dx += (int)(6.0f * (1.0f - te / 600.0f) * sinf(te * 0.05f));
+  yardShadow(yardEggX, yardEggY, 54);
+  drawEggAt(yardEggX + dx, yardEggY - YARD_EGG_MID, YARD_EGG_S, pet.eggCracks());
+  if (pet.eggRarity() >= R_RARO && (now / 400) % 3 != 0) {  // raro o legendario: brilla
+    int k = (int)((now / 1200) % 2);
+    drawMap(SPR_STAR, 16, yardEggX + 22 + dx - k * 50, yardEggY - 80 + k * 26, 1, false);
+  }
+}
+
+// el globo del huevo: el inicial (a toques) dice lo de siempre; el del patio, lo que falta un rato tras
+// un toque o una sacudida, alternando con la pista de agitarlo (mientras las sacudidas aun cuenten)
+void yardDrawEggBubble(uint32_t now) {
+  if (!pet.isEgg() || yardEggX < 0 || fxHatchHidesPet(now)) return;
+  int tip = yardEggY - YARD_EGG_MID * 2 - 8;
+  if (!pet.yardEgg()) {
+    yardBubbleAt(yardEggX, tip, eggMsg());
+    return;
+  }
+  if (!timeLeft(yardEggInfoUntil)) return;
+  char left[12];
+  eggLeftText(left, sizeof(left), pet.eggMinutesLeft());
+  const char *opts[3] = { left, nullptr, nullptr };
+  int n = 1;
+  if (pet.eggSavedMinutes() < EGG_SHAKE_CAP) opts[n++] = T(S_EGG_SHAKE);
+  if (pet.eggRarity() >= R_RARO) opts[n++] = T(pet.eggRarity() == R_LEGENDARIO ? S_EGG_LEGEND : S_EGG_RARE);
+  uint32_t since = 2600 - timeLeft(yardEggInfoUntil);
+  yardBubbleAt(yardEggX, tip, opts[yardCycleIndex(n, since, 900)]);
+}
+
+// el huevo o la comida (lo que este en el suelo) en su sitio del orden de dibujo; INT32_MAX: nada
+static int32_t yardObjY() {
+  if (pet.isEgg() && yardEggX >= 0) return yardEggY;
+  if (yardFood.phase != YF_NONE) return yardFood.y;
+  return INT32_MAX;
+}
+static void yardDrawObj(uint32_t now) {
+  yardDrawEgg(now);
+  yardDrawFood(now);
+}
+
 void yardDrawPets(uint32_t now) {
   uint8_t order[YARD_PETS_MAX];
   int n = yardDrawOrder(yardW, order);
-  bool hatching = drawHatchFx(now);  // el huevo aun se rompe en el centro: el de casa no se ve
+  // el huevo se rompe donde estaba (Y3); sin sitio, donde el bicho de casa
+  if (yardEggX >= 0) hatchAt(yardEggX, yardEggY - YARD_EGG_MID, YARD_EGG_S);
+  else if (yardW.p[0].on) hatchAt((int)yardW.p[0].x, (int)yardW.p[0].y - YARD_EGG_MID, YARD_EGG_S);
+  else hatchAt(CX, PET_CY, 5);
+  bool hatching = drawHatchFx(now);  // el huevo aun se rompe: el de casa no se ve
+  int32_t objY = yardObjY();
+  bool objDone = objY == INT32_MAX;
   for (int k = 0; k < n; k++) {
     int i = order[k];
+    if (!objDone && yardW.p[i].y > objY) {  // lo del suelo que queda detras de este bicho
+      yardDrawObj(now);
+      objDone = true;
+    }
     if (i == 0 && (hatching || pet.evolving())) continue;
     yardDrawPet(i, now);
   }
+  if (!objDone) yardDrawObj(now);
   if (pet.evolving()) drawEvolveFX(now);  // la evolucion, grande en el centro como siempre
 }
 
@@ -6981,6 +7239,19 @@ void yardSyncThings() {
     yardPoopHave |= bit;
   }
   yardPoopBooted = true;
+  // el huevo (Y3): en una celda libre cerca del centro (donde nacera el bicho). Su sitio se queda hasta
+  // que acaba de romperse: el bicho de casa sale de ahi
+  if (pet.isEgg()) {
+    if (yardEggX < 0 || !yardSpotOk(yardWalk, yardEggX, yardEggY - YBG_CELL / 2)) {
+      int c = yardNearestFreeCell(yardWalk, CX, 250);
+      if (c >= 0) {
+        yardEggX = (int16_t)yardCellCenter(yardCellCX(c));
+        yardEggY = (int16_t)(yardCellCenter(yardCellCY(c)) + 10);
+      }
+    }
+  } else if (!fxo.find(FXO_HATCH) && yardEggX >= 0) {
+    yardEggX = -1;
+  }
   uint8_t want = pet.giftCount() < YARD_GIFTS_SHOWN ? pet.giftCount() : YARD_GIFTS_SHOWN;
   while (yardGiftN > want) {  // se abrio uno: se va el tocado
     int k = (yardGiftTapped >= 0 && yardGiftTapped < yardGiftN) ? yardGiftTapped : yardGiftN - 1;
@@ -7045,12 +7316,35 @@ int yardPoopAt(int16_t x, int16_t y) {
   }
   return -1;
 }
+bool yardEggAt(int16_t x, int16_t y) {
+  if (!pet.isEgg() || yardEggX < 0) return false;
+  int dx = x - yardEggX, dy = y - (yardEggY - YARD_EGG_MID);
+  return dx * dx + dy * dy <= 46 * 46;
+}
 int yardGiftAt(int16_t x, int16_t y) {
   for (int i = 0; i < yardGiftN; i++) {
     int dx = x - yardGiftX[i], dy = y - (yardGiftY[i] - 14);
     if (dx * dx + dy * dy <= YARD_THING_HIT_R * YARD_THING_HIT_R) return i;
   }
   return -1;
+}
+
+// suelta la comida del panel Cuidar (kind: baya 0-2, tarta 3) cerca del bicho de casa. 1 cae, 0 ya hay
+// una en el suelo, -1 no hay bicho en el patio
+int yardDropFood(uint8_t kind) {
+  if (yardFood.phase != YF_NONE) return 0;
+  if (!yardW.p[0].on || !yardHomeNow() || pet.isEgg()) return -1;
+  YardPet &p = yardW.p[0];
+  int16_t ox[POOP_MAX + YARD_GIFTS_SHOWN + 1], oy[POOP_MAX + YARD_GIFTS_SHOWN + 1];
+  int n = yardThings(ox, oy, -1);
+  if (yardW.p[1].on) {  // tampoco a los pies del de la caja
+    ox[n] = (int16_t)yardW.p[1].x;
+    oy[n++] = (int16_t)yardW.p[1].y;
+  }
+  int c = yardFoodCell(yardWalkNow(), p.x, p.y, p.face, ox, oy, n);
+  yardFoodDrop(yardFood, kind, c, p.x, p.y, millis(), pet.uid);
+  Serial.printf("FOOD drop kind=%u cell=%d at %d,%d\n", kind, c, yardFood.x, yardFood.y);
+  return 1;
 }
 
 // ---- el globo sobre el bicho ----
@@ -7112,6 +7406,10 @@ void yardBubbleAt(int cx, int tipY, const char *text) {
 const char *yardBubblePrev = nullptr, *yardBubbleLatched = nullptr;
 uint32_t yardBubbleUntil = 0;
 void yardDrawBubble(uint32_t now) {
+  if (pet.isEgg()) {  // Y3: el huevo en el patio
+    yardDrawEggBubble(now);
+    return;
+  }
   if (pet.evolving() || fxHatchHidesPet(now)) return;
   const char *ev = yardEventMsg();
   if (ev && ev != yardBubblePrev) {  // un suceso nuevo: se queda al menos Y_BUBBLE_MS aunque acabe antes
@@ -7175,7 +7473,11 @@ void drawBatteryHud(int x, int y) {
 // boton del dock -> boton de la fila vieja, para los efectos de pulsar y temblar (fx.h)
 static int yardDockFx(int d) { return d == 0 ? BTN_CARE : d == 1 ? 1 : BTN_BAG; }
 // dormido: Cuidar (despertarlo) y la Mochila (mirar) siguen; Jugar solo con bichos en la caja (fases)
-static bool yardDockOff(int d) { return d == 1 && pet.sleeping && !pet.boxHasPets(); }
+// con el huevo (Y3): Cuidar no (no hay a quien), Jugar solo con bichos en la caja
+static bool yardDockOff(int d) {
+  if (pet.isEgg()) return d == 0 || (d == 1 && !pet.boxHasPets());
+  return d == 1 && pet.sleeping && !pet.boxHasPets();
+}
 
 #define YARD_CLOCK_Y 30  // la hora a tamano 5 (40 px de alto); debajo queda sitio para las monedas (Y4)
 #define YARD_BAT_Y 12
@@ -7208,6 +7510,7 @@ void renderYardHome(uint32_t now) {
   drawBath();               // la espuma, sobre el bicho
   drawBoxAppear(now);       // recien guardado o despertado: sale de una luz
   yardDrawBubble(now);
+  yardDrawFoodFx(now);     // Y3: el "!" al ver la comida y el corazon al acabarsela
   yardDrawHud();
 }
 
@@ -7226,6 +7529,17 @@ void yardTap(int16_t x, int16_t y) {
     if (d == 0) openCarePanel();
     else if (d == 1) openPlayPanel();
     else openBag();
+    return;
+  }
+  if (yardEggAt(x, y)) {  // Y3: el huevo se tambalea; el del patio dice lo que falta, el inicial se abre a toques
+    yardEggTapAt = millis();
+    sfxPlay(SFX_TAP);
+    if (pet.yardEgg()) {
+      yardEggInfo();
+      Serial.printf("EGG tap left=%u\n", pet.eggMinutesLeft());
+    } else {
+      pet.eggTap();
+    }
     return;
   }
   int pp = yardPoopAt(x, y);  // una caca: fuera con un toque (como en la casa de lado)

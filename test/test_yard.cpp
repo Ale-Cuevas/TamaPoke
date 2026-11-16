@@ -320,3 +320,134 @@ TEST(yard, paseo_vertical_mira_arriba_o_abajo) {
   yardHeading(p, &dx, &dy);
   CHECK_EQ(yardWalkDir(dx, dy, p.face, true, true), YW_DOWN);
 }
+
+// ---------------------------------------------------------------- la comida que cae (Y3)
+
+TEST(yard, la_comida_cae_cerca_en_su_fila_y_alcanzable) {
+  uint8_t walk[YBG_WALK_BYTES];
+  yardFallbackWalk(walk);
+  float px = (float)yardCellCenter(7), py = (float)yardCellCenter(9);
+  int c = yardFoodCell(walk, px, py, 1, nullptr, nullptr, 0);
+  CHECK(c >= 0);
+  CHECK(yardFree(walk, c));
+  CHECK_EQ(yardCellCY(c), 9);         // en su fila...
+  CHECK_EQ(yardCellCX(c), 9);         // ...a dos celdas, hacia donde mira
+  CHECK_EQ(yardCellCX(yardFoodCell(walk, px, py, -1, nullptr, nullptr, 0)), 5);  // mirando a la izquierda
+  // nunca debajo del bicho
+  float d = yardDist((float)yardCellCenter(yardCellCX(c)), (float)yardCellCenter(yardCellCY(c)), px, py);
+  CHECK(d >= YARD_FOOD_MIN_D);
+}
+
+TEST(yard, la_comida_no_cae_en_otra_zona_ni_sobre_una_cosa) {
+  uint8_t walk[YBG_WALK_BYTES];
+  yardFallbackWalk(walk);
+  // un muro en la columna 6 de arriba abajo: la mitad izquierda no se alcanza desde la derecha
+  for (int y = 0; y < YBG_GRID; y++) block(walk, 6, y);
+  float px = (float)yardCellCenter(7), py = (float)yardCellCenter(7);
+  int c = yardFoodCell(walk, px, py, -1, nullptr, nullptr, 0);  // mira a la izquierda (al muro)
+  CHECK(c >= 0);
+  CHECK(yardCellCX(c) > 6);
+  // una caca en la mejor celda: elige otra
+  int16_t ox[1] = { (int16_t)yardCellCenter(9) }, oy[1] = { (int16_t)yardCellCenter(7) };
+  int c2 = yardFoodCell(walk, px, py, 1, ox, oy, 1);
+  CHECK(c2 >= 0);
+  CHECK(c2 != yardCellIdx(9, 7));
+  CHECK(yardDist((float)yardCellCenter(yardCellCX(c2)), (float)yardCellCenter(yardCellCY(c2)), ox[0], oy[0]) >=
+        YARD_THING_GAP);
+  // sin sitio ninguno: -1
+  uint8_t full[YBG_WALK_BYTES];
+  memset(full, 0xFF, sizeof(full));
+  CHECK_EQ(yardFoodCell(full, px, py, 1, nullptr, nullptr, 0), -1);
+}
+
+TEST(yard, alcanzar_la_comida) {
+  CHECK(yardFoodReached(100, 100, 130, 100));
+  CHECK(yardFoodReached(100, 100, 100 + YARD_FOOD_REACH, 100));
+  CHECK(!yardFoodReached(100, 100, 100 + YARD_FOOD_REACH + 2, 100));
+}
+
+// el bicho ve la comida, va andando, se la come y solo entonces se aplica
+TEST(yard, el_bicho_va_a_por_la_comida_y_se_la_come) {
+  uint8_t walk[YBG_WALK_BYTES];
+  testWalk(walk);
+  YardWorld w;
+  w.n = 1;
+  w.p[0].on = true;
+  w.p[0].x = (float)yardCellCenter(4);
+  w.p[0].y = (float)yardCellCenter(10);
+  YardFood f;
+  uint32_t now = 1000;
+  int cell = yardFoodCell(walk, w.p[0].x, w.p[0].y, 1, nullptr, nullptr, 0);
+  CHECK(cell >= 0);
+  yardFoodDrop(f, 2, cell, w.p[0].x, w.p[0].y, now, 77);
+  CHECK_EQ((int)f.phase, (int)YF_FALL);
+  CHECK_EQ((int)yardFoodHold(f), (int)YH_STAY);
+  int eaten = 0, sawWalk = 0;
+  uint32_t eatAt = 0;
+  for (int k = 0; k < 400 && !eaten; k++) {
+    now += 85;
+    uint8_t hold[YARD_PETS_MAX] = { yardFoodHold(f), YH_NONE, YH_NONE };
+    yardStep(w, walk, now, 85, hold, 0);
+    if (f.phase == YF_WALK) sawWalk++;
+    if (yardFoodStep(f, w, walk, 0, now)) eaten = k;
+    if (f.phase == YF_EAT && !eatAt) {
+      eatAt = now;
+      CHECK(yardFoodReached(w.p[0].x, w.p[0].y, f.x, f.y));  // la alcanza antes de comer
+    }
+    CHECK(yardSpotOk(walk, w.p[0].x, w.p[0].y));
+  }
+  CHECK(eaten > 0);
+  CHECK(sawWalk > 0);
+  CHECK(eatAt > 0);
+  CHECK(now - eatAt >= YARD_FOOD_EAT_MS);  // el bocado entero antes de aplicar la comida
+  CHECK_EQ((int)f.phase, (int)YF_NONE);
+  CHECK(w.p[0].face == (f.x >= w.p[0].x ? 1 : -1));  // mirandola
+}
+
+// sin sprite de andar (o sin celda) se la come donde esta, tras el "!"
+TEST(yard, sin_andar_se_la_come_donde_esta) {
+  uint8_t walk[YBG_WALK_BYTES];
+  yardFallbackWalk(walk);
+  YardWorld w;
+  w.n = 1;
+  w.p[0].on = true;
+  w.p[0].walks = false;
+  w.p[0].x = w.p[0].y = (float)yardCellCenter(7);
+  YardFood f;
+  yardFoodDrop(f, 3, -1, w.p[0].x, w.p[0].y, 0, 1);
+  uint32_t now = 0;
+  bool eaten = false;
+  for (int k = 0; k < 60 && !eaten; k++) {
+    now += 85;
+    CHECK(f.phase != YF_WALK);
+    eaten = yardFoodStep(f, w, walk, 0, now);
+  }
+  CHECK(eaten);
+  CHECK(now >= YARD_FOOD_FALL_MS + YARD_FOOD_NOTICE_MS + YARD_FOOD_EAT_MS);
+  CHECK(now < YARD_FOOD_FALL_MS + YARD_FOOD_NOTICE_MS + YARD_FOOD_EAT_MS + 400);
+}
+
+// otro bicho en medio para siempre: a los YARD_FOOD_WALK_MAX_MS se la come donde este (nunca se atasca)
+TEST(yard, la_comida_no_espera_para_siempre) {
+  uint8_t walk[YBG_WALK_BYTES];
+  yardFallbackWalk(walk);
+  YardWorld w;
+  w.n = 2;
+  w.p[0].on = w.p[1].on = true;
+  w.p[0].x = (float)yardCellCenter(5);
+  w.p[0].y = w.p[1].y = (float)yardCellCenter(7);
+  w.p[1].x = (float)yardCellCenter(7);  // justo en medio, quieto
+  w.p[1].mode = YM_STAY;
+  YardFood f;
+  yardFoodDrop(f, 0, yardCellIdx(9, 7), w.p[0].x, w.p[0].y, 0, 1);
+  uint32_t now = 0;
+  bool eaten = false;
+  for (int k = 0; k < 400 && !eaten; k++) {
+    now += 85;
+    uint8_t hold[YARD_PETS_MAX] = { yardFoodHold(f), YH_STAY, YH_NONE };
+    yardStep(w, walk, now, 85, hold, 0);
+    eaten = yardFoodStep(f, w, walk, 0, now);
+  }
+  CHECK(eaten);
+  CHECK(now <= YARD_FOOD_FALL_MS + YARD_FOOD_NOTICE_MS + YARD_FOOD_WALK_MAX_MS + YARD_FOOD_EAT_MS + 200);
+}

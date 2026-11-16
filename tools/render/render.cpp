@@ -141,7 +141,15 @@ static void resetUi() {
   yardBubblePrev = yardBubbleLatched = nullptr;
   yardBubbleUntil = 0;
   if (yardMapForced) yardForceMap(0);
+  // fase Y3: sin comida en el suelo ni huevo en el patio
+  yardFood = YardFood{};
+  yardHeartPopAt = 0;
+  yardEggX = -1;
+  yardEggTapAt = 0;
+  yardEggInfoUntil = 0;
 #endif
+  pet.dbgEggClear();
+  pet.dbgClearAnims();  // no eating, heart or emote left over from the scene before (the clock goes back)
   zenSerialHold = -1;
   dashSerialSteerOn = false;
   dashTrailN = 0;
@@ -395,6 +403,39 @@ static void vacantNow(int hour) {
   for (int d : { 1, 4, 7, 16, 19, 25, 54, 129, 133 }) pet.dexReg[(d - 1) >> 3] |= (uint8_t)(1 << ((d - 1) & 7));
 }
 
+#if TP_YARD
+// the yard egg (Y3): placed `mins` ago with `saved` minutes shaken off, a Box pet wandering around it
+static void yardEggScene(uint32_t mins, uint8_t saved, bool box = true) {
+  eggNow();
+  pet.dbgEggElapsed(mins);
+  pet.dbgEggSaved(saved);
+  if (box) boxPet(0, 7, 12);
+  yardForceMap(1);
+}
+
+// drop-to-feed (Y3): Pikachu in the meadow, the Care panel opened from the dock and a food card tapped
+static void feedTap(uint8_t card, Lang l = LANG_EN) {
+  pokemon(25, 13);
+  yardForceMap(1);
+  pet.items[IT_CAKE] = 2;
+  setLang(l);
+  applyLangFont();
+  render();
+  openCarePanel();
+  int x, y, w, h;
+  carePanelCard(card, x, y, w, h);
+  onTap((int16_t)(x + w / 2), (int16_t)(y + h / 2));
+}
+
+// steps the yard 85 ms at a time until the food reaches `phase` (or 25 s)
+static void feedUntil(uint8_t phase) {
+  for (int i = 0; i < 300 && yardFood.phase != phase; i++) {
+    gHostMillis += 85;
+    render();
+  }
+}
+#endif
+
 // steps the clock 85 ms at a time through the battle logic until `done` (or 60 s)
 static void battleUntil(bool (*done)()) {
   for (int i = 0; i < 700 && !done(); i++) {
@@ -529,6 +570,27 @@ static const std::vector<Scene> &scenes() {
     { "yard-walk-down", [] { yardWalkScene(25, 150, 360); }, 6 },
     { "yard-walk-up-charmander", [] { yardWalkScene(4, 330, 120); }, 6 },
     { "yard-walk-down-charmander", [] { yardWalkScene(4, 150, 360); }, 6 },
+    // fase Y3: la comida cae al patio y el bicho va a por ella; el huevo en el patio
+    { "yard-feed-drop", [] { feedTap(CP_RED); }, 4 },
+    { "yard-feed-walk", [] { feedTap(CP_BLUE); feedUntil(YF_WALK); }, 3 },
+    { "yard-feed-eat", [] { feedTap(CP_CAKE); feedUntil(YF_EAT); }, 4 },
+    { "yard-feed-heart", [] { feedTap(CP_GREEN); feedUntil(YF_EAT); feedUntil(YF_NONE); }, 4 },
+    { "yard-feed-heart-es", [] { feedTap(CP_GREEN, LANG_ES); feedUntil(YF_EAT); feedUntil(YF_NONE); }, 4 },
+    { "yard-feed-busy", [] { feedTap(CP_RED); gHostMillis += 85; render(); openCarePanel(); } },
+    { "yard-feed-busy-es", [] { feedTap(CP_RED, LANG_ES); gHostMillis += 85; render(); openCarePanel(); } },
+    { "yard-egg", [] { yardEggScene(40, 0); }, 40 },
+    { "yard-egg-night", [] { yardEggScene(150, 30); pet.lastSeenEpoch = epochAt(22); }, 20 },
+    { "yard-egg-shake", [] { yardEggScene(40, 0); render(); pet.shaken(); yardEggInfo(); }, 3 },
+    { "yard-egg-tap", [] { yardEggScene(160, 0); render(); onTap(yardEggX, yardEggY - YARD_EGG_MID); }, 3 },
+    { "yard-egg-tap-hint", [] { yardEggScene(160, 0); render(); onTap(yardEggX, yardEggY - YARD_EGG_MID); }, 12 },
+    { "yard-egg-tap-es", [] { yardEggScene(160, 0); lang(LANG_ES); render(); onTap(yardEggX, yardEggY - YARD_EGG_MID); }, 3 },
+    { "yard-egg-tap-hint-es", [] { yardEggScene(160, 0); lang(LANG_ES); render(); onTap(yardEggX, yardEggY - YARD_EGG_MID); }, 12 },
+    { "yard-egg-hatch-shake", [] { yardEggScene(239, 0); render(); pet.hatchNow(); ensureMon(); fxo.push(FXO_HATCH, 0, 0, millis()); }, 6 },
+    { "yard-egg-hatch-flash", [] { yardEggScene(239, 0); render(); pet.hatchNow(); ensureMon(); fxo.push(FXO_HATCH, 0, 0, millis()); }, 9 },
+    { "yard-egg-hatch-reveal", [] { yardEggScene(239, 0); render(); pet.hatchNow(); ensureMon(); fxo.push(FXO_HATCH, 0, 0, millis()); }, 12 },
+    { "yard-egg-hatched", [] { yardEggScene(239, 0); render(); pet.hatchNow(); ensureMon(); fxo.push(FXO_HATCH, 0, 0, millis()); }, 40 },
+    { "yard-starter-egg", [] { eggNow(); } },
+    { "yard-starter-egg-es", [] { eggNow(); lang(LANG_ES); } },
     { "yard-tap-pet", [] { pokemon(25, 13); yardForceMap(1); render(); onTap((int)yardW.p[0].x, (int)yardW.p[0].y - 20); } },
     { "yard-tilt", [] { pokemon(25, 13); yardForceMap(1); gStubTiltSide = -1; }, 80 },
     { "yard-orbit", [] { pokemon(25, 13); yardForceMap(1); OrbitShift o = orbitShift(6); roundCanvas->setShift(o.dx, o.dy); }, 2 },
@@ -1229,6 +1291,7 @@ int main(int argc, char **argv) {
   roundDisplayBegin(bus, panel, roundCanvas);
   roundCanvas->overlay = drawBrightToast;  // as setup() does
   applyLangFont();
+  pet.timedEggs = TP_YARD;  // as setup() does: eggs go to the yard (Y3)
   pet.begin();
   sdBegin();
   thumbs.load();
