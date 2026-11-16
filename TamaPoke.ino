@@ -46,6 +46,7 @@
 #include "ballgame.h" // minijuego de la pokeball: velocidad segun la puntuacion y la fisica (logica pura)
 #include "zengame.h"  // cascada (v1.43): la barra de concentracion, la franja y los golpes de agua (logica pura)
 #include "dashgame.h" // carrera en trineo (v1.44): direccion, velocidad, filas de obstaculos y choques (logica pura)
+#include "yard_panels.h"  // el patio (v2.0, Y2): paneles Cuidar y Jugar (geometria)
 #include "yard_ui.h"  // el patio (v2.0): paleta, geometria y toques del kit de interfaz nuevo (logica pura)
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
@@ -149,22 +150,15 @@ int clockH = 12, clockM = 0;  // hora en edicion
 uint32_t bathUntil = 0;
 bool bathPending = false;
 struct { int16_t x, y; uint8_t r, ph; } bubbles[14];
-// menu emergente sobre la fila de botones: comida (COMER), juego/combate (JUGAR) o cuidados
-// (v1.53: dormir y banar, que antes eran dos botones; su hueco es ahora el de la mochila)
-enum : uint8_t { MENU_NONE = 0, MENU_FEED, MENU_PLAY, MENU_CARE };
-uint8_t menuKind = MENU_NONE;
-uint32_t menuUntil = 0;       // se cierra solo a este millis
-// menu de JUGAR: pelota | combate | saco de entrenamiento (v1.34) | carrera | cascada (v1.43),
-// 5 huecos de 66 como los del menu de comida, 330 x 64 (a y 288-352 la pantalla redonda mide
-// ~400 de ancho). Todos los juegos estan aqui; el saco antes salia de la ficha.
-#define PLAY_MENU_SLOTS 5
-#define PLAY_MENU_SLOT 66
-#define PLAY_MENU_W (PLAY_MENU_SLOTS * PLAY_MENU_SLOT)
-#define PLAY_MENU_X (CX - PLAY_MENU_W / 2)
-// menu de cuidados (v1.53): luz (luna, o sol para despertar) | bano, centrado como los otros
-#define CARE_MENU_SLOTS 2
-#define CARE_MENU_W (CARE_MENU_SLOTS * PLAY_MENU_SLOT)
-#define CARE_MENU_X (CX - CARE_MENU_W / 2)
+// paneles Cuidar y Jugar (v2.0, fase Y2; yard_panels.h): sustituyen a los menus emergentes de
+// COMER / JUGAR / CUIDADOS. Son pantallas: no se cierran solos; se sale con volver o con USER
+uint8_t panelKind = PANEL_NONE;
+int8_t panelShakeIdx = -1;     // la tarjeta que tiembla al negarse (como las casillas de las fases)
+uint32_t panelShakeUntil = 0;
+void openCarePanel();
+void openPlayPanel();
+void panelTap(int16_t x, int16_t y);
+void renderPanel();
 
 // minijuego "toques": mantener la pokeball en el aire
 bool gameOpen = false;
@@ -996,7 +990,7 @@ void handleSerial() {
     if (n < 0) n = 0;
     if (n > 255) n = 255;
     wakeUI();
-    menuKind = MENU_NONE;
+    panelKind = PANEL_NONE;
     startGame();
     if (!gameOpen) {
       Serial.println("ball: no puede (huevo, dormido o despedida)");
@@ -1018,7 +1012,7 @@ void handleSerial() {
     if (sec < 0) sec = 0;
     if (sec > 120) sec = 120;
     wakeUI();
-    menuKind = MENU_NONE;
+    panelKind = PANEL_NONE;
     startDash();
     if (!dashOpen) {
       Serial.println("dash: no puede (huevo, dormido, despedida, sin IMU u otro juego abierto)");
@@ -1055,7 +1049,7 @@ void handleSerial() {
     if (sec < 0) sec = 0;
     if (sec > (long)(ZEN_SESSION_MS / 1000) - 1) sec = ZEN_SESSION_MS / 1000 - 1;
     wakeUI();
-    menuKind = MENU_NONE;
+    panelKind = PANEL_NONE;
     startZen();
     if (!zenOpen) {
       Serial.println("zen: no puede (huevo, dormido, despedida u otro juego abierto)");
@@ -1327,7 +1321,7 @@ void handleTouch() {
     tXl = x;
     tYl = y;
     // pulsacion larga sin moverse sobre el bicho -> dialogo de soltar
-    if (!holdFired && !swallowGesture && !yardDemoOpen && !galleryOpen && !boxOpen && !stagesOpen && !teamOpen && !cardOpen && !bagOpen && !kbOpen && !clockOpen && !menuKind && millis() - tStart > 3000 &&
+    if (!holdFired && !swallowGesture && !yardDemoOpen && !galleryOpen && !boxOpen && !stagesOpen && !teamOpen && !cardOpen && !bagOpen && !kbOpen && !clockOpen && !panelKind && millis() - tStart > 3000 &&
         abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && inPetZone(tX0, tY0) && poopAt(tX0, tY0) < 0 &&
         !pet.isEgg() && !confirmUntil && !pet.busyEnding()) {
       confirmUntil = millis() + 10000;
@@ -1351,15 +1345,15 @@ void openClock();  // prototipo
 
 void onSwipeV(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (gameOpen || galleryOpen || boxOpen || stagesOpen || teamOpen || bagOpen || kbOpen || sackOpen || zenOpen || dashOpen || battleOpen() || pet.busyEnding()) return;
+  if (gameOpen || galleryOpen || boxOpen || stagesOpen || teamOpen || bagOpen || panelKind || kbOpen || sackOpen || zenOpen || dashOpen || battleOpen() || pet.busyEnding()) return;
   if (clockOpen) { clockOpen = false; return; }
   if (cardOpen) {
     if (dir < 0) cardOpen = false;  // arriba cierra la ficha
     return;
   }
   if (dir > 0) {                    // deslizar abajo: ajustar hora
-    if (!confirmUntil && !menuKind) openClock();
-  } else if (!pet.isEgg() && !confirmUntil && !menuKind) {
+    if (!confirmUntil && !panelKind) openClock();
+  } else if (!pet.isEgg() && !confirmUntil && !panelKind) {
     cardOpen = true;                // deslizar arriba: ficha
     cardPage = 0;
   }
@@ -1372,7 +1366,7 @@ void onSwipe(int dir) {
     yardDemoPage = (uint8_t)((yardDemoPage + YDEMO_PAGES + (dir > 0 ? -1 : 1)) % YDEMO_PAGES);
     return;
   }
-  if (gameOpen || sackOpen || zenOpen || dashOpen || bagOpen || kbOpen || clockOpen || battleOpen()) return;
+  if (gameOpen || sackOpen || zenOpen || dashOpen || bagOpen || panelKind || kbOpen || clockOpen || battleOpen()) return;
   if (pet.isDying()) return;  // v1.60: el dialogo del Revivir no se esquiva
   if (cardOpen) {  // dentro de la ficha: cambiar entre las CARD_PAGES paginas
     int p = (int)cardPage + (dir > 0 ? -1 : 1);  // izquierda avanza
@@ -1392,7 +1386,7 @@ void onSwipe(int dir) {
   }
   if (!galleryOpen) {
     // con un menu abierto no: la galeria se abria encima del de comida
-    if (!pet.ceremony && !confirmUntil && !menuKind) {
+    if (!pet.ceremony && !confirmUntil && !panelKind) {
       if (dir > 0) {  // a la derecha: la caja (v1.37), desde el bicho o desde el huevo
         if (boxCanOpen()) openBox();
       } else {        // a la izquierda: la Pokedex
@@ -1510,7 +1504,7 @@ void onBack() {
   if (gameOpen) { gameOpen = false; return; }    // abandona sin premio, como tocar la cabecera
   if (choiceKind) { choiceKind = 0; return; }    // ni evoluciona ni rechaza: el boton sigue ahi
   if (confirmUntil) { confirmUntil = 0; return; }  // "soltar?": NO
-  if (menuKind) { menuKind = MENU_NONE; return; }
+  if (panelKind) { panelKind = PANEL_NONE; return; }  // panel Cuidar / Jugar: a casa
   if (foundShown) { pet.popFound(); foundShown = false; return; }  // cierra el hallazgo
 }
 
@@ -1559,6 +1553,10 @@ void onTap(int16_t x, int16_t y) {
     bagTap(x, y);
     return;
   }
+  if (panelKind) {  // paneles Cuidar / Jugar (v2.0, Y2)
+    panelTap(x, y);
+    return;
+  }
   if (pet.ceremony) return;  // durante la despedida no hay botones
   if (pet.isDying()) {       // v1.60: solo cuenta el dialogo del Revivir
     dyingTap(x, y);
@@ -1598,59 +1596,6 @@ void onTap(int16_t x, int16_t y) {
       pet.release();
     }
     confirmUntil = 0;
-    return;
-  }
-  if (menuKind) {            // menu de comida o de juego: un toque elige o lo cierra
-    uint8_t kind = menuKind;
-    bool live = timeLeft(menuUntil);
-    menuKind = MENU_NONE;
-    if (!live || y < 288 || y > 352) return;
-    if (kind == MENU_FEED && x >= 101 && x < 365) {  // (x = 365 daba el objeto 4)
-      int item = (x - 101) / 66;
-      FxNeedSnap ns = fxSnap();
-      if (item == 3) {  // la tarta (v1.54): limitada; sin ninguna, tiembla COMER
-        if (!pet.eatCake()) {
-          sfxPlay(SFX_DENY);
-          fxo.push(FXO_DENY, 0, 0, millis());
-          if (!pet.items[IT_CAKE]) cakeHintUntil = millis() + 2500;  // (con tartas: dormido, o en una ceremonia)
-          return;
-        }
-      } else {
-        pet.feedBerry(item);
-      }
-      fxNeeds(ns);  // "+25" sobre la barra de comida
-      sfxPlay(SFX_EAT);
-    } else if (kind == MENU_PLAY && x >= PLAY_MENU_X && x < PLAY_MENU_X + PLAY_MENU_W) {
-      sfxPlay(SFX_TAP);
-      int slot = (x - PLAY_MENU_X) / PLAY_MENU_SLOT;  // pelota | combate | saco | carrera | cascada
-      if (slot == 0) startGame();
-      else if (slot == 2) startSack();
-      else if (slot == 3) {  // carrera: sin IMU no se puede inclinar
-        if (imuPresent() && !pet.isEgg() && !pet.sleeping && !pet.ceremony) startDash();
-        else {
-          sfxPlay(SFX_DENY);
-          fxo.push(FXO_DENY, 1, 0, millis());
-        }
-      }
-      else if (slot == 4) startZen();
-      else if (stagesCanOpen()) openStages();  // v1.65: las fases (antes un combate suelto)
-      else {
-        sfxPlay(SFX_DENY);
-        fxo.push(FXO_DENY, 1, 0, millis());  // tiembla JUGAR, debajo del menu ya cerrado
-      }
-    } else if (kind == MENU_CARE && x >= CARE_MENU_X && x < CARE_MENU_X + CARE_MENU_W) {
-      int slot = (x - CARE_MENU_X) / PLAY_MENU_SLOT;  // luz | bano
-      if (slot == 0) {
-        sfxPlay(SFX_TAP);
-        pet.toggleLight();
-      } else if (pet.sleeping || bathUntil) {  // dormido no se bana, y el bano no se repite a medias
-        sfxPlay(SFX_DENY);
-        fxo.push(FXO_DENY, BTN_CARE, 0, millis());
-      } else {
-        sfxPlay(SFX_TAP);
-        startBath();
-      }
-    }
     return;
   }
   if (foundShown) {          // hallazgo del paseo en pantalla: un toque lo cierra
@@ -1699,15 +1644,10 @@ void onTap(int16_t x, int16_t y) {
         return;
       }
       sfxPlay(SFX_TAP);
-      if (i == 0) {
-        if (!pet.sleeping) { menuKind = MENU_FEED; menuUntil = millis() + 6000; }
-      } else if (i == 1) {     // jugar: pelota o combate de practica
-        if (!pet.isEgg() && !pet.sleeping && !pet.ceremony) { menuKind = MENU_PLAY; menuUntil = millis() + 6000; }
-        // huevo, dormido o casa vacia: no hay juegos, pero los de la caja si pueden ir a las fases
-        else if (!pet.ceremony && pet.boxHasPets()) openStages();
-      } else if (i == BTN_CARE) {  // dormir / despertar y banar (v1.53)
-        if (!pet.ceremony) { menuKind = MENU_CARE; menuUntil = millis() + 6000; }
-      } else {
+      // v2.0 (Y2): COMER y CUIDADOS abren el panel Cuidar; JUGAR, el panel Jugar
+      if (i == 0 || i == BTN_CARE) openCarePanel();
+      else if (i == 1) openPlayPanel();
+      else {
         openBag();
       }
       return;
@@ -2298,10 +2238,12 @@ void printT(const char *s) {
 
 // Pantallas que solo cambian con un toque (o con un dato que cambia muy de vez en cuando):
 // mientras su "clave" no cambie no se repintan ni se vuelcan por QSPI.
+void mixPanelKey(uint32_t &h);
 static bool staticScreen() {
   if (pet.awaitingStarter()) return true;
   if (galleryOpen || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen()) return false;  // la galeria gestiona su propio repintado
   if (stagesOpen || teamOpen) return !timeLeft(stShakeUntil);  // menus quietos, salvo la casilla que tiembla
+  if (panelKind) return !timeLeft(panelShakeUntil);  // paneles Cuidar / Jugar (v2.0, Y2): quietos salvo una tarjeta que tiembla
   if (boxOpen) return !boxMove && !timeLeft(boxShakeUntil);  // la caja, quieta salvo la luz o un hueco que tiembla
   if (yardDemoOpen || kbOpen || clockOpen || bagOpen) return true;
   return cardOpen && cardPage != 0;  // la pagina 0 tiene el retrato animado
@@ -2319,6 +2261,8 @@ static uint32_t screenKey() {
   h = mixKey(h, gLang);
   if (stagesOpen || teamOpen) {
     mixStageKey(h);
+  } else if (panelKind) {
+    mixPanelKey(h);
   } else if (boxOpen) {
     h = mixKey(h, boxPage);
     h = mixKey(h, pet.badgeMask());
@@ -2445,6 +2389,11 @@ bool render() {
     renderBag();
     return true;
   }
+  if (panelKind && (pet.ceremony || pet.isDying())) panelKind = PANEL_NONE;  // la despedida o el Revivir se ven en casa
+  if (panelKind) {  // paneles Cuidar / Jugar (v2.0, Y2)
+    renderPanel();
+    return true;
+  }
   int h = sceneHour();
   gNight = pet.sleeping || h < 6 || h >= 20;
   // drawScene cubre los 466x466 completos: sin fillScreen(NEGRO) previo para
@@ -2543,60 +2492,6 @@ bool render() {
   drawFxBanner(millis());  // celebracion en curso (fx.h): subida, medalla, hito o meta
   fxPerfNote(fxUs + (micros() - fxT0));
   drawWalkNews();
-
-  // menus emergentes: comida (4 opciones), juego (pelota | combate | saco | carrera | cascada) o
-  // cuidados (luz | bano)
-  if (menuKind && !timeLeft(menuUntil)) menuKind = MENU_NONE;
-  if (menuKind == MENU_PLAY) {
-    gfx->fillRoundRect(PLAY_MENU_X, 288, PLAY_MENU_W, 64, 14, UI_WHITE);
-    gfx->drawRoundRect(PLAY_MENU_X, 288, PLAY_MENU_W, 64, 14, inkColor());
-    drawMap(SPR_ICON_PLAY, 16, PLAY_MENU_X + 9, 296, 3, false);
-    drawMap(SPR_ICON_BATTLE, 16, PLAY_MENU_X + PLAY_MENU_SLOT + 9, 296, 3, false);
-    drawMap(SPR_ICON_SACK, 16, PLAY_MENU_X + 2 * PLAY_MENU_SLOT + 9, 296, 3, false);
-    if (imuPresent()) drawMap(SPR_ICON_DASH, 16, PLAY_MENU_X + 3 * PLAY_MENU_SLOT + 9, 296, 3, false);
-    else drawMapTint(SPR_ICON_DASH, 16, PLAY_MENU_X + 3 * PLAY_MENU_SLOT + 9, 296, 3, UI_TRACK);  // sin IMU: en gris
-    drawMap(SPR_ICON_ZEN, 16, PLAY_MENU_X + 4 * PLAY_MENU_SLOT + 9, 296, 3, false);
-  }
-  if (menuKind == MENU_CARE) {
-    gfx->fillRoundRect(CARE_MENU_X, 288, CARE_MENU_W, 64, 14, UI_WHITE);
-    gfx->drawRoundRect(CARE_MENU_X, 288, CARE_MENU_W, 64, 14, inkColor());
-    // dormido: el sol lo despierta, y el bano espera (en gris)
-    drawMap(pet.sleeping ? SPR_ICON_SUN : SPR_ICON_LIGHT, 16, CARE_MENU_X + 9, 296, 3, false);
-    if (pet.sleeping || bathUntil) drawMapTint(SPR_ICON_CLEAN, 16, CARE_MENU_X + PLAY_MENU_SLOT + 9, 296, 3, UI_TRACK);
-    else drawMap(SPR_ICON_CLEAN, 16, CARE_MENU_X + PLAY_MENU_SLOT + 9, 296, 3, false);
-  }
-  if (menuKind == MENU_FEED) {
-    {
-      gfx->fillRoundRect(101, 288, 264, 64, 14, UI_WHITE);
-      gfx->drawRoundRect(101, 288, 264, 64, 14, inkColor());
-      drawMap(SPR_ICON_FOOD, 16, 110, 296, 3, false);
-      drawMap(SPR_ICON_BERRY_B, 16, 176, 296, 3, false);
-      drawMap(SPR_ICON_BERRY_G, 16, 242, 296, 3, false);
-      // la favorita, ya descubierta (v1.57): una estrella en su esquina, para no tener que recordarla
-      // con un marco dorado alrededor, que a 16 px la estrella sola apenas se ve en la placa
-      if (pet.berryKnown)
-        for (uint8_t c = 0; c < 3; c++)
-          if (pet.lovesBerry(c)) {
-            int fx = 110 + 66 * c;
-            gfx->drawRoundRect(fx - 5, 292, 58, 56, 10, UI_BAR_WARN);
-            gfx->drawRoundRect(fx - 4, 293, 56, 54, 9, UI_BAR_WARN);
-            drawMap(SPR_STAR, 16, fx + 38, 286, 1, false);
-          }
-      // la tarta (v1.54), con cuantas quedan; sin ninguna, en gris
-      uint8_t cakes = pet.items[IT_CAKE];
-      if (cakes) drawMap(SPR_ICON_CAKE, 16, 308, 296, 3, false);
-      else drawMapTint(SPR_ICON_CAKE, 16, 308, 296, 3, UI_TRACK);
-      if (cakes) {  // cuantas quedan, en una chapa en la esquina (como un aviso)
-        char cn[4];
-        snprintf(cn, sizeof(cn), "%u", cakes);
-        gfx->fillCircle(354, 300, 10, UI_BAR_BAD);
-        setSize(2);
-        gfx->setTextColor(UI_WHITE);
-        setCur(354 - textW(cn, 2) / 2 + 1, 293);
-        printT(cn);
-      }
-    }
-  }
 
   // dialogo "soltar?" (pulsacion larga sobre el bicho)
   if (confirmUntil) {
@@ -4008,7 +3903,7 @@ void fxCollect(uint32_t now) {
 // algo encima (dialogo, menu, bano, evolucion, despedida, eclosion)
 bool fxScreenBusy() {
   return !fxScreenAwake() || pet.sleeping || pet.busyEnding() || pet.evolving() || choiceKind || confirmUntil ||
-         menuKind || bathUntil || fxo.find(FXO_HATCH) || fxo.waiting(FXO_HATCH) || fxo.find(FXO_BOX) ||
+         panelKind || bathUntil || fxo.find(FXO_HATCH) || fxo.waiting(FXO_HATCH) || fxo.find(FXO_BOX) ||
          fxo.waiting(FXO_BOX);
 }
 
@@ -4369,7 +4264,7 @@ void drawFxOverlays(uint32_t now) {
 // que la pantalla este encendida y no haya otro dialogo, celebracion o animacion encima
 // (FR-1.5). El banner de la meta va en la cola de celebraciones (fx.h) desde la v1.30.
 void drawWalkNews() {
-  bool busy = screenOff || dimStage != DIM_AWAKE || choiceKind || confirmUntil || menuKind ||
+  bool busy = screenOff || dimStage != DIM_AWAKE || choiceKind || confirmUntil || panelKind ||
               pet.evolving() || bathUntil || fxq.busy() || pet.isDying();
   static bool wasShown = false;
   if (busy || !pet.hasFound()) { wasShown = false; return; }
@@ -5135,7 +5030,7 @@ const char *petName() { return pet.nick[0] ? pet.nick : dexName(pet.speciesId); 
 
 // la caja se abre desde la casa sin nada encima: ni dialogo, ni menu, ni bano, ni evolucion
 bool boxCanOpen() {
-  return !pet.busyEnding() && !confirmUntil && !choiceKind && !menuKind && !bathUntil && !pet.evolving();
+  return !pet.busyEnding() && !confirmUntil && !choiceKind && !panelKind && !bathUntil && !pet.evolving();
 }
 
 void openBox() {
@@ -6190,6 +6085,209 @@ void yHpBar(int x, int y, int w, int cur, int max, uint16_t col) {
   if (fw >= Y_HP_H) gfx->fillRoundRect(x, y, fw, Y_HP_H, Y_HP_H / 2, col);
 }
 
+// =================== paneles Cuidar y Jugar (v2.0, fase Y2; geometria en yard_panels.h) ===================
+// Sustituyen a los menus emergentes de COMER / JUGAR / CUIDADOS con las mismas reglas: tocar una
+// tarjeta hace lo que hacia su hueco y vuelve a casa, como el menu al cerrarse. Dos diferencias: el
+// panel no se cierra solo a los 6 s, y una tarjeta que no se puede usar tiembla en el panel (que
+// sigue abierto) en vez de cerrarlo y hacer temblar el boton de casa.
+
+// Cuidar: la comida (que en la fase Y3 pasara a soltarse en el patio) y luz / bano
+void openCarePanel() {
+  if (pet.ceremony || pet.isEgg() || pet.isVacant()) return;  // (desde casa: COMER y CUIDADOS no llegan con huevo)
+  panelKind = PANEL_CARE;
+  panelShakeIdx = -1;
+  panelShakeUntil = 0;
+}
+
+// Jugar: los juegos y las fases. Huevo, dormido o casa vacia: no hay juegos, pero los de la caja si
+// pueden ir a las fases (v1.65)
+void openPlayPanel() {
+  if (pet.ceremony) return;
+  if (!pet.isEgg() && !pet.isVacant() && !pet.sleeping) {
+    panelKind = PANEL_PLAY;
+    panelShakeIdx = -1;
+    panelShakeUntil = 0;
+  } else if (pet.boxHasPets()) {
+    openStages();
+  } else {
+    sfxPlay(SFX_DENY);
+  }
+}
+
+// que tarjeta se puede usar ahora (las que no, con contorno e icono apagado)
+static bool panelItemOn(uint8_t kind, uint8_t i) {
+  bool awake = !pet.sleeping && !pet.isEgg();
+  if (kind == PANEL_CARE) {
+    if (i == CP_CAKE) return awake && pet.items[IT_CAKE];
+    if (i == CP_LIGHT) return true;
+    if (i == CP_BATH) return awake && !bathUntil;  // dormido no se bana, y el bano no se repite a medias
+    return awake;
+  }
+  if (i == PP_BATTLE) return stagesCanOpen();
+  if (i == PP_DASH) return awake && imuPresent();  // sin IMU no se puede inclinar
+  return awake;
+}
+
+// la tarjeta bajo el dedo (se ve pulsada), o -1
+static int panelPressed() {
+  if (!wasPressed || holdFired || swallowGesture) return -1;
+  int i = panelHit(panelKind, tX0, tY0);
+  return (i >= 0 && panelHit(panelKind, tXl, tYl) == i) ? i : -1;
+}
+
+static int panelShakeDx(int8_t idx) {
+  if (idx != panelShakeIdx || !timeLeft(panelShakeUntil)) return 0;
+  float s = 1.0f - (float)timeLeft(panelShakeUntil) / (float)FX_DENY_MS;
+  return (int)(4.0f * (1.0f - s) * sinf(s * 6.0f * (float)PI));
+}
+
+static void panelDeny(int8_t idx) {
+  sfxPlay(SFX_DENY);
+  panelShakeIdx = idx;
+  panelShakeUntil = millis() + FX_DENY_MS;
+}
+
+// la clave de repintado: todo lo que dibujan los dos paneles
+void mixPanelKey(uint32_t &h) {
+  h = mixKey(h, 30u + panelKind);
+  h = mixKey(h, (uint32_t)(panelPressed() + 1));
+  for (uint8_t i = 0; i < panelCount(panelKind); i++) h = mixKey(h, panelItemOn(panelKind, i));
+  for (uint32_t v : { (uint32_t)pet.items[IT_CAKE], (uint32_t)pet.sleeping, (uint32_t)pet.berryKnown,
+                      (uint32_t)pet.speciesId, (uint32_t)(timeLeft(cakeHintUntil) > 0), (uint32_t)gLang })
+    h = mixKey(h, v);
+}
+
+// una tarjeta del panel: usable = tarjeta llena (clara si se pulsa); si no, solo el contorno y el icono
+// apagado. Devuelve la x (con el temblor) para lo que se dibuje encima
+static int panelCardDraw(uint8_t i, const char *const *icon, const char *label) {
+  int x, y, w, h;
+  panelCard(panelKind, i, x, y, w, h);
+  x += panelShakeDx(i);
+  bool on = panelItemOn(panelKind, i);
+  if (on) {
+    yCard(x, y, w, h, panelPressed() == i);
+  } else {
+    gfx->drawRoundRect(x, y, w, h, Y_CARD_RAD, STG_OFF_EDGE);
+    gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, Y_CARD_RAD - 1, STG_OFF_EDGE);
+  }
+  int iy = label ? y + 12 : y + (h - 48) / 2;
+  if (on) drawMap(icon, 16, x + (w - 48) / 2, iy, 3, false);
+  else drawMapTint(icon, 16, x + (w - 48) / 2, iy, 3, STG_LOCK_INK);
+  if (label) {
+    gfx->setTextColor(on ? Y_TEXT_DIM : STG_LOCK_INK);
+    printTight(label, x + w / 2, y + h - 30, w - 8);
+  }
+  return x;
+}
+
+static void renderCarePanel() {
+  yTitle(T(S_DOCK_CARE), nullptr);
+  static const char *const *const BERRY[3] = { SPR_ICON_FOOD, SPR_ICON_BERRY_B, SPR_ICON_BERRY_G };
+  for (uint8_t c = 0; c < 3; c++) {
+    int x = panelCardDraw(c, BERRY[c], nullptr);
+    // la favorita, ya descubierta (v1.57): marco dorado y una estrella en su esquina
+    if (pet.berryKnown && pet.lovesBerry(c)) {
+      int y = CP_FOOD_Y;
+      gfx->drawRoundRect(x, y, CP_FOOD_W, CP_FOOD_W, Y_CARD_RAD, UI_BAR_WARN);
+      gfx->drawRoundRect(x + 1, y + 1, CP_FOOD_W - 2, CP_FOOD_W - 2, Y_CARD_RAD - 1, UI_BAR_WARN);
+      drawMap(SPR_STAR, 16, x + CP_FOOD_W - 19, y + 3, 1, false);
+    }
+  }
+  // la tarta (v1.54), con cuantas quedan en una chapa; sin ninguna, apagada
+  int x = panelCardDraw(CP_CAKE, SPR_ICON_CAKE, nullptr);
+  uint8_t cakes = pet.items[IT_CAKE];
+  if (cakes) {
+    char cn[4];
+    snprintf(cn, sizeof(cn), "%u", cakes);
+    int bx = x + CP_FOOD_W - 12, by = CP_FOOD_Y + 12;
+    gfx->fillCircle(bx, by, 10, UI_BAR_BAD);
+    setSize(2);
+    gfx->setTextColor(UI_WHITE);
+    setCur(bx - textW(cn, 2) / 2 + 1, by - 7);
+    printT(cn);
+  }
+  // dormido: el sol lo despierta, y el bano espera
+  panelCardDraw(CP_LIGHT, pet.sleeping ? SPR_ICON_SUN : SPR_ICON_LIGHT, nullptr);
+  panelCardDraw(CP_BATH, SPR_ICON_CLEAN, nullptr);
+  // tocar la tarta sin ninguna: donde se encuentra (en casa lo decia la cabecera)
+  if (timeLeft(cakeHintUntil)) {
+    gfx->setTextColor(Y_TEXT);
+    printTight(T(S_NO_CAKE), CX, CP_FOOD_Y + CP_FOOD_W + 15, 380);
+  }
+}
+
+static void renderPlayPanel() {
+  yTitle(T(S_DOCK_PLAY), nullptr);
+  // bajo cada juego, la estadistica que entrena; el combate lleva a las fases
+  panelCardDraw(PP_BALL, SPR_ICON_PLAY, T(S_STAT_SPE));
+  panelCardDraw(PP_BATTLE, SPR_ICON_BATTLE, T(S_STAGES));
+  panelCardDraw(PP_SACK, SPR_ICON_SACK, T(S_STAT_ATK));
+  panelCardDraw(PP_DASH, SPR_ICON_DASH, T(S_STAT_SPE));
+  panelCardDraw(PP_ZEN, SPR_ICON_ZEN, T(S_STAT_DEF));
+}
+
+void renderPanel() {
+  yPanelBg();
+  if (panelKind == PANEL_CARE) renderCarePanel();
+  else renderPlayPanel();
+  yBackBtn();
+  gfx->flush();
+}
+
+static void carePanelTap(int i) {
+  if (!panelItemOn(PANEL_CARE, i)) {  // dormido: ni comida ni bano; la tarta sin ninguna dice donde hay
+    if (i == CP_CAKE && !pet.items[IT_CAKE]) cakeHintUntil = millis() + 2500;
+    panelDeny(i);
+    return;
+  }
+  if (i == CP_LIGHT) {
+    sfxPlay(SFX_TAP);
+    pet.toggleLight();
+  } else if (i == CP_BATH) {
+    sfxPlay(SFX_TAP);
+    startBath();
+  } else {
+    FxNeedSnap ns = fxSnap();
+    if (i == CP_CAKE) {
+      if (!pet.eatCake()) {  // (con tartas: en una ceremonia)
+        panelDeny(i);
+        return;
+      }
+    } else {
+      pet.feedBerry(i);
+    }
+    fxNeeds(ns);  // "+25" sobre la barra de comida
+    sfxPlay(SFX_EAT);
+  }
+  panelKind = PANEL_NONE;  // como el menu: hecho, a casa a verlo
+}
+
+static void playPanelTap(int i) {
+  if (!panelItemOn(PANEL_PLAY, i)) {
+    panelDeny(i);
+    return;
+  }
+  sfxPlay(SFX_TAP);
+  panelKind = PANEL_NONE;  // el juego (o las fases) se abre en su lugar; al salir, a casa
+  if (i == PP_BALL) startGame();
+  else if (i == PP_BATTLE) openStages();  // v1.65: las fases (antes un combate suelto)
+  else if (i == PP_SACK) startSack();
+  else if (i == PP_DASH) startDash();
+  else startZen();
+}
+
+void panelTap(int16_t x, int16_t y) {
+  if (yBackHit(x, y)) {  // volver: a casa, como USER
+    sfxPlay(SFX_TAP);
+    panelKind = PANEL_NONE;
+    return;
+  }
+  int i = panelHit(panelKind, x, y);
+  if (i < 0) return;  // fuera de las tarjetas: nada (es una pantalla, no un menu que se cierra)
+  if (panelKind == PANEL_CARE) carePanelTap(i);
+  else playPanelTap(i);
+}
+
 // ---- pantalla de muestra del kit (serie YARDUI [pagina]): 0 panel, 1 mundo, 2 fase ----
 // fila de la tienda de muestra: icono, nombre, precio y pastilla de comprar
 static void yDemoShopRow(int y, const char *const *icon, const char *name, int price) {
@@ -6440,7 +6538,7 @@ void closeForDying() {
   itemConfirm = 0;
   choiceKind = 0;
   confirmUntil = 0;
-  menuKind = MENU_NONE;
+  panelKind = PANEL_NONE;
   bathUntil = 0;
   bathPending = false;
 }
@@ -7329,7 +7427,7 @@ void startStage(uint8_t stage, const uint32_t *uids, uint8_t n) {
   bt.run.begin(stage, mates, m, seed);
   battleLoadFoe();  // antes de la intro: leer la SD bloquea el loop
   battleLoadAlly();
-  menuKind = MENU_NONE;
+  panelKind = PANEL_NONE;
   bt.phase = BT_INTRO;
   bt.t0 = millis();
   sfxPlay(SFX_BATTLE);
