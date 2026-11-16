@@ -81,6 +81,8 @@ static const ExpectedFmt EXPECTED[] = {
   { S_GO_FMT,          "%s" },  // stages
   { S_LV_RANGE_FMT,    "%u,%u" },
   { S_STAGE_FMT,       "%u" },
+  { S_TRV_EV_0,        "%s" },  // Y5: la especie del bioma
+  { S_TRV_EV_9,        "%s" },
 };
 static const int NUM_EXPECTED = (int)(sizeof(EXPECTED) / sizeof(EXPECTED[0]));
 

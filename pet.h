@@ -5,6 +5,7 @@
 #include "box.h"     // la caja (v1.37): el registro de un bicho guardado
 #include "economy.h" // las monedas del patio (Y4): lo que se gana y lo que cuesta
 #include "eggtimer.h" // el huevo del patio (v2.0, Y3): 2 h de tiempo real, las sacudidas lo adelantan
+#include "travel.h"  // los viajes y la coleccion (v2.0, Y5): lo que trae un viaje
 
 // 1 tick = 1 minuto de juego. Baja este valor para probar mas rapido
 // (p. ej. 5000UL = las estadisticas caen 12x mas rapido).
@@ -478,6 +479,36 @@ public:
   // el mapa que toca de verdad: el elegido si es suyo, si no el del bioma
   uint8_t yardMapWanted() const { return yardChosen && ownsMap(yardChosen) ? yardChosen : YARD_MAP_START; }
   uint16_t coinsEarnedToday() const;  // lo contado hoy para el tope diario
+
+  // --- viajes y coleccion (v2.0, Y5; travel.h). Viaja un bicho de la CAJA (el de casa nunca), de uno en
+  // uno para toda la partida, a un mapa que se tenga, 1 / 3 / 8 h de tiempo real (tier 0..2). Mientras
+  // esta fuera su hueco no se puede despertar, ni guardar encima, ni llevar al equipo. Al cumplirse (en
+  // el tick, o al arrancar si paso con la placa apagada) vuelve solo: monedas, crecimiento, objeto,
+  // recuerdo y un resultado sin ver (takeTravelResult). Sin hora (RTC sin poner) no se puede salir.
+  bool canTravel(uint8_t slot, uint8_t dest, uint8_t tier) const;
+  bool startTravel(uint8_t slot, uint8_t dest, uint8_t tier);  // guarda al momento (un toque)
+  bool travelling() const { return trvSlot != TRV_NONE; }
+  bool slotTravelling(uint8_t k) const { return trvSlot != TRV_NONE && trvSlot == k; }
+  uint8_t travelSlot() const { return trvSlot; }  // TRV_NONE si no hay viaje
+  uint8_t travelDest() const { return trvDest; }  // mapa 1..5
+  uint8_t travelTier() const { return trvTier; }  // 0..2
+  uint32_t travelStartEpoch() const { return trvStart; }
+  uint32_t travelSeed() const { return trvSeed; }
+  uint32_t travelSecondsLeft() const { return travelling() ? travelTimeLeft(trvStart, trvTier, lastSeenEpoch) : 0; }
+  uint16_t travelMinutesElapsed() const { return travelling() ? travelElapsedMin(trvStart, trvTier, lastSeenEpoch) : 0; }
+  void travelCheck();  // lo llama el tick y syncClock: si ya paso el tiempo, termina el viaje
+  // el resultado del ultimo viaje sin ver (sobrevive a un reinicio); lo recoge la UI y se olvida
+  bool travelResultPending() const { return trvResPending; }
+  bool takeTravelResult(TravelResult *out);
+  bool peekTravelResult(TravelResult *out) const { if (out && trvResPending) *out = trvResult; return trvResPending; }  // sin olvidarlo
+  // coleccion (del jugador): bit id = recuerdo id (0..SOUV_COUNT-1) conseguido
+  uint32_t souvenirMask() const { return souvOwned; }
+  bool hasSouvenir(uint8_t id) const { return id < SOUV_COUNT && (souvOwned & (1u << id)); }
+  uint8_t souvenirCount() const;
+  uint32_t souvenirFoundEpoch(uint8_t id) const { return id < SOUV_COUNT && hasSouvenir(id) ? souvDate[id] : 0; }  // 0 = sin hora
+  void setSouvenirMask(uint32_t mask);  // serie SOUV (pruebas): los nuevos se fechan ahora
+  void dbgTravelElapsed(uint32_t min);  // serie TRAVELT: el viaje salio hace min minutos MAS
+  void travelFinishNow();               // serie TRAVELEND
   uint16_t lastCoins = 0;        // lo ganado en el ultimo minijuego (la UI lo ensena; no se guarda)
   uint16_t goalBannerCoins = 0;  // monedas de las metas cruzadas desde el ultimo banner (takeGoalBanner)
 
@@ -584,8 +615,8 @@ public:
   uint8_t boxUsed() const;   // huecos ocupados (danados incluidos)
   // se puede mover algo: sin despedida, evolucion ni eleccion de inicial
   bool canBoxMove() const { return !busyEnding() && !evolving() && !starterPick; }
-  bool canStore(uint8_t k) const { return boxState(k) == BOX_EMPTY && k < BOX_SLOTS && !isEgg() && canBoxMove(); }
-  bool canWake(uint8_t k) const { return boxState(k) == BOX_OK && canBoxMove(); }
+  bool canStore(uint8_t k) const { return boxState(k) == BOX_EMPTY && k < BOX_SLOTS && !slotTravelling(k) && !isEgg() && canBoxMove(); }
+  bool canWake(uint8_t k) const { return boxState(k) == BOX_OK && !slotTravelling(k) && canBoxMove(); }  // de viaje (Y5): no
   // guarda al bicho en el hueco k (vacio) y deja en su sitio el huevo guardado, o uno nuevo
   bool store(uint8_t k);
   // despierta al del hueco k. Con un bicho nacido, los dos se cambian el sitio; con un huevo,
@@ -619,6 +650,17 @@ private:
   bool eggShakeHave = false;
   void placeEgg();          // el huevo de casa pasa a ser del patio, puesto ahora
   void eggClockStamp();     // puesto sin hora: se fecha en cuanto se sabe
+  // viajes (Y5): "trv" (hueco, mapa, duracion, uid del viajero, salida, semilla) en UNA entrada; sin ella no
+  // hay viaje. "souv" la mascara y "souvD" las 25 fechas; "trvR" el resultado sin ver
+  uint8_t trvSlot = TRV_NONE, trvDest = 0, trvTier = 0;
+  uint32_t trvUid = 0, trvStart = 0, trvSeed = 0;
+  uint32_t souvOwned = 0;
+  uint32_t souvDate[SOUV_COUNT] = { 0 };
+  TravelResult trvResult = {};
+  bool trvResPending = false;
+  void travelComplete();
+  void travelCancel();
+  bool travelPersist();
   uint8_t mistakeCooldown = 0;
   uint8_t ticksSinceSave = 0;
   bool pendingSave = false;     // guardado periodico pendiente de volcar

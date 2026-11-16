@@ -18,7 +18,10 @@ void Pet::begin() {
     load();
     migrateGrowthCurve();  // los contadores de la curva v1 (3 h) pasan a la nueva (2 h)
   }
-  boxBoot();  // la caja (v1.37): la lee y termina o deshace un movimiento que corto la luz
+  boxBoot();  // la caja (v1.37)
+  // un viaje cuyo bicho ya no esta en su hueco (BOXCLR con la placa apagada, hueco danado): se cancela
+  if (trvSlot != TRV_NONE && (trvSlot >= BOX_SLOTS || boxSt[trvSlot] != BOX_OK || boxRec[trvSlot].uid != trvUid))
+    travelCancel();
   // guardado anterior a la caja: el bicho de ahora recibe su identidad (FR-BOX.11)
   if (dying && (isEgg() || vacant)) dying = false;  // v1.60: solo se muere un bicho nacido
   if (!isEgg() && !uid) {
@@ -224,6 +227,7 @@ void Pet::syncClock(uint32_t nowEpoch) {
   uint32_t seen = prefs.getUInt("seen", 0);
   lastSeenEpoch = nowEpoch;
   if (nowEpoch == 0) return;
+  travelCheck();  // Y5: un viaje que acabo con la placa apagada vuelve ahora
   uint32_t mins = (seen && nowEpoch > seen) ? (nowEpoch - seen) / 60 : 0;
   // v1.64: la hora del Revivir es real: apagada tambien corre (el resto del tiempo esta parado)
   if (dying && ceremony == CER_NONE && mins) {
@@ -283,6 +287,7 @@ void Pet::update(uint32_t nowMs) {
 }
 
 void Pet::tick() {
+  travelCheck();  // Y5: el viaje de un bicho de la caja (no depende del de casa)
   // muriendose (v1.64): solo corre la hora del Revivir; al acabarse, la UI dice que murio
   if (dying && ceremony == CER_NONE && dyingMin < REVIVE_LIMIT_MIN) {
     if (++dyingMin >= REVIVE_LIMIT_MIN) {
@@ -1365,7 +1370,7 @@ int8_t Pet::teamSlotOf(uint32_t id) const {
 
 bool Pet::teamCanFight(uint32_t id) const {
   int8_t k = teamSlotOf(id);
-  return k == TEAM_HOME ? canBattle() : k >= 0;
+  return k == TEAM_HOME ? canBattle() : (k >= 0 && !slotTravelling((uint8_t)k));  // de viaje (Y5): no
 }
 
 // ---------- monedas (Y4) ----------
@@ -1426,6 +1431,137 @@ void Pet::chooseMap(uint8_t n) {
   if (n && !ownsMap(n)) return;
   yardChosen = n;
   save();
+}
+
+// ---------- viajes y coleccion (Y5) ----------
+static_assert(TRV_DESTS == YARD_MAPS, "travel.h: un destino por mapa del patio");
+static_assert(TRV_POOL_ID[0] == IT_GOLDEN && TRV_POOL_ID[1] == IT_CAKE && TRV_POOL_ID[2] == IT_PROTEIN &&
+                TRV_POOL_ID[3] == IT_IRON && TRV_POOL_ID[4] == IT_CARBOS && TRV_POOL_ID[5] == IT_RARECANDY &&
+                TRV_POOL_ID[6] == IT_REVIVE,
+              "travel.h: los ids de objeto son los de pet.h");
+
+uint8_t Pet::souvenirCount() const {
+  uint8_t n = 0;
+  for (uint8_t i = 0; i < SOUV_COUNT; i++) n += (souvOwned >> i) & 1;
+  return n;
+}
+
+void Pet::setSouvenirMask(uint32_t mask) {
+  mask &= (1u << SOUV_COUNT) - 1;
+  for (uint8_t i = 0; i < SOUV_COUNT; i++) {
+    bool had = (souvOwned >> i) & 1, want = (mask >> i) & 1;
+    if (want && !had) souvDate[i] = lastSeenEpoch;
+    if (!want) souvDate[i] = 0;
+  }
+  souvOwned = mask;
+  save();
+}
+
+bool Pet::canTravel(uint8_t slot, uint8_t dest, uint8_t tier) const {
+  return slot < BOX_SLOTS && boxSt[slot] == BOX_OK && trvSlot == TRV_NONE && tier < TRV_TIERS && ownsMap(dest) &&
+         eggClockKnown(lastSeenEpoch);  // sin hora no se sabe cuando vuelve
+}
+
+// la entrada "trv" entera, de una vez (un solo putBytes: o esta o no esta)
+bool Pet::travelPersist() {
+  uint8_t t[16] = { trvSlot, trvDest, trvTier, 1 };
+  memcpy(t + 4, &trvUid, 4);
+  memcpy(t + 8, &trvStart, 4);
+  memcpy(t + 12, &trvSeed, 4);
+  return prefs.putBytes("trv", t, sizeof(t)) == sizeof(t);
+}
+
+bool Pet::startTravel(uint8_t slot, uint8_t dest, uint8_t tier) {
+  if (!canTravel(slot, dest, tier)) return false;
+  trvSlot = slot;
+  trvDest = dest;
+  trvTier = tier;
+  trvUid = boxRec[slot].uid;
+  trvStart = lastSeenEpoch;
+  trvSeed = ((uint32_t)random(0x10000) << 16) | (uint32_t)random(0x10000);
+  if (!travelPersist()) {
+    trvSlot = TRV_NONE;
+    return false;
+  }
+  Serial.printf("travel: slot %u -> map %u tier %u seed %08lx\n", slot, dest, tier, (unsigned long)trvSeed);
+  return true;
+}
+
+void Pet::travelCancel() {
+  trvSlot = TRV_NONE;
+  prefs.remove("trv");
+}
+
+void Pet::travelCheck() {
+  if (trvSlot == TRV_NONE || travelTimeLeft(trvStart, trvTier, lastSeenEpoch) > 0) return;
+  travelComplete();
+}
+
+// Volver. Orden de escritura para un corte de luz (nunca se duplican monedas):
+//   1. el registro del bicho con su crecimiento (writeSlot, sellado);
+//   2. se borra "trv" (el viaje deja de existir);
+//   3. save(): monedas, mochila, coleccion y, al final, el resultado sin ver ("trvR").
+// Corte entre 1 y 2: al arrancar el viaje sigue y se completa otra vez: el bicho gana el crecimiento DOS
+// veces (peor caso aceptado; el sorteo es el mismo y el premio del jugador solo se cobra una vez).
+// Corte entre 2 y 3: el jugador pierde el premio de ese viaje (monedas, objeto, recuerdo), nunca lo cobra
+// dos veces. Corte dentro de 3: parte del premio (cada clave es atomica) y quiza sin aviso.
+void Pet::travelComplete() {
+  uint8_t k = trvSlot;
+  if (k >= BOX_SLOTS || boxSt[k] != BOX_OK || boxRec[k].uid != trvUid) {  // el bicho ya no esta (BOXCLR)
+    travelCancel();
+    return;
+  }
+  TravelResult r = travelRoll(trvSeed, trvDest, trvTier, souvOwned);
+  PetRecord rec = boxRec[k];
+  r.valid = 1;
+  r.speciesId = rec.speciesId;
+  r.shiny = (rec.flags & REC_SHINY) ? 1 : 0;
+  memcpy(r.nick, rec.nick, sizeof(r.nick));
+  r.nick[sizeof(r.nick) - 1] = 0;
+  r.lvBefore = levelFor(rec.growMin);
+  rec.growMin += r.growMin;  // la evolucion no se mira: hiberna y se mira al despertarlo (como cualquiera de la caja)
+  r.lvAfter = levelFor(rec.growMin);
+  Serial.printf("travel: back slot %u map %u tier %u seed %08lx rolls item=%u souv=%u -> item=%d souv=%d dup=%d coins=%u grow=+%u lv %u->%u\n",
+                k, r.dest, r.tier, (unsigned long)r.seed, r.rollItem, r.rollSouv,
+                r.item == TRV_NONE ? -1 : r.item, r.souvenir == TRV_NONE ? -1 : r.souvenir, r.dup, r.coins, r.growMin,
+                r.lvBefore, r.lvAfter);
+  if (!writeSlot(k, rec)) return;  // 1. (no se pudo: el viaje sigue y se reintenta en el siguiente minuto)
+  travelCancel();                  // 2.
+  r.coins = addCoins(r.coins, false);
+  if (r.dupCoins > r.coins) r.dupCoins = r.coins;
+  if (r.item != TRV_NONE) {
+    if (items[r.item] >= ITEM_MAX) r.itemLost = 1;
+    else items[r.item]++;
+  }
+  if (r.souvenir != TRV_NONE && !r.dup) {
+    souvOwned |= 1u << r.souvenir;
+    souvDate[r.souvenir] = lastSeenEpoch;
+  }
+  trvResult = r;
+  trvResPending = true;
+  save();  // 3.
+}
+
+bool Pet::takeTravelResult(TravelResult *out) {
+  if (!trvResPending) return false;
+  if (out) *out = trvResult;
+  trvResPending = false;
+  trvResult.valid = 0;
+  pendingSave = true;  // el loop lo borra de la NVS con la pantalla atenuada (un corte antes: el aviso vuelve)
+  return true;
+}
+
+void Pet::dbgTravelElapsed(uint32_t min) {
+  if (trvSlot == TRV_NONE) return;
+  uint32_t back = min * 60;
+  trvStart = trvStart > back + EGG_EPOCH_MIN ? trvStart - back : EGG_EPOCH_MIN;
+  travelPersist();
+  travelCheck();
+}
+
+void Pet::travelFinishNow() {
+  if (trvSlot == TRV_NONE) return;
+  dbgTravelElapsed(TRV_MIN[trvTier]);
 }
 
 // el premio del jefe de hoy, a la NVS antes que nada de lo que paga. Un dia nuevo empieza con la
@@ -1596,6 +1732,8 @@ void Pet::save() {
   prefs.putUShort("cnT", coinToday);
   prefs.putUShort("ybgO", yardOwned);
   prefs.putUChar("ybg", yardChosen);
+  prefs.putUInt("souv", souvOwned);  // la coleccion (Y5)
+  prefs.putBytes("souvD", souvDate, sizeof(souvDate));
   prefs.putUChar("bdg", badges);
   prefs.putUInt("stD", stageDay);
   prefs.putUChar("stM", stageMask);
@@ -1616,6 +1754,9 @@ void Pet::save() {
     prefs.putBytes("gifts", g, sizeof(g));
   }
   prefs.putBool("eggH", eggHeldFlag);
+  // el resultado de un viaje sin ver (Y5), lo ultimo: un corte antes lo deja sin aviso, pero con el premio
+  if (trvResPending) prefs.putBytes("trvR", &trvResult, sizeof(trvResult));
+  else if (prefs.isKey("trvR")) prefs.remove("trvR");
 }
 
 void Pet::load() {
@@ -1735,6 +1876,25 @@ void Pet::load() {
   if (coins > COIN_MAX) coins = COIN_MAX;
   coinDay = prefs.getUInt("cnD", 0);
   coinToday = prefs.getUShort("cnT", 0);
+  souvOwned = prefs.getUInt("souv", 0) & ((1u << SOUV_COUNT) - 1);  // un guardado anterior: sin recuerdos
+  memset(souvDate, 0, sizeof(souvDate));
+  if (prefs.isKey("souvD")) prefs.getBytes("souvD", souvDate, sizeof(souvDate));
+  trvSlot = TRV_NONE;
+  trvResPending = false;
+  if (prefs.isKey("trv")) {  // sin la clave no hay viaje
+    uint8_t t[16] = { 0 };
+    if (prefs.getBytes("trv", t, sizeof(t)) == sizeof(t) && t[0] < BOX_SLOTS && t[1] >= 1 && t[1] <= TRV_DESTS &&
+        t[2] < TRV_TIERS) {
+      trvSlot = t[0];
+      trvDest = t[1];
+      trvTier = t[2];
+      memcpy(&trvUid, t + 4, 4);
+      memcpy(&trvStart, t + 8, 4);
+      memcpy(&trvSeed, t + 12, 4);
+    }
+  }
+  if (prefs.isKey("trvR") && prefs.getBytes("trvR", &trvResult, sizeof(trvResult)) == sizeof(trvResult) && trvResult.valid)
+    trvResPending = true;
   yardOwned = prefs.getUShort("ybgO", 0) & (uint16_t)(((1u << (YARD_MAPS + 1)) - 1) & ~1u);
   yardChosen = prefs.getUChar("ybg", 0);
   if (yardChosen > YARD_MAPS) yardChosen = 0;
@@ -2038,6 +2198,7 @@ bool Pet::wake(uint8_t k) {
 
 bool Pet::boxClear(uint8_t k) {
   if (k >= BOX_SLOTS) return false;
+  if (slotTravelling(k)) travelCancel();  // Y5: forzar el borrado de un viajero cancela el viaje (antes que el hueco)
   return boxSt[k] == BOX_EMPTY || clearSlot(k);
 }
 
