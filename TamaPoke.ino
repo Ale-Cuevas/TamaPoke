@@ -1226,6 +1226,15 @@ void handleSerial() {
   } else if (line.startsWith("FACEDOWN")) {  // FACEDOWN: boca abajo; FACEDOWN 0: la levantan
     onFaceDown(!(line.length() > 9 && line.substring(9).toInt() == 0));
     Serial.println("DONE");
+  } else if (line.startsWith("COINS")) {  // COINS [n]: pone las monedas en n (0..9999); sin n, solo las muestra
+    if (line.length() > 6) {
+      long n = line.substring(6).toInt();
+      pet.setCoins((uint16_t)(n < 0 ? 0 : (n > COIN_MAX ? COIN_MAX : n)));
+      wakeUI();
+    }
+    Serial.printf("coins=%u earnedToday=%u/%u owned=0x%X chosen=%u biome=%u\n", pet.coins, pet.coinsEarnedToday(),
+                  ECO_DAILY_CAP, pet.yardOwned, pet.yardChosen, pet.biomeMap());
+    Serial.println("DONE");
   } else if (line == "STATS") {
     Serial.printf("spec=%d nv=%u com=%u fel=%u ene=%u lim=%u desc=%u sd=%d mon=%d bat=%d usb=%d rtc=%u\n",
                   pet.speciesId, pet.level(), pet.fullness, pet.joy, pet.energy,
@@ -1242,6 +1251,8 @@ void handleSerial() {
     Serial.printf("ngl=%u dth=%u dying=%d dym=%u degg=%d revive=%u lend=%u\n", pet.neglectMinutes(),
                   pet.deathMinutes(), pet.isDying() ? 1 : 0, pet.dyingMinutes(), pet.deathEggSpecies(),
                   pet.items[IT_REVIVE], pet.lastEnd);
+    Serial.printf("coins=%u earnedToday=%u/%u maps owned=0x%X chosen=%u biome=%u wanted=%u\n", pet.coins,
+                  pet.coinsEarnedToday(), ECO_DAILY_CAP, pet.yardOwned, pet.yardChosen, pet.biomeMap(), pet.yardMapWanted());
     Serial.printf("rec ball=%u bag=%u zen=%u.%u dash=%u\n", pet.gameHi, pet.strHi, pet.zenHi / 10, pet.zenHi % 10, pet.dashHi);
     // crecimiento (v1.35, growth.h): de el sale el nivel; la edad va aparte
     Serial.printf("grow=%lu lv=%u into=%u/%u age=%lu\n", (unsigned long)pet.growMin, pet.level(),
@@ -2701,10 +2712,12 @@ void stepGame() {
     if (++gameMisses >= 3) {
       if (gameNoSave) {  // partida del comando BALL: ni record ni premio
         gameNewHi = false;
+        pet.lastCoins = 0;
         sfxPlay(SFX_LEVEL);
       } else {
         gameNewHi = (gameScore > pet.gameHi);
         FxNeedSnap ns = fxSnap();
+        pet.lastCoins = 0;
         pet.playResult(gameScore);  // actualiza el record y da felicidad
         fxNeeds(ns);  // los "+N" salen al volver a la pantalla principal
         sfxPlay(gameNewHi && gameScore > 0 ? SFX_MEDAL : SFX_LEVEL);
@@ -2740,6 +2753,7 @@ void sackTap() {
 }
 
 void drawGameScene();  // prototipo (definida mas abajo)
+void drawCoinGain(int y, uint16_t n, uint16_t col);  // moneda + "+N" centrados (patio, Y4)
 
 void renderSack() {
   uint32_t now = millis();
@@ -2775,6 +2789,7 @@ void renderSack() {
       setCur(centerX(r, 2), 256);
       printT(r);
     }
+    drawCoinGain(292, pet.lastCoins, ink);
     gfx->flush();
     return;
   }
@@ -2782,6 +2797,7 @@ void renderSack() {
   // se acabaron los 10 s: aplicar entrenamiento
   if (!timeLeft(sackUntil)) {
     sackNewHi = (sackHits > pet.strHi);
+    pet.lastCoins = 0;  // trainStrength lo pone si paga (un huevo o un final no)
     FxNeedSnap ns = fxSnap();
     sackGain = pet.trainStrength(sackHits);
     fxNeeds(ns);
@@ -2875,10 +2891,12 @@ void finishZen(uint32_t now) {
   if (zenNoSave) {
     zenNewHi = false;
     zenGainShown = zenTotalGain(focus, drift);  // lo que daria, para verlo; no se aplica
+    pet.lastCoins = 0;
     sfxPlay(SFX_LEVEL);
   } else {
     zenNewHi = focus > pet.zenHi;
     FxNeedSnap ns = fxSnap();
+    pet.lastCoins = 0;
     zenGainShown = pet.zenResult(focus, drift);  // DEF (con la bonificacion), lavado, record
     fxNeeds(ns);  // los "+N" salen al volver a la pantalla principal
     sfxPlay(zenNewHi && focus > 0 ? SFX_MEDAL : SFX_PLAY);
@@ -3067,8 +3085,9 @@ void renderZen() {
       setCur(centerX(r, 2), 232);
       printT(r);
     }
+    drawCoinGain(284, pet.lastCoins, UI_INK);
     gfx->setTextColor(UI_BAR_OK);
-    setCur(centerX(T(S_CLEAN), 2), 268);
+    setCur(centerX(T(S_CLEAN), 2), 258);
     printT(T(S_CLEAN));
     gfx->flush();
     return;
@@ -3180,10 +3199,12 @@ void finishDash(uint32_t now) {
   if (dashNoSave) {
     dashNewHi = false;
     dashGainShown = dashGain(dash.dodged);  // lo que daria, para verlo; no se aplica
+    pet.lastCoins = 0;
     sfxPlay(SFX_LEVEL);
   } else {
     dashNewHi = dash.dodged > pet.dashHi;
     FxNeedSnap ns = fxSnap();
+    pet.lastCoins = 0;
     dashGainShown = pet.dashResult(dash.dodged);
     fxNeeds(ns);
     sfxPlay(dashNewHi && dash.dodged > 0 ? SFX_MEDAL : SFX_PLAY);
@@ -3457,6 +3478,7 @@ void renderDash() {
       setCur(centerX(r, 2), 342);
       printT(r);
     }
+    drawCoinGain(364, pet.lastCoins, UI_INK);
     gfx->flush();
     return;
   }
@@ -3571,6 +3593,7 @@ void renderGame() {
     gfx->setTextColor(ink);
     setCur(centerX(msg, 2), 250);
     printT(msg);
+    drawCoinGain(286, pet.lastCoins, ink);
     gfx->flush();
     return;
   }
@@ -4004,8 +4027,10 @@ void fxCollect(uint32_t now) {
   uint16_t days = pet.takeMilestone();
   if (days) fxq.push(FXB_MILESTONE, days);
   uint8_t goalLv = 0;
-  uint8_t tier = pet.takeGoalBanner(&goalLv);
-  if (tier) fxq.push(FXB_GOAL, tier, goalLv);  // b = niveles que dieron (v1.36): "+N Lv"
+  uint16_t goalCoins = 0;
+  uint8_t tier = pet.takeGoalBanner(&goalLv, &goalCoins);
+  // b = niveles que dieron (v1.36): "+N Lv"; en los 4 bits de abajo, y encima (<< 4) las monedas (Y4)
+  if (tier) fxq.push(FXB_GOAL, tier, (uint16_t)((goalLv & 15) | (goalCoins << 4)));
   fxo.step(now, false);  // caducan los que no llegan a verse
 }
 
@@ -4056,8 +4081,8 @@ bool fxDebug(const String &k) {
   else if (k == "levelup6") fxq.push(FXB_LEVELUP, lv, lv + 6, false);
   else if (k == "medal") fxq.push(FXB_MEDAL, 0);
   else if (k == "streak") fxq.push(FXB_MILESTONE, 7);
-  else if (k == "goal") fxq.push(FXB_GOAL, 1, STEP_GOAL_LEVELS[0]);
-  else if (k == "goal3") fxq.push(FXB_GOAL, STEP_GOAL_TIERS, STEP_GOAL_LEVELS[STEP_GOAL_TIERS - 1]);
+  else if (k == "goal") fxq.push(FXB_GOAL, 1, STEP_GOAL_LEVELS[0] | (coinsForGoal(1) << 4));
+  else if (k == "goal3") fxq.push(FXB_GOAL, STEP_GOAL_TIERS, STEP_GOAL_LEVELS[STEP_GOAL_TIERS - 1] | (coinsForGoal(STEP_GOAL_TIERS) << 4));
   else if (k == "stat") {
     fxo.push(FXO_STAT, 0, 25, now);
     fxo.push(FXO_STAT, 1, 10, now);
@@ -4220,11 +4245,13 @@ void drawFxBanner(uint32_t now) {
     snprintf(l2, sizeof(l2), T(S_STEPS_FMT), (unsigned long)STEP_GOALS[tier - 1]);
     // niveles que dio la meta (v1.36): "+1 Lv" / "+2 Lv"; nada si se cruzo dormido
     char lvl[12] = "";
-    if (ev.b) snprintf(lvl, sizeof(lvl), "+%u Lv", (unsigned)ev.b);
+    if (ev.b & 15) snprintf(lvl, sizeof(lvl), "+%u Lv", (unsigned)(ev.b & 15));
+    uint16_t coinsWon = ev.b >> 4;
     if (tier == STEP_GOAL_TIERS) {  // 10000: banner mayor, con una bandera por meta y "+2 Lv"
-      gfx->fillRoundRect(53, 128 + oy, 360, 140, 18, UI_BAR_WARN);
-      gfx->drawRoundRect(53, 128 + oy, 360, 140, 18, UI_INK);
-      gfx->drawRoundRect(56, 131 + oy, 354, 134, 16, UI_INK);
+      int bigH = coinsWon ? 172 : 140;
+      gfx->fillRoundRect(53, 128 + oy, 360, bigH, 18, UI_BAR_WARN);
+      gfx->drawRoundRect(53, 128 + oy, 360, bigH, 18, UI_INK);
+      gfx->drawRoundRect(56, 131 + oy, 354, bigH - 6, 16, UI_INK);
       for (int k = 0; k < STEP_GOAL_TIERS; k++) drawMap(SPR_ICON_FLAG, 16, CX - 44 + k * 30 - 8, 142 + oy, 2, false);
       gfx->setTextColor(UI_INK);
       setSize(3);
@@ -4238,10 +4265,11 @@ void drawFxBanner(uint32_t now) {
         setCur(centerX(lvl, 3), 236 + oy);
         printT(lvl);
       }
+      drawCoinGain(274 + oy, coinsWon, UI_INK);
       drawConfetti(e);
       return;
     }
-    int bh = lvl[0] ? 120 : 96;  // con "+N Lv", una linea mas
+    int bh = (lvl[0] ? 120 : 96) + (coinsWon ? 26 : 0);  // con "+N Lv" y con monedas, una linea mas cada una
     gfx->fillRoundRect(73, 150 + oy, 320, bh, 16, UI_BAR_WARN);
     gfx->drawRoundRect(73, 150 + oy, 320, bh, 16, UI_INK);
     drawMap(SPR_ICON_FLAG, 16, 88, 166 + oy, 2, false);
@@ -4256,6 +4284,7 @@ void drawFxBanner(uint32_t now) {
       setCur(centerX(lvl, 2), 238 + oy);
       printT(lvl);
     }
+    drawCoinGain((lvl[0] ? 264 : 238) + oy, coinsWon, UI_INK);
     return;
   }
   // medalla nueva o hito de racha
@@ -6216,6 +6245,19 @@ void yCoinBadge(int cx, int y, uint32_t n, bool shadow) {
   }
 }
 
+// lo ganado en monedas, "moneda +N", centrado en la pantalla (resultados de juegos y estadios)
+void drawCoinGain(int y, uint16_t n, uint16_t col) {
+  if (!n) return;
+  char s[12];
+  snprintf(s, sizeof(s), "+%u", (unsigned)n);
+  setSize(2);
+  int w = 18 + 6 + textW(s, 2), x = CX - w / 2;
+  yCoin(x + 9, y + 7, 9);
+  gfx->setTextColor(col);
+  setCur(x + 24, y);
+  printT(s);
+}
+
 static void yChevron(int cx, int cy, int dir, uint16_t col) {
   // dos trazos de 4 px: "<" (dir -1) o ">" (dir +1)
   for (int t = -2; t <= 1; t++) {
@@ -6651,18 +6693,8 @@ void yardEggInfo() {
 static_assert(YBG_CANVAS == UI_SIZE, "el mapa se copia tal cual al lienzo");
 
 // ---- el fondo ----
-// mapa de cada bioma (dex.h: biome). Un mapa nuevo se usa cambiando su numero en esta tabla
-static const uint8_t YARD_MAP_FOR_BIOME[BIOME_COUNT] = {
-  1,  // 0 pradera
-  4,  // 1 playa
-  3,  // 2 bosque
-  2,  // 3 volcan (la cantera)
-  2,  // 4 montana
-  2,  // 5 nieve
-  5,  // 6 central electrica
-  1,  // 7 pantano
-  5,  // 8 ruinas
-};
+// mapa de cada bioma: economy.h (YARD_MAP_FOR_BIOME), con el elegido por el jugador (pet.yardChosen) por encima
+static_assert(ECO_BIOMES == BIOME_COUNT, "un mapa por bioma");
 #define YARD_MAP_FALLBACK 1  // si falta el del bioma; si falta este tambien, el suelo liso
 #define YARD_MAP_NONE 255    // YARDBG 255: el suelo liso a proposito (para verlo)
 
@@ -6703,7 +6735,7 @@ static bool yardTryMap(uint8_t n) {
 // carga el mapa que toca (el del bioma, o el forzado); se mira cada frame, solo lee al cambiar
 void yardEnsureMap() {
   uint8_t b = homeBiome();
-  uint8_t want = yardMapForced ? yardMapForced : YARD_MAP_FOR_BIOME[b < BIOME_COUNT ? b : 0];
+  uint8_t want = yardMapForced ? yardMapForced : (pet.yardChosen && pet.ownsMap(pet.yardChosen) ? pet.yardChosen : YARD_MAP_FOR_BIOME[b < BIOME_COUNT ? b : 0]);
   if (want == yardMapWant && yardMapEpoch == sdEpoch) return;
   yardMapWant = want;
   yardMapEpoch = sdEpoch;
@@ -7480,6 +7512,7 @@ static bool yardDockOff(int d) {
 }
 
 #define YARD_CLOCK_Y 30  // la hora a tamano 5 (40 px de alto); debajo queda sitio para las monedas (Y4)
+#define YARD_COIN_Y 76   // la cartera: debajo de la hora (30 + 40 px)
 #define YARD_BAT_Y 12
 void yardDrawHud() {
   drawBatteryHud(Y_CX - BAT_ICON_W / 2, YARD_BAT_Y);
@@ -7489,6 +7522,7 @@ void yardDrawHud() {
     snprintf(t, sizeof(t), "%02u:%02u", (unsigned)((e / 3600) % 24), (unsigned)((e / 60) % 60));
     yShadowText(centerX(t, 5), YARD_CLOCK_Y, t, 5, Y_TEXT);
   }
+  yCoinBadge(Y_CX, YARD_COIN_Y, pet.coins, true);  // la cartera (Y4), debajo de la hora
   YDockItem dock[Y_DOCK_N] = {
     { SPR_ICON_CARE, Y_DOCK_CARE, yardDockOff(0) },
     { SPR_ICON_PLAY, Y_DOCK_PLAY, yardDockOff(1) },
@@ -9284,9 +9318,10 @@ void drawBattleResult(uint32_t now) {
   }
   // y la pista "toca: volver" en su ultima fila, reservada desde el principio (la tarjeta no crece)
   bool hint = t >= BT_END_LOCK_MS;
-  if (!n && !hint) return;
+  bool coinRow = bt.rw.coins > 0;  // las monedas (Y4): moneda + "+N", en su fila
+  if (!n && !hint && !coinRow) return;
   setSize(2);
-  int bw = textW(T(S_BACK), 2), bh = 12 + 20;
+  int bw = textW(T(S_BACK), 2), bh = 12 + 20 + (coinRow ? 22 : 0);
   for (uint8_t i = 0; i < n; i++) {
     int w = textW(ln[i], 2) + (icon[i] ? 40 : 0);
     if (w > bw) bw = w;
@@ -9306,6 +9341,10 @@ void drawBattleResult(uint32_t now) {
     setCur(lx, ly + (icon[i] ? 9 : 3));
     printT(ln[i]);
     ly += icon[i] ? 32 : 20;
+  }
+  if (coinRow) {
+    drawCoinGain(ly + 1, bt.rw.coins, Y_TEXT);
+    ly += 22;
   }
   if (hint) {  // ya se puede cerrar con un toque (v1.38)
     gfx->setTextColor(Y_TEXT_DIM);

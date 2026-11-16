@@ -537,6 +537,9 @@ static const std::vector<Scene> &scenes() {
     // el patio (v2.0, Y2): la casa es el mapa. Pradera de dia, de noche, al atardecer, la cantera, sin mapa,
     // con un bicho de la caja, cacas, regalos, el globo que pasa de una necesidad a otra, dormido y el dock
     { "yard-home", [] { pokemon(25, 13); yardForceMap(1); } },
+    // Y4: the coin badge under the clock (1234 coins; 9999 is the widest)
+    { "yard-home-coins", [] { pokemon(25, 13); yardForceMap(1); pet.coins = 1234; } },
+    { "yard-home-coins-max", [] { pokemon(25, 13); yardForceMap(1); pet.coins = 9999; } },
     { "yard-home-night", [] { pokemon(133, 22); } },
     { "yard-home-dusk", [] { pokemon(1, 19); } },
     { "yard-home-quarry", [] { pokemon(74, 11); } },
@@ -759,6 +762,14 @@ static const std::vector<Scene> &scenes() {
                                zenBonusShown = 8; zenNewHi = true; zenOverUntil = millis() + 4000; } },
     { "zen-result-max", [] { zenPlaying(7, 13, 50); pet.trDef = 100; zen.t = ZEN_SESSION_MS; zen.inBandMs = 30000;
                              zenGainShown = 0; zenBonusShown = 5; zenOverUntil = millis() + 4000; } },
+    // Y4: the coin gain on each result screen
+    { "dash-result-coins", [] { dashPlaying(123, 13, 0, 6000); dash.dodged = 61; dashNewHi = true; dashGainShown = 15; dash.hits = 3;
+                                pet.lastCoins = 8; dashOverUntil = millis() + 4000; } },
+    { "zen-result-coins", [] { zenPlaying(7, 13, 50); zen.t = ZEN_SESSION_MS; zen.inBandMs = 23400; zenGainShown = 11;
+                               zenNewHi = true; pet.lastCoins = 8; zenOverUntil = millis() + 4000; } },
+    { "sack-result-coins", [] { pokemon(66, 13); startSack(); sackHits = 31; sackGain = 7; pet.lastCoins = 6;
+                                sackOverUntil = millis() + 3000; } },
+    { "ball-result-coins", [] { pokemon(25, 13); startGame(); gameScore = 22; pet.lastCoins = 5; gameOverUntil = millis() + 4000; } },
     { "sack-max", [] { pokemon(123, 13); startSack(); pet.trAtk = 100; sackHits = 31; sackGain = 0; sackOverUntil = millis() + 3000; } },
     { "zen-result", [] { zenPlaying(7, 13, 50); zen.t = ZEN_SESSION_MS; zen.inBandMs = 23400; zenGainShown = 11;
                          zenNewHi = true; zenOverUntil = millis() + 4000; } },
@@ -878,6 +889,7 @@ static const std::vector<Scene> &scenes() {
        itemConfirm = IT_RARECANDY + 1;
        itemConfirmUntil = millis() + 10000;
      } },
+    // goal banners carry their coins (Y4): "+10" on the 3000 one, "+40" on the 10000 one
     { "goal-10000", [] {
        pokemon(7, 10);
        pet.lastCareDay = pet.dayNumber();
@@ -1229,6 +1241,9 @@ static const std::vector<Scene> &scenes() {
     { "battle-result", [] { pokemon(25, 13); boxThree(); stageGo(2, { -1, 4 }); stageResult(0, 2, 100, 1, 0); }, 4 },
     { "battle-clear", [] {
        pokemon(25, 13); boxThree(); stageGo(2, { -1, 4 }); stageResult(0, 2, 100, 1, BT_END_LOCK_MS);
+     }, 1 },
+    { "battle-clear-coins", [] {  // first clear: item + badge + team + joy + 50 coins (the tallest card)
+       pokemon(25, 13); boxThree(); stageGo(2, { -1, 4 }); stageResult(0, 2, 100, 1, BT_END_LOCK_MS); bt.rw.coins = ECO_STAGE_FIRST;
      }, 1 },
     { "battle-clear-es", [] {
        pokemon(25, 13); boxThree(); lang(LANG_ES); stageGo(2, { -1, 4 }); stageResult(0, 2, 100, 1, BT_END_LOCK_MS);
