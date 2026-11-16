@@ -132,6 +132,7 @@ static void resetUi() {
   shopBuyId = shopToast = yardMapPreview = 0;
   pet.yardOwned = 0;
   pet.yardChosen = 0;
+  pet.coins = 120;  // un saldo normal: las escenas comparten el pet (si no, se queda el 9999 de otra)
   // el patio (v2.0, Y2): bichos sin colocar, sin cosas en el suelo y el mapa del bioma
   yardW = YardWorld{};
   yardLastStep = 0;
@@ -1350,7 +1351,7 @@ static const std::vector<Scene> &scenes() {
 }
 
 // the README's contact sheet: a few screens on the square glass
-static const char *const SHEET[] = { "home", "home-night", "card-profile", "gallery", "minigame", "settings" };
+static const char *const SHEET[] = { "yard-home-two", "yard-home-night", "card-profile", "shop-rich", "picker-notowned", "gallery" };
 
 int main(int argc, char **argv) {
   if (argc < 2) {

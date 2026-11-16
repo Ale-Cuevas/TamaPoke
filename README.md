@@ -18,7 +18,7 @@ square panel inside a smooth round frame, with the rest of the panel black (on
 an AMOLED, black pixels are simply off). How and why:
 **[docs/AMOLED-2.16.md](docs/AMOLED-2.16.md)**.
 
-![TamaPoke on the AMOLED-2.16: main screen by day and at night, stat card, Pokédex, minigame and settings](docs/images/screens-216.png)
+![TamaPoke v2.0 on the AMOLED-2.16: the yard by day and at night, stat card, Shop, background picker and Pokédex](docs/images/screens-216.png)
 
 <sub>Rendered from the real firmware drawing code by `tools/render/render.sh`:
 these are the pixels the panel receives.</sub>
