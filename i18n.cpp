@@ -85,7 +85,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // el huevo del patio (v2.0, Y3)
     "Agitame!",
     // la tienda de la mochila y los fondos (v2.0, Y4)
-    "Objetos", "Fondos", "Comprar %s?", "Faltan monedas", "Mochila llena",
+    "OBJETOS", "Fondos", "Comprar %s?", "Faltan monedas", "Mochila llena",
     "Pradera", "Cantera", "Bosque", "Playa", "Ruinas",
     "En uso", "Casa", "No esta en la SD", "Toca para comprar",
   },
@@ -167,7 +167,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // el huevo del patio (v2.0, Y3)
     "Shake me!",
     // la tienda de la mochila y los fondos (v2.0, Y4)
-    "Items", "Backgrounds", "Buy %s?", "Not enough coins", "Backpack full",
+    "ITEMS", "Backgrounds", "Buy %s?", "Not enough coins", "Backpack full",
     "Meadow", "Quarry", "Forest", "Beach", "Ruins",
     "In use", "Home", "Not on SD card", "Tap to buy",
   },
@@ -249,7 +249,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // el huevo del patio (v2.0, Y3)
     "Secoue-moi!",
     // la tienda de la mochila y los fondos (v2.0, Y4)
-    "Objets", "Fonds", "Acheter %s?", "Pas assez de pieces", "Sac plein",
+    "OBJETS", "Fonds", "Acheter %s?", "Pas assez de pieces", "Sac plein",
     "Prairie", "Carriere", "Foret", "Plage", "Ruines",
     "Utilise", "Maison", "Pas sur la SD", "Touche: acheter",
   },
@@ -336,7 +336,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // el huevo del patio (v2.0, Y3)
     "Sch\201ttel mich!",
     // la tienda de la mochila y los fondos (v2.0, Y4)
-    "Dinge", "Hintergruende", "%s kaufen?", "Zu wenig Muenzen", "Rucksack voll",
+    "DINGE", "Hintergruende", "%s kaufen?", "Zu wenig Muenzen", "Rucksack voll",
     "Wiese", "Steinbruch", "Wald", "Strand", "Ruinen",
     "Aktiv", "Zuhause", "Nicht auf SD", "Tippen: kaufen",
   },
@@ -418,7 +418,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // el huevo del patio (v2.0, Y3)
     "Scuotimi!",
     // la tienda de la mochila y los fondos (v2.0, Y4)
-    "Oggetti", "Sfondi", "Comprare %s?", "Monete insufficienti", "Zaino pieno",
+    "OGGETTI", "Sfondi", "Comprare %s?", "Monete insufficienti", "Zaino pieno",
     "Prato", "Cava", "Bosco", "Spiaggia", "Rovine",
     "In uso", "Casa", "Non sulla SD", "Tocca per comprare",
   },
@@ -500,7 +500,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // el huevo del patio (v2.0, Y3)
     "Me sacode!",
     // la tienda de la mochila y los fondos (v2.0, Y4)
-    "Itens", "Fundos", "Comprar %s?", "Faltam moedas", "Mochila cheia",
+    "ITENS", "Fundos", "Comprar %s?", "Faltam moedas", "Mochila cheia",
     "Prado", "Pedreira", "Floresta", "Praia", "Ruinas",
     "Em uso", "Casa", "Nao esta no SD", "Toque para comprar",
   },
