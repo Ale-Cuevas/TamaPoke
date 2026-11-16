@@ -3699,20 +3699,45 @@ void applyClock() {
   clockOpen = false;
 }
 
-void drawClockBtn(int x, int y, const char *l) {
-  gfx->fillRoundRect(x, y, 58, 58, 12, UI_WHITE);
-  gfx->drawRoundRect(x, y, 58, 58, 12, UI_INK);
-  gfx->setTextColor(UI_INK);
-  setSize(4);
-  setCur(x + 17, y + 15);
-  printT(l);
+// Panel de ajustes (v2.0, Y1): disco oscuro del patio. Arriba el titulo; una tarjeta con la hora y
+// sus cuatro botones -/+; debajo la fila de pildoras (volumen, brillo, idioma), el OK verde, la
+// version y el boton redondo de volver (= tecla USER y deslizar arriba: cancela sin aplicar).
+#define CLK_CARD_X 88
+#define CLK_CARD_Y 80
+#define CLK_CARD_W 290
+#define CLK_CARD_H 156
+#define CLK_TIME_Y 92     // la hora, a tamano 7
+#define CLK_BTN_Y 150     // botones -/+ de 52x52 (se tocan 56x56)
+#define CLK_BTN_S 52
+#define CLK_BTN_GAP 6
+#define CLK_LBL_Y 210     // "HORA" / "MIN" bajo cada pareja
+#define CLK_PAIR_DX 63    // centro de cada pareja: CX -/+ 63, bajo las horas y bajo los minutos
+#define CLK_OK_X 133
+#define CLK_OK_Y 310
+#define CLK_OK_W 200
+#define CLK_OK_H 48
+#define CLK_VER_Y 374
+
+// x del boton i (0 hora-, 1 hora+, 2 min-, 3 min+)
+static int clkBtnX(int i) {
+  int pc = CX + (i < 2 ? -CLK_PAIR_DX : CLK_PAIR_DX);
+  return (i % 2 == 0) ? pc - CLK_BTN_GAP / 2 - CLK_BTN_S : pc + CLK_BTN_GAP / 2;
 }
 
-// pildoras de idioma centradas en y; rellena la activa
-#define LANG_PILL_Y 296
-#define LANG_PILL_H 30
+// boton -/+ dibujado con barras (sin depender de la fuente)
+void drawClockBtn(int x, int y, bool plus) {
+  gfx->fillRoundRect(x, y, CLK_BTN_S, CLK_BTN_S, Y_CARD_RAD, Y_CARD_HI);
+  int cx = x + CLK_BTN_S / 2, cy = y + CLK_BTN_S / 2;
+  gfx->fillRect(cx - 10, cy - 2, 20, 4, Y_TEXT);
+  if (plus) gfx->fillRect(cx - 2, cy - 10, 4, 20, Y_TEXT);
+}
+
+// pildoras de volumen, brillo e idioma en una fila; se tocan con 48 px de alto
+#define LANG_PILL_Y 254
+#define LANG_PILL_H 40
 #define LANG_PILL_X 336          // pildora de idioma (cicla LANG_COUNT al tocar)
 #define LANG_PILL_W 96
+#define CLK_PILL_HIT_Y (LANG_PILL_Y - (Y_HIT_MIN - LANG_PILL_H) / 2)
 static const char *const LANG_CODES[LANG_COUNT] = { "ES", "EN", "FR", "DE", "IT", "PT", "JA", "KO" };
 
 // pildora de volumen a la izquierda (v1.50: 4 niveles con el apagado, antes SON ON/OFF) y la de
@@ -3775,82 +3800,78 @@ void drawBrightToast() {
 }
 
 void renderClock() {
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
-  gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(T(S_SET_TIME), 3), 44);
-  printT(T(S_SET_TIME));
+  yPanelBg();
+  yTitle(T(S_SET_TIME), nullptr);
 
+  // tarjeta de la hora: la hora grande, sus -/+ y las etiquetas
+  yCard(CLK_CARD_X, CLK_CARD_Y, CLK_CARD_W, CLK_CARD_H, false);
   char t[8];
   snprintf(t, sizeof(t), "%02d:%02d", clockH, clockM);
+  gfx->setTextColor(Y_TEXT);
   setSize(7);
-  setCur(CX - 105, 108);
+  setCur(centerX(t, 7), CLK_TIME_Y);
   printT(t);
-
-  drawClockBtn(104, 190, "-");  // hora -
-  drawClockBtn(170, 190, "+");  // hora +
-  drawClockBtn(252, 190, "-");  // min -
-  drawClockBtn(318, 190, "+");  // min +
+  for (int i = 0; i < 4; i++) drawClockBtn(clkBtnX(i), CLK_BTN_Y, i % 2 == 1);
+  gfx->setTextColor(Y_TEXT_DIM);
   setSize(2);
-  gfx->setTextColor(UI_TRACK);
-  setCur(120, 256);
+  setCur(CX - CLK_PAIR_DX - textW(T(S_HOUR), 2) / 2, CLK_LBL_Y);
   printT(T(S_HOUR));
-  setCur(276, 256);
+  setCur(CX + CLK_PAIR_DX - textW(T(S_MIN), 2) / 2, CLK_LBL_Y);
   printT(T(S_MIN));
 
+  const int r = LANG_PILL_H / 2, my = LANG_PILL_Y + LANG_PILL_H / 2;
   // volumen: altavoz y una barra por nivel; cicla al tocar (alto -> apagado)
   uint8_t vol = audioLevel();
-  gfx->fillRoundRect(SND_PILL_X, LANG_PILL_Y, SND_PILL_W, LANG_PILL_H, 8, UI_WHITE);
-  gfx->drawRoundRect(SND_PILL_X, LANG_PILL_Y, SND_PILL_W, LANG_PILL_H, 8, UI_INK);
-  drawSpeakerIcon(SND_PILL_X + 22, LANG_PILL_Y + LANG_PILL_H / 2, vol ? UI_INK : 0x9492, vol == 0);
-  drawVolBars(SND_PILL_X + 58, LANG_PILL_Y + LANG_PILL_H / 2 + 9, vol, UI_BAR_OK, 0x9492);
+  gfx->fillRoundRect(SND_PILL_X, LANG_PILL_Y, SND_PILL_W, LANG_PILL_H, r, Y_CARD);
+  drawSpeakerIcon(SND_PILL_X + 22, my, vol ? Y_TEXT : Y_TEXT_DIM, vol == 0);
+  drawVolBars(SND_PILL_X + 58, my + 9, vol, Y_ACCENT_GO, Y_TEXT_DIM);
 
   // brillo: sol y un punto por nivel; cicla al tocar, como la tecla BOOT
-  gfx->fillRoundRect(BRI_PILL_X, LANG_PILL_Y, BRI_PILL_W, LANG_PILL_H, 8, UI_WHITE);
-  gfx->drawRoundRect(BRI_PILL_X, LANG_PILL_Y, BRI_PILL_W, LANG_PILL_H, 8, UI_INK);
-  drawSunIcon(BRI_PILL_X + 20, LANG_PILL_Y + LANG_PILL_H / 2, 5, UI_BAR_WARN);
-  drawBrightDots(BRI_PILL_X + 48, LANG_PILL_Y + LANG_PILL_H / 2, 6, 24, UI_BAR_WARN, 0x9492);
+  gfx->fillRoundRect(BRI_PILL_X, LANG_PILL_Y, BRI_PILL_W, LANG_PILL_H, r, Y_CARD);
+  drawSunIcon(BRI_PILL_X + 20, my, 5, UI_BAR_WARN);
+  drawBrightDots(BRI_PILL_X + 48, my, 6, 24, UI_BAR_WARN, Y_TEXT_DIM);
 
-  // selector de idioma: una pildora que cicla los 6 idiomas al tocar
-  gfx->fillRoundRect(LANG_PILL_X, LANG_PILL_Y, LANG_PILL_W, LANG_PILL_H, 8, UI_WHITE);
-  gfx->drawRoundRect(LANG_PILL_X, LANG_PILL_Y, LANG_PILL_W, LANG_PILL_H, 8, UI_INK);
+  // selector de idioma: una pildora que cicla los idiomas al tocar
+  gfx->fillRoundRect(LANG_PILL_X, LANG_PILL_Y, LANG_PILL_W, LANG_PILL_H, r, Y_CARD);
   char lp[10];
   snprintf(lp, sizeof(lp), "%s >", LANG_CODES[gLang]);
-  gfx->setTextColor(UI_INK);
+  gfx->setTextColor(Y_TEXT);
   setSize(2);
-  setCur(LANG_PILL_X + (LANG_PILL_W - textW(lp, 2)) / 2, LANG_PILL_Y + 8);
+  setCur(LANG_PILL_X + (LANG_PILL_W - textW(lp, 2)) / 2, my - 7);
   printT(lp);
 
-  gfx->fillRoundRect(133, 340, 200, 48, 14, UI_BAR_OK);
-  gfx->setTextColor(UI_BG_DAY);
+  // OK: aplica la hora y cierra
+  gfx->fillRoundRect(CLK_OK_X, CLK_OK_Y, CLK_OK_W, CLK_OK_H, CLK_OK_H / 2, Y_ACCENT_GO);
+  gfx->setTextColor(Y_TEXT);
   setSize(3);
-  setCur(CX - 18, 352);
+  setCur(centerX("OK", 3), CLK_OK_Y + (CLK_OK_H - 21) / 2);
   printT("OK");
 
-  gfx->setTextColor(UI_TRACK);
-  setSize(2);
-  setCur(centerX(T(S_CLOCK_CANCEL), 2), 410);
-  printT(T(S_CLOCK_CANCEL));
-
-  // version del firmware (discreta, abajo del todo)
+  // version del firmware (discreta, encima del boton de volver)
   char ver[20];
   snprintf(ver, sizeof(ver), "TamaPoke v%s", FW_VERSION);
+  gfx->setTextColor(Y_TEXT_DIM);
   setSize(1);
-  setCur(centerX(ver, 1), 436);
+  setCur(centerX(ver, 1), CLK_VER_Y);
   printT(ver);
+  yBackBtn();  // cancela sin aplicar, como deslizar arriba o la tecla USER
   gfx->flush();
 }
 
 void clockTap(int16_t x, int16_t y) {
-  if (y >= 190 && y <= 248) {  // fila de botones +/-
-    if (x >= 104 && x < 162) clockH = (clockH + 23) % 24;
-    else if (x >= 170 && x < 228) clockH = (clockH + 1) % 24;
-    else if (x >= 252 && x < 310) clockM = (clockM + 59) % 60;
-    else if (x >= 318 && x < 376) clockM = (clockM + 1) % 60;
+  if (yBackHit(x, y)) {  // volver: sin aplicar la hora
+    clockOpen = false;
     return;
   }
-  if (y >= LANG_PILL_Y && y <= LANG_PILL_Y + LANG_PILL_H) {
+  for (int i = 0; i < 4; i++) {  // botones -/+ (zona 2 px mas ancha que el dibujo por cada lado)
+    if (!yInRect(x, y, clkBtnX(i) - 2, CLK_BTN_Y - 2, CLK_BTN_S + 4, CLK_BTN_S + 4)) continue;
+    if (i == 0) clockH = (clockH + 23) % 24;
+    else if (i == 1) clockH = (clockH + 1) % 24;
+    else if (i == 2) clockM = (clockM + 59) % 60;
+    else clockM = (clockM + 1) % 60;
+    return;
+  }
+  if (y >= CLK_PILL_HIT_Y && y < CLK_PILL_HIT_Y + Y_HIT_MIN) {
     if (x >= SND_PILL_X && x < SND_PILL_X + SND_PILL_W) {  // cicla el volumen
       audioSetLevel(volNext(audioLevel()));
       sfxPlay(SFX_TAP);  // se oye al volumen nuevo (apagado, nada: sfxPlay no encola)
@@ -3868,7 +3889,7 @@ void clockTap(int16_t x, int16_t y) {
       return;
     }
   }
-  if (y >= 340 && y <= 388 && x >= 133 && x <= 333) { applyClock(); return; }
+  if (yInRect(x, y, CLK_OK_X, CLK_OK_Y, CLK_OK_W, CLK_OK_H)) { applyClock(); return; }
 }
 
 // iconos de la mochila, en el orden de IT_* (pet.h)
@@ -5550,17 +5571,18 @@ void boxFill() {
 #define STG_LEGEND_Y 366
 #define STG_LOCK_INK 0x8410          // gris del texto y la silueta de una fase bloqueada
 #define STG_SIL 0xAD55               // silueta de la insignia aun no ganada
-#define STG_PICKED_BG C565(0xd8, 0xf0, 0xd8)
+#define STG_OFF_EDGE Y_CARD          // panel (v2.0): borde de una casilla bloqueada o de quien no pelea
 #define TEAM_CW 84      // tarjetas de bicho: 4 en la fila de arriba y 3 debajo
 #define TEAM_CH 100
 #define TEAM_GAP 6
 #define TEAM_ROW1_Y 96
 #define TEAM_SINGLE_Y 140   // hasta 4 bichos, una sola fila
 #define TEAM_BAND 90        // tocar por encima de las tarjetas = volver
-#define TEAM_BTN_X 153
-#define TEAM_BTN_Y 326
+#define TEAM_BTN_X 153     // pastilla verde de Empezar (se toca con 48 px de alto, 2 por encima y debajo)
+#define TEAM_BTN_Y 322
 #define TEAM_BTN_W 160
-#define TEAM_BTN_H 50
+#define TEAM_BTN_H 44
+#define TEAM_BTN_HIT_Y (TEAM_BTN_Y - (Y_HIT_MIN - TEAM_BTN_H) / 2)
 #define BADGE_CELL_W 96     // pagina de insignias: 4x2 de 64 px (escala 4)
 #define BADGE_ROW_Y 118
 #define BADGE_ROW_H 128
@@ -5687,31 +5709,30 @@ static void drawRewardMark(int cx, int cy) {
 }
 
 void renderStages() {
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
-  gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(T(S_STAGES), 3), 36);
-  printT(T(S_STAGES));
+  yPanelBg();
+  yTitle(T(S_STAGES), nullptr);
   for (uint8_t i = 0; i < STAGE_COUNT; i++) {
     bool open = pet.stageUnlocked(i), got = pet.hasBadge(i);
     int x = stageTileX(i) + stShakeDx(i), y = stageTileY(i);
-    if (!open) {  // bloqueada: casilla gris, silueta y texto apagados
-      gfx->fillRoundRect(x, y, STG_W, STG_H, 12, UI_TRACK);
+    if (!open) {  // bloqueada: solo el contorno, silueta y texto apagados
+      gfx->drawRoundRect(x, y, STG_W, STG_H, Y_CARD_RAD, STG_OFF_EDGE);
+      gfx->drawRoundRect(x + 1, y + 1, STG_W - 2, STG_H - 2, Y_CARD_RAD - 1, STG_OFF_EDGE);
     } else {
-      gfx->fillRoundRect(x, y, STG_W, STG_H, 12, UI_WHITE);
-      gfx->drawRoundRect(x, y, STG_W, STG_H, 12, UI_INK);
-      if (got) gfx->drawRoundRect(x + 1, y + 1, STG_W - 2, STG_H - 2, 11, UI_BAR_OK);  // ganada: borde verde
+      yCard(x, y, STG_W, STG_H, false);
+      if (got) {  // ganada: borde verde
+        gfx->drawRoundRect(x, y, STG_W, STG_H, Y_CARD_RAD, Y_ACCENT_GO);
+        gfx->drawRoundRect(x + 1, y + 1, STG_W - 2, STG_H - 2, Y_CARD_RAD - 1, Y_ACCENT_GO);
+      }
     }
     if (got) drawMap(BADGE_ICON[i], 16, x + 8, y + (STG_H - 32) / 2, 2, false);
     else drawMapTint(BADGE_ICON[i], 16, x + 8, y + (STG_H - 32) / 2, 2, open ? STG_SIL : STG_LOCK_INK);
     int tcx = x + 46 + 49;
-    gfx->setTextColor(open ? UI_INK : STG_LOCK_INK);
+    gfx->setTextColor(open ? Y_TEXT : STG_LOCK_INK);
     printTight(stageName(i), tcx, y + 10, 98);
     char line[24];
     if (open) snprintf(line, sizeof(line), T(S_LV_RANGE_FMT), (unsigned)STAGES[i].lvMin, (unsigned)STAGES[i].lvMax);
     else snprintf(line, sizeof(line), "%s", T(S_LOCKED));
-    gfx->setTextColor(open ? BOX_NOTE_INK : STG_LOCK_INK);
+    gfx->setTextColor(open ? Y_TEXT_DIM : STG_LOCK_INK);
     printTight(line, tcx, y + 34, 98);
     if (open && pet.stageRewardReady(i)) drawRewardMark(x + STG_W - 12, y + 12);
   }
@@ -5719,14 +5740,15 @@ void renderStages() {
   setSize(2);
   int tw = textW(T(S_REWARD_TODAY), 2), lx = CX - (tw + 22) / 2;
   drawRewardMark(lx + 7, STG_LEGEND_Y + 7);
-  gfx->setTextColor(BOX_NOTE_INK);
+  gfx->setTextColor(Y_TEXT_DIM);
   setCur(lx + 22, STG_LEGEND_Y);
   printT(T(S_REWARD_TODAY));
+  yBackBtn();
   gfx->flush();
 }
 
 void stagesTap(int16_t x, int16_t y) {
-  if (y < STG_TITLE_BAND) {  // tocar la cabecera = salir, como la caja
+  if (y < STG_TITLE_BAND || yBackHit(x, y)) {  // tocar la cabecera = salir, como la caja
     closeStages();
     return;
   }
@@ -5757,20 +5779,25 @@ static void drawTeamCard(uint8_t idx, uint8_t n) {
   teamCardPos(idx, n, x, y);
   x += stShakeDx(idx);
   bool fight = pet.teamCanFight(c.uid), picked = teamIsPicked(c.uid);
-  uint16_t bg = !fight ? UI_TRACK : picked ? STG_PICKED_BG : UI_WHITE;
-  gfx->fillRoundRect(x, y, TEAM_CW, TEAM_CH, 12, bg);
-  gfx->drawRoundRect(x, y, TEAM_CW, TEAM_CH, 12, picked && fight ? UI_BAR_OK : fight ? UI_INK : STG_LOCK_INK);
-  if (picked && fight) gfx->drawRoundRect(x + 1, y + 1, TEAM_CW - 2, TEAM_CH - 2, 11, UI_BAR_OK);
+  // elegido: tarjeta clara con borde verde; no pelea (dormido): solo el contorno, sobre el fondo
+  uint16_t bg = !fight ? Y_CARD : picked ? Y_CARD_HI : Y_CARD;  // dormido: la miniatura se apaga hacia Y_CARD
+  if (fight) yCard(x, y, TEAM_CW, TEAM_CH, picked);
+  uint16_t edge = !fight ? Y_CARD_HI : picked ? Y_ACCENT_GO : 0;
+  if (edge) {
+    gfx->drawRoundRect(x, y, TEAM_CW, TEAM_CH, Y_CARD_RAD, edge);
+    gfx->drawRoundRect(x + 1, y + 1, TEAM_CW - 2, TEAM_CH - 2, Y_CARD_RAD - 1, edge);
+  }
   int16_t dex = c.slot == TEAM_HOME ? pet.speciesId : pet.boxRecord(c.slot).speciesId;
   const char *nm = c.slot == TEAM_HOME ? petName() : recName(pet.boxRecord(c.slot));
   uint16_t lv = c.slot == TEAM_HOME ? pet.level() : levelFor(pet.boxRecord(c.slot).growMin);
   int cx = x + TEAM_CW / 2;
   const uint8_t *t = thumbs.get(dex);
   if (t) drawThumbFit(t, cx, y + 32, TEAM_CW - 14, 48, !fight, bg);
-  gfx->setTextColor(fight ? UI_INK : STG_LOCK_INK);
+  gfx->setTextColor(fight ? Y_TEXT : STG_LOCK_INK);
   printTight(nm, cx, y + 62, TEAM_CW - 4);
   char s[16];
   snprintf(s, sizeof(s), T(S_LVL_FMT), (unsigned)lv);
+  gfx->setTextColor(fight ? Y_TEXT_DIM : STG_LOCK_INK);
   setSize(2);
   setCur(cx - textW(s, 2) / 2, y + 80);
   printT(s);
@@ -5778,8 +5805,8 @@ static void drawTeamCard(uint8_t idx, uint8_t n) {
     int pos = 0;
     for (uint8_t i = 0; i < teamPickN; i++)
       if (teamPick[i] == c.uid) pos = i + 1;
-    gfx->fillCircle(x + 14, y + 14, 12, UI_BAR_OK);
-    gfx->setTextColor(UI_WHITE);
+    gfx->fillCircle(x + 14, y + 14, 12, Y_ACCENT_GO);
+    gfx->setTextColor(Y_TEXT);
     setSize(2);
     char d[4];
     snprintf(d, sizeof(d), "%d", pos);
@@ -5791,30 +5818,31 @@ static void drawTeamCard(uint8_t idx, uint8_t n) {
 void renderTeam() {
   teamPrune();
   teamBuildCands();
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
-  gfx->setTextColor(UI_INK);
-  printTight(T(S_PICK_TEAM), CX, 36, 280);
+  yPanelBg();
+  // el titulo va a tamano 2: "Elige tu equipo" a 3 no cabe arriba del circulo
+  gfx->setTextColor(Y_TEXT);
+  printTight(T(S_PICK_TEAM), CX, Y_TITLE_Y + 4, 220);
   char sub[40];
   char stg[32];
   snprintf(stg, sizeof(stg), T(S_STAGE_FMT), (unsigned)stageSel + 1);
   snprintf(sub, sizeof(sub), "%s: %s", stg, stageName(stageSel));
-  gfx->setTextColor(BOX_NOTE_INK);
-  printTight(sub, CX, 62, 300);
+  gfx->setTextColor(Y_TEXT_DIM);
+  printTight(sub, CX, Y_SUB_Y - 4, 290);
   for (uint8_t i = 0; i < teamCandN; i++) drawTeamCard(i, teamCandN);
   bool ok = teamPickN > 0;
-  gfx->fillRoundRect(TEAM_BTN_X, TEAM_BTN_Y, TEAM_BTN_W, TEAM_BTN_H, 14, ok ? UI_BAR_OK : UI_TRACK);
-  gfx->setTextColor(ok ? UI_WHITE : STG_LOCK_INK);
+  gfx->fillRoundRect(TEAM_BTN_X, TEAM_BTN_Y, TEAM_BTN_W, TEAM_BTN_H, TEAM_BTN_H / 2, ok ? Y_ACCENT_GO : Y_CARD);
+  gfx->setTextColor(ok ? Y_TEXT : Y_TEXT_DIM);
   setSize(3);
-  setCur(TEAM_BTN_X + (TEAM_BTN_W - textW(T(S_START), 3)) / 2, TEAM_BTN_Y + 13);
+  setCur(TEAM_BTN_X + (TEAM_BTN_W - textW(T(S_START), 3)) / 2, TEAM_BTN_Y + (TEAM_BTN_H - 21) / 2);
   printT(T(S_START));
+  yBackBtn();
   gfx->flush();
 }
 
 void teamTap(int16_t x, int16_t y) {
   teamPrune();
   teamBuildCands();
-  if (x >= TEAM_BTN_X && x < TEAM_BTN_X + TEAM_BTN_W && y >= TEAM_BTN_Y && y < TEAM_BTN_Y + TEAM_BTN_H) {
+  if (yInRect(x, y, TEAM_BTN_X, TEAM_BTN_HIT_Y, TEAM_BTN_W, Y_HIT_MIN)) {
     if (!teamPickN) {
       stDeny(-1);
       return;
@@ -5827,7 +5855,7 @@ void teamTap(int16_t x, int16_t y) {
     startStage(st, uids, n);
     return;
   }
-  if (y < TEAM_BAND) {  // la cabecera: volver a las fases
+  if (y < TEAM_BAND || yBackHit(x, y)) {  // la cabecera o el boton de volver: a las fases
     closeTeam();
     return;
   }
