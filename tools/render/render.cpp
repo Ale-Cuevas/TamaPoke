@@ -125,8 +125,6 @@ static uint32_t epochAt(int hour) { return 1781481600UL + (uint32_t)hour * 3600;
 static void resetUi() {
   gHostMillis = 107915;  // the first frame then lands with the clouds clear of the title
   gHostRandom = 12345;
-  beh = decltype(beh){};
-  walkLast = 0;
   galleryOpen = cardOpen = bagOpen = kbOpen = clockOpen = gameOpen = sackOpen = zenOpen = dashOpen = false;
   yardDemoOpen = false;  // el patio (v2.0)
   yardDemoPage = 0;
@@ -134,7 +132,6 @@ static void resetUi() {
   shopBuyId = shopToast = yardMapPreview = 0;
   pet.yardOwned = 0;
   pet.yardChosen = 0;
-#if TP_YARD
   // el patio (v2.0, Y2): bichos sin colocar, sin cosas en el suelo y el mapa del bioma
   yardW = YardWorld{};
   yardLastStep = 0;
@@ -151,7 +148,6 @@ static void resetUi() {
   yardEggX = -1;
   yardEggTapAt = 0;
   yardEggInfoUntil = 0;
-#endif
   pet.dbgEggClear();
   pet.dbgClearAnims();  // no eating, heart or emote left over from the scene before (the clock goes back)
   zenSerialHold = -1;
@@ -215,7 +211,6 @@ static void resetUi() {
   fxq.clear();
   fxo.clear();
   fxBan = nullptr;
-  for (auto &b : fxBar) b.init = false;
   fxBondGate = FxGate{};
   memset(pet.items, 0, sizeof(pet.items));
   gStubImuPresent = true;
@@ -407,7 +402,6 @@ static void vacantNow(int hour) {
   for (int d : { 1, 4, 7, 16, 19, 25, 54, 129, 133 }) pet.dexReg[(d - 1) >> 3] |= (uint8_t)(1 << ((d - 1) & 7));
 }
 
-#if TP_YARD
 // the yard egg (Y3): placed `mins` ago with `saved` minutes shaken off, a Box pet wandering around it
 static void yardEggScene(uint32_t mins, uint8_t saved, bool box = true) {
   eggNow();
@@ -438,7 +432,6 @@ static void feedUntil(uint8_t phase) {
     render();
   }
 }
-#endif
 
 // steps the clock 85 ms at a time through the battle logic until `done` (or 60 s)
 static void battleUntil(bool (*done)()) {
@@ -505,7 +498,6 @@ static void stageResult(uint8_t ally, uint8_t foe, uint8_t allyPct, uint8_t foeP
   gHostMillis += ms;
 }
 
-#if TP_YARD
 // el de casa andando en el patio (Y3): desde la celda libre mas cercana a (CX, fromY) hasta la mas cercana
 // a (CX, toY); los frames de la escena lo llevan un trecho por el camino
 static void yardWalkScene(uint8_t dex, int fromY, int toY) {
@@ -518,7 +510,6 @@ static void yardWalkScene(uint8_t dex, int fromY, int toY) {
   p.y = (float)yardCellCenter(yardCellCY(from));
   yardWalkTo(yardW, yardWalk, 0, to, millis());
 }
-#endif
 
 // the Backpack's Shop tab with `coins` and a few items already owned (Y4b)
 static void shopOpen(uint16_t coins, std::initializer_list<uint8_t> have = { 0, 0, 0, 0, 0, 0, 0, 0, 0 }) {
@@ -566,7 +557,6 @@ static const std::vector<Scene> &scenes() {
        pet.lastSeenEpoch = epochAt(10);
      } },
     { "home", [] { pokemon(25, 13); } },
-#if TP_YARD
     // el patio (v2.0, Y2): la casa es el mapa. Pradera de dia, de noche, al atardecer, la cantera, sin mapa,
     // con un bicho de la caja, cacas, regalos, el globo que pasa de una necesidad a otra, dormido y el dock
     { "yard-home", [] { pokemon(25, 13); yardForceMap(1); } },
@@ -630,7 +620,6 @@ static const std::vector<Scene> &scenes() {
     { "yard-tap-pet", [] { pokemon(25, 13); yardForceMap(1); render(); onTap((int)yardW.p[0].x, (int)yardW.p[0].y - 20); } },
     { "yard-tilt", [] { pokemon(25, 13); yardForceMap(1); gStubTiltSide = -1; }, 80 },
     { "yard-orbit", [] { pokemon(25, 13); yardForceMap(1); OrbitShift o = orbitShift(6); roundCanvas->setShift(o.dx, o.dy); }, 2 },
-#endif
     // el patio (v2.0, fase Y0): el kit de interfaz nuevo, en sus tres paginas de muestra
     { "yard-ui-shop", [] { pokemon(25, 13); yardDemoOpen = true; yardDemoPage = 0; } },
     { "yard-ui-world", [] { pokemon(25, 13); yardDemoOpen = true; yardDemoPage = 1; } },
@@ -650,7 +639,6 @@ static const std::vector<Scene> &scenes() {
     // la noche (v1.63): con sueño desde las 22, el globo con "zzz" (a la izquierda si anda por la derecha)
     { "sleepy", [] { pokemon(25, 22); } },
     { "sleepy-es", [] { pokemon(25, 22); setLang(LANG_ES); applyLangFont(); } },
-    { "sleepy-right", [] { pokemon(7, 22); beh.x = beh.targetX = 330; } },
     { "weak", [] { pokemon(4, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.bond = 0; } },
     { "dying-revive", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.dbgSetPoops(2);
                            pet.items[IT_REVIVE] = 3; pet.startDying(); }, 2 },
@@ -1377,7 +1365,7 @@ int main(int argc, char **argv) {
   roundDisplayBegin(bus, panel, roundCanvas);
   roundCanvas->overlay = drawBrightToast;  // as setup() does
   applyLangFont();
-  pet.timedEggs = TP_YARD;  // as setup() does: eggs go to the yard (Y3)
+  pet.timedEggs = true;  // as setup() does: eggs go to the yard (Y3)
   pet.begin();
   sdBegin();
   thumbs.load();

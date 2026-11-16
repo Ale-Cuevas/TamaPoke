@@ -376,7 +376,7 @@ public:
   bool addGift(uint8_t it);  // un regalo nuevo (serie GIFT y pruebas); false = cola llena
   bool hatchFromBag();  // casa vacia: el boton "Abrir un huevo" (uno de la mochila a casa)
   uint8_t eggCracks() const { return yardEgg() ? eggCracksFor(eggMinutesLeft()) : eggTaps; }
-  // el huevo del patio (v2.0, Y3; eggtimer.h). La UI pone timedEggs (TP_YARD) antes de begin(): cada huevo
+  // el huevo del patio (v2.0, Y3; eggtimer.h). La UI pone timedEggs antes de begin(): cada huevo
   // que llega a casa se pone en el patio y eclosiona solo a las 2 h reales (las sacudidas lo adelantan,
   // hasta 2 h). El inicial y uno a medias del sistema de antes (sin "yegg") siguen con los 3 toques.
   bool timedEggs = false;

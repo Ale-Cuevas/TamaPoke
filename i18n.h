@@ -16,9 +16,9 @@ extern Lang gLang;  // idioma activo (definido en i18n.cpp)
 
 // IDs de cadena. El orden debe coincidir con la tabla STRINGS de i18n.cpp.
 enum StrId : uint8_t {
-  // estado del bicho (statusMsg)
-  S_EVOLVING, S_EATING, S_LIKES, S_HUNGRY, S_NEEDS_BATH,
-  S_EXHAUSTED, S_SAD, S_CHUBBY, S_IS_SHINY, S_HAPPY,
+  // estado del bicho
+  S_EATING, S_LIKES, S_HUNGRY, S_NEEDS_BATH,
+  S_EXHAUSTED, S_SAD,
   // ceremonias de despedida
   S_FAREWELL, S_DIED, S_GOODBYE,  // la segunda: la muerte por abandono (v1.60, era la escapada)
   // huevo
@@ -90,8 +90,8 @@ enum StrId : uint8_t {
   S_TRAIN_LEGEND,
   // v1.53: la mochila con su boton: como se usa y dormido solo se mira
   S_BAG_HINT, S_BAG_ASLEEP,
-  // v1.54: la tarta: lleno durante 3 h, y tocarla sin ninguna
-  S_SO_FULL, S_NO_CAKE,
+  // v1.54: tocar la tarta sin ninguna
+  S_NO_CAKE,
   // v1.56: el botin de un combate ganado, que espera envuelto en casa
   S_BATTLE_GIFT,
   // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
