@@ -6,9 +6,14 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
-## [Unreleased]
+## [2.0] - 2026-11-16
 
-Work in progress on `feature/yard`: the "yard" redesign (`docs/yard-prototype/DESIGN_YARD_UI.md`), released as 2.0.
+**The yard.** A new look and home (design: `docs/yard-prototype/DESIGN_YARD_UI.md`): the pet lives in a top-down
+pixel-art yard with a floating HUD and a 3-button dock, menus are dark panels, and coins buy items and yard
+backgrounds in a Shop. Updating keeps your Pokémon, items and Box; you start with 0 coins and the meadow.
+To see the maps, pack them and send them to the SD card (`tools/pack_yard.py`, `tools/send_sd.py --yard`;
+see the README); without them the yard is a flat ground. The re-packed sprites (walking up and down) are in the
+new `web/sprites.pak` / `tools/send_sd.py`; old sprite files still work.
 
 ### Added
 
