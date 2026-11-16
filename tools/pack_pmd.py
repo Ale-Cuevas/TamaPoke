@@ -4,16 +4,25 @@
 Genera /mons/pNNN.bin (y psNNN.bin shiny) en formato TPK2 multi-accion:
 
   char[4] "TPK2"
-  u8  nActs
+  u8  nActs                          (solo las acciones base, ids 0-11)
   u16 palCount
   u16 pal[palCount]                  (RGB565)
   por accion:
     u8 id, u8 w, u8 h, u8 nFrames
     u16 ms[nFrames]
     u8 data[w*h*nFrames]             (indices, 0xFF transparente)
+  acciones extra (ids >= 12): mas registros iguales hasta el final del fichero
 
 Acciones: 0 Idle, 1 WalkL, 2 WalkR, 3 Sleep, 4 Eat, 5 Hurt, 6 Attack,
-7 Pose, 8 Hop, 9 Nod, 10 DeepBreath, 11 Sit. Las que falten se omiten.
+7 Pose, 8 Hop, 9 Nod, 10 DeepBreath, 11 Sit, 12 WalkUp, 13 WalkDown (las dos
+ultimas para el patio visto desde arriba, v2.0). Las que falten se omiten.
+Los ids nuevos se anaden siempre al final, nunca se renumeran.
+
+Las extra (ids >= 12) van detras de las nActs contadas: el firmware anterior al
+patio (<= v1.68) rechaza el fichero entero si ve un id que no conoce, pero solo
+lee nActs registros, asi que ignora la cola. El firmware nuevo lee tambien la
+cola hasta el final. La paleta solo crece por el final, asi que los indices de
+las acciones base no cambian al anadir acciones.
 
   python3 tools/pack_pmd.py             # los 151, normal + shiny
   python3 tools/pack_pmd.py 7 25        # dex concretos
@@ -34,7 +43,8 @@ MIN_MS = 70
 ALPHA_T = 128
 
 # (id, nombre de accion, fila del sheet) — fila None = 0 si solo hay una
-# direcciones del sheet: 0 abajo, 2 DERECHA, 6 IZQUIERDA (verificado en placa)
+# direcciones del sheet: 0 abajo, 2 DERECHA, 4 arriba, 6 IZQUIERDA (verificado en placa)
+# WalkUp/WalkDown: si el sheet no tiene esa fila, la accion se omite (sin caer a la fila 0)
 ACTIONS = [
     (0, 'Idle', 0),
     (1, 'Walk', 6),   # izquierda
@@ -48,7 +58,11 @@ ACTIONS = [
     (9, 'Nod', 0),
     (10, 'DeepBreath', 0),
     (11, 'Sit', 0),
+    (12, 'Walk', 4),  # arriba (de espaldas), patio
+    (13, 'Walk', 0),  # abajo (de frente), patio
 ]
+BASE_ACTS = 12      # ids < 12 cuentan en nActs; los demas van en la cola del fichero
+STRICT_ROW = {12, 13}
 
 
 def fetch(url, dest):
@@ -108,6 +122,8 @@ def pack(dexnum, shiny=False):
             continue
         im = Image.open(png).convert('RGBA')
         rows = im.size[1] // fh
+        if aid in STRICT_ROW and rows <= row:
+            continue
         r = row if rows > row else 0
         nf = min(len(durs), im.size[0] // fw, 24)
         data = bytearray()
@@ -137,7 +153,8 @@ def pack(dexnum, shiny=False):
     path = os.path.join(OUT, f'p{"s" if shiny else ""}{dexnum:03d}.bin')
     with open(path, 'wb') as f:
         f.write(b'TPK2')
-        f.write(struct.pack('<BH', len(packed), len(pal)))
+        packed.sort(key=lambda p: p[0] >= BASE_ACTS)  # estable: base delante, extra en la cola
+        f.write(struct.pack('<BH', sum(p[0] < BASE_ACTS for p in packed), len(pal)))
         for r, g, b in pal:
             f.write(struct.pack('<H', rgb565(r, g, b)))
         for aid, fw, fh, nf, ms, data in packed:

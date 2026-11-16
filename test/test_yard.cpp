@@ -281,3 +281,42 @@ TEST(yard, solo_la_zona_conectada_mas_grande) {
   for (int c = 0; c < YARD_CELLS; c++)
     if (yardFree(walk, c) && c != yardCellIdx(7, 7)) CHECK(yardPath(walk, yardCellIdx(7, 7), c, path, YARD_PATH_MAX) > 0);
 }
+
+TEST(yard, sprite_de_andar_segun_la_direccion) {
+  // mas vertical que horizontal: de espaldas subiendo, de frente bajando
+  CHECK_EQ(yardWalkDir(3, -10, 1, true, true), YW_UP);
+  CHECK_EQ(yardWalkDir(-3, 10, 1, true, true), YW_DOWN);
+  // mas horizontal (o a 45 grados): de lado, hacia donde mira
+  CHECK_EQ(yardWalkDir(10, -3, 1, true, true), YW_RIGHT);
+  CHECK_EQ(yardWalkDir(-10, 3, -1, true, true), YW_LEFT);
+  CHECK_EQ(yardWalkDir(5, 5, 1, true, true), YW_RIGHT);
+  // sin moverse: de lado
+  CHECK_EQ(yardWalkDir(0, 0, -1, true, true), YW_LEFT);
+  // sprite viejo sin arriba/abajo: de lado segun el ultimo lado al que miraba
+  CHECK_EQ(yardWalkDir(0, -10, -1, false, false), YW_LEFT);
+  CHECK_EQ(yardWalkDir(0, 10, 1, false, false), YW_RIGHT);
+  CHECK_EQ(yardWalkDir(0, -10, 1, false, true), YW_RIGHT);  // solo tiene de frente
+  CHECK_EQ(yardWalkDir(0, 10, 1, false, true), YW_DOWN);
+}
+
+TEST(yard, paseo_vertical_mira_arriba_o_abajo) {
+  uint8_t walk[YBG_WALK_BYTES];
+  yardFallbackWalk(walk);
+  YardWorld w;
+  w.n = 1;
+  YardPet &p = w.p[0];
+  p.on = true;
+  p.x = (float)yardCellCenter(7);
+  p.y = (float)yardCellCenter(9);
+  float dx, dy;
+  yardHeading(p, &dx, &dy);
+  CHECK(dx == 0 && dy == 0);  // sin camino
+  CHECK(yardWalkTo(w, walk, 0, yardCellIdx(7, 4), 0));  // recto hacia arriba
+  yardAdvance(w, walk, 0, 100, YARD_SPEED);
+  yardHeading(p, &dx, &dy);
+  CHECK_EQ(yardWalkDir(dx, dy, p.face, true, true), YW_UP);
+  CHECK(yardWalkTo(w, walk, 0, yardCellIdx(7, 11), 0));  // y hacia abajo
+  yardAdvance(w, walk, 0, 100, YARD_SPEED);
+  yardHeading(p, &dx, &dy);
+  CHECK_EQ(yardWalkDir(dx, dy, p.face, true, true), YW_DOWN);
+}

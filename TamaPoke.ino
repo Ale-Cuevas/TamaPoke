@@ -6853,6 +6853,15 @@ void yardShadow(int cx, int cy, int w) {
   }
 }
 
+// sprite del paseo en el patio (Y3): de espaldas / de frente si va mas en vertical, de lado si no
+// (o si el .bin de la SD es viejo y no trae WalkU/WalkD). La casa de lado y el combate siguen con L/R
+uint8_t yardWalkAct(const PmdMon &m, const YardPet &p) {
+  float dx, dy;
+  yardHeading(p, &dx, &dy);
+  static const uint8_t ACT[] = { PMD_WALKL, PMD_WALKR, PMD_WALKU, PMD_WALKD };  // por YW_*
+  return ACT[yardWalkDir(dx, dy, p.face, m.has(PMD_WALKU), m.has(PMD_WALKD))];
+}
+
 void yardDrawPet(int i, uint32_t now) {
   YardPet &p = yardW.p[i];
   YardBody b = yardBodyOf(i);
@@ -6866,7 +6875,7 @@ void yardDrawPet(int i, uint32_t now) {
     else if (p.mode == YM_STAY && i == 0) {
       PetMood md = pet.mood();
       act = md == MOOD_EATING ? PMD_EAT : md == MOOD_SAD ? PMD_HURT : PMD_IDLE;
-    } else if (p.mode == YM_WALK) act = p.face > 0 ? PMD_WALKR : PMD_WALKL;
+    } else if (p.mode == YM_WALK) act = yardWalkAct(m, p);
     else if (p.mode == YM_GESTURE) {
       act = p.act;
       loop = false;

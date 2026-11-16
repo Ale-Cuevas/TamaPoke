@@ -6,6 +6,7 @@
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -194,6 +195,44 @@ class TestGeneratedFiles(unittest.TestCase):
             with open(os.path.join(ROOT, name)) as fh:
                 head = fh.read(400)
             self.assertIn('GENERADO', head, f'{name} deberia decir que esta generado')
+
+
+def _tpk2_records(buf):
+    """(nActs, [(id, w, h, nf, contado)], fin) de un .bin TPK2 (tools/pack_pmd.py)."""
+    nacts = buf[4]
+    (palcount,) = struct.unpack_from('<H', buf, 5)
+    p = 7 + palcount * 2
+    recs = []
+    while p + 4 <= len(buf):
+        aid, w, h, nf = buf[p:p + 4]
+        recs.append((aid, w, h, nf, len(recs) < nacts))
+        p += 4 + nf * 2 + w * h * nf
+    return nacts, recs, p
+
+
+class TestPmdSprites(unittest.TestCase):
+    """Los sprites de la SD (tools/sdcard/mons) los lee sdmon.cpp, tambien el firmware viejo."""
+
+    def test_los_bin_se_leen_hasta_el_final(self):
+        mons = os.path.join(TOOLS, 'sdcard', 'mons')
+        files = sorted(f for f in os.listdir(mons) if re.fullmatch(r'ps?\d{3}\.bin', f))
+        self.assertEqual(len(files), 302)
+        for name in files:
+            with self.subTest(sprite=name):
+                with open(os.path.join(mons, name), 'rb') as fh:
+                    buf = fh.read()
+                self.assertEqual(buf[:4], b'TPK2')
+                self.assertLessEqual(len(buf), 3 * 1024 * 1024)  # tope de PmdMon::load
+                nacts, recs, end = _tpk2_records(buf)
+                self.assertEqual(end, len(buf), 'el ultimo registro no acaba justo al final')
+                ids = [r[0] for r in recs]
+                self.assertEqual(len(ids), len(set(ids)), 'accion repetida')
+                self.assertIn(0, ids)  # Idle
+                for aid, w, h, nf, counted in recs:
+                    self.assertTrue(w and h and 1 <= nf <= 24)
+                    # el firmware <= v1.68 rechaza ids >= 12: solo pueden ir en la cola sin contar
+                    self.assertEqual(counted, aid < 12, f'accion {aid} mal colocada')
+                    self.assertLess(aid, 14)  # PMD_NACTS en sdmon.h
 
 
 class TestSketchSanity(unittest.TestCase):

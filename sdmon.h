@@ -16,10 +16,11 @@ struct SdMon {
   void unload();
 };
 
-// acciones de los sprites PMD (formato TPK2)
+// acciones de los sprites PMD (formato TPK2, ids fijos de tools/pack_pmd.py: solo se anaden al final)
 enum : uint8_t {
   PMD_IDLE = 0, PMD_WALKL, PMD_WALKR, PMD_SLEEP, PMD_EAT, PMD_HURT,
   PMD_ATTACK, PMD_POSE, PMD_HOP, PMD_NOD, PMD_BREATH, PMD_SIT,
+  PMD_WALKU = 12, PMD_WALKD = 13,  // patio (v2.0): andar de espaldas / de frente; en la cola del fichero
   PMD_NACTS
 };
 
