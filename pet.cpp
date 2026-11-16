@@ -73,8 +73,37 @@ void Pet::newEgg(bool saveNow, int16_t heir) {
     if (charm) items[IT_CHARM] = 0;
     eggShiny = (random(shinyOdds(charm)) == 0);
     eggTaps = 0;
+    eggPlaced = 0;
+    eggSaved = 0;
   }
+  // Y3: el huevo se pone en el patio (el inicial no: se abre con 3 toques). El que vuelve de la
+  // incubadora sigue con su hora: la incubadora tambien incuba
+  if (timedEggs && !starterPick && !eggPlaced) placeEgg();
   persist(saveNow);
+}
+
+void Pet::placeEgg() {
+  eggPlaced = lastSeenEpoch >= EGG_EPOCH_MIN ? lastSeenEpoch : EGG_NO_CLOCK;
+  eggShakeHave = false;
+}
+
+void Pet::eggClockStamp() {
+  if (eggPlaced && !eggClockKnown(eggPlaced) && lastSeenEpoch >= EGG_EPOCH_MIN) {
+    eggPlaced = lastSeenEpoch;
+    pendingSave = true;
+  }
+}
+
+void Pet::dbgEggElapsed(uint32_t min) {
+  if (!isEgg() || vacant || starterPick) return;
+  if (!eggPlaced) placeEgg();
+  if (lastSeenEpoch >= EGG_EPOCH_MIN) eggPlaced = eggPlacedFor(lastSeenEpoch, min);
+  pendingSave = true;
+}
+
+void Pet::hatchNow() {
+  if (!isEgg() || vacant || starterPick || busyEnding()) return;
+  hatch();
 }
 
 // Guardar en la caja deja la casa libre. Huevos limitados (v1.39): vuelve el que esperaba en la
@@ -148,6 +177,10 @@ void Pet::vacate(bool saveNow) {
   vacant = true;
   starterPick = false;
   eggTaps = 0;
+  if (!eggHeldFlag) {  // (el de la incubadora conserva su hora)
+    eggPlaced = 0;
+    eggSaved = 0;
+  }
   persist(saveNow);
 }
 
@@ -202,12 +235,14 @@ void Pet::syncClock(uint32_t nowEpoch) {
     return;
   }
   if (mins > 14UL * 24 * 60) mins = 14UL * 24 * 60;  // tope: 2 semanas
+  if (yardEgg()) eggClockStamp();  // puesto sin hora: cuenta desde la ultima vista
 
   for (uint32_t i = 0; i < mins; i++) {
     bool full = sated();  // la tarta (v1.54) tambien cuenta apagado
     ageMinutes++;
     if (isEgg()) {
-      if (ageMinutes >= 3) hatch();  // eclosiona en tu ausencia
+      // el del patio (Y3): a su hora real; el inicial o uno del sistema de antes, a los 3 min
+      if (yardEgg() ? eggMinutesLeft(seen + (i + 1) * 60) == 0 : ageMinutes >= 3) hatch();  // eclosiona en tu ausencia
       continue;
     }
     growMin++;  // crece igual apagado que en vivo, dormido o despierto
@@ -267,7 +302,12 @@ void Pet::tick() {
   ageMinutes++;
 
   if (isEgg()) {
-    if (ageMinutes >= 3) hatch();  // si no lo tocas, eclosiona solo a los 3 min
+    if (yardEgg()) {  // el del patio (Y3): a las 2 h reales menos lo que le quitaron las sacudidas
+      eggClockStamp();
+      if (eggMinutesLeft() == 0) hatch();
+    } else if (ageMinutes >= 3) {
+      hatch();  // si no lo tocas, eclosiona solo a los 3 min
+    }
     return;
   }
   growMin++;  // el nivel sale de aqui (growth.h), despierto o dormido
@@ -609,6 +649,8 @@ void Pet::release() {
 
 void Pet::hatch() {
   speciesId = eggTarget;
+  eggPlaced = 0;  // el huevo del patio ya no esta
+  eggSaved = 0;
   shiny = eggShiny;
   // genes del individuo: 90-110% por stat (cada crianza es unica)
   geneAtk = 90 + random(21);
@@ -712,6 +754,7 @@ void Pet::playResult(uint8_t score) {
   weight = burn > 0 ? burn : 0;
   if (score >= 5) heartUntil = millis() + HEART_MS;
   if (score > gameHi) gameHi = score;  // nuevo record
+  lastCoins = addCoins(coinsForGame(ECO_BALL, score), true);
   addBond(2);
   registerCare();
   save();
@@ -734,6 +777,7 @@ uint8_t Pet::trainStrength(uint16_t hits) {
   joy = clamp100(joy + 6);
   if (hits >= 20) heartUntil = millis() + HEART_MS;
   if (hits > strHi) strHi = hits;   // record de golpes
+  lastCoins = addCoins(coinsForGame(ECO_SACK, hits), true);
   addBond(2);
   registerCare();
   save();
@@ -755,6 +799,7 @@ uint8_t Pet::zenResult(uint16_t focusTenths, uint16_t driftTenths) {
   hygiene = clamp100(hygiene + ZEN_WASH);  // la cascada lava (decidido 2026-11-07)
   if (focusTenths >= 200) heartUntil = millis() + HEART_MS;
   if (focusTenths > zenHi) zenHi = focusTenths;
+  lastCoins = addCoins(coinsForGame(ECO_ZEN, zenTotalGain(focusTenths, driftTenths)), true);
   addBond(2);
   registerCare();
   save();
@@ -776,6 +821,7 @@ uint8_t Pet::dashResult(uint16_t dodged) {
   joy = clamp100(joy + 5 + (dodged > 15 ? 15 : dodged) * 2);
   if (dodged >= 10) heartUntil = millis() + HEART_MS;
   if (dodged > dashHi) dashHi = dodged;
+  lastCoins = addCoins(coinsForGame(ECO_SLED, dodged), true);
   addBond(2);
   registerCare();
   save();
@@ -930,6 +976,7 @@ void Pet::caress() {
 
 void Pet::eggTap() {
   if (!isEgg() || vacant) return;
+  if (yardEgg()) return;  // el del patio no se abre a toques (Y3): solo se tambalea (la UI)
   if (++eggTaps >= 3) hatch();
   else save();
 }
@@ -1017,6 +1064,7 @@ void Pet::addSteps(uint32_t n, uint32_t day) {
       goalDay = day;
       goalTier = tier;
       goalBanner = tier;
+      goalBannerCoins += addCoins(coinsForGoal(tier), false);  // fuera del tope diario; con el bicho dormido tambien
       goalReward(tier, rewarded);
     }
   }
@@ -1234,13 +1282,20 @@ void Pet::wakeGrumpy() {
 
 // agitarlo despierto: se marea. 3 sacudidas en 2 min restan felicidad, como
 // mucho una vez cada 10 min. El huevo solo se tambalea.
-void Pet::shaken() {
-  if (busyEnding()) return;
+bool Pet::shaken() {
+  if (busyEnding()) return false;
   if (isEgg()) {
-    if (!vacant) startEmote(EMOTE_WOBBLE);
-    return;
+    if (vacant) return false;
+    startEmote(EMOTE_WOBBLE);
+    // el del patio (Y3): la sacudida le quita minutos (una cada EGG_SHAKE_COOLDOWN_MS, hasta el tope).
+    // Solo se marca el guardado: lo vuelca el loop con la pantalla atenuada
+    if (yardEgg() && eggShake(&eggSaved, &eggShakeMs, &eggShakeHave, millis())) {
+      pendingSave = true;
+      return true;
+    }
+    return false;
   }
-  if (sleeping) return;  // dormido es wakeGrumpy()
+  if (sleeping) return false;  // dormido es wakeGrumpy()
   startEmote(EMOTE_DIZZY);
   uint32_t now = millis();
   if (shakeN == DIZZY_SHAKES) {
@@ -1256,6 +1311,7 @@ void Pet::shaken() {
     shakeN = 0;
     pendingSave = true;
   }
+  return false;
 }
 
 // ---------- combate: felicidad y botin ----------
@@ -1312,6 +1368,66 @@ bool Pet::teamCanFight(uint32_t id) const {
   return k == TEAM_HOME ? canBattle() : k >= 0;
 }
 
+// ---------- monedas (Y4) ----------
+static_assert(IT_REVIVE + 1 == ECO_ITEMS, "economy.h: un precio por objeto de pet.h");
+
+uint16_t Pet::coinsEarnedToday() const { return coinDay == today() ? coinToday : 0; }
+
+uint16_t Pet::addCoins(uint16_t n, bool capped) {
+  if (capped) {
+    uint32_t d = today();
+    if (coinDay != d) {  // dia nuevo: el contador vuelve a 0
+      coinDay = d;
+      coinToday = 0;
+    }
+    uint16_t room = coinToday >= ECO_DAILY_CAP ? 0 : ECO_DAILY_CAP - coinToday;
+    if (n > room) n = room;
+  }
+  uint16_t room2 = coins >= COIN_MAX ? 0 : COIN_MAX - coins;
+  if (n > room2) n = room2;
+  if (!n) return 0;
+  coins += n;
+  if (capped) coinToday += n;
+  pendingSave = true;  // como los pasos: el que llama guarda, o el loop con la pantalla atenuada
+  return n;
+}
+
+bool Pet::spendCoins(uint16_t n) {
+  if (n > coins) return false;
+  coins -= n;
+  save();
+  return true;
+}
+
+bool Pet::buyItem(uint8_t itemId) {
+  uint16_t p = priceOfItem(itemId);
+  if (!p || itemId >= IT_COUNT || p > coins || items[itemId] >= ITEM_MAX) return false;
+  items[itemId]++;
+  coins -= p;
+  save();
+  return true;
+}
+
+bool Pet::ownsMap(uint8_t n) const {
+  if (n < 1 || n > YARD_MAPS) return false;
+  return (yardOwned & (1u << n)) || n == YARD_MAP_START;
+}
+
+bool Pet::buyMap(uint8_t n) {
+  uint16_t p = priceOfMap(n);
+  if (!p || ownsMap(n) || p > coins) return false;
+  coins -= p;
+  yardOwned |= (uint16_t)(1u << n);
+  save();
+  return true;
+}
+
+void Pet::chooseMap(uint8_t n) {
+  if (n && !ownsMap(n)) return;
+  yardChosen = n;
+  save();
+}
+
 // el premio del jefe de hoy, a la NVS antes que nada de lo que paga. Un dia nuevo empieza con la
 // mascara a 0 y despues el dia ("stD" antes que "stM"): un corte entre los dos deja el dia de hoy con
 // la mascara de ayer (como mucho se pierde un premio de hoy), nunca la mascara de hoy con el dia de
@@ -1337,7 +1453,7 @@ bool Pet::payStageDay(uint8_t stage) {
 // puede dejar parte del premio sin dar (un bicho de la caja si y el siguiente no), nunca pagarlo dos
 // veces el mismo dia ni dejar un hueco danado.
 StageReward Pet::stageDone(uint8_t stage, bool cleared, const uint32_t *uids, uint8_t n) {
-  StageReward res = { false, false, (uint8_t)IT_COUNT, 0, 0 };
+  StageReward res = { false, false, (uint8_t)IT_COUNT, 0, 0, 0 };
   res.joy = practiceJoy();  // gane o pierda, una vez por hora (0 con huevo, casa vacia o final)
   if (cleared && stage < STAGE_COUNT) {
     uint8_t bit = (uint8_t)(1u << stage);
@@ -1346,8 +1462,13 @@ StageReward Pet::stageDone(uint8_t stage, bool cleared, const uint32_t *uids, ui
       res.newBadge = true;
       prefs.putUChar("bdg", badges);  // 1. la medalla: abre el siguiente estadio
     }
+    // monedas (Y4): la primera vez, fuera del tope; las repeticiones, una por estadio y dia (la marca
+    // del premio del jefe) y dentro del tope. Si la marca no se pudo escribir, no se paga
+    bool repeat = !res.newBadge && stageRewardReady(stage);
+    if (res.newBadge) res.coins = addCoins(ECO_STAGE_FIRST, false);
     if (stageRewardReady(stage) && payStageDay(stage)) {  // 2.
       res.paid = true;
+      if (repeat) res.coins = addCoins(ECO_STAGE_REPEAT, true);
       if (n > TEAM_MAX) n = TEAM_MAX;
       for (uint8_t i = 0; uids && i < n; i++) {
         uint32_t id = uids[i];
@@ -1421,6 +1542,8 @@ void Pet::save() {
   prefs.putShort("dexn", speciesId);
   prefs.putShort("eggT2", eggTarget);
   prefs.putUChar("crack", eggTaps);
+  prefs.putUInt("yegg", eggPlaced);  // el huevo del patio (Y3)
+  prefs.putUChar("ysav", eggSaved);
   prefs.putUChar("mist", careMistakes);
   prefs.putBool("sleep", sleeping);
   prefs.putBool("nslp", nightSleep);  // la noche (v1.63)
@@ -1468,6 +1591,11 @@ void Pet::save() {
   // estadios (del jugador). Antes del bloque del uid: no tocan nada de los movimientos de la caja, y
   // asi la ventana entre el uid y "eggH" no se alarga. stageDone ya los escribe por su cuenta antes de
   // pagar (aqui solo repiten el mismo valor). "stD" antes que "stM", como en payStageDay
+  prefs.putUShort("cn", coins);  // monedas (Y4)
+  prefs.putUInt("cnD", coinDay);
+  prefs.putUShort("cnT", coinToday);
+  prefs.putUShort("ybgO", yardOwned);
+  prefs.putUChar("ybg", yardChosen);
   prefs.putUChar("bdg", badges);
   prefs.putUInt("stD", stageDay);
   prefs.putUChar("stM", stageMask);
@@ -1527,6 +1655,11 @@ void Pet::load() {
     eggTarget = (oldT >= 0 && oldT < 9) ? OLD2DEX[oldT] : 4;
   }
   eggTaps = prefs.getUChar("crack", 0);
+  // el huevo del patio (Y3). Sin la clave (un guardado anterior) no lo es: un huevo a medias del sistema
+  // de toques lo termina asi (3 toques, o solo a los 3 min de edad)
+  eggPlaced = prefs.isKey("yegg") ? prefs.getUInt("yegg", 0) : 0;
+  eggSaved = prefs.isKey("ysav") ? prefs.getUChar("ysav", 0) : 0;
+  if (eggSaved > EGG_SHAKE_CAP) eggSaved = EGG_SHAKE_CAP;
   careMistakes = prefs.getUChar("mist", 0);
   sleeping = prefs.getBool("sleep", false);
   nightSleep = sleeping && prefs.getBool("nslp", false);
@@ -1598,6 +1731,13 @@ void Pet::load() {
     prefs.putBytes("bpack", items, sizeof(items));
     prefs.putBool("rvg", true);
   }
+  coins = prefs.getUShort("cn", 0);  // un guardado anterior no trae las claves: 0
+  if (coins > COIN_MAX) coins = COIN_MAX;
+  coinDay = prefs.getUInt("cnD", 0);
+  coinToday = prefs.getUShort("cnT", 0);
+  yardOwned = prefs.getUShort("ybgO", 0) & (uint16_t)(((1u << (YARD_MAPS + 1)) - 1) & ~1u);
+  yardChosen = prefs.getUChar("ybg", 0);
+  if (yardChosen > YARD_MAPS) yardChosen = 0;
   bondDay = prefs.getUInt("bondD", 0);
   bondToday = prefs.getUChar("bondT", 0);
   // estadios: un guardado anterior no trae las claves (sin medallas, nada pagado, sin equipo)

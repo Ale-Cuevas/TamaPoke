@@ -1,0 +1,75 @@
+# Legend for Sunnyside World (16px sheet: spr_tileset_sunnysideworld_16px.png, 64x64 tiles, no spacing)
+# Coordinates are tile column,row in that sheet.
+# char = col,row [col,row ...]        single tile; several = random variants (fixed seed)
+# char = stamp WxH col,row             multi-tile object, placed by its top-left cell
+# char = autotile "Set" over b [fill c,r ...]  ground terrain with automatic edges (set from the .yy), drawn over ground char b
+# A trailing "!" marks the tile/stamp as blocking (pets can't walk there).
+# A "weights" list after variants biases the random pick.
+
+# The pack lives in tools/yard/tilesets/<pack>/ (git-ignored: its licence forbids redistributing it).
+# Unzip Sunnyside_World_ASSET_PACK_V2.1.zip and rename its top folder to "sunnyside".
+# The paths below are relative to that folder.
+pack = sunnyside
+sheet = Sunnyside_World_Assets/Tileset/spr_tileset_sunnysideworld_16px.png
+# GameMaker tileset that ships with the pack; holds the 16-tile autotile sets (edges)
+autotiles = Sunnyside_World_Gamemaker/tilesets/tileset_sunnysideworld/tileset_sunnysideworld.yy
+# animal strips, only used to show the scale in the previews
+animals = Sunnyside_World_Assets/Elements/Animals
+
+# ---- ground layer ----
+g = 2,1 2,2 3,2 1,2 2,3 3,3 2,4   weights 10 1 1 1 1 1 1     # grass, mostly plain
+d = autotile "Path 01" over g fill 9,7 10,7 11,7 9,8 10,8                           # dirt, edges drawn automatically
+s = 7,1 8,1 9,1                                               # sand fill
+w = autotile "River" over g fill 32,8 33,8 !                            # water, edges drawn automatically
+
+# ---- object layer ----
+D = stamp 5x5 4,33          # dirt patch with grass edge (walkable)
+B = stamp 2x2 49,1 !        # round bush
+E = stamp 2x2 49,3 !        # berry bush
+O = stamp 2x2 49,5 !        # orange bush
+t = stamp 1x2 52,4 !        # small pine
+T = stamp 2x3 51,6 !        # tall pine
+R = stamp 2x2 49,21 !       # big grey rock
+K = stamp 2x2 49,23 !       # coal rock
+C = stamp 2x2 49,25 !       # blue crystal rock
+G = stamp 2x2 49,27 !       # gold ore rock
+r = 33,4 34,4               # small pebbles (walkable)
+f = 33,1 33,2 33,3 34,3 35,3 34,1 34,2   # flowers (walkable)
+u = 32,5 !                  # tree stump
+m = 49,7 50,8 49,8          # mushrooms (walkable)
+W = stamp 2x2 37,19 !       # stone well
+A = stamp 2x1 37,18 !       # anvil
+l = 47,7                    # minecart rail, straight (walkable)
+
+# ---- added for maps 03-05 ----
+# ground
+v = 12,18 13,18 14,18 12,19 13,19 14,19 12,20 13,20 14,20 !         # sea water (plain, blocks)
+y = 42,7 43,7 42,8 43,8                                             # beach sand
+# forest corners: pieces of the sheet's tree cluster whose cut sides face the map edge
+1 = stamp 5x7 56,2 !        # tree cluster for the top-left corner
+2 = stamp 5x7 53,2 !        # tree cluster for the top-right corner
+3 = stamp 5x6 56,1 !        # tree cluster for the bottom-left corner
+4 = stamp 5x6 53,1 !        # tree cluster for the bottom-right corner
+# beach
+~ = 20,5                    # shore, top of the water: sand above, foam + water below (over v)
+_ = 20,4                    # shore, bottom of the water: water above, sand below (over v)
+* = 12,22 13,22 14,22       # water sparkle (over v)
+x = 57,19                   # starfish (walkable)
+c = 59,19 60,19             # crab (walkable)
+e = 56,19                   # shell (walkable)
+P = stamp 1x2 38,12         # wooden pier planks (over v)
+# village / ruins
+F = 39,2 !                  # wooden fence, middle
+[ = 38,2 !                  # wooden fence, left end
+] = 42,2 !                  # wooden fence, right end
+V = 45,1 46,1 47,1 !        # stone wall, middle
+< = 44,1 !                  # stone wall, left end
+| = 44,3 !                  # stone wall post
++ = 44,15 45,15 46,15 47,15 !   # small gravestone
+X = stamp 1x2 44,16 !       # gravestone with a dirt grave
+Q = stamp 2x4 44,18 !       # knight statue on a plinth
+q = stamp 2x3 46,19 !       # pillar on a plinth
+H = stamp 2x2 39,9 !        # stacked crates
+b = 38,16 39,16 40,16 !     # barrel / bucket
+k = stamp 2x2 37,21 !       # campfire ring
+n = 49,8                    # red mushroom (walkable)

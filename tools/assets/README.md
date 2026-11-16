@@ -32,6 +32,9 @@ Definidos en las cabeceras de cada empaquetador y parseados en `sdmon.cpp`:
   transparente).
 - **TPK2** (`PmdMon`): `"TPK2"`, `u8 nActs`, `u16 palCount`, `u16 pal[]`, y por
   acción `u8 id,w,h,nFrames` + `u16 ms[nFrames]` + `u8 data[w*h*nFrames]`.
+  `nActs` solo cuenta las acciones 0-11; las nuevas (12 WalkUp, 13 WalkDown,
+  para el patio) van detrás sin contar, hasta el final del fichero, para que el
+  firmware anterior (que rechaza ids desconocidos) las ignore.
 - **TPTH** (`SdThumbs`): `"TPTH"`, `u16 count`, `u32 offset[count]`, y por
   miniatura `u8 w,h,palCount` + `u16 pal[]` + `u8 data[w*h]`.
 

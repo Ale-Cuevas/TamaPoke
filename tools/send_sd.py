@@ -4,6 +4,8 @@
   python3 tools/send_sd.py                  # envia tools/sdcard/mons/*.bin
   python3 tools/send_sd.py --port /dev/cu.usbmodem101
   python3 tools/send_sd.py --ls             # lista lo que hay en la SD
+  python3 tools/send_sd.py --yard           # envia los fondos del patio (tools/yard/out/NN-*.bin
+                                            # -> /yard/NN.bin); antes: tools/pack_yard.py
 """
 import argparse
 import glob
@@ -35,6 +37,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--port')
     ap.add_argument('--ls', action='store_true')
+    ap.add_argument('--yard', action='store_true', help='envia los fondos del patio en vez de los sprites')
     args = ap.parse_args()
 
     port = args.port or find_port()
@@ -48,13 +51,20 @@ def main():
         wait_line(ser, 'DONE', 5)
         return
 
-    files = sorted(glob.glob(os.path.join(os.path.dirname(__file__), 'sdcard', 'mons', '*.bin')))
-    if not files:
-        sys.exit("no hay .bin; ejecuta antes tools/pack_pmd.py")
+    if args.yard:
+        # NN-nombre.bin -> yard/NN.bin: la placa busca el fondo por su numero
+        files = sorted(glob.glob(os.path.join(os.path.dirname(__file__), 'yard', 'out', '[0-9][0-9]-*.bin')))
+        if not files:
+            sys.exit("no hay fondos; ejecuta antes tools/pack_yard.py")
+        targets = [(p, f"yard/{os.path.basename(p)[:2]}.bin") for p in files]
+    else:
+        files = sorted(glob.glob(os.path.join(os.path.dirname(__file__), 'sdcard', 'mons', '*.bin')))
+        if not files:
+            sys.exit("no hay .bin; ejecuta antes tools/pack_pmd.py")
+        targets = [(p, f"mons/{os.path.basename(p)}") for p in files]
 
-    for path in files:
+    for path, name in targets:
         size = os.path.getsize(path)
-        name = f"mons/{os.path.basename(path)}"
         print(f"-> {name} ({size/1024:.0f} KB)")
         ser.write(f"PUT {name} {size}\n".encode())
         if not wait_line(ser, 'OK', 5):

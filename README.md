@@ -1,7 +1,7 @@
 # TamaPoke
 
 ![Board](https://img.shields.io/badge/board-ESP32--S3%20AMOLED%202.16-E7352C?logo=espressif&logoColor=white)
-![Firmware](https://img.shields.io/badge/firmware-v1.30-8A2BE2)
+![Firmware](https://img.shields.io/badge/firmware-v2.0-8A2BE2)
 [![CI](https://github.com/Ale-Cuevas/TamaPoke/actions/workflows/ci.yml/badge.svg)](https://github.com/Ale-Cuevas/TamaPoke/actions/workflows/ci.yml)
 ![Code](https://img.shields.io/badge/code-MIT-blue)
 ![Languages](https://img.shields.io/badge/languages-8-FFCB05)
@@ -18,7 +18,7 @@ square panel inside a smooth round frame, with the rest of the panel black (on
 an AMOLED, black pixels are simply off). How and why:
 **[docs/AMOLED-2.16.md](docs/AMOLED-2.16.md)**.
 
-![TamaPoke on the AMOLED-2.16: main screen by day and at night, stat card, Pokédex, minigame and settings](docs/images/screens-216.png)
+![TamaPoke v2.0 on the AMOLED-2.16: the yard by day and at night, stat card, Shop, background picker and Pokédex](docs/images/screens-216.png)
 
 <sub>Rendered from the real firmware drawing code by `tools/render/render.sh`:
 these are the pixels the panel receives.</sub>
@@ -28,6 +28,14 @@ these are the pixels the panel receives.</sub>
 > **[License](#license)** and **Credits**.
 
 ## Status
+
+**v2.0: the yard.** The home is now a top-down pixel-art yard where the pet (and the first pet of the Box)
+wanders, eats food dropped on the grass, leaves poops and finds gifts where it stands, and says how it feels
+in speech bubbles. A thin HUD floats on top: the clock, the battery, your **coins** and a 3-button dock
+(**Care**, **Play**, **Bag**). Eggs sit in the yard and hatch in 2 h (shake the board to speed them up).
+Games, stages and walks earn coins to spend in the **Shop** (a tab of the Bag): items, and new
+**backgrounds** for the yard. Menus are dark panels. The maps come from the Sunnyside World tile pack and are
+packed on your PC (see [Yard backgrounds](#yard-backgrounds)). Design: [docs/yard-prototype/DESIGN_YARD_UI.md](docs/yard-prototype/DESIGN_YARD_UI.md).
 
 **AMOLED-2.16 port (v1.19):** builds (PlatformIO and arduino-cli, pinned
 versions), passes the host test suite, and every screen has been rendered and
@@ -139,10 +147,10 @@ While **awake**, per minute:
 
 ### Actions
 - 🍎 **Berry** (3 flavors): +25 FOOD. Each species has a **hidden favorite flavor**
-  → +35 FOOD, +10 JOY, ♥, bond, and it gets revealed. Once revealed, the food menu marks it with a
+  → +35 FOOD, +10 JOY, ♥, bond, and it gets revealed. Once revealed, the Care panel marks it with a
   gold frame and a star (v1.57). Evolving can change the favourite: then it's a secret again and the
   status says "Its tastes changed!".
-- 🍰 **Cake** (v1.54, the food menu's 4th slot, replacing the candy): **limited**, found on walks
+- 🍰 **Cake** (v1.54, in the Care panel next to the berries): **limited**, found on walks
   (and won from stage bosses). It fills FOOD to 100 and **keeps it full for 3 hours** (the bar turns pink and
   the status says "So full!"; games don't make it hungry either, and the time counts while the board
   is off), +12 JOY, but **+12 weight**. The slot shows how many you have; with none it's grey and a
@@ -405,7 +413,7 @@ waving it around doesn't farm anything.
   | Item | Odds | Use |
   |---|---|---|
   | Golden Berry | 35 % | +50 FOOD, +15 JOY, a heart |
-  | Cake (v1.54) | 20 % | FOOD full for 3 h, +12 JOY, +12 weight (food menu or Backpack) |
+  | Cake (v1.54) | 20 % | FOOD full for 3 h, +12 JOY, +12 weight (Care panel or Bag) |
   | Protein / Iron / Carbos | 30 % (1/3 each) | +3 ATK / DEF / SPD training (cap 100) |
   | Shiny Charm | 10 % | Held, not used: the **next egg** gets ×3 shiny odds (never better than 1/8). One at a time; a second one becomes a Golden Berry. |
   | Revive (v1.59) | 5 % | Not used by hand: when a neglected pet is dying, a dialog offers it to save the pet. A new game starts with **3**. |
@@ -577,20 +585,23 @@ on, care for your companion:
 **Four stats** that decay: **FOOD**, **JOY**, **ENE** (energy), **HYG** (hygiene).
 If one bottoms out it counts as a *slip-up*.
 
-**Buttons (bottom arc, icons):**
-- 🍎 **Feed** → food menu: 3 berries (each species has a hidden favourite that
-  gives a bonus) and the cake (limited: full for 3 h, but it fattens; weight makes it sluggish).
-- ⚽ **Play** → a menu with every game: the pokeball minigame (trains SPEED), the battle
-  stages (crossed swords) or the training bag (red bag, trains STRENGTH). With an egg, a sleeping pet
-  or an empty home, Play opens the stage list directly when the Box has pets.
-- 💗 **Care** (v1.53) → a menu with two choices:
-  - 🌙 **Sleep** / ☀️ **wake** (recovers energy, the scene goes dark). While asleep, needs decay
-    much slower (rest); at night even slower, and it wakes up by itself at 08:00 (v1.63). The screen stays as bright as when it's awake. Asleep, Care is the button
-    that still works, and its menu shows the sun.
-  - 🫧 **Bath**: a foam scene that cleans up the poops (greyed while asleep).
+**The dock (three round buttons at the bottom, v2.0):**
+- 💗 **Care** → a panel with the 3 berries (each species has a hidden favourite that gives a bonus), the cake
+  (limited: full for 3 h, but it fattens), the light (🌙 sleep / ☀️ wake) and the bath. Food drops into the
+  yard: the pet sees it, walks over and eats it. Asleep, the light still works.
+- ⚽ **Play** → the games: the pokeball minigame (SPEED), the battle stages, the training bag (STRENGTH), the
+  sled run (SPEED) and the waterfall (DEFENSE). Each result pays a few coins.
+- 🎒 **Bag** → two tabs: **ITEMS** (your items and eggs; tap one to use it) and **SHOP** (buy items and
+  backgrounds with coins).
 
-**Poops** (v1.58): tap one to clean it (+10 HYG, sparkles where it was). Works asleep too.
-- 🎒 **Backpack** (v1.53) → your items and eggs; tap one to use it.
+**In the yard:** tap the pet for its stat card (the first page shows the four needs), tap the Box pet to
+open the Box, tap a poop to clean it (+10 HYG), tap a gift to open it. An egg placed from the Bag sits in the
+yard: tap it to see the time left, shake the board to speed it up.
+
+**Coins (v2.0):** each minigame pays 3–8 by result, a stage's first clear 50 and a repeat clear 10 (once per
+stage per day), walk goals 10 / 20 / 40. Games and repeat clears stop at 150 a day. They are spent in the
+Shop: berries 30, cake 40, protein / iron / carbos 60, Revive 80, rare candy 150, and backgrounds 150–250.
+Backgrounds are yours, not the pet's: you start with the meadow, and a map you buy works for every pet.
 
 **Touch gestures:**
 - Tap the creature = pet it (+happiness, bond).
@@ -713,33 +724,33 @@ and Portuguese use the English ones, which is what those regions officially use
 for gen 1. Nidoran♀/♂ read ニドランF/M in Japanese and 니드런 암/수 in Korean: no
 U8g2 unifont subset carries ♀ or ♂, so each language picks its own substitute.
 
-## Backgrounds: biome + real time
+## Yard backgrounds
 
-The idle screen paints the sky from the **RTC's real time** (dawn / day / dusk /
-night with moon and stars) and the ground from the **type's biome**. Sleeping
-forces night.
+The yard is a **map from the SD card** (`/yard/NN.bin`): 01 meadow, 02 quarry, 03 forest, 04 beach and 05 ruins
+(a ghostly purple one with mist). Everyone starts with the meadow; the others are bought in the Shop and
+picked in its background picker. The **RTC's real time** tints the map for dawn, dusk and night, and sleeping
+forces night. Without the SD map the yard is a flat ground in the colour of the pet's biome.
 
-| Biome | Types | What moves |
-|---|---|---|
-| Meadow | normal, fighting, flying (and the egg) | tall grass and flowers in the wind |
-| Beach | water, dragon (and the sea fossils) | waves |
-| Forest | grass, bug | conifer tips in the wind |
-| Volcano | fire | |
-| Mountain | rock, ground | |
-| Snow | ice | falling snow |
-| Power plant | electric | chimney smoke, swaying cables, a spark now and then, lit windows at night |
-| Swamp | poison | reeds in the wind, ripples, bubbles that pop |
-| Ruins | ghost, psychic | floating wisps under a violet sky (more at night) |
+The maps are made from the [Sunnyside World](https://danieldiggle.itch.io/sunnyside) tile pack by Daniel
+Diggle, whose licence doesn't allow sharing the tiles, so they are not in this repo or the web installer. To
+make them: buy/download the pack, unzip it into `tools/yard/tilesets/sunnyside/`, then
 
-The meadow is **tall grass that sways in the wind**, with flowers, and a front
-row of tufts brushing the pet's feet; a gust sweeps across it from left to right
-every 12 s, and the forest's conifers sway with it (`wind.h`). `BIOME <n>` over
-serial previews another biome without touching the pet (`BIOME` alone goes
-back), and `PERF` prints how long the background takes to draw.
+```bash
+uv run --no-project --with pillow tools/pack_yard.py   # tools/yard/maps/*.txt -> tools/yard/out/NN.bin (+ previews)
+python3 tools/send_sd.py --yard                          # send them to the board's /yard/
+```
+
+Each map is a 15×15 text grid (`tools/yard/maps/NN-name.txt`) with a legend
+(`tools/yard/legends/sunnyside.txt`); the packer also writes the walk mask (where pets may stand) and keeps
+the clock, the dock and the round edge clear. Serial `YARDBG <n>` previews a map without buying it.
 
 ## Layout
 
 - `TamaPoke.ino` — init, game loop, render of every screen, gestures, serial console, audio
+- `yard_ui.h` — the v2.0 look: palette, sizes and tap zones of panels, pills, dock, chevrons, back button
+- `yard.h` / `yardbg.h` — the yard: walking on the walk mask, food drops; the `TPY1` map files and their tint
+- `economy.h` / `shop.h` — coins earned and prices; the Shop and background picker rules
+- `eggtimer.h` — the yard egg's hatch time and shake bonus
 - `pet.h` / `pet.cpp` — pet state and logic (stats, evolution, life cycle, streak/bond/medals, NVS)
 - `sdmon.h` / `sdmon.cpp` — TPK1 (animated) and TPK2 (PMD) sprites + thumbnails, and file reception over USB (PUT/LS)
 - `round_display.h` — the 466×466 canvas on the 480×480 panel, with the round frame
@@ -763,7 +774,7 @@ back), and `PERF` prints how long the background takes to draw.
 - `tools/` — pipeline: `dex_data.py` (data), `dex_stats.py`, `dex_names.py` +
   `gen_names.py` (localized names), `gen_dex.py`,
   `sprites.py` (workshop), `pack_pmd.py` / `make_thumbs.py`
-  (packers), `pack_bundle.py` (web bundle), `send_sd.py` (SD upload), `touch_log.py`,
+  (packers), `pack_bundle.py` (web bundle), `send_sd.py` (SD upload), `pack_yard.py` (yard maps), `touch_log.py`,
   `render/` (renders the screens on the PC)
 - `tools/sdcard/mons/` — the generated .bin files (animated, shiny, PMD, thumbnails)
 - `web/` — the browser installer (ESP Web Tools + Web Serial sprite loader)
@@ -832,7 +843,10 @@ without the light) · `BOXFILL` (made-up pets in the empty slots, for tests and 
 `EGG` (eggs in the Backpack, the waiting egg, steps to the next one, empty home or not) · `EGG <n>` (set the
 Backpack to n eggs, for tests) · `REVIVES [n]` (Revives in the Backpack; with n, set it, v1.59) · `RELEASE` (release without the dialog) · `AGE <min>` (the pet's age in game minutes, for tests: 4320 on a final
 form shows the farewell button) · `TAP <x> <y>` (a tap at
-canvas coordinates, through the same path as a finger; prints the battle phase).
+canvas coordinates, through the same path as a finger; prints the battle phase) · `COINS [n]` (coins and
+today's capped earnings; with n, set them) · `SHOP` (prices, counts, maps owned) · `BUY <item>` /
+`BUYMAP <n>` (buy as if from the Shop) · `YARDBG <n>` (show yard map n, 0 = the chosen one) · `EGGT <min>`
+(fast-forward the yard egg).
 
 To test fast: lower `PET_TICK_MS` and `FAREWELL_AGE_MIN` in `pet.h` (levels count game minutes, so they
 speed up with the tick; the per-level costs are in `growth.h`), or jump levels with `LVL <n>` over serial.

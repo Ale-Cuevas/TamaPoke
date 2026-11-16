@@ -21,3 +21,6 @@ case/
 
 # PlatformIO
 .pio/
+
+# yard redesign: the video reference frames stay local (not in git)
+docs/yard-prototype/references/*.png

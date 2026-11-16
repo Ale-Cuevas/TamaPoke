@@ -46,10 +46,16 @@
 #include "ballgame.h" // minijuego de la pokeball: velocidad segun la puntuacion y la fisica (logica pura)
 #include "zengame.h"  // cascada (v1.43): la barra de concentracion, la franja y los golpes de agua (logica pura)
 #include "dashgame.h" // carrera en trineo (v1.44): direccion, velocidad, filas de obstaculos y choques (logica pura)
+#include "yard_panels.h"  // el patio (v2.0, Y2): paneles Cuidar y Jugar (geometria)
+#include "yard_ui.h"  // el patio (v2.0): paleta, geometria y toques del kit de interfaz nuevo (logica pura)
+#include "yardbg.h"   // fondos del patio (v2.0): lector de TPY1, mascara de paso y tinte (logica pura)
+#include "yard.h"     // el patio (v2.0, Y2): los bichos que pasean por el mapa (logica pura)
+#include "shop.h"     // la tienda de la mochila y el selector de fondos (v2.0, Y4b): logica pura
+// (eggtimer.h, el huevo del patio de la Y3, llega con pet.h)
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.68"
+#define FW_VERSION "2.0"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -75,16 +81,35 @@ PmdMon evoPmd;      // forma anterior, solo durante el parpadeo de evolucion
 int16_t monFor = -2;
 bool monShinyFor = false;
 
-// comportamiento del bicho en pantalla
-struct {
-  uint8_t mode = 0;     // 0 idle, 1 paseo, 2 gesto one-shot
-  uint8_t act = PMD_IDLE;
-  uint32_t t0 = 0;      // inicio de la animacion en curso
-  uint32_t until = 0;   // fin del estado actual
-  float x = 233, targetX = 233;
-} beh;
-uint32_t walkLast = 0;  // instante del ultimo paso del paseo (0 = ninguno aun)
-#define PET_GROUND 304  // linea de suelo de la mascota
+#define PET_GROUND 304  // linea de suelo de la mascota (las pantallas de la despedida y el Revivir)
+// el patio (v2.0, Y2): el bicho de casa (p[0]) y el primero de la caja (p[1], hibernando: solo pasea)
+YardWorld yardW;
+PmdMon yardBoxPmd;              // sprite del de la caja (si no hay, su miniatura)
+int8_t yardBoxSlot = -1;        // hueco de la caja que se ve en el patio (-1 = nadie)
+int16_t yardBoxDex = -2;
+bool yardBoxShiny = false;
+uint32_t yardBoxEpoch = 0;      // sdEpoch con que se cargo
+uint32_t yardLastStep = 0;      // ultimo paso del planificador (0 = ninguno aun)
+uint32_t gYardPetsUs = 0, gYardPetsMaxUs = 0;  // PERF: los bichos, sus cosas y el HUD
+// fase Y3 (acciones en el mundo): la comida que cae al patio (una a la vez; yard.h) y el huevo del patio
+YardFood yardFood;
+uint32_t yardHeartPopAt = 0;          // al acabarse la comida sale un corazon
+int16_t yardEggX = -1, yardEggY = 0;  // donde esta el huevo (los pies; solo RAM, -1 = sin sitio aun)
+uint32_t yardEggTapAt = 0;            // tocado: se tambalea y dice lo que falta
+uint32_t yardEggInfoUntil = 0;        // el globo del huevo (tras un toque o una sacudida que conto)
+#define YARD_EGG_S 3                  // el huevo del patio, a escala 3 (~51x69 px de tinta)
+#define YARD_EGG_MID (13 * YARD_EGG_S)  // de sus pies al centro del sprite
+int yardDropFood(uint8_t kind);       // (en la seccion del patio) 1 cae, 0 ya hay una, -1 sin patio
+const uint8_t *yardWalkNow();         // la mascara de paso con el huevo (seccion del patio)
+// como se dibuja cada bicho del patio (aqui arriba: el conversor .ino pone los prototipos antes que
+// el resto): el PMD a escala fija, el sprite B/N, el de flash o la miniatura de la caja
+enum : uint8_t { YB_NONE = 0, YB_PMD, YB_TPK1, YB_FLASH, YB_THUMB };
+struct YardBody {
+  uint8_t kind;
+  uint8_t s;   // escala
+  int16_t w;   // ancho visible
+  int16_t h;   // alto visible, de los pies a la cabeza
+};
 PmdMon galleryPmd;  // sprite grande de la vista detalle de la galeria (PMD/TPK2, legal)
 
 // galeria pokedex
@@ -123,6 +148,7 @@ bool screenOff = false;       // pulsacion corta del boton PWR (la tercera de ca
 // como hacen con la pantalla atenuada; cualquier toque, tecla o sacudida si (wakeUI)
 bool saverPinned = false;
 bool cardOpen = false;        // ficha del bicho (deslizar vertical)
+#define CARD_NAME_TAP_Y 96  // ficha, pagina 0: tocar arriba de esto (el nombre y la especie) = renombrar
 bool kbOpen = false;          // teclado para renombrar al bicho
 char nameBuf[12] = "";
 uint8_t nameLen = 0;
@@ -131,6 +157,15 @@ uint8_t cardPage = 0;         // 0 perfil, 1 combate, 2 medallas, 3 progreso, 4 
 bool bagOpen = false;         // mochila (v1.53): su boton en la fila de abajo, antes la pagina de paseo de la ficha
 uint8_t itemConfirm = 0;      // mochila: objeto a confirmar + 1 (0 = ninguno)
 uint32_t itemConfirmUntil = 0;
+// la tienda de la mochila y el selector de fondos (v2.0, Y4b)
+uint8_t bagTab = 0;           // 0 = Objetos, 1 = Tienda
+uint8_t shopBuyId = 0;        // tienda: objeto a comprar + 1 (0 = ninguno)
+uint32_t shopBuyUntil = 0;
+uint8_t shopToast = 0;        // aviso verde / rojo (SHT_*) y hasta cuando
+uint32_t shopToastUntil = 0;
+uint8_t yardMapPreview = 0;   // selector de fondos abierto en el mapa n (1..YARD_MAPS); solo RAM; 0 = cerrado
+enum : uint8_t { SHT_NONE = 0, SHT_OK, SHT_BROKE, SHT_FULL };
+#define SHOP_TOAST_MS 1500UL
 uint32_t bagReviveHintUntil = 0;  // la pista del Revivir en la mochila (v1.59)
 uint32_t revivedMsgUntil = 0;     // "Revivido!" en el estado tras usar un Revivir (v1.60)
 bool foundShown = false;      // el ultimo frame enseno un hallazgo: un toque lo cierra
@@ -138,28 +173,25 @@ uint32_t cakeHintUntil = 0;
 uint32_t tastesMsgUntil = 0;  // la baya favorita cambio al evolucionar (v1.57): "Sus gustos cambiaron!"   // tocar la tarta sin ninguna (v1.54): la cabecera dice donde se encuentra
 static_assert(S_IT_REVIVE - S_IT_GOLDEN == IT_REVIVE - IT_GOLDEN && IT_REVIVE + 1 == IT_COUNT, "nombres de objeto en el orden de IT_*");
 bool clockOpen = false;       // pantalla de ajuste de hora (deslizar abajo)
+static int barLabelGap();  // (mas abajo, con drawBar; la usan antes la ficha y el patio)
+#define YDEMO_PAGES 3
+bool yardDemoOpen = false;    // el patio (v2.0, Y0): muestra del kit de interfaz (serie YARDUI)
+uint8_t yardDemoPage = 0;     // 0 panel (tienda), 1 mundo (casa), 2 fase
 int clockH = 12, clockM = 0;  // hora en edicion
 
 // escena de bano: espuma sobre el bicho y limpieza al reventar
 uint32_t bathUntil = 0;
 bool bathPending = false;
 struct { int16_t x, y; uint8_t r, ph; } bubbles[14];
-// menu emergente sobre la fila de botones: comida (COMER), juego/combate (JUGAR) o cuidados
-// (v1.53: dormir y banar, que antes eran dos botones; su hueco es ahora el de la mochila)
-enum : uint8_t { MENU_NONE = 0, MENU_FEED, MENU_PLAY, MENU_CARE };
-uint8_t menuKind = MENU_NONE;
-uint32_t menuUntil = 0;       // se cierra solo a este millis
-// menu de JUGAR: pelota | combate | saco de entrenamiento (v1.34) | carrera | cascada (v1.43),
-// 5 huecos de 66 como los del menu de comida, 330 x 64 (a y 288-352 la pantalla redonda mide
-// ~400 de ancho). Todos los juegos estan aqui; el saco antes salia de la ficha.
-#define PLAY_MENU_SLOTS 5
-#define PLAY_MENU_SLOT 66
-#define PLAY_MENU_W (PLAY_MENU_SLOTS * PLAY_MENU_SLOT)
-#define PLAY_MENU_X (CX - PLAY_MENU_W / 2)
-// menu de cuidados (v1.53): luz (luna, o sol para despertar) | bano, centrado como los otros
-#define CARE_MENU_SLOTS 2
-#define CARE_MENU_W (CARE_MENU_SLOTS * PLAY_MENU_SLOT)
-#define CARE_MENU_X (CX - CARE_MENU_W / 2)
+// paneles Cuidar y Jugar (v2.0, fase Y2; yard_panels.h): sustituyen a los menus emergentes de
+// COMER / JUGAR / CUIDADOS. Son pantallas: no se cierran solos; se sale con volver o con USER
+uint8_t panelKind = PANEL_NONE;
+int8_t panelShakeIdx = -1;     // la tarjeta que tiembla al negarse (como las casillas de las fases)
+uint32_t panelShakeUntil = 0;
+void openCarePanel();
+void openPlayPanel();
+void panelTap(int16_t x, int16_t y);
+void renderPanel();
 
 // minijuego "toques": mantener la pokeball en el aire
 bool gameOpen = false;
@@ -221,7 +253,6 @@ struct DashPal { uint16_t track, outside, edge, mark, rock, log, bush, sled, sle
 // definidas al final; se declaran aqui porque el conversor .ino de PlatformIO no
 // genera prototipos para funciones que devuelven punteros
 const char *eggMsg();
-const char *statusMsg();
 const char *battlePhaseName();  // comando TAP
 
 // las 9 especies con sprite propio en flash (respaldo sin SD): dex -> indice
@@ -236,22 +267,9 @@ int flashIdxForDex(int16_t dex) {
 
 static const uint16_t INK_K = 0x18C4;  // spriteColor('k')
 
-// botones de icono siguiendo el arco inferior de la pantalla redonda
-// (los exteriores van mas altos para no salirse del circulo)
-struct Btn {
-  int16_t cx, cy;
-  const char *const *icon;
-};
-Btn buttons[4] = {
-  { 140, 390, SPR_ICON_FOOD },   // comer
-  { 202, 404, SPR_ICON_PLAY },   // jugar
-  { 264, 404, SPR_ICON_CARE },   // cuidados: dormir y banar (v1.53, eran dos botones)
-  { 326, 390, SPR_ICON_BAG },    // mochila (v1.53)
-};
-#define BTN_CARE 2  // dormido solo funcionan cuidados (para despertarlo) y la mochila (para mirar)
+// indices de los botones del dock del patio para los efectos (fx.h): Comer/Cuidar, Jugar, Mochila
+#define BTN_CARE 2  // Cuidar (el dock lo usa para el temblor del boton)
 #define BTN_BAG 3
-#define BTN_HALF 26  // boton de 52x52
-#define BTN_HIT 36   // radio tactil (un poco mas generoso)
 
 // grietas del huevo (pixeles 'k' sobre el sprite)
 static const uint8_t CRACK1[][2] = { {15,8},{16,9},{15,10} };
@@ -324,7 +342,6 @@ FxWatch fxLevelW, fxBondW, fxMistakeW, fxTrainW[3];
 FxWatch fxPoopW;
 FxZeroWatch fxNeedW[4];
 FxGate fxBondGate;
-FxTween fxBar[4];                 // barras de necesidades que se deslizan
 bool fxWasEgg = false;            // para ver la eclosion
 const FxEvent *fxBan = nullptr;   // celebracion en pantalla este frame (la fija fxFrame)
 int16_t fxGain[3] = { 0, 0, 0 };  // ATK/DEF/VEL que gano la subida que se ve
@@ -403,6 +420,7 @@ void setup() {
   // de arranque, pero solo cuenta al encender: despues es una entrada normal
   pinMode(BOARD_BTN_BOOT, INPUT);
 
+  pet.timedEggs = true;  // Y3: los huevos se ponen en el patio y eclosionan a las 4 h
   pet.begin();
   sdBegin();
   thumbs.load();
@@ -449,9 +467,6 @@ void ensureMon() {
   monShinyFor = pet.shiny;
   mon.unload();
   pmd.unload();
-  beh.x = beh.targetX = 233;
-  beh.mode = 0;
-  beh.until = 0;
   if (pet.speciesId >= 1 && pet.speciesId <= DEX_COUNT) {
     pmd.load(pet.speciesId, pet.shiny);          // principal: PMD
     if (!pmd.loaded) mon.load(pet.speciesId, pet.shiny);  // respaldo: B/N
@@ -611,7 +626,7 @@ void onShake() {
   if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen()) return;
   if (galleryOpen || boxOpen || stagesOpen || teamOpen || cardOpen || bagOpen || kbOpen || clockOpen) return;  // el bicho no esta en pantalla
   if (pet.sleeping) pet.wakeGrumpy();
-  else pet.shaken();  // tambien el huevo: se tambalea
+  else if (pet.shaken()) yardEggInfo();  // tambien el huevo: se tambalea (el del patio dice lo que le queda)
 }
 
 // Boca abajo y quieta 3 s (FR-2.2): de noche el bicho se va a dormir; de dia solo
@@ -763,8 +778,19 @@ void handleSerial() {
   if (line.length() == 0) return;
   if (sdSerialCommand(line)) return;
 
-  if (line == "HATCH") {
-    pet.eggTap(); pet.eggTap(); pet.eggTap();
+  if (line == "HATCH") {  // el huevo de casa eclosiona ya (tambien el del patio)
+    pet.hatchNow();
+    Serial.println("DONE");
+  } else if (line == "EGGT" || line.startsWith("EGGT ")) {  // EGGT <min>: el huevo del patio, puesto hace min minutos
+    if (line.length() > 5) {
+      long m = line.substring(5).toInt();
+      pet.dbgEggElapsed((uint32_t)(m < 0 ? 0 : m));
+      yardEggInfo();
+      wakeUI();
+    }
+    Serial.printf("egg yard=%d placed=%lu left=%u saved=%u cracks=%u\n", pet.yardEgg() ? 1 : 0,
+                  (unsigned long)pet.eggPlacedEpoch(), pet.yardEgg() ? pet.eggMinutesLeft() : 0, pet.eggSavedMinutes(),
+                  pet.eggCracks());
     Serial.println("DONE");
   } else if (line.startsWith("SPEC ")) {
     int n = line.substring(5).toInt();
@@ -879,6 +905,11 @@ void handleSerial() {
     wakeUI();
     Serial.printf("biome=%u%s\n", homeBiome(), gBiomeOverride >= 0 ? " (override)" : "");
     Serial.println("DONE");
+  } else if (line.startsWith("YARDBG")) {  // YARDBG <n>: fuerza el mapa n del patio (0 = el elegido, 255 = sin mapa)
+    if (line.length() > 7) yardForceMap((uint8_t)line.substring(7).toInt());
+    wakeUI();
+    yardReport();
+    Serial.println("DONE");
   } else if (line.startsWith("ORBIT")) {  // ORBIT <n>: fija la posicion de la orbita; ORBIT: la del reloj
     gOrbitForce = line.length() > 6 ? (int8_t)(line.substring(6).toInt() % ORBIT_POSITIONS) : -1;
     wakeUI();
@@ -898,6 +929,10 @@ void handleSerial() {
   } else if (line == "PERF") {  // cuanto tarda el paisaje (drawScene) en dibujarse, en us
     Serial.printf("scene=%luus max=%luus biome=%u fx=%luus fxmax=%luus\n", (unsigned long)gSceneUs,
                   (unsigned long)gSceneMaxUs, homeBiome(), (unsigned long)gFxUs, (unsigned long)gFxMaxUs);
+    // el patio: scene = copiar el mapa al lienzo (y re-expandirlo si cambio); pets = bichos, cosas y HUD
+    Serial.printf("yard=%d pets=%luus petsmax=%luus n=%u map=%u\n", yardHomeNow() ? 1 : 0, (unsigned long)gYardPetsUs,
+                  (unsigned long)gYardPetsMaxUs, yardPetsShown(), yardMapNow());
+    gYardPetsMaxUs = 0;
     gSceneMaxUs = 0;
     gFxMaxUs = 0;
     Serial.println("DONE");
@@ -974,6 +1009,12 @@ void handleSerial() {
   } else if (line == "STAGEDAY") {  // los premios del jefe de hoy, otra vez
     pet.clearStageDay();
     Serial.println("DONE");
+  } else if (line == "YARDUI" || line.startsWith("YARDUI ")) {  // YARDUI [pagina]: muestra del kit del patio (v2.0)
+    wakeUI();
+    yardDemoPage = line.length() > 7 ? (uint8_t)(line.substring(7).toInt() % YDEMO_PAGES) : 0;
+    yardDemoOpen = true;
+    Serial.printf("yardui page=%u\n", yardDemoPage);
+    Serial.println("DONE");
   } else if (line == "BADGES" || line.startsWith("BADGES ")) {  // BADGES <mascara>: las insignias (0-255)
     if (line.length() > 7) pet.setBadges((uint8_t)line.substring(7).toInt());
     Serial.printf("badges=%u hoy=%u equipo=%lu,%lu,%lu,%lu\n", pet.badgeMask(), pet.stageRewardMask(),
@@ -985,7 +1026,7 @@ void handleSerial() {
     if (n < 0) n = 0;
     if (n > 255) n = 255;
     wakeUI();
-    menuKind = MENU_NONE;
+    panelKind = PANEL_NONE;
     startGame();
     if (!gameOpen) {
       Serial.println("ball: no puede (huevo, dormido o despedida)");
@@ -1007,7 +1048,7 @@ void handleSerial() {
     if (sec < 0) sec = 0;
     if (sec > 120) sec = 120;
     wakeUI();
-    menuKind = MENU_NONE;
+    panelKind = PANEL_NONE;
     startDash();
     if (!dashOpen) {
       Serial.println("dash: no puede (huevo, dormido, despedida, sin IMU u otro juego abierto)");
@@ -1044,7 +1085,7 @@ void handleSerial() {
     if (sec < 0) sec = 0;
     if (sec > (long)(ZEN_SESSION_MS / 1000) - 1) sec = ZEN_SESSION_MS / 1000 - 1;
     wakeUI();
-    menuKind = MENU_NONE;
+    panelKind = PANEL_NONE;
     startZen();
     if (!zenOpen) {
       Serial.println("zen: no puede (huevo, dormido, despedida u otro juego abierto)");
@@ -1157,6 +1198,37 @@ void handleSerial() {
   } else if (line.startsWith("FACEDOWN")) {  // FACEDOWN: boca abajo; FACEDOWN 0: la levantan
     onFaceDown(!(line.length() > 9 && line.substring(9).toInt() == 0));
     Serial.println("DONE");
+  } else if (line.startsWith("COINS")) {  // COINS [n]: pone las monedas en n (0..9999); sin n, solo las muestra
+    if (line.length() > 6) {
+      long n = line.substring(6).toInt();
+      pet.setCoins((uint16_t)(n < 0 ? 0 : (n > COIN_MAX ? COIN_MAX : n)));
+      wakeUI();
+    }
+    Serial.printf("coins=%u earnedToday=%u/%u owned=0x%X chosen=%u\n", pet.coins, pet.coinsEarnedToday(),
+                  ECO_DAILY_CAP, pet.yardOwned, pet.yardChosen);
+    Serial.println("DONE");
+  } else if (line == "SHOP" || line.startsWith("BUY")) {  // SHOP: la tienda; BUY <idObjeto> / BUYMAP <n>: comprar (pruebas)
+    if (line.startsWith("BUYMAP") && line.length() > 7) {
+      uint8_t n = (uint8_t)line.substring(7).toInt();
+      bool ok = pet.buyMap(n);
+      if (ok) pet.chooseMap(n);
+      Serial.printf("buymap %u -> %s\n", n, ok ? "ok" : "no");
+    } else if (line.startsWith("BUY ")) {
+      uint8_t id = (uint8_t)line.substring(4).toInt();
+      ShopBuy r = shopCheckItem(id, pet.coins, id < IT_COUNT ? pet.items[id] : 0, ITEM_MAX);
+      bool ok = r == SB_OK && pet.buyItem(id);
+      Serial.printf("buy %u -> %s\n", id, ok ? "ok" : r == SB_FULL ? "full" : r == SB_NOT_SOLD ? "not sold" : "no coins");
+    }
+    wakeUI();
+    Serial.printf("coins=%u tab=%u\n", pet.coins, bagTab);
+    for (int k = 0; k < SHOP_ITEMS; k++) {
+      uint8_t id = SHOP_ORDER[k];
+      Serial.printf("  item %u %s price=%u have=%u\n", id, T((StrId)(S_IT_GOLDEN + id)), priceOfItem(id), pet.items[id]);
+    }
+    for (uint8_t n = 1; n <= YARD_MAPS; n++)
+      Serial.printf("  map %u %s price=%u owned=%d chosen=%d wanted=%d%s\n", n, T((StrId)(S_MAP_1 + n - 1)), priceOfMap(n),
+                    pet.ownsMap(n), pet.yardChosen == n, pet.yardMapWanted() == n, n == YARD_MAP_START ? " (start)" : "");
+    Serial.println("DONE");
   } else if (line == "STATS") {
     Serial.printf("spec=%d nv=%u com=%u fel=%u ene=%u lim=%u desc=%u sd=%d mon=%d bat=%d usb=%d rtc=%u\n",
                   pet.speciesId, pet.level(), pet.fullness, pet.joy, pet.energy,
@@ -1173,6 +1245,8 @@ void handleSerial() {
     Serial.printf("ngl=%u dth=%u dying=%d dym=%u degg=%d revive=%u lend=%u\n", pet.neglectMinutes(),
                   pet.deathMinutes(), pet.isDying() ? 1 : 0, pet.dyingMinutes(), pet.deathEggSpecies(),
                   pet.items[IT_REVIVE], pet.lastEnd);
+    Serial.printf("coins=%u earnedToday=%u/%u maps owned=0x%X chosen=%u wanted=%u\n", pet.coins,
+                  pet.coinsEarnedToday(), ECO_DAILY_CAP, pet.yardOwned, pet.yardChosen, pet.yardMapWanted());
     Serial.printf("rec ball=%u bag=%u zen=%u.%u dash=%u\n", pet.gameHi, pet.strHi, pet.zenHi / 10, pet.zenHi % 10, pet.dashHi);
     // crecimiento (v1.35, growth.h): de el sale el nivel; la edad va aparte
     Serial.printf("grow=%lu lv=%u into=%u/%u age=%lu\n", (unsigned long)pet.growMin, pet.level(),
@@ -1197,22 +1271,9 @@ void handleSerial() {
 
 // ---------- entrada tactil ----------
 
-bool inPetZone(int16_t x, int16_t y) {
-  return x > 110 && x < 356 && y > 95 && y < 310;
-}
-
-// cacas (v1.58): se limpian de una en una tocandolas. Cada una se dibuja a escala 2 en
-// (36 + 46 i, 244); la tinta ocupa ~32x40 px alrededor de (70 + 46 i, 282). Devuelve el hueco
-// tocado o -1. Va antes que la zona del bicho, que pisa las de los huecos 1 y 2
-#define POOP_HIT_R 28
-int poopAt(int16_t x, int16_t y) {
-  uint8_t m = pet.poopSlots();
-  for (int i = 0; i < POOP_MAX; i++) {
-    if (!(m & (1 << i))) continue;
-    int dx = x - (70 + 46 * i), dy = y - 282;
-    if (dx * dx + dy * dy <= POOP_HIT_R * POOP_HIT_R) return i;
-  }
-  return -1;
+// pulsacion larga: sobre el bicho de casa y no sobre una caca (el patio: el que pasea, fuera del dock)
+bool holdOnPet(int16_t x, int16_t y) {
+  return yardPetAt(x, y) == 0 && yardPoopAt(x, y) < 0 && yDockHit(x, y) < 0;
 }
 
 // el toque se resuelve al LEVANTAR el dedo para distinguir tap de deslizar
@@ -1316,8 +1377,8 @@ void handleTouch() {
     tXl = x;
     tYl = y;
     // pulsacion larga sin moverse sobre el bicho -> dialogo de soltar
-    if (!holdFired && !swallowGesture && !galleryOpen && !boxOpen && !stagesOpen && !teamOpen && !cardOpen && !bagOpen && !kbOpen && !clockOpen && !menuKind && millis() - tStart > 3000 &&
-        abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && inPetZone(tX0, tY0) && poopAt(tX0, tY0) < 0 &&
+    if (!holdFired && !swallowGesture && !yardDemoOpen && !galleryOpen && !boxOpen && !stagesOpen && !teamOpen && !cardOpen && !bagOpen && !kbOpen && !clockOpen && !panelKind && millis() - tStart > 3000 &&
+        abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && holdOnPet(tX0, tY0) &&
         !pet.isEgg() && !confirmUntil && !pet.busyEnding()) {
       confirmUntil = millis() + 10000;
       holdFired = true;
@@ -1340,15 +1401,15 @@ void openClock();  // prototipo
 
 void onSwipeV(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (gameOpen || galleryOpen || boxOpen || stagesOpen || teamOpen || bagOpen || kbOpen || sackOpen || zenOpen || dashOpen || battleOpen() || pet.busyEnding()) return;
+  if (gameOpen || galleryOpen || boxOpen || stagesOpen || teamOpen || bagOpen || panelKind || kbOpen || sackOpen || zenOpen || dashOpen || battleOpen() || pet.busyEnding()) return;
   if (clockOpen) { clockOpen = false; return; }
   if (cardOpen) {
     if (dir < 0) cardOpen = false;  // arriba cierra la ficha
     return;
   }
   if (dir > 0) {                    // deslizar abajo: ajustar hora
-    if (!confirmUntil && !menuKind) openClock();
-  } else if (!pet.isEgg() && !confirmUntil && !menuKind) {
+    if (!confirmUntil && !panelKind) openClock();
+  } else if (!pet.isEgg() && !confirmUntil && !panelKind) {
     cardOpen = true;                // deslizar arriba: ficha
     cardPage = 0;
   }
@@ -1357,7 +1418,15 @@ void onSwipeV(int dir) {
 // deslizar: dir +1 = hacia la derecha
 void onSwipe(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (gameOpen || sackOpen || zenOpen || dashOpen || bagOpen || kbOpen || clockOpen || battleOpen()) return;
+  if (yardDemoOpen) {  // muestra del kit: pasa de pagina como las flechas
+    yardDemoPage = (uint8_t)((yardDemoPage + YDEMO_PAGES + (dir > 0 ? -1 : 1)) % YDEMO_PAGES);
+    return;
+  }
+  if (bagOpen) {  // v2.0 (Y4b): Objetos <-> Tienda, las paginas de la tienda y los mapas del selector
+    bagSwipe(dir);
+    return;
+  }
+  if (gameOpen || sackOpen || zenOpen || dashOpen || panelKind || kbOpen || clockOpen || battleOpen()) return;
   if (pet.isDying()) return;  // v1.60: el dialogo del Revivir no se esquiva
   if (cardOpen) {  // dentro de la ficha: cambiar entre las CARD_PAGES paginas
     int p = (int)cardPage + (dir > 0 ? -1 : 1);  // izquierda avanza
@@ -1377,7 +1446,7 @@ void onSwipe(int dir) {
   }
   if (!galleryOpen) {
     // con un menu abierto no: la galeria se abria encima del de comida
-    if (!pet.ceremony && !confirmUntil && !menuKind) {
+    if (!pet.ceremony && !confirmUntil && !panelKind) {
       if (dir > 0) {  // a la derecha: la caja (v1.37), desde el bicho o desde el huevo
         if (boxCanOpen()) openBox();
       } else {        // a la izquierda: la Pokedex
@@ -1448,6 +1517,10 @@ void onBack() {
   wakeUI();
   if (pet.awaitingStarter()) return;  // hay que elegir inicial
   if (pet.isDying()) return;          // v1.60: el dialogo del Revivir no se cierra con USER
+  if (yardDemoOpen) {
+    yardDemoOpen = false;
+    return;
+  }
   if (sackOpen) {                     // abandona (sin premio si aun corre el tiempo)
     sackOpen = false;
     return;
@@ -1485,13 +1558,15 @@ void onBack() {
   if (kbOpen) { kbOpen = false; return; }        // descarta el nombre y vuelve a la ficha
   if (clockOpen) { clockOpen = false; return; }  // sin aplicar la hora, como al deslizar
   if (pet.ceremony) return;                      // durante la despedida no hay vuelta atras
+  if (bagOpen && yardMapPreview) { yardMapPreview = 0; return; }  // selector de fondos -> tienda
+  if (bagOpen && shopBuyId) { shopBuyId = 0; return; }             // "comprar?": NO
   if (bagOpen && itemConfirm) { itemConfirm = 0; return; }  // "usar objeto?": NO
-  if (bagOpen) { bagOpen = false; return; }
+  if (bagOpen) { closeBag(); return; }
   if (cardOpen) { cardOpen = false; return; }
   if (gameOpen) { gameOpen = false; return; }    // abandona sin premio, como tocar la cabecera
   if (choiceKind) { choiceKind = 0; return; }    // ni evoluciona ni rechaza: el boton sigue ahi
   if (confirmUntil) { confirmUntil = 0; return; }  // "soltar?": NO
-  if (menuKind) { menuKind = MENU_NONE; return; }
+  if (panelKind) { panelKind = PANEL_NONE; return; }  // panel Cuidar / Jugar: a casa
   if (foundShown) { pet.popFound(); foundShown = false; return; }  // cierra el hallazgo
 }
 
@@ -1506,6 +1581,10 @@ void onTap(int16_t x, int16_t y) {
         break;
       }
     }
+    return;
+  }
+  if (yardDemoOpen) {
+    yardDemoTap(x, y);
     return;
   }
   if (galleryOpen) {
@@ -1536,13 +1615,17 @@ void onTap(int16_t x, int16_t y) {
     bagTap(x, y);
     return;
   }
+  if (panelKind) {  // paneles Cuidar / Jugar (v2.0, Y2)
+    panelTap(x, y);
+    return;
+  }
   if (pet.ceremony) return;  // durante la despedida no hay botones
   if (pet.isDying()) {       // v1.60: solo cuenta el dialogo del Revivir
     dyingTap(x, y);
     return;
   }
   if (cardOpen) {
-    if (cardPage == 0 && y < 84) openKeyboard();  // tocar el nombre = renombrar
+    if (cardPage == 0 && y < CARD_NAME_TAP_Y) openKeyboard();  // tocar el nombre = renombrar
     else cardOpen = false;
     return;
   }
@@ -1577,59 +1660,6 @@ void onTap(int16_t x, int16_t y) {
     confirmUntil = 0;
     return;
   }
-  if (menuKind) {            // menu de comida o de juego: un toque elige o lo cierra
-    uint8_t kind = menuKind;
-    bool live = timeLeft(menuUntil);
-    menuKind = MENU_NONE;
-    if (!live || y < 288 || y > 352) return;
-    if (kind == MENU_FEED && x >= 101 && x < 365) {  // (x = 365 daba el objeto 4)
-      int item = (x - 101) / 66;
-      FxNeedSnap ns = fxSnap();
-      if (item == 3) {  // la tarta (v1.54): limitada; sin ninguna, tiembla COMER
-        if (!pet.eatCake()) {
-          sfxPlay(SFX_DENY);
-          fxo.push(FXO_DENY, 0, 0, millis());
-          if (!pet.items[IT_CAKE]) cakeHintUntil = millis() + 2500;  // (con tartas: dormido, o en una ceremonia)
-          return;
-        }
-      } else {
-        pet.feedBerry(item);
-      }
-      fxNeeds(ns);  // "+25" sobre la barra de comida
-      sfxPlay(SFX_EAT);
-    } else if (kind == MENU_PLAY && x >= PLAY_MENU_X && x < PLAY_MENU_X + PLAY_MENU_W) {
-      sfxPlay(SFX_TAP);
-      int slot = (x - PLAY_MENU_X) / PLAY_MENU_SLOT;  // pelota | combate | saco | carrera | cascada
-      if (slot == 0) startGame();
-      else if (slot == 2) startSack();
-      else if (slot == 3) {  // carrera: sin IMU no se puede inclinar
-        if (imuPresent() && !pet.isEgg() && !pet.sleeping && !pet.ceremony) startDash();
-        else {
-          sfxPlay(SFX_DENY);
-          fxo.push(FXO_DENY, 1, 0, millis());
-        }
-      }
-      else if (slot == 4) startZen();
-      else if (stagesCanOpen()) openStages();  // v1.65: las fases (antes un combate suelto)
-      else {
-        sfxPlay(SFX_DENY);
-        fxo.push(FXO_DENY, 1, 0, millis());  // tiembla JUGAR, debajo del menu ya cerrado
-      }
-    } else if (kind == MENU_CARE && x >= CARE_MENU_X && x < CARE_MENU_X + CARE_MENU_W) {
-      int slot = (x - CARE_MENU_X) / PLAY_MENU_SLOT;  // luz | bano
-      if (slot == 0) {
-        sfxPlay(SFX_TAP);
-        pet.toggleLight();
-      } else if (pet.sleeping || bathUntil) {  // dormido no se bana, y el bano no se repite a medias
-        sfxPlay(SFX_DENY);
-        fxo.push(FXO_DENY, BTN_CARE, 0, millis());
-      } else {
-        sfxPlay(SFX_TAP);
-        startBath();
-      }
-    }
-    return;
-  }
   if (foundShown) {          // hallazgo del paseo en pantalla: un toque lo cierra
     pet.popFound();
     foundShown = false;
@@ -1647,9 +1677,8 @@ void onTap(int16_t x, int16_t y) {
     sfxPlay(SFX_DENY);  // nada mas que tocar: el mensaje dice que hay que caminar
     return;
   }
-  if (pet.isEgg()) {
-    pet.eggTap();
-    sfxPlay(SFX_TAP);
+  if (pet.isEgg()) {  // el huevo en el patio (Y3): el dock, el huevo y el de la caja
+    yardTap(x, y);
     return;
   }
   // boton de evolucion: abre el dialogo evolucionar/mantener
@@ -1663,57 +1692,8 @@ void onTap(int16_t x, int16_t y) {
       y >= FAR_BTN_Y && y <= FAR_BTN_Y + FAR_BTN_H) {
     if (pet.wantFarewellButton()) { choiceKind = 2; choiceUntil = millis() + 12000; return; }
   }
-  for (int i = 0; i < 4; i++) {
-    int dx = x - buttons[i].cx, dy = y - buttons[i].cy;
-    if (dx * dx + dy * dy <= BTN_HIT * BTN_HIT) {
-      Serial.printf("BTN %d\n", i);
-      fxo.push(FXO_PRESS, i, 0, millis());
-      // dormido solo funcionan cuidados (despertarlo) y la mochila (mirar): el boton tiembla (fx.h)
-      // ...y jugar si hay bichos en la caja: ellos si pueden ir a las fases (v1.65)
-      if (pet.sleeping && i != BTN_CARE && i != BTN_BAG && !(i == 1 && pet.boxHasPets())) {
-        sfxPlay(SFX_DENY);
-        fxo.push(FXO_DENY, i, 0, millis());
-        return;
-      }
-      sfxPlay(SFX_TAP);
-      if (i == 0) {
-        if (!pet.sleeping) { menuKind = MENU_FEED; menuUntil = millis() + 6000; }
-      } else if (i == 1) {     // jugar: pelota o combate de practica
-        if (!pet.isEgg() && !pet.sleeping && !pet.ceremony) { menuKind = MENU_PLAY; menuUntil = millis() + 6000; }
-        // huevo, dormido o casa vacia: no hay juegos, pero los de la caja si pueden ir a las fases
-        else if (!pet.ceremony && pet.boxHasPets()) openStages();
-      } else if (i == BTN_CARE) {  // dormir / despertar y banar (v1.53)
-        if (!pet.ceremony) { menuKind = MENU_CARE; menuUntil = millis() + 6000; }
-      } else {
-        openBag();
-      }
-      return;
-    }
-  }
-  int pp = poopAt(x, y);  // una caca (v1.58): fuera con un toque
-  if (pp >= 0) {
-    FxNeedSnap ns = fxSnap();
-    if (pet.cleanPoop(pp)) {
-      Serial.printf("POOP clean %d\n", pp);
-      sfxPlay(SFX_TAP);
-      fxNeeds(ns);  // "+10" de higiene
-      poopPuffSlot = pp;
-      poopPuffUntil = millis() + POOP_PUFF_MS;
-    } else {
-      sfxPlay(SFX_DENY);
-    }
-    return;
-  }
-  if (inGiftZone(x, y)) {  // un regalo envuelto (v1.55)
-    openGiftTap();
-    return;
-  }
-  // tocar al bicho = caricia
-  if (inPetZone(x, y)) {
-    Serial.println("PET");
-    pet.caress();
-    if (!pet.sleeping) sfxPlay(SFX_HEART);
-  }
+  // el patio: el dock, las cacas, los regalos y los bichos
+  yardTap(x, y);
 }
 
 // ---------- render ----------
@@ -1857,17 +1837,6 @@ static void drawMeadow(uint32_t now, bool night, uint16_t soil, uint16_t dk) {
     gfx->fillRect(hx - 1, hy - 1, 2, 2, night ? C565(0x80, 0x70, 0x30) : C565(0xe8, 0xa2, 0x3c));
   }
   for (auto &t : meadowMid) drawTuft(t.x, t.y, t.h, now, mid, light);
-}
-
-// las matas de delante, encima del bicho (render() la llama tras dibujarlo y antes del panel)
-void drawSceneFront(uint8_t biome, uint32_t now, bool night) {
-  if (biome != 0) return;
-  meadowInit();
-  uint16_t soil = BIOME_SOIL[0];
-  if (night) soil = lerp565(soil, C565(0x16, 0x1c, 0x30), 9, 16);
-  uint16_t dk = lerp565(soil, C565(0x10, 0x18, 0x20), night ? 11 : 7, 16);
-  uint16_t front = lerp565(soil, dk, 13, 16), frontL = lerp565(soil, dk, 9, 16);
-  for (auto &t : meadowFront) drawTuft(t.x, t.y, t.h, now, front, frontL);
 }
 
 // ---------- central electrica (bioma 6, v1.27) ----------
@@ -2275,12 +2244,14 @@ void printT(const char *s) {
 
 // Pantallas que solo cambian con un toque (o con un dato que cambia muy de vez en cuando):
 // mientras su "clave" no cambie no se repintan ni se vuelcan por QSPI.
+void mixPanelKey(uint32_t &h);
 static bool staticScreen() {
   if (pet.awaitingStarter()) return true;
   if (galleryOpen || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen()) return false;  // la galeria gestiona su propio repintado
   if (stagesOpen || teamOpen) return !timeLeft(stShakeUntil);  // menus quietos, salvo la casilla que tiembla
+  if (panelKind) return !timeLeft(panelShakeUntil);  // paneles Cuidar / Jugar (v2.0, Y2): quietos salvo una tarjeta que tiembla
   if (boxOpen) return !boxMove && !timeLeft(boxShakeUntil);  // la caja, quieta salvo la luz o un hueco que tiembla
-  if (kbOpen || clockOpen || bagOpen) return true;
+  if (yardDemoOpen || kbOpen || clockOpen || bagOpen) return true;
   return cardOpen && cardPage != 0;  // la pagina 0 tiene el retrato animado
 }
 uint32_t walkStepsToday();
@@ -2292,8 +2263,12 @@ static uint32_t screenKey() {
   h = mixKey(h, gBright);                      // el aviso de brillo va encima de todo
   h = mixKey(h, timeLeft(briToastUntil) > 0);  // y al irse tiene que repintarse
   h = mixKey(h, gOrbitStep);                   // la orbita la mueve: hay que volver a mandarla
+  h = mixKey(h, yardDemoOpen ? 100u + yardDemoPage : 0u);
+  h = mixKey(h, gLang);
   if (stagesOpen || teamOpen) {
     mixStageKey(h);
+  } else if (panelKind) {
+    mixPanelKey(h);
   } else if (boxOpen) {
     h = mixKey(h, boxPage);
     h = mixKey(h, pet.badgeMask());
@@ -2309,7 +2284,11 @@ static uint32_t screenKey() {
   } else if (bagOpen) {
     for (uint8_t n : pet.items) h = mixKey(h, n);
     for (uint32_t v : { (uint32_t)pet.eggsOwned(), (uint32_t)itemConfirm, (uint32_t)pet.sleeping, (uint32_t)gLang,
-                        (uint32_t)(timeLeft(bagReviveHintUntil) > 0) })
+                        (uint32_t)(timeLeft(bagReviveHintUntil) > 0),
+                        // v2.0 (Y4b): pestana, tienda, aviso, selector de fondos y lo que lo cambia
+                        (uint32_t)bagTab, (uint32_t)shopBuyId, (uint32_t)shopToast, (uint32_t)yardMapPreview,
+                        (uint32_t)pet.coins, (uint32_t)pet.yardOwned, (uint32_t)pet.yardChosen,
+                        (uint32_t)pet.yardMapWanted(), (uint32_t)(yardMapPreview ? sceneHour() : 0) })
       h = mixKey(h, v);
   } else if (kbOpen) {
     h = mixKey(h, nameLen);
@@ -2342,6 +2321,8 @@ uint32_t lastScreenKey = 0;
 // Dibuja un frame y devuelve true si lo ha volcado al panel.
 bool render() {
   if (itemConfirm && !timeLeft(itemConfirmUntil)) itemConfirm = 0;  // antes de la clave: asi se repinta
+  if (shopBuyId && !timeLeft(shopBuyUntil)) shopBuyId = 0;          // (lo mismo, "comprar?" y el aviso de la tienda)
+  if (shopToast && !timeLeft(shopToastUntil)) shopToast = 0;
   if (boxAsk && !timeLeft(boxAskUntil)) boxAsk = 0;                  // (lo mismo, el dialogo de la caja)
   foundShown = false;  // lo vuelve a poner drawWalkNews() si el hallazgo sigue en pantalla
   if (saverOn()) {  // 2 min sin tocar: salvapantallas, encima de cualquier pantalla
@@ -2359,6 +2340,10 @@ bool render() {
   }
   if (pet.awaitingStarter()) {  // primera partida: elegir inicial (prioridad total)
     renderStarterSelect();
+    return true;
+  }
+  if (yardDemoOpen) {  // muestra del kit del patio (serie YARDUI)
+    renderYardDemo();
     return true;
   }
   if (galleryOpen) {
@@ -2416,12 +2401,26 @@ bool render() {
     renderBag();
     return true;
   }
+  if (panelKind && (pet.ceremony || pet.isDying())) panelKind = PANEL_NONE;  // la despedida o el Revivir se ven en casa
+  if (panelKind) {  // paneles Cuidar / Jugar (v2.0, Y2)
+    renderPanel();
+    return true;
+  }
   int h = sceneHour();
   gNight = pet.sleeping || h < 6 || h >= 20;
+  // el patio (v2.0): la casa con un bicho o un huevo (Y3) es el mapa; la casa vacia, la despedida y el
+  // Revivir tienen su propia pantalla sobre el paisaje de lado
+  bool yard = yardHomeNow();
+  if (!yard) yardW.p[0].on = yardW.p[1].on = false;
   // drawScene cubre los 466x466 completos: sin fillScreen(NEGRO) previo para
   // que un flush DMA solapado nunca capture negro a medias (anti-parpadeo)
   uint32_t sceneT0 = micros();
-  drawScene(homeBiome(), millis(), gNight);
+  if (yard) {
+    yardDrawBg();  // el mapa ya expandido (en PSRAM), copiado al lienzo
+  } else {
+    drawScene(homeBiome(), millis(), gNight);
+    hatchAt(CX, PET_CY, 5);  // la eclosion, en el centro (el patio pone la suya)
+  }
   perfNote(micros() - sceneT0);
 
   if (pet.ceremony) {
@@ -2446,61 +2445,24 @@ bool render() {
   fxFrame(millis());
   uint32_t fxUs = micros() - fxT0;
 
-  if (pet.isVacant()) {
-    drawVacantHome();
-  } else if (pet.isEgg()) {
-    drawHeader(T(S_EGG_HDR), inkColor(), eggMsg());
-    int dx = 0;
-    if (pet.emote() == EMOTE_WOBBLE)  // agitado: se tambalea y se va calmando
-      dx = (int)(8.0f * (1.0f - pet.emoteT()) * sinf(millis() * 0.035f));
-    drawEggSprite(dx, pet.eggCracks());
-    drawBoxAppear(millis());  // guardado: el huevo sale de una luz
-    if (pet.eggRarity() >= R_RARO) {
-      const char *rar = (pet.eggRarity() == R_LEGENDARIO) ? T(S_EGG_LEGEND) : T(S_EGG_RARE);
-      gfx->setTextColor(pet.eggRarity() == R_LEGENDARIO ? UI_BAR_WARN : 0x4C98);
-      setSize(2);
-      setCur(centerX(rar, 2), 316);
-      printT(rar);
-    }
-    char reg[24];
-    snprintf(reg, sizeof(reg), T(S_POKEDEX_FMT), pet.registeredCount());
-    gfx->fillRect(0, 312, 466, 154, gNight ? UI_BG_NIGHT : UI_BG_DAY);
-    gfx->setTextColor(inkColor());
-    setSize(2);
-    setCur(centerX(reg, 2), 348);
-    printT(reg);
-  } else {
-    const DexEntry &d = DEX_TBL[pet.speciesId];
-    char name[28];
-    const char *base = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
-    snprintf(name, sizeof(name), T(S_NAME_FMT), pet.shiny ? "*" : "", base, pet.level());
-    uint16_t nameCol = gNight ? UI_INK_NIGHT : d.accent;
-    if (fxBan && fxBan->kind == FXB_LEVELUP) {  // subida de nivel: el nivel de la cabecera parpadea
-      uint32_t e = fxq.elapsed(millis());
-      if (e < 1200 && (e / 150) % 2 == 0) nameCol = UI_BAR_WARN;
-    }
-    if (fxHatchHidesPet(millis())) drawHeader(T(S_EGG_HDR), inkColor(), T(S_EGG_ALMOST));  // aun se rompe el huevo
-    else drawHeader(name, nameCol, statusMsg());  // con la racha
-    drawPet();
-    drawSceneFront(homeBiome(), millis(), gNight);  // hierba delante de los pies
-    drawBath();
-    drawPoops();
-    drawGifts();  // regalos sin abrir (v1.55)
-    drawBoxAppear(millis());  // recien guardado o despertado (caja): sale de una luz
-    // panel inferior: base limpia para barras y botones sobre el paisaje
-    gfx->fillRect(0, 312, 466, 154, gNight ? UI_BG_NIGHT : UI_BG_DAY);
-    drawBars();
-    drawButtons();
+  if (yard) {
+    uint32_t yT0 = micros();
+    renderYardHome(millis());  // los bichos, la caca, los regalos, el globo, la hora, la bateria y el dock
     fxT0 = micros();
-    drawFxOverlays(millis());  // "+N", corazon de vinculo, entrenamiento, "!", aro de la eclosion
-    fxUs += micros() - fxT0;
+    drawFxOverlays(millis());
+    uint32_t ov = micros() - fxT0;
+    fxUs += ov;
     if (!fxBan) {  // con una celebracion encima, los botones grandes esperan a que acabe
-      if (pet.wantEvolveButton()) drawEvolveButton();        // CTA rojo: evolucionar
-      else if (pet.wantFarewellButton()) drawFarewellButton();  // CTA dorado: despedida
+      if (pet.wantEvolveButton()) drawEvolveButton();
+      else if (pet.wantFarewellButton()) drawFarewellButton();
     }
+    gYardPetsUs = micros() - yT0 - ov;
+    if (gYardPetsUs > gYardPetsMaxUs) gYardPetsMaxUs = gYardPetsUs;
+  } else {  // la casa vacia (la despedida y el Revivir ya salieron arriba)
+    drawVacantHome();
   }
 
-  if (pet.sleeping) {
+  if (pet.sleeping && !yard) {  // (el patio lo dice en el globo)
     gfx->setTextColor(UI_INK_NIGHT);
     setSize(3);
     setCur(320, 130);
@@ -2514,60 +2476,6 @@ bool render() {
   drawFxBanner(millis());  // celebracion en curso (fx.h): subida, medalla, hito o meta
   fxPerfNote(fxUs + (micros() - fxT0));
   drawWalkNews();
-
-  // menus emergentes: comida (4 opciones), juego (pelota | combate | saco | carrera | cascada) o
-  // cuidados (luz | bano)
-  if (menuKind && !timeLeft(menuUntil)) menuKind = MENU_NONE;
-  if (menuKind == MENU_PLAY) {
-    gfx->fillRoundRect(PLAY_MENU_X, 288, PLAY_MENU_W, 64, 14, UI_WHITE);
-    gfx->drawRoundRect(PLAY_MENU_X, 288, PLAY_MENU_W, 64, 14, inkColor());
-    drawMap(SPR_ICON_PLAY, 16, PLAY_MENU_X + 9, 296, 3, false);
-    drawMap(SPR_ICON_BATTLE, 16, PLAY_MENU_X + PLAY_MENU_SLOT + 9, 296, 3, false);
-    drawMap(SPR_ICON_SACK, 16, PLAY_MENU_X + 2 * PLAY_MENU_SLOT + 9, 296, 3, false);
-    if (imuPresent()) drawMap(SPR_ICON_DASH, 16, PLAY_MENU_X + 3 * PLAY_MENU_SLOT + 9, 296, 3, false);
-    else drawMapTint(SPR_ICON_DASH, 16, PLAY_MENU_X + 3 * PLAY_MENU_SLOT + 9, 296, 3, UI_TRACK);  // sin IMU: en gris
-    drawMap(SPR_ICON_ZEN, 16, PLAY_MENU_X + 4 * PLAY_MENU_SLOT + 9, 296, 3, false);
-  }
-  if (menuKind == MENU_CARE) {
-    gfx->fillRoundRect(CARE_MENU_X, 288, CARE_MENU_W, 64, 14, UI_WHITE);
-    gfx->drawRoundRect(CARE_MENU_X, 288, CARE_MENU_W, 64, 14, inkColor());
-    // dormido: el sol lo despierta, y el bano espera (en gris)
-    drawMap(pet.sleeping ? SPR_ICON_SUN : SPR_ICON_LIGHT, 16, CARE_MENU_X + 9, 296, 3, false);
-    if (pet.sleeping || bathUntil) drawMapTint(SPR_ICON_CLEAN, 16, CARE_MENU_X + PLAY_MENU_SLOT + 9, 296, 3, UI_TRACK);
-    else drawMap(SPR_ICON_CLEAN, 16, CARE_MENU_X + PLAY_MENU_SLOT + 9, 296, 3, false);
-  }
-  if (menuKind == MENU_FEED) {
-    {
-      gfx->fillRoundRect(101, 288, 264, 64, 14, UI_WHITE);
-      gfx->drawRoundRect(101, 288, 264, 64, 14, inkColor());
-      drawMap(SPR_ICON_FOOD, 16, 110, 296, 3, false);
-      drawMap(SPR_ICON_BERRY_B, 16, 176, 296, 3, false);
-      drawMap(SPR_ICON_BERRY_G, 16, 242, 296, 3, false);
-      // la favorita, ya descubierta (v1.57): una estrella en su esquina, para no tener que recordarla
-      // con un marco dorado alrededor, que a 16 px la estrella sola apenas se ve en la placa
-      if (pet.berryKnown)
-        for (uint8_t c = 0; c < 3; c++)
-          if (pet.lovesBerry(c)) {
-            int fx = 110 + 66 * c;
-            gfx->drawRoundRect(fx - 5, 292, 58, 56, 10, UI_BAR_WARN);
-            gfx->drawRoundRect(fx - 4, 293, 56, 54, 9, UI_BAR_WARN);
-            drawMap(SPR_STAR, 16, fx + 38, 286, 1, false);
-          }
-      // la tarta (v1.54), con cuantas quedan; sin ninguna, en gris
-      uint8_t cakes = pet.items[IT_CAKE];
-      if (cakes) drawMap(SPR_ICON_CAKE, 16, 308, 296, 3, false);
-      else drawMapTint(SPR_ICON_CAKE, 16, 308, 296, 3, UI_TRACK);
-      if (cakes) {  // cuantas quedan, en una chapa en la esquina (como un aviso)
-        char cn[4];
-        snprintf(cn, sizeof(cn), "%u", cakes);
-        gfx->fillCircle(354, 300, 10, UI_BAR_BAD);
-        setSize(2);
-        gfx->setTextColor(UI_WHITE);
-        setCur(354 - textW(cn, 2) / 2 + 1, 293);
-        printT(cn);
-      }
-    }
-  }
 
   // dialogo "soltar?" (pulsacion larga sobre el bicho)
   if (confirmUntil) {
@@ -2667,10 +2575,12 @@ void stepGame() {
     if (++gameMisses >= 3) {
       if (gameNoSave) {  // partida del comando BALL: ni record ni premio
         gameNewHi = false;
+        pet.lastCoins = 0;
         sfxPlay(SFX_LEVEL);
       } else {
         gameNewHi = (gameScore > pet.gameHi);
         FxNeedSnap ns = fxSnap();
+        pet.lastCoins = 0;
         pet.playResult(gameScore);  // actualiza el record y da felicidad
         fxNeeds(ns);  // los "+N" salen al volver a la pantalla principal
         sfxPlay(gameNewHi && gameScore > 0 ? SFX_MEDAL : SFX_LEVEL);
@@ -2706,6 +2616,7 @@ void sackTap() {
 }
 
 void drawGameScene();  // prototipo (definida mas abajo)
+void drawCoinGain(int y, uint16_t n, uint16_t col);  // moneda + "+N" centrados (patio, Y4)
 
 void renderSack() {
   uint32_t now = millis();
@@ -2741,6 +2652,7 @@ void renderSack() {
       setCur(centerX(r, 2), 256);
       printT(r);
     }
+    drawCoinGain(292, pet.lastCoins, ink);
     gfx->flush();
     return;
   }
@@ -2748,6 +2660,7 @@ void renderSack() {
   // se acabaron los 10 s: aplicar entrenamiento
   if (!timeLeft(sackUntil)) {
     sackNewHi = (sackHits > pet.strHi);
+    pet.lastCoins = 0;  // trainStrength lo pone si paga (un huevo o un final no)
     FxNeedSnap ns = fxSnap();
     sackGain = pet.trainStrength(sackHits);
     fxNeeds(ns);
@@ -2841,10 +2754,12 @@ void finishZen(uint32_t now) {
   if (zenNoSave) {
     zenNewHi = false;
     zenGainShown = zenTotalGain(focus, drift);  // lo que daria, para verlo; no se aplica
+    pet.lastCoins = 0;
     sfxPlay(SFX_LEVEL);
   } else {
     zenNewHi = focus > pet.zenHi;
     FxNeedSnap ns = fxSnap();
+    pet.lastCoins = 0;
     zenGainShown = pet.zenResult(focus, drift);  // DEF (con la bonificacion), lavado, record
     fxNeeds(ns);  // los "+N" salen al volver a la pantalla principal
     sfxPlay(zenNewHi && focus > 0 ? SFX_MEDAL : SFX_PLAY);
@@ -3033,8 +2948,9 @@ void renderZen() {
       setCur(centerX(r, 2), 232);
       printT(r);
     }
+    drawCoinGain(284, pet.lastCoins, UI_INK);
     gfx->setTextColor(UI_BAR_OK);
-    setCur(centerX(T(S_CLEAN), 2), 268);
+    setCur(centerX(T(S_CLEAN), 2), 258);
     printT(T(S_CLEAN));
     gfx->flush();
     return;
@@ -3146,10 +3062,12 @@ void finishDash(uint32_t now) {
   if (dashNoSave) {
     dashNewHi = false;
     dashGainShown = dashGain(dash.dodged);  // lo que daria, para verlo; no se aplica
+    pet.lastCoins = 0;
     sfxPlay(SFX_LEVEL);
   } else {
     dashNewHi = dash.dodged > pet.dashHi;
     FxNeedSnap ns = fxSnap();
+    pet.lastCoins = 0;
     dashGainShown = pet.dashResult(dash.dodged);
     fxNeeds(ns);
     sfxPlay(dashNewHi && dash.dodged > 0 ? SFX_MEDAL : SFX_PLAY);
@@ -3423,6 +3341,7 @@ void renderDash() {
       setCur(centerX(r, 2), 342);
       printT(r);
     }
+    drawCoinGain(364, pet.lastCoins, UI_INK);
     gfx->flush();
     return;
   }
@@ -3537,6 +3456,7 @@ void renderGame() {
     gfx->setTextColor(ink);
     setCur(centerX(msg, 2), 250);
     printT(msg);
+    drawCoinGain(286, pet.lastCoins, ink);
     gfx->flush();
     return;
   }
@@ -3616,7 +3536,7 @@ static int statBarX() {
 }
 
 void drawCardStat(int y, const char *label, uint16_t val, uint16_t maxBar, uint16_t color) {
-  gfx->setTextColor(UI_INK);
+  gfx->setTextColor(Y_TEXT);  // panel del patio (Y1): texto blanco, barra sobre pista oscura
   setSize(2);
   setCur(96, y);
   printT(label);
@@ -3628,7 +3548,7 @@ void drawCardStat(int y, const char *label, uint16_t val, uint16_t maxBar, uint1
   int bw = 310 - bx;   // la barra siempre acaba en 310, dejando aire hasta el numero
   int fw = (int)val * bw / maxBar;
   if (fw > bw) fw = bw;
-  gfx->fillRoundRect(bx, y + 2, bw, 11, 3, UI_TRACK);
+  gfx->fillRoundRect(bx, y + 2, bw, 11, 3, Y_CARD_HI);
   if (fw > 2) gfx->fillRoundRect(bx, y + 2, fw, 11, 3, color);
 }
 
@@ -3641,12 +3561,12 @@ void drawCardTrain(int y, uint8_t tr, uint16_t color) {
   int bw = 310 - bx;
   int fw = (int)tr * bw / 100;
   if (fw > bw) fw = bw;
-  gfx->fillRoundRect(bx, y + 24, bw, 6, 2, UI_TRACK);
+  gfx->fillRoundRect(bx, y + 24, bw, 6, 2, Y_CARD_HI);
   if (fw > 2) gfx->fillRoundRect(bx, y + 24, fw, 6, 2, color);
   char num[8];
   if (tr >= 100) snprintf(num, sizeof(num), "MAX");
   else snprintf(num, sizeof(num), "%u", tr);
-  gfx->setTextColor(tr >= 100 ? color : 0x8410);  // gris medio: UI_TRACK casi no se lee
+  gfx->setTextColor(tr >= 100 ? color : Y_TEXT_DIM);
   setSize(2);
   setCur(330, y + 20);
   printT(num);
@@ -3671,20 +3591,45 @@ void applyClock() {
   clockOpen = false;
 }
 
-void drawClockBtn(int x, int y, const char *l) {
-  gfx->fillRoundRect(x, y, 58, 58, 12, UI_WHITE);
-  gfx->drawRoundRect(x, y, 58, 58, 12, UI_INK);
-  gfx->setTextColor(UI_INK);
-  setSize(4);
-  setCur(x + 17, y + 15);
-  printT(l);
+// Panel de ajustes (v2.0, Y1): disco oscuro del patio. Arriba el titulo; una tarjeta con la hora y
+// sus cuatro botones -/+; debajo la fila de pildoras (volumen, brillo, idioma), el OK verde, la
+// version y el boton redondo de volver (= tecla USER y deslizar arriba: cancela sin aplicar).
+#define CLK_CARD_X 88
+#define CLK_CARD_Y 80
+#define CLK_CARD_W 290
+#define CLK_CARD_H 156
+#define CLK_TIME_Y 92     // la hora, a tamano 7
+#define CLK_BTN_Y 150     // botones -/+ de 52x52 (se tocan 56x56)
+#define CLK_BTN_S 52
+#define CLK_BTN_GAP 6
+#define CLK_LBL_Y 210     // "HORA" / "MIN" bajo cada pareja
+#define CLK_PAIR_DX 63    // centro de cada pareja: CX -/+ 63, bajo las horas y bajo los minutos
+#define CLK_OK_X 133
+#define CLK_OK_Y 310
+#define CLK_OK_W 200
+#define CLK_OK_H 48
+#define CLK_VER_Y 374
+
+// x del boton i (0 hora-, 1 hora+, 2 min-, 3 min+)
+static int clkBtnX(int i) {
+  int pc = CX + (i < 2 ? -CLK_PAIR_DX : CLK_PAIR_DX);
+  return (i % 2 == 0) ? pc - CLK_BTN_GAP / 2 - CLK_BTN_S : pc + CLK_BTN_GAP / 2;
 }
 
-// pildoras de idioma centradas en y; rellena la activa
-#define LANG_PILL_Y 296
-#define LANG_PILL_H 30
+// boton -/+ dibujado con barras (sin depender de la fuente)
+void drawClockBtn(int x, int y, bool plus) {
+  gfx->fillRoundRect(x, y, CLK_BTN_S, CLK_BTN_S, Y_CARD_RAD, Y_CARD_HI);
+  int cx = x + CLK_BTN_S / 2, cy = y + CLK_BTN_S / 2;
+  gfx->fillRect(cx - 10, cy - 2, 20, 4, Y_TEXT);
+  if (plus) gfx->fillRect(cx - 2, cy - 10, 4, 20, Y_TEXT);
+}
+
+// pildoras de volumen, brillo e idioma en una fila; se tocan con 48 px de alto
+#define LANG_PILL_Y 254
+#define LANG_PILL_H 40
 #define LANG_PILL_X 336          // pildora de idioma (cicla LANG_COUNT al tocar)
 #define LANG_PILL_W 96
+#define CLK_PILL_HIT_Y (LANG_PILL_Y - (Y_HIT_MIN - LANG_PILL_H) / 2)
 static const char *const LANG_CODES[LANG_COUNT] = { "ES", "EN", "FR", "DE", "IT", "PT", "JA", "KO" };
 
 // pildora de volumen a la izquierda (v1.50: 4 niveles con el apagado, antes SON ON/OFF) y la de
@@ -3747,82 +3692,78 @@ void drawBrightToast() {
 }
 
 void renderClock() {
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
-  gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(T(S_SET_TIME), 3), 44);
-  printT(T(S_SET_TIME));
+  yPanelBg();
+  yTitle(T(S_SET_TIME), nullptr);
 
+  // tarjeta de la hora: la hora grande, sus -/+ y las etiquetas
+  yCard(CLK_CARD_X, CLK_CARD_Y, CLK_CARD_W, CLK_CARD_H, false);
   char t[8];
   snprintf(t, sizeof(t), "%02d:%02d", clockH, clockM);
+  gfx->setTextColor(Y_TEXT);
   setSize(7);
-  setCur(CX - 105, 108);
+  setCur(centerX(t, 7), CLK_TIME_Y);
   printT(t);
-
-  drawClockBtn(104, 190, "-");  // hora -
-  drawClockBtn(170, 190, "+");  // hora +
-  drawClockBtn(252, 190, "-");  // min -
-  drawClockBtn(318, 190, "+");  // min +
+  for (int i = 0; i < 4; i++) drawClockBtn(clkBtnX(i), CLK_BTN_Y, i % 2 == 1);
+  gfx->setTextColor(Y_TEXT_DIM);
   setSize(2);
-  gfx->setTextColor(UI_TRACK);
-  setCur(120, 256);
+  setCur(CX - CLK_PAIR_DX - textW(T(S_HOUR), 2) / 2, CLK_LBL_Y);
   printT(T(S_HOUR));
-  setCur(276, 256);
+  setCur(CX + CLK_PAIR_DX - textW(T(S_MIN), 2) / 2, CLK_LBL_Y);
   printT(T(S_MIN));
 
+  const int r = LANG_PILL_H / 2, my = LANG_PILL_Y + LANG_PILL_H / 2;
   // volumen: altavoz y una barra por nivel; cicla al tocar (alto -> apagado)
   uint8_t vol = audioLevel();
-  gfx->fillRoundRect(SND_PILL_X, LANG_PILL_Y, SND_PILL_W, LANG_PILL_H, 8, UI_WHITE);
-  gfx->drawRoundRect(SND_PILL_X, LANG_PILL_Y, SND_PILL_W, LANG_PILL_H, 8, UI_INK);
-  drawSpeakerIcon(SND_PILL_X + 22, LANG_PILL_Y + LANG_PILL_H / 2, vol ? UI_INK : 0x9492, vol == 0);
-  drawVolBars(SND_PILL_X + 58, LANG_PILL_Y + LANG_PILL_H / 2 + 9, vol, UI_BAR_OK, 0x9492);
+  gfx->fillRoundRect(SND_PILL_X, LANG_PILL_Y, SND_PILL_W, LANG_PILL_H, r, Y_CARD);
+  drawSpeakerIcon(SND_PILL_X + 22, my, vol ? Y_TEXT : Y_TEXT_DIM, vol == 0);
+  drawVolBars(SND_PILL_X + 58, my + 9, vol, Y_ACCENT_GO, Y_TEXT_DIM);
 
   // brillo: sol y un punto por nivel; cicla al tocar, como la tecla BOOT
-  gfx->fillRoundRect(BRI_PILL_X, LANG_PILL_Y, BRI_PILL_W, LANG_PILL_H, 8, UI_WHITE);
-  gfx->drawRoundRect(BRI_PILL_X, LANG_PILL_Y, BRI_PILL_W, LANG_PILL_H, 8, UI_INK);
-  drawSunIcon(BRI_PILL_X + 20, LANG_PILL_Y + LANG_PILL_H / 2, 5, UI_BAR_WARN);
-  drawBrightDots(BRI_PILL_X + 48, LANG_PILL_Y + LANG_PILL_H / 2, 6, 24, UI_BAR_WARN, 0x9492);
+  gfx->fillRoundRect(BRI_PILL_X, LANG_PILL_Y, BRI_PILL_W, LANG_PILL_H, r, Y_CARD);
+  drawSunIcon(BRI_PILL_X + 20, my, 5, UI_BAR_WARN);
+  drawBrightDots(BRI_PILL_X + 48, my, 6, 24, UI_BAR_WARN, Y_TEXT_DIM);
 
-  // selector de idioma: una pildora que cicla los 6 idiomas al tocar
-  gfx->fillRoundRect(LANG_PILL_X, LANG_PILL_Y, LANG_PILL_W, LANG_PILL_H, 8, UI_WHITE);
-  gfx->drawRoundRect(LANG_PILL_X, LANG_PILL_Y, LANG_PILL_W, LANG_PILL_H, 8, UI_INK);
+  // selector de idioma: una pildora que cicla los idiomas al tocar
+  gfx->fillRoundRect(LANG_PILL_X, LANG_PILL_Y, LANG_PILL_W, LANG_PILL_H, r, Y_CARD);
   char lp[10];
   snprintf(lp, sizeof(lp), "%s >", LANG_CODES[gLang]);
-  gfx->setTextColor(UI_INK);
+  gfx->setTextColor(Y_TEXT);
   setSize(2);
-  setCur(LANG_PILL_X + (LANG_PILL_W - textW(lp, 2)) / 2, LANG_PILL_Y + 8);
+  setCur(LANG_PILL_X + (LANG_PILL_W - textW(lp, 2)) / 2, my - 7);
   printT(lp);
 
-  gfx->fillRoundRect(133, 340, 200, 48, 14, UI_BAR_OK);
-  gfx->setTextColor(UI_BG_DAY);
+  // OK: aplica la hora y cierra
+  gfx->fillRoundRect(CLK_OK_X, CLK_OK_Y, CLK_OK_W, CLK_OK_H, CLK_OK_H / 2, Y_ACCENT_GO);
+  gfx->setTextColor(Y_TEXT);
   setSize(3);
-  setCur(CX - 18, 352);
+  setCur(centerX("OK", 3), CLK_OK_Y + (CLK_OK_H - 21) / 2);
   printT("OK");
 
-  gfx->setTextColor(UI_TRACK);
-  setSize(2);
-  setCur(centerX(T(S_CLOCK_CANCEL), 2), 410);
-  printT(T(S_CLOCK_CANCEL));
-
-  // version del firmware (discreta, abajo del todo)
+  // version del firmware (discreta, encima del boton de volver)
   char ver[20];
   snprintf(ver, sizeof(ver), "TamaPoke v%s", FW_VERSION);
+  gfx->setTextColor(Y_TEXT_DIM);
   setSize(1);
-  setCur(centerX(ver, 1), 436);
+  setCur(centerX(ver, 1), CLK_VER_Y);
   printT(ver);
+  yBackBtn();  // cancela sin aplicar, como deslizar arriba o la tecla USER
   gfx->flush();
 }
 
 void clockTap(int16_t x, int16_t y) {
-  if (y >= 190 && y <= 248) {  // fila de botones +/-
-    if (x >= 104 && x < 162) clockH = (clockH + 23) % 24;
-    else if (x >= 170 && x < 228) clockH = (clockH + 1) % 24;
-    else if (x >= 252 && x < 310) clockM = (clockM + 59) % 60;
-    else if (x >= 318 && x < 376) clockM = (clockM + 1) % 60;
+  if (yBackHit(x, y)) {  // volver: sin aplicar la hora
+    clockOpen = false;
     return;
   }
-  if (y >= LANG_PILL_Y && y <= LANG_PILL_Y + LANG_PILL_H) {
+  for (int i = 0; i < 4; i++) {  // botones -/+ (zona 2 px mas ancha que el dibujo por cada lado)
+    if (!yInRect(x, y, clkBtnX(i) - 2, CLK_BTN_Y - 2, CLK_BTN_S + 4, CLK_BTN_S + 4)) continue;
+    if (i == 0) clockH = (clockH + 23) % 24;
+    else if (i == 1) clockH = (clockH + 1) % 24;
+    else if (i == 2) clockM = (clockM + 59) % 60;
+    else clockM = (clockM + 1) % 60;
+    return;
+  }
+  if (y >= CLK_PILL_HIT_Y && y < CLK_PILL_HIT_Y + Y_HIT_MIN) {
     if (x >= SND_PILL_X && x < SND_PILL_X + SND_PILL_W) {  // cicla el volumen
       audioSetLevel(volNext(audioLevel()));
       sfxPlay(SFX_TAP);  // se oye al volumen nuevo (apagado, nada: sfxPlay no encola)
@@ -3840,7 +3781,7 @@ void clockTap(int16_t x, int16_t y) {
       return;
     }
   }
-  if (y >= 340 && y <= 388 && x >= 133 && x <= 333) { applyClock(); return; }
+  if (yInRect(x, y, CLK_OK_X, CLK_OK_Y, CLK_OK_W, CLK_OK_H)) { applyClock(); return; }
 }
 
 // iconos de la mochila, en el orden de IT_* (pet.h)
@@ -3949,8 +3890,10 @@ void fxCollect(uint32_t now) {
   uint16_t days = pet.takeMilestone();
   if (days) fxq.push(FXB_MILESTONE, days);
   uint8_t goalLv = 0;
-  uint8_t tier = pet.takeGoalBanner(&goalLv);
-  if (tier) fxq.push(FXB_GOAL, tier, goalLv);  // b = niveles que dieron (v1.36): "+N Lv"
+  uint16_t goalCoins = 0;
+  uint8_t tier = pet.takeGoalBanner(&goalLv, &goalCoins);
+  // b = niveles que dieron (v1.36): "+N Lv"; en los 4 bits de abajo, y encima (<< 4) las monedas (Y4)
+  if (tier) fxq.push(FXB_GOAL, tier, (uint16_t)((goalLv & 15) | (goalCoins << 4)));
   fxo.step(now, false);  // caducan los que no llegan a verse
 }
 
@@ -3958,7 +3901,7 @@ void fxCollect(uint32_t now) {
 // algo encima (dialogo, menu, bano, evolucion, despedida, eclosion)
 bool fxScreenBusy() {
   return !fxScreenAwake() || pet.sleeping || pet.busyEnding() || pet.evolving() || choiceKind || confirmUntil ||
-         menuKind || bathUntil || fxo.find(FXO_HATCH) || fxo.waiting(FXO_HATCH) || fxo.find(FXO_BOX) ||
+         panelKind || bathUntil || fxo.find(FXO_HATCH) || fxo.waiting(FXO_HATCH) || fxo.find(FXO_BOX) ||
          fxo.waiting(FXO_BOX);
 }
 
@@ -3966,10 +3909,7 @@ bool fxScreenBusy() {
 void fxPose(uint8_t act, uint32_t now, uint32_t minMs) {
   if (!pmd.has(act)) return;
   uint32_t ms = pmdActTotalMs(pmd.acts[act]);
-  beh.mode = 2;
-  beh.act = act;
-  beh.t0 = now;
-  beh.until = now + (ms < minMs ? minMs : ms);
+  yardGesture(yardW, 0, act, ms < minMs ? minMs : ms, now);  // el del patio, igual
 }
 
 // cada frame de la pantalla principal, antes de dibujar: avanza la cola y los efectos
@@ -3998,8 +3938,8 @@ bool fxDebug(const String &k) {
   else if (k == "levelup6") fxq.push(FXB_LEVELUP, lv, lv + 6, false);
   else if (k == "medal") fxq.push(FXB_MEDAL, 0);
   else if (k == "streak") fxq.push(FXB_MILESTONE, 7);
-  else if (k == "goal") fxq.push(FXB_GOAL, 1, STEP_GOAL_LEVELS[0]);
-  else if (k == "goal3") fxq.push(FXB_GOAL, STEP_GOAL_TIERS, STEP_GOAL_LEVELS[STEP_GOAL_TIERS - 1]);
+  else if (k == "goal") fxq.push(FXB_GOAL, 1, STEP_GOAL_LEVELS[0] | (coinsForGoal(1) << 4));
+  else if (k == "goal3") fxq.push(FXB_GOAL, STEP_GOAL_TIERS, STEP_GOAL_LEVELS[STEP_GOAL_TIERS - 1] | (coinsForGoal(STEP_GOAL_TIERS) << 4));
   else if (k == "stat") {
     fxo.push(FXO_STAT, 0, 25, now);
     fxo.push(FXO_STAT, 1, 10, now);
@@ -4027,9 +3967,30 @@ void fxPerfNote(uint32_t us) {
 
 // cabeza del bicho en pantalla, aproximada (donde van el "!", el entrenamiento y la pildora)
 int fxHeadY() {
+  if (yardW.p[0].on) return yardPetHeadY(0) - 14;  // por encima del globo del estado
   if (!pmd.loaded) return PET_CY - 60;
   int head = PET_GROUND - pmdIdleHeight() + 24;
   return head < 130 ? 130 : head;
+}
+
+// el bicho de casa esta en el patio (v2.0): los efectos salen de donde pasea
+bool petInYard() {
+  return yardW.p[0].on;
+}
+
+// los pies del bicho de casa en pantalla: en el patio, donde pasea; si no, el centro
+int petFootX() {
+  if (yardW.p[0].on) return (int)yardW.p[0].x;
+  return CX;
+}
+int petFootY() {
+  if (yardW.p[0].on) return (int)yardW.p[0].y;
+  return PET_GROUND;
+}
+// alto del bicho de casa sobre sus pies (para los efectos que salen de el)
+int petBodyH() {
+  if (yardW.p[0].on) return petFootY() - yardPetHeadY(0);
+  return pmd.loaded ? pmdIdleHeight() : 140;
 }
 
 // desplazamiento de un banner que entra desde arriba (0 al llegar a su sitio)
@@ -4070,14 +4031,15 @@ void drawConfetti(uint32_t e) {
 // subida de nivel: chispas que suben alrededor del bicho y la pildora "LEVEL UP!" con el
 // nivel; en el ultimo tramo, lo que gano en ATK/DEF/VEL
 void drawLevelUpFx(const FxEvent &ev, uint32_t e) {
-  int px = (int)beh.x;
+  int px = petFootX(), foot = petFootY(), rise = petBodyH() * 190 / 140;
+  int spread = petInYard() ? 24 : 44;
   if (e < 2000) {
     for (int i = 0; i < FX_SPARKS; i++) {
       uint32_t h = fxHash((uint32_t)i * 2654435761u + 7u);
       uint32_t ph = (e + h % 700) % 700;  // cada chispa sube en 0,7 s y vuelve a empezar
       int side = (i & 1) ? 1 : -1;
-      int x = px + side * (44 + (int)((h >> 8) % 64));
-      int y = PET_GROUND - 12 - (int)(ph * 190 / 700);
+      int x = px + side * (spread + (int)((h >> 8) % 64) * spread / 44);
+      int y = foot - 12 - (int)(ph * rise / 700);
       uint16_t c = (i % 3) ? C565(0xff, 0xdc, 0x4a) : UI_WHITE;
       gfx->fillRect(x - 1, y - 5, 3, 11, c);
       gfx->fillRect(x - 5, y - 1, 11, 3, c);
@@ -4128,11 +4090,13 @@ void drawFxBanner(uint32_t now) {
     snprintf(l2, sizeof(l2), T(S_STEPS_FMT), (unsigned long)STEP_GOALS[tier - 1]);
     // niveles que dio la meta (v1.36): "+1 Lv" / "+2 Lv"; nada si se cruzo dormido
     char lvl[12] = "";
-    if (ev.b) snprintf(lvl, sizeof(lvl), "+%u Lv", (unsigned)ev.b);
+    if (ev.b & 15) snprintf(lvl, sizeof(lvl), "+%u Lv", (unsigned)(ev.b & 15));
+    uint16_t coinsWon = ev.b >> 4;
     if (tier == STEP_GOAL_TIERS) {  // 10000: banner mayor, con una bandera por meta y "+2 Lv"
-      gfx->fillRoundRect(53, 128 + oy, 360, 140, 18, UI_BAR_WARN);
-      gfx->drawRoundRect(53, 128 + oy, 360, 140, 18, UI_INK);
-      gfx->drawRoundRect(56, 131 + oy, 354, 134, 16, UI_INK);
+      int bigH = coinsWon ? 172 : 140;
+      gfx->fillRoundRect(53, 128 + oy, 360, bigH, 18, UI_BAR_WARN);
+      gfx->drawRoundRect(53, 128 + oy, 360, bigH, 18, UI_INK);
+      gfx->drawRoundRect(56, 131 + oy, 354, bigH - 6, 16, UI_INK);
       for (int k = 0; k < STEP_GOAL_TIERS; k++) drawMap(SPR_ICON_FLAG, 16, CX - 44 + k * 30 - 8, 142 + oy, 2, false);
       gfx->setTextColor(UI_INK);
       setSize(3);
@@ -4146,10 +4110,11 @@ void drawFxBanner(uint32_t now) {
         setCur(centerX(lvl, 3), 236 + oy);
         printT(lvl);
       }
+      drawCoinGain(274 + oy, coinsWon, UI_INK);
       drawConfetti(e);
       return;
     }
-    int bh = lvl[0] ? 120 : 96;  // con "+N Lv", una linea mas
+    int bh = (lvl[0] ? 120 : 96) + (coinsWon ? 26 : 0);  // con "+N Lv" y con monedas, una linea mas cada una
     gfx->fillRoundRect(73, 150 + oy, 320, bh, 16, UI_BAR_WARN);
     gfx->drawRoundRect(73, 150 + oy, 320, bh, 16, UI_INK);
     drawMap(SPR_ICON_FLAG, 16, 88, 166 + oy, 2, false);
@@ -4164,6 +4129,7 @@ void drawFxBanner(uint32_t now) {
       setCur(centerX(lvl, 2), 238 + oy);
       printT(lvl);
     }
+    drawCoinGain((lvl[0] ? 264 : 238) + oy, coinsWon, UI_INK);
     return;
   }
   // medalla nueva o hito de racha
@@ -4191,17 +4157,6 @@ void drawFxBanner(uint32_t now) {
   if (ev.kind == FXB_MEDAL) drawConfetti(e);
 }
 
-// caja de la barra i (0 comida, 1 felicidad, 2 energia, 3 higiene), como la pinta drawBar
-void fxBarBox(int i, int *bx, int *by, int *bw) {
-  setSize(2);  // barLabelGap mide las etiquetas a tamano 2
-  int gap = barLabelGap();
-  int w = 232 - (78 + gap);
-  if (w > 100) w = 100;
-  *bx = (i % 2 ? 244 : 78) + gap;
-  *by = i < 2 ? 318 : 346;
-  *bw = w;
-}
-
 // necesidades antes y despues de una accion: los cambios de FX_STAT_MIN o mas sacan su "+N"
 FxNeedSnap fxSnap() { return FxNeedSnap{ { pet.fullness, pet.joy, pet.energy, pet.hygiene } }; }
 void fxNeeds(const FxNeedSnap &before) {
@@ -4220,9 +4175,18 @@ bool fxHatchHidesPet(uint32_t now) {
   return false;
 }
 
-// el huevo de la pantalla principal (y el de la eclosion), desplazado dx, con sus grietas
-void drawEggSprite(int dx, uint8_t cracks) {
-  int s = 5, x = CX - 16 * s + dx, y = PET_CY - 16 * s;
+// donde se rompe el huevo (drawHatchFx): el centro del sprite y su escala. La pantalla del huevo, en el
+// centro a escala 5; el patio (Y3) lo pone donde esta su huevo, a escala 3 (hatchAt)
+int gHatchX = CX, gHatchY = PET_CY, gHatchS = 5;
+void hatchAt(int cx, int cy, int s) {
+  gHatchX = cx;
+  gHatchY = cy;
+  gHatchS = s;
+}
+
+// el huevo con el centro del sprite en (cx, cy), a escala s y con sus grietas
+void drawEggAt(int cx, int cy, int s, uint8_t cracks) {
+  int x = cx - 16 * s, y = cy - 16 * s;
   drawMap(SPR_EGG, SPRITE_H, x, y, s, false);
   if (cracks >= 1)
     for (auto &c : CRACK1) gfx->fillRect(x + c[0] * s, y + c[1] * s, s, s, INK_K);
@@ -4237,9 +4201,11 @@ bool drawHatchFx(uint32_t now) {
   if (!h) return false;
   float t = FxOverlays::t(*h, now);
   static uint32_t soundFor = 0, poseFor = 0;
+  // escala del sitio (5 en la pantalla del huevo): el destello y la cascara, en proporcion
+  const int S = gHatchS, HX = gHatchX, HY = gHatchY;
   if (t < 0.55f) {
     float k = t / 0.55f;
-    drawEggSprite((int)(k * 10 * sinf(now * 0.06f)), 2);
+    drawEggAt(HX + (int)(k * 2 * S * sinf(now * 0.06f)), HY, S, 2);
     return true;
   }
   if (soundFor != h->start) {
@@ -4248,12 +4214,12 @@ bool drawHatchFx(uint32_t now) {
   }
   if (t < 0.75f) {
     float k = (t - 0.55f) / 0.2f;
-    gfx->fillCircle(CX, PET_CY, 40 + (int)(k * 110), UI_WHITE);
+    gfx->fillCircle(HX, HY, (40 + (int)(k * 110)) * S / 5, UI_WHITE);
     const uint16_t shell = C565(0xf6, 0xea, 0xc2);
     for (int i = 0; i < 10; i++) {  // trozos de cascara volando (y cayendo), girando
       float a = i * 0.628f + 0.3f;
-      int d = 120 + (int)(k * 90);
-      int sx = CX + (int)(cosf(a) * d), sy = PET_CY + (int)(sinf(a) * d * 0.7f) + (int)(k * k * 70);
+      int d = (120 + (int)(k * 90)) * (S + 2) / 7;
+      int sx = HX + (int)(cosf(a) * d), sy = HY + (int)(sinf(a) * d * 0.7f) + (int)(k * k * 70);
       float r = a + k * 5.0f;
       int x1 = sx + (int)(cosf(r) * 12), y1 = sy + (int)(sinf(r) * 12);
       int x2 = sx + (int)(cosf(r + 2.3f) * 10), y2 = sy + (int)(sinf(r + 2.3f) * 10);
@@ -4270,18 +4236,28 @@ bool drawHatchFx(uint32_t now) {
   return false;
 }
 
-// efectos pequenos de la pantalla principal (los botones los pinta drawButtons)
+// "!" en un bocadillo blanco (el del descuido, FXO_OOPS, y el de ver la comida del patio), con la punta hacia (bx - 22, by + 26)
+void drawExclaim(int bx, int by) {
+  gfx->fillTriangle(bx - 14, by + 10, bx - 4, by + 16, bx - 22, by + 26, UI_WHITE);
+  gfx->fillCircle(bx, by, 19, UI_WHITE);
+  gfx->drawCircle(bx, by, 19, UI_INK);
+  gfx->setTextColor(UI_BAR_BAD);
+  setSize(3);
+  setCur(bx - 7, by - 11);
+  printT("!");
+}
+
+// efectos pequenos de la pantalla principal (la casa del patio)
 void drawFxOverlays(uint32_t now) {
   int head = fxHeadY();
   for (auto &x : fxo.o) {
     if (!x.on || !x.started) continue;
     float t = FxOverlays::t(x, now);
-    if (x.kind == FXO_STAT) {  // "+25" que sube desde su barra
-      int bx, by, bw;
-      fxBarBox(x.a, &bx, &by, &bw);
-      fxNumber(bx + bw / 2, by - 6 - (int)(t * 26), x.v, x.v > 0 ? UI_BAR_OK : UI_BAR_BAD);
+    if (x.kind == FXO_STAT) {  // "LIM +10" sube sobre el bicho, una fila por necesidad
+      if (yardW.p[0].on) yardStatPill(x.a, x.v, t);
+      continue;
     } else if (x.kind == FXO_BOND) {  // corazon pequeno con "+N", a la izquierda del bicho
-      int cx = (int)beh.x - 78, y = PET_GROUND - 150 - (int)(t * 40);
+      int cx = petFootX() - 78, y = petFootY() - petBodyH() * 150 / 140 - (int)(t * 40);
       drawMap(SPR_HEART, 32, cx - 34, y, 1, false);
       fxNumber(cx + 18, y + 6, x.v, UI_BAR_BAD);
     } else if (x.kind == FXO_TRAIN) {  // "ATK +3" sobre la cabeza, y un ataque
@@ -4300,17 +4276,10 @@ void drawFxOverlays(uint32_t now) {
       setCur(CX - w / 2, y);
       printT(s);
     } else if (x.kind == FXO_OOPS) {  // "!" en un bocadillo junto a la cabeza
-      int bx = (int)beh.x + 58, by = head - 40 + (int)(3 * sinf(now * 0.012f));
-      gfx->fillTriangle(bx - 14, by + 10, bx - 4, by + 16, bx - 22, by + 26, UI_WHITE);
-      gfx->fillCircle(bx, by, 19, UI_WHITE);
-      gfx->drawCircle(bx, by, 19, UI_INK);
-      gfx->setTextColor(UI_BAR_BAD);
-      setSize(3);
-      setCur(bx - 7, by - 11);
-      printT("!");
+      drawExclaim(petFootX() + 58, head - 40 + (int)(3 * sinf(now * 0.012f)));
     } else if (x.kind == FXO_HATCH && t >= 0.75f) {  // aro de luz que se abre al nacer
       float k = (t - 0.75f) / 0.25f;
-      for (int r = 0; r < 3; r++) gfx->drawCircle(CX, PET_CY, 120 + (int)(k * 110) + r * 3, UI_WHITE);
+      for (int r = 0; r < 3; r++) gfx->drawCircle(gHatchX, gHatchY, (120 + (int)(k * 110)) * gHatchS / 5 + r * 3, UI_WHITE);
     }
   }
 }
@@ -4319,7 +4288,7 @@ void drawFxOverlays(uint32_t now) {
 // que la pantalla este encendida y no haya otro dialogo, celebracion o animacion encima
 // (FR-1.5). El banner de la meta va en la cola de celebraciones (fx.h) desde la v1.30.
 void drawWalkNews() {
-  bool busy = screenOff || dimStage != DIM_AWAKE || choiceKind || confirmUntil || menuKind ||
+  bool busy = screenOff || dimStage != DIM_AWAKE || choiceKind || confirmUntil || panelKind ||
               pet.evolving() || bathUntil || fxq.busy() || pet.isDying();
   static bool wasShown = false;
   if (busy || !pet.hasFound()) { wasShown = false; return; }
@@ -4359,49 +4328,87 @@ void drawMedalBadge(int x, int y, int i) {
   printT(medalLabel(i));
 }
 
-// pagina 0: perfil (retrato grande, identidad, racha, vinculo, baya)
+// Ficha en el panel del patio (Y1): disco oscuro, titulo blanco, filas en tarjetas, puntos de
+// pagina claros y el boton redondo de volver. Las tarjetas de fila van de CARD_ROW_X a +CARD_ROW_W.
+#define UI_BAR_SATED 0xF474  // #f08ca0, el rosa de la tarta: la comida esta llena y no baja (v1.54)
+#define CARD_ROW_X 70
+#define CARD_ROW_W 326
+#define CARD_DOTS_Y 374
+
+// tarjeta de fila de alto h, centrada en un texto de tamano 2 que empieza en ty
+static void cardRow(int ty, int h) { yCard(CARD_ROW_X, ty + 7 - h / 2, CARD_ROW_W, h, false); }
+
+// una barra de necesidad en la tarjeta del perfil: etiqueta, pista oscura y relleno
+// verde / ambar / rojo (rosa con la tarta)
+static void cardNeedBar(int x, int y, StrId label, uint8_t val, bool sated) {
+  gfx->setTextColor(Y_TEXT);
+  setSize(2);
+  setCur(x, y);
+  printT(T(label));
+  int gap = barLabelGap();
+  int bx = x + gap + 4, bw = 144 - gap - 4;
+  uint16_t fill = sated ? UI_BAR_SATED : (val >= 50) ? UI_BAR_OK : (val >= 25) ? UI_BAR_WARN : UI_BAR_BAD;
+  gfx->fillRoundRect(bx, y + 1, bw, 12, 4, Y_CARD_HI);
+  int fw = (bw - 4) * val / 100;
+  if (fw > 0) gfx->fillRoundRect(bx + 2, y + 3, fw, 8, 3, fill);
+}
+
+// tarjeta con las 4 necesidades en 2x2 (COM FEL / ENE LIM), arriba en y0
+static void cardNeeds(int y0) {
+  yCard(CARD_ROW_X, y0, CARD_ROW_W, 60, false);
+  cardNeedBar(84, y0 + 10, S_BAR_FOOD, pet.fullness, pet.sated());
+  cardNeedBar(240, y0 + 10, S_BAR_JOY, pet.joy, false);
+  cardNeedBar(84, y0 + 36, S_BAR_ENE, pet.energy, false);
+  cardNeedBar(240, y0 + 36, S_BAR_HYG, pet.hygiene, false);
+}
+
+// pagina 0: perfil (retrato, identidad, necesidades, racha, vinculo, baya)
 void renderCardProfile() {
-  const DexEntry &d = DEX_TBL[pet.speciesId];
   const char *nm = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
   char head[32];
   snprintf(head, sizeof(head), T(S_NAME_FMT), pet.shiny ? "*" : "", nm, pet.level());
-  gfx->setTextColor(d.accent);
+  gfx->setTextColor(Y_TEXT);
   // auto-encoge: a tamano 3 los nombres largos no caben en la franja estrecha de
   // arriba de la pantalla redonda, asi que se cortaban por el borde. El ancho se
   // MIDE con textW(): strlen() cuenta bytes, y en una fila UTF-8 no hay un byte
-  // por caracter ni todos miden lo mismo. Con la fuente clasica textW() devuelve
-  // strlen()*6*size, o sea exactamente la cuenta anterior: no mueve un pixel en
-  // los seis idiomas latinos (11 caracteres a tamano 3 son esos 198 px).
+  // por caracter ni todos miden lo mismo.
   setSize(3);
   int hts = (textW(head, 3) <= 198) ? 3 : 2;
   setSize(hts);
-  setCur(centerX(head, hts), hts == 3 ? 34 : 40);
+  setCur(centerX(head, hts), hts == 3 ? Y_TITLE_Y : Y_TITLE_Y + 4);
   printT(head);
   if (pet.nick[0]) {  // especie real bajo el apodo
     const char *sp = dexName(pet.speciesId);
     char par[32];
     snprintf(par, sizeof(par), "(%s)", sp);
-    gfx->setTextColor(UI_TRACK);
+    gfx->setTextColor(Y_TEXT_DIM);
     setSize(2);
-    setCur(centerX(par, 2), 64);   // medido, no contado en bytes
+    setCur(centerX(par, 2), Y_SUB_Y);   // medido, no contado en bytes
     printT(par);
   }
 
-  // retrato grande animado
-  if (pmd.loaded) drawPmdAct(PMD_IDLE, CX, 206, millis(), true, false, 4);
+  // retrato animado (a escala 3 desde v2.0: debajo van las necesidades)
+  // con apodo hay subtitulo (la especie): a escala 2 un bicho alto no lo tapa
+  if (pmd.loaded) drawPmdAct(PMD_IDLE, CX, 158, millis(), true, false, pet.nick[0] ? 2 : 3);
 
-  // racha con llama
-  int sx = 138, sy = 224;
-  gfx->fillTriangle(sx + 8, sy, sx + 1, sy + 18, sx + 15, sy + 18, UI_BAR_BAD);
-  gfx->fillTriangle(sx + 8, sy + 7, sx + 4, sy + 18, sx + 12, sy + 18, UI_BAR_WARN);
+  // las 4 necesidades (v2.0): en el patio ya no hay barras, y al tocar al bicho se ve aqui
+  cardNeeds(166);
+
+  // racha con llama, centradas como grupo en su tarjeta
   char rl[40];  // en japones pierde cifras con 30 a partir de 100 dias
   snprintf(rl, sizeof(rl), T(S_STREAK_FMT), pet.streak, pet.bestStreak);
-  gfx->setTextColor(UI_INK);
   setSize(2);
-  setCur(sx + 24, sy + 2);
+  const int ry = 240;
+  cardRow(ry, 32);
+  int sx = CX - (24 + textW(rl, 2)) / 2, sy = ry - 3;
+  gfx->fillTriangle(sx + 8, sy, sx + 1, sy + 18, sx + 15, sy + 18, UI_BAR_BAD);
+  gfx->fillTriangle(sx + 8, sy + 7, sx + 4, sy + 18, sx + 12, sy + 18, UI_BAR_WARN);
+  gfx->setTextColor(Y_TEXT);
+  setCur(sx + 24, ry);
   printT(rl);
 
-  drawCardStat(258, T(S_VIN), pet.bond, 100, C565(0xd4, 0x52, 0x7e));
+  cardRow(276, 32);
+  drawCardStat(274, T(S_VIN), pet.bond, 100, C565(0xd4, 0x52, 0x7e));
 
   const char *berry = !pet.berryKnown ? T(S_BERRY_UNK)
                       : pet.lovesBerry(0) ? T(S_BERRY_RED)
@@ -4410,67 +4417,67 @@ void renderCardProfile() {
   char info[48];
   snprintf(info, sizeof(info), T(S_INFO_FMT), berry,
            (unsigned long)(pet.ageMinutes / 1440));
-  gfx->setTextColor(UI_INK);
+  cardRow(312, 32);
+  gfx->setTextColor(Y_TEXT);
   setSize(2);
-  setCur(centerX(info, 2), 296);
+  setCur(centerX(info, 2), 312);
   printT(info);
 
-  gfx->setTextColor(UI_TRACK);
-  setCur(centerX(T(S_RENAME_HINT), 2), 332);
+  gfx->setTextColor(Y_TEXT_DIM);
+  setCur(centerX(T(S_RENAME_HINT), 2), 348);
   printT(T(S_RENAME_HINT));
 }
 
 // pagina 1: combate (4 barras). El saco de entrenamiento ya no sale de aqui sino del menu de
 // JUGAR (v1.34), con los otros juegos: las barras ocupan el sitio del boton.
 void renderCardStats() {
-  gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(T(S_BATTLE), 3), 48);
-  printT(T(S_BATTLE));
+  yTitle(T(S_BATTLE), nullptr);
 
-  drawCardStat(124, T(S_STAT_ATK), pet.atkStat(), 260, UI_BAR_BAD);
-  drawCardTrain(124, pet.trAtk, UI_BAR_BAD);
-  drawCardStat(180, T(S_STAT_DEF), pet.defStat(), 260, 0x4C98);
-  drawCardTrain(180, pet.trDef, 0x4C98);
-  drawCardStat(236, T(S_STAT_SPE), pet.speStat(), 260, UI_BAR_WARN);
-  drawCardTrain(236, pet.trSpe, UI_BAR_WARN);
-  drawCardStat(292, T(S_STAT_WGT), pet.weight, 100, 0xB3C8);
+  // cada stat en su tarjeta: la barra de combate y debajo la fina del entrenamiento
+  const int y0 = 104, step = 56;
+  for (int r = 0; r < 3; r++) yCard(CARD_ROW_X, y0 + r * step - 9, CARD_ROW_W, 50, false);
+  yCard(CARD_ROW_X, y0 + 3 * step - 9, CARD_ROW_W, 32, false);
+  drawCardStat(y0, T(S_STAT_ATK), pet.atkStat(), 260, UI_BAR_BAD);
+  drawCardTrain(y0, pet.trAtk, UI_BAR_BAD);
+  drawCardStat(y0 + step, T(S_STAT_DEF), pet.defStat(), 260, 0x4C98);
+  drawCardTrain(y0 + step, pet.trDef, 0x4C98);
+  drawCardStat(y0 + 2 * step, T(S_STAT_SPE), pet.speStat(), 260, UI_BAR_WARN);
+  drawCardTrain(y0 + 2 * step, pet.trSpe, UI_BAR_WARN);
+  drawCardStat(y0 + 3 * step, T(S_STAT_WGT), pet.weight, 100, 0xB3C8);
 
   // que es la barra fina (v1.49)
-  gfx->setTextColor(UI_TRACK);
+  gfx->setTextColor(Y_TEXT_DIM);
   setSize(2);
   setCur(centerX(T(S_TRAIN_LEGEND), 2), 338);
   printT(T(S_TRAIN_LEGEND));
 }
 
-// pagina 2: medallas con etiqueta descriptiva
+// pagina 2: medallas con etiqueta descriptiva: verdes y en blanco las conseguidas, apagadas las
+// que faltan. Dos columnas que caben en la parte estrecha de arriba del circulo.
+#define MEDAL_W 172
+#define MEDAL_H 40
+#define MEDAL_GAP 8
+#define MEDAL_Y 100
 void renderCardMedals() {
   int got = 0;
   for (int i = 0; i < MED_COUNT; i++)
     if (pet.hasMedal(1 << i)) got++;
   char head[24];
   snprintf(head, sizeof(head), T(S_MEDALS_FMT), got, MED_COUNT);
-  gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(head, 3), 48);
-  printT(head);
+  yTitle(head, nullptr);
 
   for (int i = 0; i < MED_COUNT; i++) {
-    int x = 28 + (i % 2) * 206, y = 104 + (i / 2) * 54;
-    if (i == MED_COUNT - 1 && MED_COUNT % 2) x = CX - 98;  // la impar (MARATON), centrada abajo
+    int x = CX - MEDAL_W - MEDAL_GAP / 2 + (i % 2) * (MEDAL_W + MEDAL_GAP);
+    int y = MEDAL_Y + (i / 2) * (MEDAL_H + 6);
+    if (i == MED_COUNT - 1 && MED_COUNT % 2) x = CX - MEDAL_W / 2;  // la impar (MARATON), centrada abajo
     bool g = pet.hasMedal(1 << i);
-    gfx->fillRoundRect(x, y, 196, 44, 10, g ? UI_BAR_OK : UI_TRACK);
-    if (g) {  // marca de conseguida
-      gfx->fillCircle(x + 22, y + 22, 11, UI_BG_DAY);
-      gfx->setTextColor(UI_BAR_OK);
-      setSize(2);
-      setCur(x + 16, y + 13);
-      printT("v");
-    }
-    gfx->setTextColor(g ? UI_BG_DAY : 0x8410);
+    gfx->fillRoundRect(x, y, MEDAL_W, MEDAL_H, Y_CARD_RAD, g ? Y_ACCENT_GO : Y_CARD);
+    const char *t = medalDesc(i);
     setSize(2);
-    setCur(x + 44, y + 14);
-    printT(medalDesc(i));
+    int tx = x + (MEDAL_W - textW(t, 2)) / 2;  // sin marca: "BAYA HALLADA" llena la tarjeta; el verde basta
+    gfx->setTextColor(g ? Y_TEXT : Y_TEXT_DIM);
+    setCur(tx, y + (MEDAL_H - 14) / 2);
+    printT(t);
   }
 }
 
@@ -4478,69 +4485,70 @@ void renderCardMedals() {
 // que antes eran invisibles (cuanto falta para subir/evolucionar y por que)
 void renderCardProgress() {
   const DexEntry &d = DEX_TBL[pet.speciesId];
-  gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(T(S_PROGRESS), 3), 44);
-  printT(T(S_PROGRESS));
+  yTitle(T(S_PROGRESS), nullptr);
 
   // nivel grande
   char lv[10];
   snprintf(lv, sizeof(lv), T(S_LVL_FMT), pet.level());
+  gfx->setTextColor(Y_TEXT);
   setSize(5);
-  setCur(centerX(lv, 5), 86);
+  setCur(centerX(lv, 5), 84);
   printT(lv);
 
   // barra de progreso al siguiente nivel (v1.35: cada nivel cuesta lo suyo, 20 a 180 min,
   // growth.h). En el tope (999) la barra queda llena y sin "siguiente nivel".
   bool lvMax = pet.level() >= LEVEL_MAX;
   uint16_t into = pet.levelMinutesInto(), cost = pet.levelMinutesCost();
-  int bx = 93, bw = 280, by = 158, bh = 22;
-  gfx->fillRoundRect(bx, by, bw, bh, 6, UI_TRACK);
-  int fw = lvMax ? bw - 4 : (int)((uint32_t)(bw - 4) * into / cost);
-  if (fw > 0) gfx->fillRoundRect(bx + 2, by + 2, fw, bh - 4, 5, UI_BAR_OK);
+  int bx = 93, bw = 280, by = 136, bh = 18;
+  gfx->fillRoundRect(bx, by, bw, bh, bh / 2, Y_CARD_HI);
+  int fw = lvMax ? bw : (int)((uint32_t)bw * into / cost);
+  if (fw >= bh) gfx->fillRoundRect(bx, by, fw, bh, bh / 2, Y_ACCENT_GO);
   if (!lvMax) {
     char nx[32];
     snprintf(nx, sizeof(nx), T(S_NEXT_LVL_FMT), (unsigned)(cost - into), (unsigned)(pet.level() + 1));
-    gfx->setTextColor(UI_INK);
+    gfx->setTextColor(Y_TEXT_DIM);
     setSize(2);
-    setCur(centerX(nx, 2), by + 32);
+    setCur(centerX(nx, 2), by + 28);
     printT(nx);
   }
 
-  // estado de evolucion
-  gfx->setTextColor(UI_TRACK);
-  setCur(centerX(T(S_EVO_LABEL), 2), 230);
+  // estado de evolucion, en su tarjeta
+  yCard(CARD_ROW_X, 202, CARD_ROW_W, 64, false);
+  gfx->setTextColor(Y_TEXT_DIM);
+  setSize(2);
+  setCur(centerX(T(S_EVO_LABEL), 2), 212);
   printT(T(S_EVO_LABEL));
   char evoBuf[32];
   const char *evo;
-  uint16_t evoCol = UI_INK;
+  uint16_t evoCol = Y_TEXT;
   if (d.evolvesTo == 0) {
     evo = T(S_FINAL_FORM);
   } else {
     int needed = d.evolveLevel + pet.careMistakes;
     if (pet.level() >= needed) {
-      if (pet.lowestStat() >= 40) { evo = T(S_EVO_READY); evoCol = UI_BAR_OK; }
-      else { evo = T(S_EVO_BLOCKED); evoCol = UI_BAR_BAD; }
+      if (pet.lowestStat() >= 40) { evo = T(S_EVO_READY); evoCol = Y_ACCENT_GO; }
+      else { evo = T(S_EVO_BLOCKED); evoCol = Y_ACCENT_BAD; }
     } else {
       snprintf(evoBuf, sizeof(evoBuf), T(S_EVO_IN_FMT), needed - pet.level());
       evo = evoBuf;
     }
   }
   gfx->setTextColor(evoCol);
-  setCur(centerX(evo, 2), 256);
+  setCur(centerX(evo, 2), 238);
   printT(evo);
 
   // descuidos (retrasan la evolucion)
   char ms[24];
   snprintf(ms, sizeof(ms), T(S_MISTAKES_FMT), pet.careMistakes);
-  gfx->setTextColor(pet.careMistakes > 0 ? UI_BAR_BAD : UI_INK);
-  setCur(centerX(ms, 2), 312);
+  cardRow(290, 32);
+  gfx->setTextColor(pet.careMistakes > 0 ? Y_ACCENT_BAD : Y_TEXT);
+  setCur(centerX(ms, 2), 290);
   printT(ms);
 }
 
 // pagina 4: paseo (FR-1.7). Pasos de hoy con un anillo hacia la meta, el total y los hallazgos
 // de hoy. La mochila tiene su boton desde la v1.53 (renderBag).
-#define WALK_RING_Y 140
+#define WALK_RING_Y 150
 #define WALK_RING_R 60   // radio exterior del anillo (el interior, 13 px menos)
 
 // pasos de hoy en pantalla: los del bicho mas los que el IMU aun no le ha pasado
@@ -4556,14 +4564,11 @@ void drawMapTint(const char *const *map, int n, int x, int y, int s, uint16_t co
 }
 
 void renderCardWalk() {
-  gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(T(S_WALK), 3), 40);
-  printT(T(S_WALK));
+  yTitle(T(S_WALK), nullptr);
 
   uint32_t day = pet.dayNumber();
   if (!imuPresent()) {  // FR-1.9: sin IMU lo dice y nada mas cambia
-    gfx->setTextColor(UI_TRACK);
+    gfx->setTextColor(Y_TEXT_DIM);
     setSize(2);
     setCur(centerX(T(S_NO_IMU), 2), WALK_RING_Y - 8);
     printT(T(S_NO_IMU));
@@ -4574,31 +4579,33 @@ void renderCardWalk() {
     while (tiers < STEP_GOAL_TIERS && st >= STEP_GOALS[tiers]) tiers++;
     // el anillo se llena hacia la siguiente meta; con las tres, entero y verde
     uint32_t next = STEP_GOALS[tiers < STEP_GOAL_TIERS ? tiers : STEP_GOAL_TIERS - 1];
-    gfx->fillArc(CX, WALK_RING_Y, WALK_RING_R, WALK_RING_R - 13, 0, 360, UI_TRACK);
+    gfx->fillArc(CX, WALK_RING_Y, WALK_RING_R, WALK_RING_R - 13, 0, 360, Y_CARD_HI);
     float frac = tiers >= STEP_GOAL_TIERS ? 1.0f : (float)st / next;
-    if (frac >= 1.0f) gfx->fillArc(CX, WALK_RING_Y, WALK_RING_R, WALK_RING_R - 13, 0, 360, UI_BAR_OK);
+    if (frac >= 1.0f) gfx->fillArc(CX, WALK_RING_Y, WALK_RING_R, WALK_RING_R - 13, 0, 360, Y_ACCENT_GO);
     else if (frac > 0.003f)  // de las 12 en el sentido de las agujas del reloj
-      gfx->fillArc(CX, WALK_RING_Y, WALK_RING_R, WALK_RING_R - 13, 270, 270 + 360 * frac, 0x4C98);
+      gfx->fillArc(CX, WALK_RING_Y, WALK_RING_R, WALK_RING_R - 13, 270, 270 + 360 * frac, Y_BACK);
     char num[12];
     snprintf(num, sizeof(num), "%lu", (unsigned long)st);
     uint8_t ns = strlen(num) <= 5 ? 3 : 2;
-    gfx->setTextColor(UI_INK);
+    gfx->setTextColor(Y_TEXT);
     setSize(ns);
     setCur(centerX(num, ns), WALK_RING_Y - (ns == 3 ? 18 : 14));
     printT(num);
     char goal[10];
     snprintf(goal, sizeof(goal), "/%lu", (unsigned long)next);
-    gfx->setTextColor(UI_TRACK);
+    gfx->setTextColor(Y_TEXT_DIM);
     setSize(2);
     setCur(centerX(goal, 2), WALK_RING_Y + 12);
     printT(goal);
     // una bandera por meta de hoy, en fila arriba a la derecha del anillo
-    for (int k = 0; k < tiers; k++) drawMap(SPR_ICON_FLAG, 16, CX + 48 + k * 26, WALK_RING_Y - 74, 2, false);
+    for (int k = 0; k < tiers; k++) drawMap(SPR_ICON_FLAG, 16, CX + 52 + k * 26, WALK_RING_Y - 70, 2, false);
 
+    // el total y los hallazgos, en una tarjeta
+    yCard(CARD_ROW_X, 228, CARD_ROW_W, 60, false);
     char tot[32];
     snprintf(tot, sizeof(tot), T(S_STEPS_TOTAL_FMT), (unsigned long)(pet.stepsTotal + imuStepsPending()));
-    gfx->setTextColor(UI_INK);
-    setCur(centerX(tot, 2), 212);
+    gfx->setTextColor(Y_TEXT);
+    setCur(centerX(tot, 2), 238);
     printT(tot);
     char fnd[32];
     // hallazgos al azar hacia el tope, y aparte los regalos de las metas
@@ -4609,15 +4616,15 @@ void renderCardWalk() {
       size_t L = strlen(fnd);
       snprintf(fnd + L, sizeof(fnd) - L, " +%u", (unsigned)pet.bonusFindsToday);
     }
-    setCur(centerX(fnd, 2), 236);
+    setCur(centerX(fnd, 2), 262);
     printT(fnd);
   }
 
   // la mochila tiene su propio boton desde la v1.53: aqui solo la pista de los huevos
   if (pet.eggsOwned()) {
-    gfx->setTextColor(UI_INK);
+    gfx->setTextColor(Y_TEXT);
     setSize(2);
-    setCur(centerX(T(S_EGG_HINT), 2), 290);
+    setCur(centerX(T(S_EGG_HINT), 2), 312);
     printT(T(S_EGG_HINT));
   }
 }
@@ -4630,11 +4637,19 @@ void renderCardWalk() {
 #define BAG_COLS 3
 #define BAG_ROWS 3
 #define BAG_SLOT_W 76
-#define BAG_SLOT_H 80
-#define BAG_GAP 10
+#define BAG_SLOT_H 76
+#define BAG_GAP 8
 #define BAG_X (CX - (BAG_COLS * BAG_SLOT_W + (BAG_COLS - 1) * BAG_GAP) / 2)
-#define BAG_Y 94
+#define BAG_Y 98  // panel del patio (Y1/Y4b): las dos pestanas y las monedas arriba, la rejilla debajo
+#define BAG_HINT_Y (BAG_Y + BAG_ROWS * BAG_SLOT_H + (BAG_ROWS - 1) * BAG_GAP + 14)
 #define BAG_REVIVE_HINT_MS 3000UL  // tocar el Revivir: dice para que sirve (no se usa a mano)
+// "usar objeto?" (Y1): una tarjeta que tapa la rejilla entera, con dos pastillas, Usar (verde) y NO
+#define BAG_ASK_X 88
+#define BAG_ASK_Y (BAG_Y - 4)
+#define BAG_ASK_W 290
+#define BAG_ASK_H (BAG_ROWS * BAG_SLOT_H + (BAG_ROWS - 1) * BAG_GAP + 8)
+#define BAG_ASK_PILL_Y (BAG_ASK_Y + 170)
+#define BAG_ASK_PILL_GAP 24
 // orden en pantalla: lo que se come, las vitaminas, el caramelo y lo que no se usa a mano
 static const uint8_t BAG_ORDER[] = { IT_GOLDEN, IT_CAKE, IT_RARECANDY, IT_PROTEIN, IT_IRON, IT_CARBOS,
                                      IT_CHARM, IT_EGG, IT_REVIVE };
@@ -4646,21 +4661,329 @@ void bagSlotXY(int k, int &x, int &y) {
   y = BAG_Y + (k / BAG_COLS) * (BAG_SLOT_H + BAG_GAP);
 }
 
+// las dos pastillas del "usar objeto?": x de cada una (centradas como pareja) y sus anchos
+static void bagAskPills(int &xUse, int &wUse, int &xNo, int &wNo) {
+  wUse = yPillWidth(T(S_USE));
+  wNo = yPillWidth(T(S_NO));
+  xUse = CX - (wUse + BAG_ASK_PILL_GAP + wNo) / 2;
+  xNo = xUse + wUse + BAG_ASK_PILL_GAP;
+}
+
 void openBag() {
   bagOpen = true;
+  bagTab = 0;
   itemConfirm = 0;
+  shopBuyId = 0;
+  shopToast = 0;
+  yardMapPreview = 0;
   bagReviveHintUntil = 0;
 }
 
-void renderBag() {
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
-  gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(T(S_BACKPACK), 3), 44);
-  printT(T(S_BACKPACK));
+// cerrar la mochila del todo (el selector de fondos suelta su mapa de prueba: el patio recarga el suyo)
+void closeBag() {
+  bagOpen = false;
+  itemConfirm = 0;
+  shopBuyId = 0;
+  shopToast = 0;
+  yardMapPreview = 0;
+}
 
-  // una casilla por objeto, con su cuenta; el amuleto, enmarcado si se lleva
+// ---------- pestanas y tienda (v2.0, Y4b) ----------
+#define BAG_TAB_Y 44      // las pastillas Objetos / Tienda (a y 44 el disco deja 229 px de ancho)
+#define BAG_TAB_GAP 10
+#define BAG_COIN_Y 78     // las monedas, centradas bajo las pestanas
+#define SHOP_BG_SLOT 7    // el 8o hueco: la tarjeta "Fondos", de ancho doble
+#define SHOP_PRICE_OFF yRgb(0x5A5E74)  // precio que no se puede pagar
+#define PICK_TOAST_Y 282
+#define PICK_PAGER_Y 322
+#define PICK_PILL_Y 350
+
+static void bagTabPills(int &xI, int &wI, int &xS, int &wS) {
+  wI = yPillWidth(T(S_TAB_ITEMS));
+  wS = yPillWidth(T(S_SHOP));
+  xI = CX - (wI + BAG_TAB_GAP + wS) / 2;
+  xS = xI + wI + BAG_TAB_GAP;
+}
+
+static void drawBagTabs() {
+  int xI, wI, xS, wS;
+  bagTabPills(xI, wI, xS, wS);
+  yPill(xI, BAG_TAB_Y, T(S_TAB_ITEMS), bagTab == 0 ? Y_BACK : Y_CARD);
+  yPill(xS, BAG_TAB_Y, T(S_SHOP), bagTab == 1 ? Y_BACK : Y_CARD);
+  yCoinBadge(CX, BAG_COIN_Y, pet.coins, false);
+}
+
+// moneda pequena + precio, centrados como grupo en cx (y = arriba del texto)
+static void shopPrice(int cx, int y, uint16_t price, uint16_t col) {
+  char s[8];
+  snprintf(s, sizeof(s), "%u", (unsigned)price);
+  setSize(2);
+  int tw = textW(s, 2), w = 14 + 5 + tw, x = cx - w / 2;
+  yCoin(x + 7, y + 7, 7);
+  gfx->setTextColor(col);
+  setCur(x + 19, y);
+  printT(s);
+}
+
+// aviso (verde: comprado; rojo: no se pudo) con texto centrado
+static void shopDrawToast(int y) {
+  if (!shopToast) return;
+  const char *t = shopToast == SHT_OK ? T(S_PURCHASED) : shopToast == SHT_BROKE ? T(S_NOT_ENOUGH) : T(S_BAG_FULL);
+  setSize(2);
+  int w = textW(t, 2) + 32;
+  yToastC(CX - w / 2, y, w, 32, t, shopToast == SHT_OK ? Y_ACCENT_GO : Y_ACCENT_BAD);
+}
+
+static void shopSetToast(uint8_t kind) {
+  shopToast = kind;
+  shopToastUntil = millis() + SHOP_TOAST_MS;
+}
+
+// una tarjeta de la tienda: icono, cuanto hay (x3) y el precio, gris si no se puede pagar
+static void shopCell(int k, uint8_t id) {
+  int x, y;
+  bagSlotXY(k, x, y);
+  uint8_t n = pet.items[id];
+  uint16_t pr = priceOfItem(id);
+  bool can = shopCheckItem(id, pet.coins, n, ITEM_MAX) == SB_OK;
+  yCard(x, y, BAG_SLOT_W, BAG_SLOT_H, false);
+  drawMap(ITEM_ICON[id], 16, x + 6, y + 6, 2, false);
+  char c[6];
+  snprintf(c, sizeof(c), "x%u", n);
+  gfx->setTextColor(n >= ITEM_MAX ? UI_BAR_WARN : n ? Y_TEXT : Y_TEXT_DIM);
+  setSize(2);
+  setCur(x + 42, y + 13);
+  printT(c);
+  shopPrice(x + BAG_SLOT_W / 2, y + 50, pr, can ? Y_TEXT : SHOP_PRICE_OFF);
+}
+
+// la tarjeta "Fondos": un paisaje en miniatura y su nombre
+static void shopBgCell() {
+  int x, y;
+  bagSlotXY(SHOP_BG_SLOT, x, y);
+  int w = 2 * BAG_SLOT_W + BAG_GAP;
+  yCard(x, y, w, BAG_SLOT_H, false);
+  gfx->fillRoundRect(x + 16, y + 8, w - 32, 34, 6, Y_BACK);
+  gfx->fillCircle(x + w - 40, y + 20, 6, Y_COIN);
+  gfx->fillRoundRect(x + 16, y + 26, w - 32, 16, 6, Y_ACCENT_GO);
+  const char *t = T(S_BACKGROUNDS);
+  gfx->setTextColor(Y_TEXT);
+  setSize(2);
+  setCur(x + (w - textW(t, 2)) / 2, y + 50);
+  printT(t);
+}
+
+static void shopAskPills(const char *yes, int &xY, int &wY, int &xN, int &wN) {
+  wY = yPillWidth(yes);
+  wN = yPillWidth(T(S_NO));
+  xY = CX - (wY + BAG_ASK_PILL_GAP + wN) / 2;
+  xN = xY + wY + BAG_ASK_PILL_GAP;
+}
+
+static void renderShop() {
+  for (int k = 0; k < SHOP_ITEMS; k++) shopCell(k, SHOP_ORDER[k]);
+  shopBgCell();
+  if (shopToast) {
+    shopDrawToast(BAG_HINT_Y - 8);
+  } else {
+    setSize(2);
+    gfx->setTextColor(Y_TEXT_DIM);
+    setCur(centerX(T(S_SHOP_HINT), 2), BAG_HINT_Y);
+    printT(T(S_SHOP_HINT));
+  }
+  if (shopBuyId) {  // "comprar?": la tarjeta tapa la rejilla
+    uint8_t it = shopBuyId - 1;
+    uint16_t pr = priceOfItem(it);
+    bool can = shopCheckItem(it, pet.coins, pet.items[it], ITEM_MAX) == SB_OK;
+    yCard(BAG_ASK_X, BAG_ASK_Y, BAG_ASK_W, BAG_ASK_H, true);
+    drawMap(ITEM_ICON[it], 16, CX - 32, BAG_ASK_Y + 30, 4, false);
+    char q[48];
+    snprintf(q, sizeof(q), T(S_BUY_FMT), T((StrId)(S_IT_GOLDEN + it)));
+    gfx->setTextColor(Y_TEXT);
+    setSize(2);
+    setCur(centerX(q, 2), BAG_ASK_Y + 108);
+    printT(q);
+    shopPrice(CX, BAG_ASK_Y + 140, pr, can ? Y_TEXT : SHOP_PRICE_OFF);
+    int xy, wy, xn, wn;
+    shopAskPills(T(S_BUY), xy, wy, xn, wn);
+    yPill(xy, BAG_ASK_PILL_Y, T(S_BUY), can ? Y_ACCENT_GO : SHOP_PRICE_OFF);
+    yPill(xn, BAG_ASK_PILL_Y, T(S_NO), Y_ACCENT_BAD);
+  }
+}
+
+// el selector de fondos: el mapa a pantalla completa tal como lo dibuja el patio
+static void pickerChevrons(uint8_t n) {
+  if (n > 1) {
+    yChevron(Y_CHEV_LX + 2, Y_CY + 2, -1, Y_SHADOW);
+    yChevron(Y_CHEV_LX, Y_CY, -1, Y_TEXT);
+  }
+  if (n < YARD_MAPS) {
+    yChevron(Y_CHEV_RX + 2, Y_CY + 2, 1, Y_SHADOW);
+    yChevron(Y_CHEV_RX, Y_CY, 1, Y_TEXT);
+  }
+}
+
+// la pastilla de abajo: ancho y pintado segun su estado; el ancho tambien sirve para tocarla
+static int pickerPillW(PickerPill st, uint8_t n) {
+  if (st == PK_BUY || st == PK_BROKE) {
+    char s[8];
+    snprintf(s, sizeof(s), "%u", (unsigned)priceOfMap(n));
+    setSize(2);
+    return 14 + 6 + textW(s, 2) + 2 * Y_PILL_PAD + 4;
+  }
+  return yPillWidth(st == PK_USING ? T(S_USING) : T(S_USE));
+}
+
+static void pickerDrawPill(PickerPill st, uint8_t n) {
+  int w = pickerPillW(st, n), x = CX - w / 2, y = PICK_PILL_Y;
+  gfx->fillRoundRect(x + 2, y + 2, w, Y_PILL_H, Y_PILL_H / 2, Y_SHADOW);
+  if (st == PK_BUY || st == PK_BROKE) {
+    gfx->fillRoundRect(x, y, w, Y_PILL_H, Y_PILL_H / 2, st == PK_BUY ? Y_ACCENT_GO : Y_CARD_HI);
+    char s[8];
+    snprintf(s, sizeof(s), "%u", (unsigned)priceOfMap(n));
+    yCoin(x + Y_PILL_PAD + 9, y + Y_PILL_H / 2, 7);
+    gfx->setTextColor(st == PK_BUY ? Y_TEXT : SHOP_PRICE_OFF);
+    setSize(2);
+    setCur(x + Y_PILL_PAD + 22, y + (Y_PILL_H - 14) / 2);
+    printT(s);
+  } else if (st == PK_USE) {
+    yPill(x, y, T(S_USE), Y_ACCENT_GO);
+  } else {
+    yPill(x, y, T(S_USING), Y_CARD_HI);
+  }
+}
+
+static void renderPicker() {
+  uint8_t n = yardMapPreview;
+  yardDrawBg();  // honra yardMapPreview: carga el mapa n (o el de respaldo si falta)
+  bool ok = yardMapNow() == n;  // el que de verdad se ve
+  const char *name = T((StrId)(S_MAP_1 + n - 1));
+  if (!ok) yPanelBg();  // sin el .bin (o sin SD): un panel oscuro con el aviso
+  yShadowText(centerX(name, 3), Y_TITLE_Y, name, 3, Y_TEXT);
+  if (!ok) {
+    const char *m = T(S_NOT_ON_SD);
+    yShadowText(centerX(m, 2), Y_CY - 7, m, 2, Y_TEXT_DIM);
+  }
+  pickerChevrons(n);
+  char pg[12];
+  snprintf(pg, sizeof(pg), "%u/%d", n, YARD_MAPS);
+  yShadowText(centerX(pg, 2), PICK_PAGER_Y, pg, 2, Y_TEXT);
+  pickerDrawPill(pickerPill(n, pet.yardMapWanted(), pet.ownsMap(n), pet.coins), n);
+  shopDrawToast(PICK_TOAST_Y);
+  yBackBtn();
+  gfx->flush();
+}
+
+static void pickerTap(int16_t x, int16_t y) {
+  uint8_t n = yardMapPreview;
+  if (yBackHit(x, y)) {
+    yardMapPreview = 0;
+    return;
+  }
+  int c = yChevronHit(x, y);
+  if (c) {
+    uint8_t m = pickerStep(n, c);
+    if (m) {
+      yardMapPreview = m;
+      shopToast = 0;
+      sfxPlay(SFX_TAP);
+    }
+    return;
+  }
+  PickerPill st = pickerPill(n, pet.yardMapWanted(), pet.ownsMap(n), pet.coins);
+  int w = pickerPillW(st, n);
+  if (!yPillHit(x, y, CX - w / 2, PICK_PILL_Y, w)) return;
+  if (st == PK_USE) {
+    pet.chooseMap(n);
+    sfxPlay(SFX_LEVEL);
+  } else if (st == PK_BUY) {
+    if (pet.buyMap(n)) {
+      pet.chooseMap(n);
+      shopSetToast(SHT_OK);
+      sfxPlay(SFX_LEVELUP);
+    } else {
+      shopSetToast(SHT_BROKE);
+      sfxPlay(SFX_DENY);
+    }
+  } else if (st == PK_BROKE) {
+    shopSetToast(SHT_BROKE);
+    sfxPlay(SFX_DENY);
+  }
+}
+
+// toques en la tienda: una tarjeta pide confirmacion (Comprar / NO); "Fondos" abre el selector
+static void shopTap(int16_t x, int16_t y) {
+  if (shopBuyId) {  // solo la pastilla de Comprar compra; cualquier otro toque es NO
+    uint8_t it = shopBuyId - 1;
+    shopBuyId = 0;
+    int xy, wy, xn, wn;
+    shopAskPills(T(S_BUY), xy, wy, xn, wn);
+    if (!timeLeft(shopBuyUntil) || !yPillHit(x, y, xy, BAG_ASK_PILL_Y, wy)) return;
+    ShopBuy r = shopCheckItem(it, pet.coins, pet.items[it], ITEM_MAX);
+    if (r == SB_OK && pet.buyItem(it)) {
+      shopSetToast(SHT_OK);
+      sfxPlay(SFX_LEVELUP);
+    } else {
+      shopSetToast(r == SB_FULL ? SHT_FULL : SHT_BROKE);
+      sfxPlay(SFX_DENY);
+    }
+    return;
+  }
+  for (int k = 0; k < SHOP_ITEMS; k++) {
+    int sx, sy;
+    bagSlotXY(k, sx, sy);
+    if (!yInRect(x, y, sx, sy, BAG_SLOT_W, BAG_SLOT_H)) continue;
+    shopBuyId = SHOP_ORDER[k] + 1;
+    shopBuyUntil = millis() + 10000;
+    shopToast = 0;
+    sfxPlay(SFX_TAP);
+    return;
+  }
+  int bx, by;
+  bagSlotXY(SHOP_BG_SLOT, bx, by);
+  if (yInRect(x, y, bx, by, 2 * BAG_SLOT_W + BAG_GAP, BAG_SLOT_H)) {
+    uint8_t w = pet.yardMapWanted();
+    yardMapPreview = w >= 1 && w <= YARD_MAPS ? w : 1;  // se abre en el que se usa
+    shopToast = 0;
+    sfxPlay(SFX_TAP);
+  }
+}
+
+// deslizar dentro de la mochila: en el selector, de mapa en mapa; en la tienda y en Objetos, de pestana a
+// pestana (izquierda = la siguiente)
+void bagSwipe(int dir) {
+  if (yardMapPreview) {
+    uint8_t m = pickerStep(yardMapPreview, dir > 0 ? -1 : 1);
+    if (m) {
+      yardMapPreview = m;
+      shopToast = 0;
+    }
+    return;
+  }
+  if (itemConfirm || shopBuyId) return;  // con una pregunta abierta, no
+  uint8_t t = dir > 0 ? 0 : 1;
+  if (t != bagTab) {
+    bagTab = t;
+    shopToast = 0;
+  }
+}
+
+void renderBag() {
+  if (yardMapPreview) {
+    renderPicker();
+    return;
+  }
+  yPanelBg();
+  drawBagTabs();
+  if (bagTab == 1) {
+    renderShop();
+    yBackBtn();
+    gfx->flush();
+    return;
+  }
+
+  // una tarjeta por objeto, con su cuenta; el amuleto, enmarcado si se lleva. Sin ninguno, la
+  // tarjeta queda hundida (solo el borde) y el icono en silueta.
   for (int k = 0; k < (int)BAG_SLOTS; k++) {
     uint8_t i = BAG_ORDER[k];
     int x, y;
@@ -4668,21 +4991,23 @@ void renderBag() {
     // los huevos (v1.40): tambien el que espera en la incubadora
     uint8_t n = (i == IT_EGG) ? pet.eggsOwned() : pet.items[i];
     bool held = (i == IT_CHARM) && n;
-    gfx->fillRoundRect(x, y, BAG_SLOT_W, BAG_SLOT_H, 12, n ? UI_WHITE : UI_BG_DAY);
-    gfx->drawRoundRect(x, y, BAG_SLOT_W, BAG_SLOT_H, 12, held ? UI_BAR_WARN : (n ? UI_INK : UI_TRACK));
-    if (held) gfx->drawRoundRect(x + 1, y + 1, BAG_SLOT_W - 2, BAG_SLOT_H - 2, 11, UI_BAR_WARN);
-    if (n) drawMap(ITEM_ICON[i], 16, x + (BAG_SLOT_W - 48) / 2, y + 6, 3, false);
-    else drawMapTint(ITEM_ICON[i], 16, x + (BAG_SLOT_W - 48) / 2, y + 6, 3, UI_TRACK);
+    if (n) yCard(x, y, BAG_SLOT_W, BAG_SLOT_H, false);
+    else gfx->drawRoundRect(x, y, BAG_SLOT_W, BAG_SLOT_H, Y_CARD_RAD, Y_CARD);
+    if (held) {
+      gfx->drawRoundRect(x, y, BAG_SLOT_W, BAG_SLOT_H, Y_CARD_RAD, UI_BAR_WARN);
+      gfx->drawRoundRect(x + 1, y + 1, BAG_SLOT_W - 2, BAG_SLOT_H - 2, Y_CARD_RAD - 1, UI_BAR_WARN);
+    }
+    if (n) drawMap(ITEM_ICON[i], 16, x + (BAG_SLOT_W - 48) / 2, y + 5, 3, false);
+    else drawMapTint(ITEM_ICON[i], 16, x + (BAG_SLOT_W - 48) / 2, y + 5, 3, Y_CARD_HI);
     char c[6];
     snprintf(c, sizeof(c), "x%u", n);
-    gfx->setTextColor(n ? UI_INK : UI_TRACK);
+    gfx->setTextColor(n ? Y_TEXT : Y_TEXT_DIM);
     setSize(2);
-    setCur(x + (BAG_SLOT_W - textW(c, 2)) / 2, y + 58);
+    setCur(x + (BAG_SLOT_W - textW(c, 2)) / 2, y + 56);
     printT(c);
   }
   // una pista: el Revivir recien tocado, dormido, los huevos (v1.39), el amuleto, la mochila vacia o
   // como se usa
-  int hy = BAG_Y + BAG_ROWS * BAG_SLOT_H + (BAG_ROWS - 1) * BAG_GAP + 18;
   bool empty = pet.itemCount() == 0 && !pet.eggsOwned();
   bool reviveHint = timeLeft(bagReviveHintUntil) > 0;
   const char *hint = reviveHint            ? T(S_REVIVE_HINT)
@@ -4691,53 +5016,75 @@ void renderBag() {
                      : pet.eggsOwned()     ? T(S_EGG_HINT)
                      : pet.items[IT_CHARM] ? T(S_CHARM_HELD)
                                            : T(S_BAG_HINT);
-  gfx->setTextColor(empty ? UI_TRACK : UI_INK);
+  gfx->setTextColor(empty ? Y_TEXT_DIM : Y_TEXT);
   setSize(2);
-  setCur(centerX(hint, 2), hy);
+  setCur(centerX(hint, 2), BAG_HINT_Y);
   printT(hint);
-  gfx->setTextColor(UI_TRACK);
-  setCur(centerX(T(S_BACK), 2), 412);
-  printT(T(S_BACK));
+  yBackBtn();
 
-  // "usar objeto?" (mismo dialogo que "soltar?")
+  // "usar objeto?" (mismo dialogo que "soltar?"): tarjeta encima de la rejilla, Usar / NO
   if (itemConfirm) {
     uint8_t it = itemConfirm - 1;
-    gfx->fillRoundRect(94, 168, 278, 152, 16, UI_WHITE);
-    gfx->drawRoundRect(94, 168, 278, 152, 16, UI_INK);
-    drawMap(ITEM_ICON[it], 16, CX - 16, 176, 2, false);
+    yCard(BAG_ASK_X, BAG_ASK_Y, BAG_ASK_W, BAG_ASK_H, true);
+    drawMap(ITEM_ICON[it], 16, CX - 32, BAG_ASK_Y + 34, 4, false);
     char q[48];
     snprintf(q, sizeof(q), T(S_USE_FMT), T((StrId)(S_IT_GOLDEN + it)));
-    gfx->setTextColor(UI_INK);
+    gfx->setTextColor(Y_TEXT);
     setSize(2);
-    setCur(centerX(q, 2), 218);
+    setCur(centerX(q, 2), BAG_ASK_Y + 120);
     printT(q);
-    gfx->fillRoundRect(118, 252, 100, 52, 12, UI_BAR_OK);
-    gfx->setTextColor(UI_WHITE);
-    setCur(118 + (100 - textW(T(S_YES), 2)) / 2, 270);
-    printT(T(S_YES));
-    gfx->fillRoundRect(248, 252, 100, 52, 12, UI_BAR_BAD);
-    setCur(248 + (100 - textW(T(S_NO), 2)) / 2, 270);
-    printT(T(S_NO));
+    int xu, wu, xn, wn;
+    bagAskPills(xu, wu, xn, wn);
+    yPill(xu, BAG_ASK_PILL_Y, T(S_USE), Y_ACCENT_GO);
+    yPill(xn, BAG_ASK_PILL_Y, T(S_NO), Y_ACCENT_BAD);
   }
   gfx->flush();
 }
 
-// toques en la mochila: una casilla pide confirmacion; fuera de la rejilla, se cierra
+// toques en la mochila: una casilla pide confirmacion; el boton de volver (o fuera de la rejilla)
+// la cierra
 void bagTap(int16_t x, int16_t y) {
-  if (itemConfirm) {
+  if (yardMapPreview) {
+    pickerTap(x, y);
+    return;
+  }
+  if (bagTab == 1 && shopBuyId) {
+    shopTap(x, y);
+    return;
+  }
+  if (itemConfirm) {  // solo la pastilla de Usar usa el objeto; cualquier otro toque es NO
     uint8_t it = itemConfirm - 1;
     itemConfirm = 0;
-    if (timeLeft(itemConfirmUntil) && x >= 118 && x <= 218 && y >= 252 && y <= 304) {
+    int xu, wu, xn, wn;
+    bagAskPills(xu, wu, xn, wn);
+    if (timeLeft(itemConfirmUntil) && yPillHit(x, y, xu, BAG_ASK_PILL_Y, wu)) {
       FxNeedSnap ns = fxSnap();
       if (pet.useItem(it)) {
         fxNeeds(ns);
         sfxPlay(it == IT_GOLDEN || it == IT_CAKE ? SFX_EAT : SFX_LEVEL);
         // a la pantalla principal a verlo: comer, subir de nivel o entrenar (v1.30, "ATK +3")
-        bagOpen = false;
+        closeBag();
       } else {
         sfxPlay(SFX_DENY);
       }
     }
+    return;
+  }
+  if (yBackHit(x, y)) {  // como la tecla USER
+    closeBag();
+    return;
+  }
+  int xI, wI, xS, wS;  // las pestanas
+  bagTabPills(xI, wI, xS, wS);
+  uint8_t tab = yPillHit(x, y, xI, BAG_TAB_Y, wI) ? 1 : yPillHit(x, y, xS, BAG_TAB_Y, wS) ? 2 : 0;
+  if (tab) {
+    if (bagTab != tab - 1) sfxPlay(SFX_TAP);
+    bagTab = tab - 1;
+    shopToast = 0;
+    return;
+  }
+  if (bagTab == 1) {
+    shopTap(x, y);
     return;
   }
   for (int k = 0; k < (int)BAG_SLOTS; k++) {
@@ -4757,28 +5104,29 @@ void bagTap(int16_t x, int16_t y) {
     }
     return;  // un toque en una casilla nunca cierra la mochila
   }
-  bagOpen = false;
+  closeBag();
+}
+
+// puntos de pagina de la ficha en colores claros (sobre el panel oscuro)
+static void cardPageDots(int y) {
+  for (int i = 0; i < CARD_PAGES; i++) {
+    int dx = CX - (CARD_PAGES - 1) * 13 + i * 26;
+    if (i == cardPage) gfx->fillCircle(dx, y, 5, Y_TEXT);
+    else gfx->fillCircle(dx, y, 4, Y_CARD_HI);
+  }
 }
 
 void renderCard() {
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  yPanelBg();
   if (cardPage == 0) renderCardProfile();
   else if (cardPage == 1) renderCardStats();
   else if (cardPage == 2) renderCardMedals();
   else if (cardPage == 3) renderCardProgress();
   else renderCardWalk();
 
-  // indicador de paginas + ayuda
-  for (int i = 0; i < CARD_PAGES; i++) {
-    int dx = CX - (CARD_PAGES - 1) * 13 + i * 26;
-    if (i == cardPage) gfx->fillCircle(dx, 374, 5, UI_INK);
-    else gfx->drawCircle(dx, 374, 4, UI_INK);
-  }
-  gfx->setTextColor(UI_TRACK);
-  setSize(2);
-  setCur(centerX(T(S_BACK), 2), 398);
-  printT(T(S_BACK));
+  // indicador de paginas + boton de volver (tocar en cualquier otro sitio tambien cierra)
+  cardPageDots(CARD_DOTS_Y);
+  yBackBtn();
   gfx->flush();
 }
 
@@ -4786,10 +5134,14 @@ void renderCard() {
 
 static const char KB_KEYS[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ.-";  // 28 + DEL + OK = 30
 #define KB_COLS 6
-#define KB_X 40
-#define KB_Y 150
-#define KB_W 64
-#define KB_H 52
+#define KB_W 58  // celda (y zona de toque) de cada tecla; se dibuja 6 px menor
+#define KB_H 48
+#define KB_X (CX - KB_COLS * KB_W / 2)
+#define KB_Y 118  // panel del patio (Y1): todo sube para dejar sitio al boton de volver
+#define KB_BOX_X 93
+#define KB_BOX_Y 72
+#define KB_BOX_W 280
+#define KB_BOX_H 36
 
 void openKeyboard() {
   kbOpen = true;
@@ -4799,35 +5151,27 @@ void openKeyboard() {
 }
 
 void renderKeyboard() {
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
-  gfx->setTextColor(UI_INK);
-  setSize(2);
-  setCur(centerX(T(S_NAME), 2), 56);
-  printT(T(S_NAME));
+  yPanelBg();
+  yTitle(T(S_NAME), nullptr);
   // buffer actual
-  gfx->fillRoundRect(83, 84, 300, 40, 8, UI_WHITE);
-  gfx->drawRoundRect(83, 84, 300, 40, 8, UI_INK);
+  yCard(KB_BOX_X, KB_BOX_Y, KB_BOX_W, KB_BOX_H, true);
+  gfx->setTextColor(Y_TEXT);
   setSize(3);
-  setCur(95, 94);
+  setCur(KB_BOX_X + 12, KB_BOX_Y + 8);
   printT(nameLen ? nameBuf : "_");
 
   for (int i = 0; i < 30; i++) {
     int x = KB_X + (i % KB_COLS) * KB_W, y = KB_Y + (i / KB_COLS) * KB_H;
-    bool special = (i >= 28);
-    gfx->fillRoundRect(x, y, KB_W - 6, KB_H - 6, 6, special ? UI_BAR_WARN : UI_WHITE);
-    gfx->drawRoundRect(x, y, KB_W - 6, KB_H - 6, 6, UI_INK);
-    gfx->setTextColor(UI_INK);
+    uint16_t bg = i == 29 ? Y_ACCENT_GO : i == 28 ? Y_CARD_HI : Y_CARD;
+    gfx->fillRoundRect(x + 3, y + 3, KB_W - 6, KB_H - 6, 8, bg);
+    gfx->setTextColor(Y_TEXT);
     setSize(2);
-    if (i < 28) {
-      setCur(x + KB_W / 2 - 9, y + KB_H / 2 - 10);
-      printT(KB_KEYS[i]);
-    } else {
-      const char *lab = (i == 28) ? "<-" : "OK";
-      setCur(x + KB_W / 2 - 15, y + KB_H / 2 - 10);
-      printT(lab);
-    }
+    char lab[3] = { i < 28 ? KB_KEYS[i] : 0, 0, 0 };
+    if (i >= 28) strcpy(lab, i == 28 ? "<-" : "OK");
+    setCur(x + (KB_W - textW(lab, 2)) / 2, y + (KB_H - 14) / 2);
+    printT(lab);
   }
+  yBackBtn();
   gfx->flush();
 }
 
@@ -4835,6 +5179,10 @@ void keyboardTap(int16_t x, int16_t y) {
   // filtra ANTES de dividir: con x/y menores que KB_X/KB_Y la resta da negativo
   // y la division entera trunca hacia cero (no hacia -inf), asi que col/row
   // saldria 0 en vez de negativo y el filtro de abajo no lo detectaria
+  if (yBackHit(x, y)) {  // como la tecla USER: descarta el nombre y vuelve a la ficha
+    kbOpen = false;
+    return;
+  }
   if (x < KB_X || y < KB_Y) return;
   int col = (x - KB_X) / KB_W, row = (y - KB_Y) / KB_H;
   if (col >= KB_COLS || row >= 5) return;
@@ -4853,9 +5201,14 @@ void keyboardTap(int16_t x, int16_t y) {
 
 // ---------- galeria pokedex ----------
 
-#define GAL_X 73
-#define GAL_Y 84
-#define GAL_CELL 80
+#define GAL_CELL 80  // celda de drawThumb (la usan tambien el combate y el selector de equipo)
+// rejilla de la Pokedex en el panel del patio (v2.0, Y1): 4x4 celdas de 72 px, entre las flechas
+// (zonas hasta x 64 y desde x 402) y por encima del contador "1/10" y del boton de volver
+#define GAL_X 89
+#define GAL_Y 82
+#define GAL_GC 72
+#define GAL_PAGER_Y 374
+#define GAL_SIL C565(0x50, 0x55, 0x70)  // silueta de un no registrado, sobre la tarjeta oscura
 
 // dibuja una miniatura centrada en su celda; sil=true la pinta en tinta
 void drawThumb(const uint8_t *b, int x, int y, int s, bool sil) {
@@ -4874,34 +5227,76 @@ void drawThumb(const uint8_t *b, int x, int y, int s, bool sil) {
   }
 }
 
+// miniatura de thumbs.bin centrada en (cx, cy) a escala s; sil = silueta en el color silCol
+// (en el panel oscuro la tinta INK_K de drawThumb no se ve). clip > 0: no pasa de un cuadrado de
+// ese lado centrado en (cx, cy) (los mas grandes se saldrian un poco de su tarjeta)
+static void galThumb(const uint8_t *b, int cx, int cy, int s, bool sil, uint16_t silCol, int clip = 0) {
+  uint8_t w = b[0], h = b[1], n = b[2];
+  const uint8_t *pal = b + 3;
+  const uint8_t *d = pal + n * 2;
+  int ox = cx - w * s / 2, oy = cy - h * s / 2;
+  int lx = clip ? cx - clip / 2 : -9999, rx = clip ? cx + clip / 2 : 9999;
+  int ty = clip ? cy - clip / 2 : -9999, by = clip ? cy + clip / 2 : 9999;
+  for (int r = 0; r < h; r++) {
+    int y0 = oy + r * s, y1 = y0 + s;
+    if (y0 < ty) y0 = ty;
+    if (y1 > by) y1 = by;
+    if (y1 <= y0) continue;
+    const uint8_t *row = d + r * w;
+    forRuns(w, [&](int c) { return indexedKey(row[c], sil); },
+            [&](int c0, int len, int k) {
+              uint16_t col = sil ? silCol : (uint16_t)(pal[k * 2] | (pal[k * 2 + 1] << 8));
+              int x0 = ox + c0 * s, x1 = x0 + len * s;
+              if (x0 < lx) x0 = lx;
+              if (x1 > rx) x1 = rx;
+              if (x1 > x0) gfx->fillRect(x0, y0, x1 - x0, y1 - y0, col);
+            });
+  }
+}
+
+// silueta quieta del sprite PMD (primer cuadro de reposo) en el color col, con la misma
+// escala y el mismo anclaje que drawPmdActM
+static void galPmdSil(PmdMon &m, int cx, int groundY, uint8_t maxS, uint16_t col) {
+  const PmdAct &a = m.acts[PMD_IDLE];
+  if (!a.frames) return;
+  uint8_t s = a.h ? 170 / a.h : 5;
+  if (s < 2) s = 2;
+  if (s > maxS) s = maxS;
+  while (s > 2 && a.h * s > 250) s--;
+  int x0 = cx - a.w * s / 2, y0 = groundY - (a.base ? a.base : a.h) * s;
+  for (int r = 0; r < a.h; r++) {
+    const uint8_t *row = a.data + r * a.w;
+    forRuns(a.w, [&](int c) { return indexedKey(row[c], true); },
+            [&](int c0, int len, int k) { gfx->fillRect(x0 + c0 * s, y0 + r * s, len * s, s, col); });
+  }
+}
+
 void renderGallery() {
   if (galleryDetail) {  // vista detalle: se redibuja siempre (animada)
-    gfx->fillScreen(RGB565_BLACK);
-    gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+    yPanelBg();
     const DexEntry &d = DEX_TBL[galleryDetail];
     bool reg = pet.isRegistered(galleryDetail);
     char head[32];
     snprintf(head, sizeof(head), "N.%03d %s%s", galleryDetail,
              pet.isShinyRegistered(galleryDetail) ? "*" : "", reg ? dexName(galleryDetail) : "???");
-    gfx->setTextColor(reg ? d.accent : UI_INK);
+    // el color del tipo, aclarado para leerse sobre el disco oscuro
+    gfx->setTextColor(reg ? lerp565(d.accent, Y_TEXT, 6, 16) : Y_TEXT);
     // auto-encoge nombres largos (no caben a t3), midiendo en vez de contar
     // bytes; 13 caracteres a tamano 3 son los 234 px de antes.
     setSize(3);
     int gts = (textW(head, 3) <= 234) ? 3 : 2;
     setSize(gts);
-    setCur(centerX(head, gts), gts == 3 ? 56 : 60);
+    setCur(centerX(head, gts), gts == 3 ? Y_TITLE_Y + 8 : Y_TITLE_Y + 12);
     printT(head);
     if (galleryPmd.loaded) {
       // animado y a color si esta registrado; silueta estatica si no (estilo "?")
-      drawPmdActM(galleryPmd, PMD_IDLE, CX, 300, reg ? millis() : 0, true, !reg, 6);
+      if (reg) drawPmdActM(galleryPmd, PMD_IDLE, CX, 300, millis(), true, false, 6);
+      else galPmdSil(galleryPmd, CX, 300, 6, GAL_SIL);
     } else {
       const uint8_t *t = thumbs.get(galleryDetail);
-      if (t) drawThumb(t, CX - GAL_CELL, 135, 4, !reg);
+      if (t) galThumb(t, CX, 215, 4, !reg, GAL_SIL);
     }
-    gfx->setTextColor(UI_INK);
-    setSize(2);
-    setCur(centerX(T(S_DETAIL_BACK), 2), 408);
-    printT(T(S_DETAIL_BACK));
+    yBackBtn();  // tocar en cualquier sitio vuelve a la rejilla, como antes
     gfx->flush();
     return;
   }
@@ -4909,62 +5304,67 @@ void renderGallery() {
   if (!galleryDirty) return;  // la rejilla es estatica
   galleryDirty = false;
 
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  yPanelBg();
   char head[24];
   snprintf(head, sizeof(head), T(S_POKEDEX_FMT), pet.registeredCount());
-  gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(head, 3), 36);
-  printT(head);
+  yTitle(head, nullptr);
 
   for (int r = 0; r < 4; r++) {
     for (int c = 0; c < 4; c++) {
       int16_t dex = galleryPage * 16 + r * 4 + c + 1;
       if (dex > 151) break;
-      int x = GAL_X + c * GAL_CELL, y = GAL_Y + r * GAL_CELL;
+      int x = GAL_X + c * GAL_GC, y = GAL_Y + r * GAL_GC;
+      bool reg = pet.isRegistered(dex);
+      yCard(x + 3, y + 3, GAL_GC - 6, GAL_GC - 6, false);
       const uint8_t *t = thumbs.get(dex);
       if (t) {
-        drawThumb(t, x, y, 2, !pet.isRegistered(dex));
+        galThumb(t, x + GAL_GC / 2, y + GAL_GC / 2, 2, !reg, GAL_SIL, GAL_GC - 8);
         if (pet.isShinyRegistered(dex)) {
           gfx->setTextColor(UI_BAR_WARN);
           setSize(2);
-          setCur(x + 62, y + 4);
+          setCur(x + GAL_GC - 17, y + 7);
           printT("*");
         }
       } else {
         char num[6];
         snprintf(num, sizeof(num), "%d", dex);
-        gfx->setTextColor(UI_TRACK);
+        gfx->setTextColor(Y_TEXT_DIM);
         setSize(2);
-        setCur(x + 24, y + 32);
+        setCur(x + (GAL_GC - textW(num, 2)) / 2, y + GAL_GC / 2 - 7);
         printT(num);
       }
     }
   }
-  // puntos de pagina
-  for (int i = 0; i < 10; i++) {
-    if (i == galleryPage) gfx->fillCircle(170 + i * 14, 436, 4, UI_INK);
-    else gfx->drawCircle(170 + i * 14, 436, 3, UI_INK);
-  }
+  yChevrons(galleryPage > 0, galleryPage < 9);
+  yPager(galleryPage, 10, GAL_PAGER_Y);
+  yBackBtn();
   gfx->flush();
 }
 
 void galleryTap(int16_t x, int16_t y) {
-  if (galleryDetail) {  // volver a la rejilla
+  if (galleryDetail) {  // volver a la rejilla (tambien el boton de volver)
     galleryDetail = 0;
     galleryPmd.unload();
     galleryDirty = true;
     return;
   }
-  if (y < 72) {  // tocar la cabecera = salir
+  if (y < 72 || yBackHit(x, y)) {  // la cabecera o el boton de volver = salir
     galleryOpen = false;
     galleryPmd.unload();
     return;
   }
+  int ch = yChevronHit(x, y);  // las flechas: como deslizar (sin salir por la izquierda de la 1)
+  if (ch) {
+    int np = galleryPage + ch;
+    if (np >= 0 && np <= 9 && np != galleryPage) {
+      galleryPage = np;
+      galleryDirty = true;
+    }
+    return;
+  }
   // mismo motivo que en el teclado: filtrar antes de dividir
   if (x < GAL_X || y < GAL_Y) return;
-  int c = (x - GAL_X) / GAL_CELL, r = (y - GAL_Y) / GAL_CELL;
+  int c = (x - GAL_X) / GAL_GC, r = (y - GAL_Y) / GAL_GC;
   if (c > 3 || r > 3) return;
   int16_t dex = galleryPage * 16 + r * 4 + c + 1;
   if (dex > 151) return;
@@ -4979,13 +5379,17 @@ void galleryTap(int16_t x, int16_t y) {
 // como queda, y con el en pantalla se escribe en la NVS (40-180 ms en la placa, con el sprite). Luego se
 // vuelve a casa, donde el que queda activo sale de una luz (FXO_BOX).
 
-#define BOX_X 47       // rejilla de 3x2 huecos de 124x110 (las esquinas quedan ~8 px dentro del circulo)
-#define BOX_Y 92
-#define BOX_CW 124
-#define BOX_CH 110
-#define BOX_NOW_Y 350  // centro de la fila "Ahora: ..."
-#define BOX_DOTS_Y 404 // puntos de pagina (v1.65), bajo la fila "Ahora:"
-#define BOX_SLEEP_BG C565(0xe2, 0xe5, 0xf4)  // fondo de un hueco ocupado: azulado, duermen
+// panel del patio (v2.0, Y1): rejilla de 3x2 huecos de 112x106 entre las flechas < > (sus zonas
+// llegan a x 64 y empiezan en x 402), la fila "Ahora:" en su tarjeta, el contador "1/2" y el boton
+// de volver abajo
+#define BOX_X 65
+#define BOX_Y 84
+#define BOX_CW 112
+#define BOX_CH 106
+#define BOX_NOW_Y 330   // centro de la fila "Ahora: ..."
+#define BOX_PAGER_Y 366 // contador de pagina "1/2" (v1.65 eran puntos), bajo la fila "Ahora:"
+#define BOX_Z_INK Y_BACK  // la "z" de los que duermen
+#define BOX_DLG_LINE C565(0x4a, 0x4f, 0x6a)  // borde del dialogo, sobre el disco oscuro
 #define BOX_LIGHT C565(0xff, 0xe7, 0x9f)     // halo dorado de la luz
 
 int boxCellX(uint8_t k) { return BOX_X + (k % 3) * BOX_CW; }
@@ -5003,7 +5407,7 @@ const char *petName() { return pet.nick[0] ? pet.nick : dexName(pet.speciesId); 
 
 // la caja se abre desde la casa sin nada encima: ni dialogo, ni menu, ni bano, ni evolucion
 bool boxCanOpen() {
-  return !pet.busyEnding() && !confirmUntil && !choiceKind && !menuKind && !bathUntil && !pet.evolving();
+  return !pet.busyEnding() && !confirmUntil && !choiceKind && !panelKind && !bathUntil && !pet.evolving();
 }
 
 void openBox() {
@@ -5078,27 +5482,30 @@ void drawThumbFit(const uint8_t *b, int cx, int cy, int maxW, int maxH, bool dim
 }
 
 // un hueco: miniatura dormida (con su "z" y la estrella si es shiny), nombre y nivel; "?" si esta
-// danado; vacio, con un "+" si el activo se puede guardar. hide = su miniatura se fue con la luz
+// danado; vacio, con un "+" si el activo se puede guardar. hide = su miniatura se fue con la luz.
+// Panel del patio (v2.0, Y1): el ocupado es una tarjeta; el elegido (el del dialogo), la tarjeta
+// clara; el vacio, solo el contorno
 void drawBoxSlot(uint8_t k, uint8_t st, const PetRecord *r, bool hide, int dx) {
   int x = boxCellX(k) + 4 + dx, y = boxCellY(k) + 4, w = BOX_CW - 8, h = BOX_CH - 8;
   int cx = x + w / 2;
+  bool sel = boxAsk == k + 1;
   if (st == BOX_OK && r) {
-    gfx->fillRoundRect(x, y, w, h, 12, BOX_SLEEP_BG);
-    gfx->drawRoundRect(x, y, w, h, 12, UI_INK);
+    uint16_t bg = sel ? Y_CARD_HI : Y_CARD;
+    yCard(x, y, w, h, sel);
     if (!hide) {
       const uint8_t *t = thumbs.get(r->speciesId);
       if (t) {
-        drawThumbFit(t, cx, y + 34, w - 40, 58, true, BOX_SLEEP_BG);
+        drawThumbFit(t, cx, y + 32, w - 40, 56, false, bg);
       } else {  // sin thumbs.bin: el numero, como la Pokedex
         char num[6];
         snprintf(num, sizeof(num), "%d", r->speciesId);
-        gfx->setTextColor(UI_TRACK);
+        gfx->setTextColor(Y_TEXT_DIM);
         setSize(3);
-        setCur(cx - textW(num, 3) / 2, y + 22);
+        setCur(cx - textW(num, 3) / 2, y + 20);
         printT(num);
       }
     }
-    gfx->setTextColor(0x4C98);  // "z": duerme
+    gfx->setTextColor(BOX_Z_INK);  // "z": duerme
     setSize(2);
     setCur(x + w - 18, y + 6);
     printT("z");
@@ -5107,38 +5514,42 @@ void drawBoxSlot(uint8_t k, uint8_t st, const PetRecord *r, bool hide, int dx) {
       setCur(x + 7, y + 6);
       printT("*");
     }
-    gfx->setTextColor(UI_INK);
-    printTight(recName(*r), cx, y + 68, w - 6);
+    gfx->setTextColor(Y_TEXT);
+    printTight(recName(*r), cx, y + 62, w - 6);
     char lv[16];
     snprintf(lv, sizeof(lv), T(S_LVL_FMT), (unsigned)levelFor(r->growMin));
+    gfx->setTextColor(Y_TEXT_DIM);
     setSize(2);
-    setCur(cx - textW(lv, 2) / 2, y + 86);
+    setCur(cx - textW(lv, 2) / 2, y + 80);
     printT(lv);
     return;
   }
   if (st == BOX_DAMAGED) {
-    gfx->drawRoundRect(x, y, w, h, 12, UI_BAR_BAD);
-    gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, 11, UI_BAR_BAD);
-    gfx->setTextColor(UI_BAR_BAD);
+    yCard(x, y, w, h, false);
+    gfx->drawRoundRect(x, y, w, h, Y_CARD_RAD, Y_ACCENT_BAD);
+    gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, Y_CARD_RAD - 1, Y_ACCENT_BAD);
+    gfx->setTextColor(Y_ACCENT_BAD);
     setSize(4);
-    setCur(cx - textW("?", 4) / 2, y + 18);
+    setCur(cx - textW("?", 4) / 2, y + 16);
     printT("?");
-    printTight(T(S_BOX_DAMAGED), cx, y + 74, w - 4);
+    printTight(T(S_BOX_DAMAGED), cx, y + 70, w - 4);
     return;
   }
-  gfx->drawRoundRect(x, y, w, h, 12, UI_TRACK);
-  gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, 11, UI_TRACK);
+  if (sel) yCard(x, y, w, h, true);
+  gfx->drawRoundRect(x, y, w, h, Y_CARD_RAD, Y_CARD_HI);
+  gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, Y_CARD_RAD - 1, Y_CARD_HI);
   if (pet.canStore(k)) {  // aqui cabe el activo
-    gfx->fillRoundRect(cx - 14, y + 34, 28, 6, 3, UI_TRACK);
-    gfx->fillRoundRect(cx - 3, y + 23, 6, 28, 3, UI_TRACK);
+    gfx->fillRoundRect(cx - 14, y + 32, 28, 6, 3, Y_TEXT_DIM);
+    gfx->fillRoundRect(cx - 3, y + 21, 6, 28, 3, Y_TEXT_DIM);
   }
-  gfx->setTextColor(UI_TRACK);
-  printTight(T(S_BOX_EMPTY), cx, y + 74, w - 4);
+  gfx->setTextColor(Y_TEXT_DIM);
+  printTight(T(S_BOX_EMPTY), cx, y + 70, w - 4);
 }
 
 // fila del activo: su miniatura (o el huevo) y "Ahora: <nombre>"; con un huevo esperando a su turno,
 // el huevo dormido a la derecha. Deja en boxNowCx el centro de la miniatura (de ahi sale la luz).
-// vacant = la casa vacia (v1.39): "Ahora: Vacio", con la silueta del huevo en gris
+// vacant = la casa vacia (v1.39): "Ahora: Vacio", con la silueta del huevo en gris.
+// En el panel del patio la fila va en su tarjeta
 void drawBoxNow(const PetRecord *r, bool hide, bool held, bool vacant) {
   char line[48];
   snprintf(line, sizeof(line), T(S_NOW_FMT), r ? recName(*r) : T(vacant ? S_BOX_EMPTY : S_EGG_HDR));
@@ -5147,25 +5558,26 @@ void drawBoxNow(const PetRecord *r, bool hide, bool held, bool vacant) {
   int total = 48 + tw + (held ? 46 : 0);
   int x = CX - total / 2;
   boxNowCx = x + 20;
+  yCard(x - 14, BOX_NOW_Y - 22, total + 28, 44, false);
   if (!hide) {
     if (r) {
       const uint8_t *t = thumbs.get(r->speciesId);
-      if (t) drawThumbFit(t, boxNowCx, BOX_NOW_Y, 58, 58, false, UI_BG_DAY);
+      if (t) drawThumbFit(t, boxNowCx, BOX_NOW_Y, 58, 40, false, Y_CARD);
     } else if (vacant) {
-      drawMapTint(SPR_EGG, SPRITE_H, boxNowCx - 16, BOX_NOW_Y - 16, 1, UI_TRACK);
+      drawMapTint(SPR_EGG, SPRITE_H, boxNowCx - 16, BOX_NOW_Y - 16, 1, Y_TEXT_DIM);
     } else {
       drawMap(SPR_EGG, SPRITE_H, boxNowCx - 16, BOX_NOW_Y - 16, 1, false);
     }
   }
-  gfx->setTextColor(UI_INK);
+  gfx->setTextColor(Y_TEXT);
   setCur(x + 48, BOX_NOW_Y - 7);
   printT(line);
   if (held) {  // el huevo que espera (FR-BOX.5): no se ha perdido
     int ex = x + 48 + tw + 10;
-    drawMapTint(SPR_EGG, SPRITE_H, ex, BOX_NOW_Y - 16, 1, UI_TRACK);
-    gfx->setTextColor(0x4C98);
+    drawMapTint(SPR_EGG, SPRITE_H, ex, BOX_NOW_Y - 16, 1, Y_TEXT_DIM);
+    gfx->setTextColor(BOX_Z_INK);
     setSize(2);
-    setCur(ex + 26, BOX_NOW_Y - 22);
+    setCur(ex + 26, BOX_NOW_Y - 20);
     printT("z");
   }
 }
@@ -5230,28 +5642,29 @@ void drawBoxAsk() {
     // (v1.55: un huevo envuelto tambien: freeHome lo desenvuelve y llega a casa)
     if (!pet.eggHeld() && !pet.items[IT_EGG] && !pet.giftEggs()) snprintf(note, sizeof(note), "%s", T(S_NO_EGG_NOTE));
   }
-  gfx->fillRoundRect(73, 160, 320, 160, 16, UI_WHITE);
-  gfx->drawRoundRect(73, 160, 320, 160, 16, UI_INK);
-  gfx->setTextColor(UI_INK);
+  // panel del patio: tarjeta oscura con borde, sombra debajo; SI verde y NO rojo en el mismo sitio
+  gfx->fillRoundRect(77, 166, 320, 160, 16, Y_SHADOW);
+  gfx->fillRoundRect(73, 160, 320, 160, 16, Y_CARD);
+  gfx->drawRoundRect(73, 160, 320, 160, 16, BOX_DLG_LINE);
+  gfx->setTextColor(Y_TEXT);
   printTight(q, CX, note[0] ? 182 : 198, 296);
   if (note[0]) {
-    gfx->setTextColor(BOX_NOTE_INK);
+    gfx->setTextColor(Y_TEXT_DIM);
     printTight(note, CX, 214, 296);
   }
   setSize(2);
-  gfx->fillRoundRect(118, 252, 100, 52, 12, UI_BAR_OK);
-  gfx->setTextColor(UI_WHITE);
+  gfx->fillRoundRect(118, 252, 100, 52, 12, Y_ACCENT_GO);
+  gfx->setTextColor(Y_TEXT);
   setCur(118 + (100 - textW(T(S_YES), 2)) / 2, 270);
   printT(T(S_YES));
-  gfx->fillRoundRect(248, 252, 100, 52, 12, UI_BAR_BAD);
+  gfx->fillRoundRect(248, 252, 100, 52, 12, Y_ACCENT_BAD);
   setCur(248 + (100 - textW(T(S_NO), 2)) / 2, 270);
   printT(T(S_NO));
 }
 
 void renderBox() {
   uint32_t now = millis();
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  yPanelBg();  // panel del patio (v2.0, Y1): siempre oscuro
   if (boxPage == 1) {  // las insignias (v1.65)
     renderBadges();
     gfx->flush();
@@ -5274,10 +5687,7 @@ void renderBox() {
   if (outcome && boxMove == BOXMV_WAKE) used--;
   char head[32];
   snprintf(head, sizeof(head), T(S_BOX_FMT), used, (unsigned)BOX_SLOTS);
-  gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(head, 3), 36);
-  printT(head);
+  yTitle(head, nullptr);
   bool hatched = !pet.isEgg();
   PetRecord act;
   memset(&act, 0, sizeof(act));
@@ -5332,7 +5742,9 @@ void renderBox() {
     }
   }
 
-  drawPageDots(2, 0, BOX_DOTS_Y);
+  yPager(0, 2, BOX_PAGER_Y);
+  yChevrons(false, !boxAsk && !boxMove);  // > las insignias, como deslizar a la derecha
+  yBackBtn();
   if (boxAsk) drawBoxAsk();
   gfx->flush();
 }
@@ -5365,8 +5777,17 @@ void boxTap(int16_t x, int16_t y) {
     if (timeLeft(boxAskUntil) && x >= 118 && x <= 218 && y >= 252 && y <= 304) boxStartMove(k);
     return;
   }
-  if (y < 72) {  // tocar la cabecera = salir, como en la Pokedex
+  if (y < 72 || yBackHit(x, y)) {  // la cabecera o el boton de volver = salir, como en la Pokedex
     closeBox();
+    return;
+  }
+  int ch = yChevronHit(x, y);  // las flechas: como deslizar entre la caja y las insignias
+  if (ch > 0 && boxPage == 0) {
+    boxPage = 1;
+    return;
+  }
+  if (ch < 0 && boxPage == 1) {
+    boxPage = 0;
     return;
   }
   if (boxPage != 0) return;  // las insignias no tienen nada que tocar
@@ -5395,7 +5816,6 @@ void boxAfterMove() {
   fxq.drop(FXB_LEVELUP);
   fxq.drop(FXB_MEDAL);
   fxo.clear();
-  for (auto &b : fxBar) b.init = false;
   fxArmWatches();
   if (!pet.isVacant()) fxo.push(FXO_BOX, 0, 0, millis());  // casa vacia (v1.39): nadie sale de la luz
   wakeUI();  // la escritura tardo ~1 s: el siguiente cuadro, ya
@@ -5424,8 +5844,12 @@ void drawBoxAppear(uint32_t now) {
   const FxOverlay *o = fxo.find(FXO_BOX);
   if (!o) return;
   float t = FxOverlays::t(*o, now);
-  int cx = pet.isEgg() ? CX : (int)beh.x;
-  int cy = (pet.isEgg() || !pmd.loaded) ? PET_CY : PET_GROUND - pmdIdleHeight() / 2;
+  int cx = pet.isEgg() ? CX : petFootX();
+  int cy = (pet.isEgg() || (!pmd.loaded && petFootY() == PET_GROUND)) ? PET_CY : petFootY() - petBodyH() / 2;
+  if (pet.isEgg() && yardHomeNow() && yardEggX >= 0) {  // el huevo del patio (Y3): donde esta
+    cx = yardEggX;
+    cy = yardEggY - YARD_EGG_MID;
+  }
   float k = 1.0f - t;
   int r = (int)(118 * k * k);
   if (r > 2) {
@@ -5522,20 +5946,22 @@ void boxFill() {
 #define STG_LEGEND_Y 366
 #define STG_LOCK_INK 0x8410          // gris del texto y la silueta de una fase bloqueada
 #define STG_SIL 0xAD55               // silueta de la insignia aun no ganada
-#define STG_PICKED_BG C565(0xd8, 0xf0, 0xd8)
+#define STG_OFF_EDGE Y_CARD          // panel (v2.0): borde de una casilla bloqueada o de quien no pelea
 #define TEAM_CW 84      // tarjetas de bicho: 4 en la fila de arriba y 3 debajo
 #define TEAM_CH 100
 #define TEAM_GAP 6
 #define TEAM_ROW1_Y 96
 #define TEAM_SINGLE_Y 140   // hasta 4 bichos, una sola fila
 #define TEAM_BAND 90        // tocar por encima de las tarjetas = volver
-#define TEAM_BTN_X 153
-#define TEAM_BTN_Y 326
+#define TEAM_BTN_X 153     // pastilla verde de Empezar (se toca con 48 px de alto, 2 por encima y debajo)
+#define TEAM_BTN_Y 322
 #define TEAM_BTN_W 160
-#define TEAM_BTN_H 50
+#define TEAM_BTN_H 44
+#define TEAM_BTN_HIT_Y (TEAM_BTN_Y - (Y_HIT_MIN - TEAM_BTN_H) / 2)
 #define BADGE_CELL_W 96     // pagina de insignias: 4x2 de 64 px (escala 4)
 #define BADGE_ROW_Y 118
 #define BADGE_ROW_H 128
+#define BADGE_PLATE C565(0xe8, 0xea, 0xf2)  // placa de una insignia ganada (panel del patio, Y1)
 
 // un bicho que puede ir al equipo: el de casa (slot TEAM_HOME) o uno de la caja
 struct TeamCand {
@@ -5659,31 +6085,30 @@ static void drawRewardMark(int cx, int cy) {
 }
 
 void renderStages() {
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
-  gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(T(S_STAGES), 3), 36);
-  printT(T(S_STAGES));
+  yPanelBg();
+  yTitle(T(S_STAGES), nullptr);
   for (uint8_t i = 0; i < STAGE_COUNT; i++) {
     bool open = pet.stageUnlocked(i), got = pet.hasBadge(i);
     int x = stageTileX(i) + stShakeDx(i), y = stageTileY(i);
-    if (!open) {  // bloqueada: casilla gris, silueta y texto apagados
-      gfx->fillRoundRect(x, y, STG_W, STG_H, 12, UI_TRACK);
+    if (!open) {  // bloqueada: solo el contorno, silueta y texto apagados
+      gfx->drawRoundRect(x, y, STG_W, STG_H, Y_CARD_RAD, STG_OFF_EDGE);
+      gfx->drawRoundRect(x + 1, y + 1, STG_W - 2, STG_H - 2, Y_CARD_RAD - 1, STG_OFF_EDGE);
     } else {
-      gfx->fillRoundRect(x, y, STG_W, STG_H, 12, UI_WHITE);
-      gfx->drawRoundRect(x, y, STG_W, STG_H, 12, UI_INK);
-      if (got) gfx->drawRoundRect(x + 1, y + 1, STG_W - 2, STG_H - 2, 11, UI_BAR_OK);  // ganada: borde verde
+      yCard(x, y, STG_W, STG_H, false);
+      if (got) {  // ganada: borde verde
+        gfx->drawRoundRect(x, y, STG_W, STG_H, Y_CARD_RAD, Y_ACCENT_GO);
+        gfx->drawRoundRect(x + 1, y + 1, STG_W - 2, STG_H - 2, Y_CARD_RAD - 1, Y_ACCENT_GO);
+      }
     }
     if (got) drawMap(BADGE_ICON[i], 16, x + 8, y + (STG_H - 32) / 2, 2, false);
     else drawMapTint(BADGE_ICON[i], 16, x + 8, y + (STG_H - 32) / 2, 2, open ? STG_SIL : STG_LOCK_INK);
     int tcx = x + 46 + 49;
-    gfx->setTextColor(open ? UI_INK : STG_LOCK_INK);
+    gfx->setTextColor(open ? Y_TEXT : STG_LOCK_INK);
     printTight(stageName(i), tcx, y + 10, 98);
     char line[24];
     if (open) snprintf(line, sizeof(line), T(S_LV_RANGE_FMT), (unsigned)STAGES[i].lvMin, (unsigned)STAGES[i].lvMax);
     else snprintf(line, sizeof(line), "%s", T(S_LOCKED));
-    gfx->setTextColor(open ? BOX_NOTE_INK : STG_LOCK_INK);
+    gfx->setTextColor(open ? Y_TEXT_DIM : STG_LOCK_INK);
     printTight(line, tcx, y + 34, 98);
     if (open && pet.stageRewardReady(i)) drawRewardMark(x + STG_W - 12, y + 12);
   }
@@ -5691,14 +6116,15 @@ void renderStages() {
   setSize(2);
   int tw = textW(T(S_REWARD_TODAY), 2), lx = CX - (tw + 22) / 2;
   drawRewardMark(lx + 7, STG_LEGEND_Y + 7);
-  gfx->setTextColor(BOX_NOTE_INK);
+  gfx->setTextColor(Y_TEXT_DIM);
   setCur(lx + 22, STG_LEGEND_Y);
   printT(T(S_REWARD_TODAY));
+  yBackBtn();
   gfx->flush();
 }
 
 void stagesTap(int16_t x, int16_t y) {
-  if (y < STG_TITLE_BAND) {  // tocar la cabecera = salir, como la caja
+  if (y < STG_TITLE_BAND || yBackHit(x, y)) {  // tocar la cabecera = salir, como la caja
     closeStages();
     return;
   }
@@ -5729,20 +6155,25 @@ static void drawTeamCard(uint8_t idx, uint8_t n) {
   teamCardPos(idx, n, x, y);
   x += stShakeDx(idx);
   bool fight = pet.teamCanFight(c.uid), picked = teamIsPicked(c.uid);
-  uint16_t bg = !fight ? UI_TRACK : picked ? STG_PICKED_BG : UI_WHITE;
-  gfx->fillRoundRect(x, y, TEAM_CW, TEAM_CH, 12, bg);
-  gfx->drawRoundRect(x, y, TEAM_CW, TEAM_CH, 12, picked && fight ? UI_BAR_OK : fight ? UI_INK : STG_LOCK_INK);
-  if (picked && fight) gfx->drawRoundRect(x + 1, y + 1, TEAM_CW - 2, TEAM_CH - 2, 11, UI_BAR_OK);
+  // elegido: tarjeta clara con borde verde; no pelea (dormido): solo el contorno, sobre el fondo
+  uint16_t bg = !fight ? Y_CARD : picked ? Y_CARD_HI : Y_CARD;  // dormido: la miniatura se apaga hacia Y_CARD
+  if (fight) yCard(x, y, TEAM_CW, TEAM_CH, picked);
+  uint16_t edge = !fight ? Y_CARD_HI : picked ? Y_ACCENT_GO : 0;
+  if (edge) {
+    gfx->drawRoundRect(x, y, TEAM_CW, TEAM_CH, Y_CARD_RAD, edge);
+    gfx->drawRoundRect(x + 1, y + 1, TEAM_CW - 2, TEAM_CH - 2, Y_CARD_RAD - 1, edge);
+  }
   int16_t dex = c.slot == TEAM_HOME ? pet.speciesId : pet.boxRecord(c.slot).speciesId;
   const char *nm = c.slot == TEAM_HOME ? petName() : recName(pet.boxRecord(c.slot));
   uint16_t lv = c.slot == TEAM_HOME ? pet.level() : levelFor(pet.boxRecord(c.slot).growMin);
   int cx = x + TEAM_CW / 2;
   const uint8_t *t = thumbs.get(dex);
   if (t) drawThumbFit(t, cx, y + 32, TEAM_CW - 14, 48, !fight, bg);
-  gfx->setTextColor(fight ? UI_INK : STG_LOCK_INK);
+  gfx->setTextColor(fight ? Y_TEXT : STG_LOCK_INK);
   printTight(nm, cx, y + 62, TEAM_CW - 4);
   char s[16];
   snprintf(s, sizeof(s), T(S_LVL_FMT), (unsigned)lv);
+  gfx->setTextColor(fight ? Y_TEXT_DIM : STG_LOCK_INK);
   setSize(2);
   setCur(cx - textW(s, 2) / 2, y + 80);
   printT(s);
@@ -5750,8 +6181,8 @@ static void drawTeamCard(uint8_t idx, uint8_t n) {
     int pos = 0;
     for (uint8_t i = 0; i < teamPickN; i++)
       if (teamPick[i] == c.uid) pos = i + 1;
-    gfx->fillCircle(x + 14, y + 14, 12, UI_BAR_OK);
-    gfx->setTextColor(UI_WHITE);
+    gfx->fillCircle(x + 14, y + 14, 12, Y_ACCENT_GO);
+    gfx->setTextColor(Y_TEXT);
     setSize(2);
     char d[4];
     snprintf(d, sizeof(d), "%d", pos);
@@ -5763,30 +6194,31 @@ static void drawTeamCard(uint8_t idx, uint8_t n) {
 void renderTeam() {
   teamPrune();
   teamBuildCands();
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
-  gfx->setTextColor(UI_INK);
-  printTight(T(S_PICK_TEAM), CX, 36, 280);
+  yPanelBg();
+  // el titulo va a tamano 2: "Elige tu equipo" a 3 no cabe arriba del circulo
+  gfx->setTextColor(Y_TEXT);
+  printTight(T(S_PICK_TEAM), CX, Y_TITLE_Y + 4, 220);
   char sub[40];
   char stg[32];
   snprintf(stg, sizeof(stg), T(S_STAGE_FMT), (unsigned)stageSel + 1);
   snprintf(sub, sizeof(sub), "%s: %s", stg, stageName(stageSel));
-  gfx->setTextColor(BOX_NOTE_INK);
-  printTight(sub, CX, 62, 300);
+  gfx->setTextColor(Y_TEXT_DIM);
+  printTight(sub, CX, Y_SUB_Y - 4, 290);
   for (uint8_t i = 0; i < teamCandN; i++) drawTeamCard(i, teamCandN);
   bool ok = teamPickN > 0;
-  gfx->fillRoundRect(TEAM_BTN_X, TEAM_BTN_Y, TEAM_BTN_W, TEAM_BTN_H, 14, ok ? UI_BAR_OK : UI_TRACK);
-  gfx->setTextColor(ok ? UI_WHITE : STG_LOCK_INK);
+  gfx->fillRoundRect(TEAM_BTN_X, TEAM_BTN_Y, TEAM_BTN_W, TEAM_BTN_H, TEAM_BTN_H / 2, ok ? Y_ACCENT_GO : Y_CARD);
+  gfx->setTextColor(ok ? Y_TEXT : Y_TEXT_DIM);
   setSize(3);
-  setCur(TEAM_BTN_X + (TEAM_BTN_W - textW(T(S_START), 3)) / 2, TEAM_BTN_Y + 13);
+  setCur(TEAM_BTN_X + (TEAM_BTN_W - textW(T(S_START), 3)) / 2, TEAM_BTN_Y + (TEAM_BTN_H - 21) / 2);
   printT(T(S_START));
+  yBackBtn();
   gfx->flush();
 }
 
 void teamTap(int16_t x, int16_t y) {
   teamPrune();
   teamBuildCands();
-  if (x >= TEAM_BTN_X && x < TEAM_BTN_X + TEAM_BTN_W && y >= TEAM_BTN_Y && y < TEAM_BTN_Y + TEAM_BTN_H) {
+  if (yInRect(x, y, TEAM_BTN_X, TEAM_BTN_HIT_Y, TEAM_BTN_W, Y_HIT_MIN)) {
     if (!teamPickN) {
       stDeny(-1);
       return;
@@ -5799,7 +6231,7 @@ void teamTap(int16_t x, int16_t y) {
     startStage(st, uids, n);
     return;
   }
-  if (y < TEAM_BAND) {  // la cabecera: volver a las fases
+  if (y < TEAM_BAND || yBackHit(x, y)) {  // la cabecera o el boton de volver: a las fases
     closeTeam();
     return;
   }
@@ -5828,24 +6260,26 @@ void teamTap(int16_t x, int16_t y) {
 void renderBadges() {
   char head[32];
   snprintf(head, sizeof(head), "%s %u/%u", T(S_BADGES), (unsigned)pet.badgeCount(), (unsigned)STAGE_COUNT);
-  gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(head, 3), 36);
-  printT(head);
+  yTitle(head, nullptr);  // el disco oscuro ya lo pinta renderBox
   int x0 = CX - (4 * BADGE_CELL_W) / 2;
   for (uint8_t i = 0; i < STAGE_COUNT; i++) {
     int cx = x0 + (i % 4) * BADGE_CELL_W + BADGE_CELL_W / 2, y = BADGE_ROW_Y + (i / 4) * BADGE_ROW_H;
     bool got = pet.hasBadge(i);
+    // panel del patio (v2.0, Y1): cada insignia en su tarjeta; la ganada, en color sobre una
+    // placa clara (su contorno oscuro no se leeria sobre la tarjeta); la que falta, en silueta
+    yCard(cx - 40, y - 8, 80, 80, got);
     if (got) {
-      gfx->fillRoundRect(cx - 38, y - 6, 76, 76, 14, UI_WHITE);
+      gfx->fillRoundRect(cx - 35, y - 3, 70, 70, 10, BADGE_PLATE);
       drawMap(BADGE_ICON[i], 16, cx - 32, y, 4, false);
     } else {
-      drawMapTint(BADGE_ICON[i], 16, cx - 32, y, 4, UI_TRACK);
+      drawMapTint(BADGE_ICON[i], 16, cx - 32, y, 4, BOX_DLG_LINE);
     }
-    gfx->setTextColor(got ? UI_INK : STG_LOCK_INK);
-    printTight(got ? stageName(i) : "???", cx, y + 78, BADGE_CELL_W - 2);
+    gfx->setTextColor(got ? Y_TEXT : Y_TEXT_DIM);
+    printTight(got ? stageName(i) : "???", cx, y + 80, BADGE_CELL_W - 8);  // 8 px entre nombres vecinos
   }
-  drawPageDots(2, 1, BOX_DOTS_Y);
+  yPager(1, 2, BOX_PAGER_Y);
+  yChevrons(true, false);  // < la caja, como deslizar a la izquierda
+  yBackBtn();
 }
 
 #define BAT_ICON_W 27  // 24 de cuerpo + 3 de borne
@@ -5870,6 +6304,1440 @@ void drawBattery(int x) {
   } else {
     int fw = (w - 4) * pc / 100;
     if (fw > 0) gfx->fillRect(x + 2, y + 2, fw, h - 4, col);
+  }
+}
+
+// =================== kit del patio (v2.0, fase Y0; geometria en yard_ui.h) ===================
+// Piezas de la interfaz nueva. Los paneles son un disco casi negro con tarjetas; el mundo
+// lleva el texto con sombra para leerse sobre el mapa. Pantalla de muestra: serie YARDUI.
+
+void yPanelBg() {
+  gfx->fillScreen(0x0000);  // fuera del disco: negro (el marco redondo lo tapa igualmente)
+  gfx->fillCircle(Y_CX, Y_CY, Y_PANEL_R, Y_PANEL_BG);
+}
+
+// texto con sombra de 2 px, para encima del mapa
+void yShadowText(int x, int y, const char *s, uint8_t size, uint16_t col) {
+  setSize(size);
+  gfx->setTextColor(Y_SHADOW);
+  setCur(x + 2, y + 2);
+  printT(s);
+  gfx->setTextColor(col);
+  setCur(x, y);
+  printT(s);
+}
+
+void yTitle(const char *t, const char *sub) {
+  gfx->setTextColor(Y_TEXT);
+  setSize(3);
+  setCur(centerX(t, 3), Y_TITLE_Y);
+  printT(t);
+  if (sub && *sub) {
+    gfx->setTextColor(Y_TEXT_DIM);
+    setSize(2);
+    setCur(centerX(sub, 2), Y_SUB_Y);
+    printT(sub);
+  }
+}
+
+void yCard(int x, int y, int w, int h, bool hi) {
+  gfx->fillRoundRect(x, y, w, h, Y_CARD_RAD, hi ? Y_CARD_HI : Y_CARD);
+}
+
+int yPillWidth(const char *label) {
+  setSize(2);
+  return yPillW(textW(label, 2));
+}
+
+// pastilla redondeada con el texto en blanco; devuelve su ancho
+int yPill(int x, int y, const char *label, uint16_t col) {
+  int w = yPillWidth(label);
+  gfx->fillRoundRect(x, y, w, Y_PILL_H, Y_PILL_H / 2, col);
+  gfx->setTextColor(Y_TEXT);
+  setSize(2);
+  setCur(x + (w - textW(label, 2)) / 2, y + (Y_PILL_H - 14) / 2);
+  printT(label);
+  return w;
+}
+
+// moneda: disco dorado con el canto oscuro y un brillo
+void yCoin(int cx, int cy, int r) {
+  gfx->fillCircle(cx, cy, r, Y_COIN_DARK);
+  gfx->fillCircle(cx - 1, cy - 1, r - 2, Y_COIN);
+  gfx->fillRect(cx - 1, cy - r / 2, 2, r, Y_COIN_DARK);  // la raya del centro
+}
+
+// moneda + numero, centrados como grupo en cx; shadow = sobre el mapa
+void yCoinBadge(int cx, int y, uint32_t n, bool shadow) {
+  char s[12];
+  snprintf(s, sizeof(s), "%lu", (unsigned long)n);
+  setSize(2);
+  int tw = textW(s, 2), w = 18 + 6 + tw, x = cx - w / 2;
+  if (shadow) gfx->fillCircle(x + 9 + 2, y + 7 + 2, 9, Y_SHADOW);
+  yCoin(x + 9, y + 7, 9);
+  if (shadow) yShadowText(x + 24, y, s, 2, Y_TEXT);
+  else {
+    gfx->setTextColor(Y_TEXT);
+    setCur(x + 24, y);
+    printT(s);
+  }
+}
+
+// lo ganado en monedas, "moneda +N", centrado en la pantalla (resultados de juegos y estadios)
+void drawCoinGain(int y, uint16_t n, uint16_t col) {
+  if (!n) return;
+  char s[12];
+  snprintf(s, sizeof(s), "+%u", (unsigned)n);
+  setSize(2);
+  int w = 18 + 6 + textW(s, 2), x = CX - w / 2;
+  yCoin(x + 9, y + 7, 9);
+  gfx->setTextColor(col);
+  setCur(x + 24, y);
+  printT(s);
+}
+
+static void yChevron(int cx, int cy, int dir, uint16_t col) {
+  // dos trazos de 4 px: "<" (dir -1) o ">" (dir +1)
+  for (int t = -2; t <= 1; t++) {
+    gfx->drawLine(cx - dir * 5 + t, cy - Y_CHEV_HALF, cx + dir * 5 + t, cy, col);
+    gfx->drawLine(cx + dir * 5 + t, cy, cx - dir * 5 + t, cy + Y_CHEV_HALF, col);
+  }
+}
+
+void yChevrons(bool showL, bool showR) {
+  if (showL) yChevron(Y_CHEV_LX, Y_CY, -1, Y_TEXT);
+  if (showR) yChevron(Y_CHEV_RX, Y_CY, 1, Y_TEXT);
+}
+
+void yPager(int cur, int n, int y) {
+  char s[12];
+  snprintf(s, sizeof(s), "%d/%d", cur + 1, n);
+  gfx->setTextColor(Y_TEXT_DIM);
+  setSize(2);
+  setCur(centerX(s, 2), y);
+  printT(s);
+}
+
+// boton redondo de volver con una flecha curva blanca
+void yBackBtn() {
+  gfx->fillCircle(Y_BACK_X, Y_BACK_Y, Y_BACK_R, Y_BACK);
+  // arco de 3/4 de vuelta (de las 12 en sentido horario hasta las 9) y la punta arriba a la izquierda
+  for (int a = -90; a <= 180; a += 8) {
+    float r = a * (float)PI / 180.0f;
+    gfx->fillCircle(Y_BACK_X + (int)lroundf(cosf(r) * 8), Y_BACK_Y + 2 + (int)lroundf(sinf(r) * 8), 1, Y_TEXT);
+  }
+  gfx->fillTriangle(Y_BACK_X - 1, Y_BACK_Y - 12, Y_BACK_X - 1, Y_BACK_Y - 1, Y_BACK_X - 8, Y_BACK_Y - 6, Y_TEXT);
+}
+
+// dock de la casa: 3 circulos de color con su icono y una sombra debajo
+void yDock(const YDockItem *items, int pressed) {
+  for (int i = 0; i < Y_DOCK_N; i++) {
+    int cx = yDockX(i), cy = Y_DOCK_Y + (i == pressed ? 2 : 0);
+    gfx->fillCircle(cx + 2, Y_DOCK_Y + 3, Y_DOCK_R, Y_SHADOW);
+    gfx->fillCircle(cx, cy, Y_DOCK_R, items[i].off ? (uint16_t)0x8410 : items[i].col);
+    gfx->drawCircle(cx, cy, Y_DOCK_R, Y_TEXT);
+    drawMap(items[i].icon, 16, cx - 16, cy - 16, 2, false);
+  }
+}
+
+// aviso verde encima de una fila (tarjeta), con el texto centrado
+void yToastC(int x, int y, int w, int h, const char *text, uint16_t col) {
+  gfx->fillRoundRect(x, y, w, h, Y_CARD_RAD, col);
+  gfx->setTextColor(Y_TEXT);
+  setSize(2);
+  setCur(x + (w - (int)textW(text, 2)) / 2, y + (h - 14) / 2);
+  printT(text);
+}
+void yToast(int x, int y, int w, int h, const char *text) { yToastC(x, y, w, h, text, Y_ACCENT_GO); }
+
+// globo de dialogo blanco con la cola hacia abajo; (cx, tipY) = la punta de la cola
+void yBubble(int cx, int tipY, const char *text) {
+  setSize(2);
+  int tw = textW(text, 2), w = tw + 20, h = 30;
+  int x = cx - w / 2;
+  if (x < 20) x = 20;
+  if (x + w > 446) x = 446 - w;
+  int y = tipY - 8 - h;
+  gfx->fillRoundRect(x + 2, y + 2, w, h, 10, Y_SHADOW);
+  gfx->fillRoundRect(x, y, w, h, 10, Y_TEXT);
+  gfx->fillTriangle(cx - 7, y + h - 1, cx + 7, y + h - 1, cx, tipY, Y_TEXT);
+  gfx->setTextColor(UI_INK);
+  setCur(x + 10, y + (h - 14) / 2);
+  printT(text);
+}
+
+// barra de vida de 10 px con "cur/max" encima, a la izquierda
+void yHpBar(int x, int y, int w, int cur, int max, uint16_t col) {
+  char s[16];
+  snprintf(s, sizeof(s), "%d/%d", cur, max);
+  gfx->setTextColor(Y_TEXT);
+  setSize(2);
+  setCur(x, y - 20);
+  printT(s);
+  gfx->fillRoundRect(x, y, w, Y_HP_H, Y_HP_H / 2, Y_CARD_HI);
+  int fw = max > 0 ? w * (cur < 0 ? 0 : cur > max ? max : cur) / max : 0;
+  if (fw >= Y_HP_H) gfx->fillRoundRect(x, y, fw, Y_HP_H, Y_HP_H / 2, col);
+}
+
+// =================== paneles Cuidar y Jugar (v2.0, fase Y2; geometria en yard_panels.h) ===================
+// Sustituyen a los menus emergentes de COMER / JUGAR / CUIDADOS con las mismas reglas: tocar una
+// tarjeta hace lo que hacia su hueco y vuelve a casa, como el menu al cerrarse. Dos diferencias: el
+// panel no se cierra solo a los 6 s, y una tarjeta que no se puede usar tiembla en el panel (que
+// sigue abierto) en vez de cerrarlo y hacer temblar el boton de casa.
+
+// Cuidar: la comida (que en la fase Y3 pasara a soltarse en el patio) y luz / bano
+void openCarePanel() {
+  if (pet.ceremony || pet.isEgg() || pet.isVacant()) return;  // (desde casa: COMER y CUIDADOS no llegan con huevo)
+  panelKind = PANEL_CARE;
+  panelShakeIdx = -1;
+  panelShakeUntil = 0;
+}
+
+// Jugar: los juegos y las fases. Huevo, dormido o casa vacia: no hay juegos, pero los de la caja si
+// pueden ir a las fases (v1.65)
+void openPlayPanel() {
+  if (pet.ceremony) return;
+  if (!pet.isEgg() && !pet.isVacant() && !pet.sleeping) {
+    panelKind = PANEL_PLAY;
+    panelShakeIdx = -1;
+    panelShakeUntil = 0;
+  } else if (pet.boxHasPets()) {
+    openStages();
+  } else {
+    sfxPlay(SFX_DENY);
+  }
+}
+
+// que tarjeta se puede usar ahora (las que no, con contorno e icono apagado)
+static bool panelItemOn(uint8_t kind, uint8_t i) {
+  bool awake = !pet.sleeping && !pet.isEgg();
+  if (kind == PANEL_CARE) {
+    // Y3: la comida cae al patio, una a la vez: con una en el suelo, las demas esperan
+    if ((i <= CP_CAKE) && yardFood.phase != YF_NONE) return false;
+    if (i == CP_CAKE) return awake && pet.items[IT_CAKE];
+    if (i == CP_LIGHT) return true;
+    if (i == CP_BATH) return awake && !bathUntil;  // dormido no se bana, y el bano no se repite a medias
+    return awake;
+  }
+  if (i == PP_BATTLE) return stagesCanOpen();
+  if (i == PP_DASH) return awake && imuPresent();  // sin IMU no se puede inclinar
+  return awake;
+}
+
+// la tarjeta bajo el dedo (se ve pulsada), o -1
+static int panelPressed() {
+  if (!wasPressed || holdFired || swallowGesture) return -1;
+  int i = panelHit(panelKind, tX0, tY0);
+  return (i >= 0 && panelHit(panelKind, tXl, tYl) == i) ? i : -1;
+}
+
+static int panelShakeDx(int8_t idx) {
+  if (idx != panelShakeIdx || !timeLeft(panelShakeUntil)) return 0;
+  float s = 1.0f - (float)timeLeft(panelShakeUntil) / (float)FX_DENY_MS;
+  return (int)(4.0f * (1.0f - s) * sinf(s * 6.0f * (float)PI));
+}
+
+static void panelDeny(int8_t idx) {
+  sfxPlay(SFX_DENY);
+  panelShakeIdx = idx;
+  panelShakeUntil = millis() + FX_DENY_MS;
+}
+
+// la clave de repintado: todo lo que dibujan los dos paneles
+void mixPanelKey(uint32_t &h) {
+  h = mixKey(h, 30u + panelKind);
+  h = mixKey(h, (uint32_t)(panelPressed() + 1));
+  for (uint8_t i = 0; i < panelCount(panelKind); i++) h = mixKey(h, panelItemOn(panelKind, i));
+  for (uint32_t v : { (uint32_t)pet.items[IT_CAKE], (uint32_t)pet.sleeping, (uint32_t)pet.berryKnown,
+                      (uint32_t)pet.speciesId, (uint32_t)(timeLeft(cakeHintUntil) > 0), (uint32_t)gLang })
+    h = mixKey(h, v);
+}
+
+// una tarjeta del panel: usable = tarjeta llena (clara si se pulsa); si no, solo el contorno y el icono
+// apagado. Devuelve la x (con el temblor) para lo que se dibuje encima
+static int panelCardDraw(uint8_t i, const char *const *icon, const char *label) {
+  int x, y, w, h;
+  panelCard(panelKind, i, x, y, w, h);
+  x += panelShakeDx(i);
+  bool on = panelItemOn(panelKind, i);
+  if (on) {
+    yCard(x, y, w, h, panelPressed() == i);
+  } else {
+    gfx->drawRoundRect(x, y, w, h, Y_CARD_RAD, STG_OFF_EDGE);
+    gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, Y_CARD_RAD - 1, STG_OFF_EDGE);
+  }
+  int iy = label ? y + 12 : y + (h - 48) / 2;
+  if (on) drawMap(icon, 16, x + (w - 48) / 2, iy, 3, false);
+  else drawMapTint(icon, 16, x + (w - 48) / 2, iy, 3, STG_LOCK_INK);
+  if (label) {
+    gfx->setTextColor(on ? Y_TEXT_DIM : STG_LOCK_INK);
+    printTight(label, x + w / 2, y + h - 30, w - 8);
+  }
+  return x;
+}
+
+static void renderCarePanel() {
+  yTitle(T(S_DOCK_CARE), nullptr);
+  static const char *const *const BERRY[3] = { SPR_ICON_FOOD, SPR_ICON_BERRY_B, SPR_ICON_BERRY_G };
+  for (uint8_t c = 0; c < 3; c++) {
+    int x = panelCardDraw(c, BERRY[c], nullptr);
+    // la favorita, ya descubierta (v1.57): marco dorado y una estrella en su esquina
+    if (pet.berryKnown && pet.lovesBerry(c)) {
+      int y = CP_FOOD_Y;
+      gfx->drawRoundRect(x, y, CP_FOOD_W, CP_FOOD_W, Y_CARD_RAD, UI_BAR_WARN);
+      gfx->drawRoundRect(x + 1, y + 1, CP_FOOD_W - 2, CP_FOOD_W - 2, Y_CARD_RAD - 1, UI_BAR_WARN);
+      drawMap(SPR_STAR, 16, x + CP_FOOD_W - 19, y + 3, 1, false);
+    }
+  }
+  // la tarta (v1.54), con cuantas quedan en una chapa; sin ninguna, apagada
+  int x = panelCardDraw(CP_CAKE, SPR_ICON_CAKE, nullptr);
+  uint8_t cakes = pet.items[IT_CAKE];
+  if (cakes) {
+    char cn[4];
+    snprintf(cn, sizeof(cn), "%u", cakes);
+    int bx = x + CP_FOOD_W - 12, by = CP_FOOD_Y + 12;
+    gfx->fillCircle(bx, by, 10, UI_BAR_BAD);
+    setSize(2);
+    gfx->setTextColor(UI_WHITE);
+    setCur(bx - textW(cn, 2) / 2 + 1, by - 7);
+    printT(cn);
+  }
+  // dormido: el sol lo despierta, y el bano espera
+  panelCardDraw(CP_LIGHT, pet.sleeping ? SPR_ICON_SUN : SPR_ICON_LIGHT, nullptr);
+  panelCardDraw(CP_BATH, SPR_ICON_CLEAN, nullptr);
+  // tocar la tarta sin ninguna: donde se encuentra (en casa lo decia la cabecera)
+  if (timeLeft(cakeHintUntil)) {
+    gfx->setTextColor(Y_TEXT);
+    printTight(T(S_NO_CAKE), CX, CP_FOOD_Y + CP_FOOD_W + 15, 380);
+  }
+}
+
+static void renderPlayPanel() {
+  yTitle(T(S_DOCK_PLAY), nullptr);
+  // bajo cada juego, la estadistica que entrena; el combate lleva a las fases
+  panelCardDraw(PP_BALL, SPR_ICON_PLAY, T(S_STAT_SPE));
+  panelCardDraw(PP_BATTLE, SPR_ICON_BATTLE, T(S_STAGES));
+  panelCardDraw(PP_SACK, SPR_ICON_SACK, T(S_STAT_ATK));
+  panelCardDraw(PP_DASH, SPR_ICON_DASH, T(S_STAT_SPE));
+  panelCardDraw(PP_ZEN, SPR_ICON_ZEN, T(S_STAT_DEF));
+}
+
+void renderPanel() {
+  yPanelBg();
+  if (panelKind == PANEL_CARE) renderCarePanel();
+  else renderPlayPanel();
+  yBackBtn();
+  gfx->flush();
+}
+
+static void carePanelTap(int i) {
+  if (!panelItemOn(PANEL_CARE, i)) {  // dormido: ni comida ni bano; la tarta sin ninguna dice donde hay
+    if (i == CP_CAKE && !pet.items[IT_CAKE]) cakeHintUntil = millis() + 2500;
+    panelDeny(i);
+    return;
+  }
+  if (i == CP_LIGHT) {
+    sfxPlay(SFX_TAP);
+    pet.toggleLight();
+  } else if (i == CP_BATH) {
+    sfxPlay(SFX_TAP);
+    startBath();
+  } else {
+    // Y3: la comida cae al patio y el bicho va a por ella; Pet la aplica al comersela (yardFoodEaten).
+    // La tarta se mira ya (canUseItem) pero no se gasta hasta entonces
+    if (i == CP_CAKE && !pet.canUseItem(IT_CAKE)) {
+      panelDeny(i);
+      return;
+    }
+    int r = yardDropFood(i == CP_CAKE ? 3 : (uint8_t)i);
+    if (r == 0) {  // ya hay una en el suelo
+      panelDeny(i);
+      return;
+    }
+    if (r > 0) {
+      sfxPlay(SFX_TAP);
+      panelKind = PANEL_NONE;  // a casa a verlo
+      return;
+    }
+    // -1: sin bicho en el patio (no deberia pasar): como siempre, al momento
+    FxNeedSnap ns = fxSnap();
+    if (i == CP_CAKE) {
+      if (!pet.eatCake()) {  // (con tartas: en una ceremonia)
+        panelDeny(i);
+        return;
+      }
+    } else {
+      pet.feedBerry(i);
+    }
+    fxNeeds(ns);  // "+25" sobre la barra de comida
+    sfxPlay(SFX_EAT);
+  }
+  panelKind = PANEL_NONE;  // como el menu: hecho, a casa a verlo
+}
+
+static void playPanelTap(int i) {
+  if (!panelItemOn(PANEL_PLAY, i)) {
+    panelDeny(i);
+    return;
+  }
+  sfxPlay(SFX_TAP);
+  panelKind = PANEL_NONE;  // el juego (o las fases) se abre en su lugar; al salir, a casa
+  if (i == PP_BALL) startGame();
+  else if (i == PP_BATTLE) openStages();  // v1.65: las fases (antes un combate suelto)
+  else if (i == PP_SACK) startSack();
+  else if (i == PP_DASH) startDash();
+  else startZen();
+}
+
+void panelTap(int16_t x, int16_t y) {
+  if (yBackHit(x, y)) {  // volver: a casa, como USER
+    sfxPlay(SFX_TAP);
+    panelKind = PANEL_NONE;
+    return;
+  }
+  int i = panelHit(panelKind, x, y);
+  if (i < 0) return;  // fuera de las tarjetas: nada (es una pantalla, no un menu que se cierra)
+  if (panelKind == PANEL_CARE) carePanelTap(i);
+  else playPanelTap(i);
+}
+
+// ---- pantalla de muestra del kit (serie YARDUI [pagina]): 0 panel, 1 mundo, 2 fase ----
+// fila de la tienda de muestra: icono, nombre, precio y pastilla de comprar
+static void yDemoShopRow(int y, const char *const *icon, const char *name, int price) {
+  const int x = 70, w = 326, h = 64;
+  yCard(x, y, w, h, false);
+  drawMap(icon, 16, x + 12, y + 16, 2, false);
+  gfx->setTextColor(Y_TEXT);
+  setSize(2);
+  setCur(x + 56, y + 12);
+  printT(name);
+  yCoin(x + 63, y + 45, 7);
+  char s[8];
+  snprintf(s, sizeof(s), "%d", price);
+  gfx->setTextColor(Y_TEXT_DIM);
+  setCur(x + 76, y + 38);
+  printT(s);
+  int pw = yPillWidth(T(S_BUY));
+  yPill(x + w - 12 - pw, y + (h - Y_PILL_H) / 2, T(S_BUY), Y_ACCENT_GO);
+}
+
+static void yDemoShop() {
+  yPanelBg();
+  yTitle(T(S_SHOP), nullptr);
+  yCoinBadge(Y_CX, Y_SUB_Y, 37, false);
+  gfx->drawFastHLine(150, 100, 166, Y_CARD_HI);
+  yDemoShopRow(118, SPR_ICON_GOLDEN, T(S_IT_GOLDEN), 10);
+  yDemoShopRow(194, SPR_ICON_CAKE, T(S_IT_CAKE), 40);
+  yDemoShopRow(270, SPR_ICON_REVIVE, T(S_IT_REVIVE), 80);
+  yToast(70, 194, 326, 64, T(S_PURCHASED));
+  yChevrons(true, true);
+  yPager(1, 3, 352);
+  yBackBtn();
+}
+
+static void yDemoWorld() {
+  // un prado de cuadros de 32 px (lo que mide una baldosa de 16 a escala 2) en dos verdes
+  for (int ty = 0; ty < 466; ty += 32)
+    for (int tx = 0; tx < 466; tx += 32)
+      gfx->fillRect(tx, ty, 32, 32, ((tx + ty) / 32) & 1 ? C565(0x8c, 0xc6, 0x5a) : C565(0x80, 0xbc, 0x52));
+  drawBattery(Y_CX - BAT_ICON_W / 2);
+  yShadowText(centerX("12:30", 5), 30, "12:30", 5, Y_TEXT);
+  yCoinBadge(Y_CX, 76, 117, true);
+  // el bicho de muestra: un huevo con su sombra, y su globo con el estado
+  gfx->fillEllipse(Y_CX, 262, 26, 8, C565(0x5a, 0x8a, 0x3c));
+  drawMap(SPR_ICON_EGG, 16, Y_CX - 32, 200, 4, false);
+  yBubble(Y_CX, 192, T(S_HUNGRY));
+  YDockItem dock[Y_DOCK_N] = {
+    { SPR_ICON_CARE, Y_DOCK_CARE, false },
+    { SPR_ICON_PLAY, Y_DOCK_PLAY, false },
+    { SPR_ICON_BAG, Y_DOCK_BAG, false },
+  };
+  yDock(dock, -1);
+}
+
+static void yDemoStage() {
+  yPanelBg();
+  char t[24];
+  snprintf(t, sizeof(t), T(S_STAGE_FMT), 1u);
+  yTitle(t, stageName(0));
+  yHpBar(60, 128, 156, 48, 52, Y_ACCENT_GO);
+  yHpBar(250, 128, 156, 98, 100, Y_ACCENT_BAD);
+  // ventana de la pelea (la fase Y1 pondra aqui el bioma y los dos bichos)
+  gfx->fillRoundRect(60, 152, 346, 136, Y_CARD_RAD, C565(0x80, 0xbc, 0x52));
+  gfx->drawRoundRect(60, 152, 346, 136, Y_CARD_RAD, Y_CARD_HI);
+  gfx->setTextColor(Y_TEXT);
+  setSize(2);
+  setCur(centerX(T(S_SUPER_EFF), 2), 302);
+  printT(T(S_SUPER_EFF));
+  gfx->setTextColor(Y_TEXT_DIM);
+  setCur(centerX(T(S_CRITICAL), 2), 326);
+  printT(T(S_CRITICAL));
+  yBackBtn();
+}
+
+void renderYardDemo() {
+  if (yardDemoPage == 0) yDemoShop();
+  else if (yardDemoPage == 1) yDemoWorld();
+  else yDemoStage();
+  gfx->flush();
+}
+
+void yardDemoTap(int16_t x, int16_t y) {
+  if (yBackHit(x, y)) {
+    yardDemoOpen = false;
+    return;
+  }
+  int c = yChevronHit(x, y);
+  if (c) yardDemoPage = (uint8_t)((yardDemoPage + YDEMO_PAGES + c) % YDEMO_PAGES);
+}
+
+// =================== el patio: la casa (v2.0, fase Y2) ===================
+// La casa con un bicho nacido es un mapa de arriba abajo (/yard/NN.bin, yardbg.h) por el que
+// pasean el bicho de casa y el primero de la caja (yard.h). Encima, la hora, la bateria y el dock
+// (Cuidar / Jugar / Mochila); el estado sale en un globo sobre el bicho, y las cacas y los regalos
+// estan en el suelo. La casa vacia, la despedida y el Revivir siguen con su pantalla.
+//
+// Fase Y3 (acciones en el mundo):
+// - Comer: la baya o la tarta del panel Cuidar cae al suelo cerca del bicho, el bicho la ve ("!"), va
+//   andando, se la come (Eat) y solo entonces Pet la aplica (con su "+N", su sonido y un corazon). Una a
+//   la vez: con una en el suelo, las tarjetas de comida se apagan. Si deja el patio (otra pantalla, un
+//   juego, un combate) la comida le espera en el suelo y sigue al volver; si ya no puede comer (se
+//   duerme, ceremonia, se muere, otro bicho en casa) desaparece sin gastarse nada: la tarta solo se
+//   descuenta al comersela.
+// - El huevo esta en el patio (el de la caja pasea a su alrededor) y eclosiona solo a las 4 h reales;
+//   cada sacudida (una cada 30 s) le quita 5 min, hasta 2 h (eggtimer.h). Tocarlo lo tambalea y dice lo
+//   que falta. El inicial (y uno a medias del sistema de antes) tambien se ve aqui, pero se abre con 3
+//   toques como siempre.
+
+bool yardHomeNow() {
+  return !pet.awaitingStarter() && !pet.ceremony && !pet.isDying() && !pet.isVacant();
+}
+
+// el globo del huevo del patio, un rato (tras un toque, una sacudida que conto o EGGT)
+void yardEggInfo() {
+  yardEggInfoUntil = millis() + 2600;
+}
+
+static_assert(YBG_CANVAS == UI_SIZE, "el mapa se copia tal cual al lienzo");
+
+// ---- el fondo ----
+// el mapa del patio es del jugador (Pet::yardMapWanted: el elegido, o el prado del principio), igual para
+// todos los bichos
+#define YARD_MAP_FALLBACK 1  // si falta el del bioma; si falta este tambien, el suelo liso
+#define YARD_MAP_NONE 255    // YARDBG 255: el suelo liso a proposito (para verlo)
+
+uint8_t *yardFile = nullptr;       // el .bin entero en PSRAM (yardView.px apunta dentro)
+YardBgView yardView;
+uint16_t *yardBg = nullptr;        // 466x466 RGB565 ya tintado, en PSRAM (434 KB)
+uint8_t yardWalk[YBG_WALK_BYTES];  // la mascara de paso (solo la zona conectada mas grande)
+uint8_t yardMapForced = 0;         // YARDBG <n>; 0 = el elegido
+uint8_t yardMapWant = 0;           // el pedido la ultima vez (0 = ninguno aun)
+uint8_t yardMapLoaded = 0;         // el cargado; 0 = el suelo liso de respaldo
+uint32_t yardMapEpoch = 0;
+int32_t yardBgKey = -1;            // tinte + mapa + bioma de lo que hay en yardBg
+char yardWhy[48] = "";             // por que no se cargo el pedido (YARDBG)
+
+uint8_t yardMapNow() { return yardMapLoaded; }
+
+static bool yardTryMap(uint8_t n) {
+  size_t len = 0;
+  uint8_t *d = sdReadYardMap(n, YBG_FILE_MAX, &len);
+  if (!d) {
+    snprintf(yardWhy, sizeof(yardWhy), "missing /yard/%02u.bin", n);
+    return false;
+  }
+  YbgErr e = yardBgParse(d, len, &yardView);
+  if (e != YBG_OK) {
+    free(d);
+    snprintf(yardWhy, sizeof(yardWhy), "bad /yard/%02u.bin (err %u)", n, (unsigned)e);
+    return false;
+  }
+  if (yardFile) free(yardFile);
+  yardFile = d;
+  memcpy(yardWalk, yardView.walk, YBG_WALK_BYTES);
+  yardKeepLargestRegion(yardWalk);
+  yardMapLoaded = n;
+  return true;
+}
+
+// carga el mapa que toca (el del bioma, o el forzado); se mira cada frame, solo lee al cambiar
+void yardEnsureMap() {
+  // el selector de fondos (Y4b) manda sobre lo elegido, solo mientras esta abierto
+  uint8_t want = yardMapForced ? yardMapForced : yardMapPreview ? yardMapPreview : pet.yardMapWanted();
+  if (want == yardMapWant && yardMapEpoch == sdEpoch) return;
+  yardMapWant = want;
+  yardMapEpoch = sdEpoch;
+  yardBgKey = -1;
+  yardWhy[0] = 0;
+  if (want == YARD_MAP_NONE) {
+    snprintf(yardWhy, sizeof(yardWhy), "forced");
+  } else if (!sdReady) {
+    snprintf(yardWhy, sizeof(yardWhy), "no SD");
+  } else if (yardTryMap(want)) {
+    Serial.printf("yard map %02u\n", want);
+    return;
+  } else if (want != YARD_MAP_FALLBACK) {
+    char first[48];
+    snprintf(first, sizeof(first), "%s", yardWhy);
+    if (yardTryMap(YARD_MAP_FALLBACK)) {
+      snprintf(yardWhy, sizeof(yardWhy), "%s, using %02u", first, YARD_MAP_FALLBACK);
+      Serial.printf("yard map %02u (%s)\n", YARD_MAP_FALLBACK, yardWhy);
+      return;
+    }
+  }
+  if (yardFile) free(yardFile);
+  yardFile = nullptr;
+  yardMapLoaded = 0;
+  yardFallbackWalk(yardWalk);
+  Serial.printf("yard map fallback (%s)\n", yardWhy);
+}
+
+static void yBufRect(uint16_t *b, int x, int y, int w, int h, uint16_t c) {
+  if (x < 0) { w += x; x = 0; }
+  if (y < 0) { h += y; y = 0; }
+  if (x + w > YBG_CANVAS) w = YBG_CANVAS - x;
+  if (y + h > YBG_CANVAS) h = YBG_CANVAS - y;
+  for (int j = 0; j < h; j++)
+    for (int i = 0; i < w; i++) b[(y + j) * YBG_CANVAS + x + i] = c;
+}
+
+// sin mapa: suelo liso del color del bioma, en cuadros de una celda apenas distintos, y unas matas
+void yardPaintFallback(uint16_t *b, uint8_t biome, YardTint t) {
+  uint16_t soil = BIOME_SOIL[biome < BIOME_COUNT ? biome : 0];
+  const uint16_t ink = C565(0x10, 0x18, 0x20);
+  uint16_t base = yardTint565(soil, t), alt = yardTint565(lerp565(soil, ink, 1, 16), t);
+  uint16_t dk = yardTint565(lerp565(soil, ink, 6, 16), t), lt = yardTint565(lerp565(soil, 0xFFFF, 6, 16), t);
+  for (int cy = 0; cy < YBG_GRID; cy++)
+    for (int cx = 0; cx < YBG_GRID; cx++)
+      yBufRect(b, cx * YBG_CELL - YBG_CROP, cy * YBG_CELL - YBG_CROP, YBG_CELL, YBG_CELL, (cx + cy) & 1 ? alt : base);
+  uint32_t seed = 0x7a4d11u;
+  auto rnd = [&](int n) { seed = seed * 1664525u + 1013904223u; return (int)((seed >> 16) % (uint32_t)n); };
+  for (int k = 0; k < 34; k++) {
+    int x = 30 + rnd(406), y = 30 + rnd(406);
+    int dx = x - 233, dy = y - 233;
+    if (dx * dx + dy * dy > 205 * 205) continue;
+    if ((x >= 130 && x <= 336 && y <= 116) || (x >= 140 && x <= 326 && y >= 370)) continue;  // bajo el HUD, liso
+    if (k % 4 == 3) {  // una piedrecita
+      yBufRect(b, x, y, 6, 4, lt);
+      yBufRect(b, x + 2, y + 4, 6, 2, dk);
+      continue;
+    }
+    yBufRect(b, x, y - 10, 2, 10, dk);  // una mata: tres briznas
+    yBufRect(b, x - 4, y - 6, 2, 6, dk);
+    yBufRect(b, x + 4, y - 7, 2, 7, dk);
+    yBufRect(b, x - 2, y - 12, 2, 2, lt);
+  }
+}
+
+// re-expande el fondo si cambio el mapa, el bioma o el tinte (una vez, no por frame)
+void yardEnsureBg() {
+  yardEnsureMap();
+  YardTint tint = yardTintAt((uint8_t)sceneHour(), pet.sleeping);
+  uint8_t biome = homeBiome();
+  int32_t key = (int32_t)tint | (yardMapLoaded << 2) | (biome << 10);
+  if (key == yardBgKey) return;
+  if (!yardBg) yardBg = (uint16_t *)ps_malloc((size_t)YBG_CANVAS * YBG_CANVAS * 2);
+  if (!yardBg) return;  // sin PSRAM: yardDrawBg pinta el suelo liso cada frame
+  yardBgKey = key;
+  if (yardFile) {
+    static uint16_t pal[256];
+    yardTintPalette(yardView.pal, pal, yardView.palCount, tint);
+    yardBgExpand(yardView.px, pal, yardBg);
+  } else {
+    yardPaintFallback(yardBg, biome, tint);
+  }
+}
+
+void yardDrawBg() {
+  yardEnsureBg();
+  if (yardBg) memcpy(gfx->getFramebuffer(), yardBg, (size_t)YBG_CANVAS * YBG_CANVAS * 2);
+  else gfx->fillScreen(yardTint565(BIOME_SOIL[homeBiome() % BIOME_COUNT], yardTintAt((uint8_t)sceneHour(), pet.sleeping)));
+}
+
+void yardForceMap(uint8_t n) {
+  yardMapForced = n;
+  yardMapWant = 0;  // se vuelve a leer
+  yardEnsureBg();
+}
+
+void yardReport() {
+  Serial.printf("yardbg want=%u loaded=%u%s%s forced=%u free=%d pets=%u\n", yardMapWant, yardMapLoaded,
+                yardWhy[0] ? " why=" : "", yardWhy, yardMapForced, yardFreeCount(yardWalk), yardPetsShown());
+}
+
+// ---- los bichos ----
+
+// el alto visible del PMD en reposo (de su primera fila con algo a los pies) da la escala del patio:
+// unos 60-100 px, la mitad que en la casa de lado, para que quepan dos bichos
+YardBody yardPmdBody(PmdMon &m) {
+  YardBody b = { YB_PMD, 2, 40, 60 };
+  const PmdAct &a = m.acts[PMD_IDLE];
+  if (!a.frames) return b;
+  int top = a.h, x0 = a.w, x1 = -1;
+  for (int r = 0; r < a.h; r++)
+    for (int c = 0; c < a.w; c++)
+      if (a.data[r * a.w + c] != 0xFF) {
+        if (r < top) top = r;
+        if (c < x0) x0 = c;
+        if (c > x1) x1 = c;
+      }
+  int vh = (a.base ? a.base : a.h) - top, vw = x1 >= x0 ? x1 - x0 + 1 : a.w;
+  if (vh < 1) vh = a.h;
+  b.s = vh <= 16 ? 3 : (vh * 2 <= 104 ? 2 : 1);  // casi todos a 2; los muy pequenos a 3, los enormes a 1
+  b.h = (int16_t)(vh * b.s);
+  b.w = (int16_t)(vw * b.s);
+  return b;
+}
+
+YardBody yardBodyOf(int i) {
+  YardBody b = { YB_NONE, 2, 40, 48 };
+  if (i == 0) {
+    if (pmd.loaded) return yardPmdBody(pmd);
+    if (mon.loaded) {
+      b.kind = YB_TPK1;
+      b.s = mon.h * 2 <= 110 ? 2 : 1;
+      b.w = (int16_t)(mon.w * b.s * 3 / 4);
+      b.h = (int16_t)(mon.h * b.s);
+    } else if (flashIdxForDex(pet.speciesId) >= 0) {
+      b.kind = YB_FLASH;
+      b.w = 52;
+      b.h = 58;
+    }
+  } else {
+    if (yardBoxPmd.loaded) return yardPmdBody(yardBoxPmd);
+    if (thumbs.get(yardBoxDex)) {
+      b.kind = YB_THUMB;
+      b.w = 56;
+      b.h = 60;
+    }
+  }
+  return b;
+}
+
+int yardPetHeadY(int i) { return (int)yardW.p[i].y - yardBodyOf(i).h; }
+
+uint8_t yardPetsShown() {
+  uint8_t n = 0;
+  for (int i = 0; i < yardW.n; i++) n += yardW.p[i].on;
+  return n;
+}
+
+// gesto al azar (los de la casa de lado: Pose, Nod, Breath; Hop salta mucho y Sit mira atras)
+bool yardPickGesture(uint8_t i, uint8_t *act, uint32_t *ms) {
+  PmdMon &m = i == 0 ? pmd : yardBoxPmd;
+  static const uint8_t flair[] = { PMD_POSE, PMD_NOD, PMD_BREATH };
+  uint8_t pick[3], n = 0;
+  for (uint8_t f : flair)
+    if (m.has(f)) pick[n++] = f;
+  if (!n) return false;
+  *act = pick[random(n)];
+  *ms = pmdActTotalMs(m.acts[*act]);
+  return true;
+}
+
+// quien esta en el patio: el de casa, y el primero de la caja (cargando su sprite si cambio)
+void yardSyncPets() {
+  yardW.n = 2;
+  yardW.pickGesture = yardPickGesture;
+  YardPet &h = yardW.p[0];
+  if (yardW.rng.s == 1) yardW.rng.s = (uint32_t)random(1, 0x7fffffff);
+  if (pet.isEgg()) {  // el huevo (Y3): en casa aun no hay nadie que pasee
+    h.on = false;
+  } else if (!h.on) {
+    h = YardPet{};
+    h.on = true;
+    // donde se veia el bicho en la casa de lado, abajo del centro; recien nacido, donde estaba su huevo
+    int c = yardEggX >= 0 ? yardNearestFreeCell(yardWalk, yardEggX, yardEggY)
+                          : yardNearestFreeCell(yardWalk, CX, PET_GROUND);
+    if (c >= 0) {
+      h.x = (float)yardCellCenter(yardCellCX(c));
+      h.y = (float)yardCellCenter(yardCellCY(c));
+    } else {
+      yardPlace(yardW, yardWalk, 0);
+    }
+    yardLastStep = 0;
+  }
+  h.walks = pmd.has(PMD_WALKL) || pmd.has(PMD_WALKR);
+  int8_t slot = -1;
+  for (uint8_t k = 0; k < BOX_SLOTS && slot < 0; k++)
+    if (pet.boxState(k) == BOX_OK) slot = (int8_t)k;
+  YardPet &b = yardW.p[1];
+  if (slot < 0) {
+    b.on = false;
+    if (yardBoxPmd.loaded) yardBoxPmd.unload();
+    yardBoxDex = -2;
+    yardBoxSlot = -1;
+    return;
+  }
+  const PetRecord &r = pet.boxRecord((uint8_t)slot);
+  bool sh = (r.flags & REC_SHINY) != 0;
+  if (r.speciesId != yardBoxDex || sh != yardBoxShiny || yardBoxEpoch != sdEpoch) {
+    yardBoxDex = r.speciesId;
+    yardBoxShiny = sh;
+    yardBoxEpoch = sdEpoch;
+    yardBoxPmd.unload();
+    if (r.speciesId >= 1 && r.speciesId <= DEX_COUNT) yardBoxPmd.load((uint8_t)r.speciesId, sh);
+  }
+  yardBoxSlot = slot;
+  if (!b.on) {
+    b = YardPet{};
+    b.on = true;
+    yardPlace(yardW, yardWalkNow(), 1);
+  }
+  b.walks = yardBoxPmd.has(PMD_WALKL) || yardBoxPmd.has(PMD_WALKR);
+}
+
+// la mascara de paso de ahora: la del mapa y, con el huevo en el suelo (Y3), su celda bloqueada (el de
+// la caja pasea a su alrededor, no por encima)
+const uint8_t *yardWalkNow() {
+  if (!pet.isEgg() || yardEggX < 0) return yardWalk;
+  static uint8_t w[YBG_WALK_BYTES];
+  memcpy(w, yardWalk, sizeof(w));
+  int c = yardCellAt(yardEggX, yardEggY - YBG_CELL / 2);
+  if (c >= 0) w[c >> 3] |= (uint8_t)(1 << (c & 7));
+  return w;
+}
+
+// la comida (Y3): ya se la ha comido. Ahora Pet la aplica, como antes al tocar la tarjeta: sus "+N", su
+// sonido y, si le encanta o es la tarta, su corazon (si no, sale uno pequeno igual)
+void yardFoodEaten(uint8_t kind) {
+  FxNeedSnap ns = fxSnap();
+  bool ok;
+  if (kind == 3) {
+    ok = pet.eatCake();  // (sin tartas ya, p. ej. gastada desde la mochila: no se gasta nada)
+  } else {
+    pet.feedBerry(kind);
+    ok = pet.eating();
+  }
+  Serial.printf("FOOD eaten kind=%u ok=%d\n", kind, ok ? 1 : 0);
+  if (!ok) return;
+  fxNeeds(ns);
+  sfxPlay(SFX_EAT);
+  yardHeartPopAt = millis();
+}
+
+// un paso del planificador: lo que pide el juego (dormir, comer, triste...) y la inclinacion
+void yardTick(uint32_t now) {
+  uint32_t dt = yardLastStep ? now - yardLastStep : 100;
+  uint32_t cap = frameIntervalMs(powerCtx(now)) + 100;  // otra pantalla de por medio no es un paso largo
+  if (dt > cap) {
+    yardFood.t0 += dt - cap;  // fuera del patio la comida espera en el suelo, en la misma fase
+    dt = cap;
+  }
+  yardLastStep = now;
+  // la comida del suelo (Y3): si ya no puede comer, desaparece sin gastarse nada (aun no se aplico)
+  if (yardFood.phase != YF_NONE &&
+      (!yardW.p[0].on || pet.sleeping || pet.isEgg() || pet.busyEnding() || pet.uid != yardFood.tag)) {
+    Serial.println("FOOD cancelled");
+    yardFood.phase = YF_NONE;
+  }
+  uint8_t hold[YARD_PETS_MAX] = { YH_NONE, YH_NONE, YH_NONE };
+  PetMood m = pet.mood();
+  if (pet.sleeping) hold[0] = YH_SLEEP;
+  else if (pet.evolving() || fxHatchHidesPet(now) || bathUntil || pet.emote() != EMOTE_NONE ||
+           (m == MOOD_EATING && pmd.has(PMD_EAT)) || (m == MOOD_SAD && pmd.has(PMD_HURT)))
+    hold[0] = YH_STAY;
+  bool foodWaits = hold[0] != YH_NONE;  // otra cosa lo tiene quieto: la comida espera
+  if (!foodWaits && yardFood.phase != YF_NONE) hold[0] = yardFoodHold(yardFood);
+  hold[1] = pet.sleeping ? YH_SLEEP : YH_NONE;  // el de la caja se duerme con el de casa
+  int8_t tilt = (imuPresent() && !bathUntil && pet.emote() == EMOTE_NONE && yardFood.phase == YF_NONE) ? imuTiltSide() : 0;
+  const uint8_t *walk = yardWalkNow();
+  yardStep(yardW, walk, now, dt, hold, tilt);
+  if (yardFood.phase == YF_FALL || (!foodWaits && yardFood.phase != YF_NONE)) {  // (la caida no espera)
+    uint8_t kind = yardFood.kind;
+    if (yardFoodStep(yardFood, yardW, walk, 0, now)) yardFoodEaten(kind);
+  } else if (foodWaits) {
+    yardFood.t0 += dt;  // su fase no avanza mientras tanto
+  }
+}
+
+// sombra: el suelo de debajo, oscurecido (un 25 %) en una elipse
+void yardShadow(int cx, int cy, int w) {
+  int rx = w * 2 / 5, ry;
+  if (rx < 10) rx = 10;
+  ry = rx / 3 < 4 ? 4 : rx / 3;
+  uint16_t *fb = gfx->getFramebuffer();
+  for (int dy = -ry; dy <= ry; dy++) {
+    int y = cy + dy;
+    if (y < 0 || y >= YBG_CANVAS) continue;
+    int span = (int)(rx * sqrtf(1.0f - (float)(dy * dy) / (ry * ry)));
+    for (int x = cx - span; x <= cx + span; x++) {
+      if (x < 0 || x >= YBG_CANVAS) continue;
+      uint16_t &c = fb[y * YBG_CANVAS + x];
+      c = (uint16_t)(((c >> 1) & 0x7BEF) + ((c >> 2) & 0x39E7));
+    }
+  }
+}
+
+// sprite del paseo en el patio (Y3): de espaldas / de frente si va mas en vertical, de lado si no
+// (o si el .bin de la SD es viejo y no trae WalkU/WalkD). La casa de lado y el combate siguen con L/R
+uint8_t yardWalkAct(const PmdMon &m, const YardPet &p) {
+  float dx, dy;
+  yardHeading(p, &dx, &dy);
+  static const uint8_t ACT[] = { PMD_WALKL, PMD_WALKR, PMD_WALKU, PMD_WALKD };  // por YW_*
+  return ACT[yardWalkDir(dx, dy, p.face, m.has(PMD_WALKU), m.has(PMD_WALKD))];
+}
+
+void yardDrawPet(int i, uint32_t now) {
+  YardPet &p = yardW.p[i];
+  YardBody b = yardBodyOf(i);
+  int x = (int)p.x + (i == 0 ? dizzyWobble(now) : 0), y = (int)p.y;
+  yardShadow(x, y, b.w);
+  if (b.kind == YB_PMD) {
+    PmdMon &m = i == 0 ? pmd : yardBoxPmd;
+    uint8_t act = PMD_IDLE;
+    bool loop = true;
+    if (p.mode == YM_SLEEP) act = PMD_SLEEP;
+    else if (p.mode == YM_STAY && i == 0) {
+      PetMood md = pet.mood();
+      act = md == MOOD_EATING ? PMD_EAT : md == MOOD_SAD ? PMD_HURT : PMD_IDLE;
+      if (yardFood.phase == YF_EAT) act = PMD_EAT;  // Y3: el bocado a la comida del suelo
+    } else if (p.mode == YM_WALK) act = yardWalkAct(m, p);
+    else if (p.mode == YM_GESTURE) {
+      act = p.act;
+      loop = false;
+    }
+    if (!m.has(act)) act = PMD_IDLE;
+    drawPmdActS(m, act, x, y, now - p.t0, loop || act == PMD_IDLE, false, b.s);
+  } else if (b.kind == YB_TPK1) {
+    int s = b.s, w = mon.w * s;
+    uint16_t fm = mon.frameMs ? mon.frameMs : 100;
+    uint16_t fi = pet.sleeping ? 0 : (now / fm) % mon.frames;
+    const uint8_t *fr = mon.data + (uint32_t)fi * mon.w * mon.h;
+    int x0 = x - w / 2, y0 = y - mon.h * s;
+    for (int r = 0; r < mon.h; r++) {
+      const uint8_t *row = fr + r * mon.w;
+      forRuns(mon.w, [&](int c) { return indexedKey(row[c], false); },
+              [&](int c0, int len, int k) { gfx->fillRect(x0 + c0 * s, y0 + r * s, len * s, s, mon.pal[k]); });
+    }
+  } else if (b.kind == YB_FLASH) {
+    const Species &sp = SPECIES[flashIdxForDex(pet.speciesId)];
+    drawMap(sp.sprite, SPRITE_H, x - 32, y - 62, 2, false);
+  } else if (b.kind == YB_THUMB) {
+    drawThumbFit(thumbs.get(yardBoxDex), x, y - b.h / 2, 80, 80, false, 0);
+  } else {  // sin sprite ninguno
+    yShadowText(x - 9, y - 40, "?", 4, Y_TEXT);
+  }
+  if (i != 0) return;
+  int head = y - b.h;
+  if (pet.showHeart()) drawMap(SPR_HEART, 32, x + b.w / 2 - 6, head - 18, 1, false);
+  uint8_t e = pet.emote();
+  if (e == EMOTE_ANGRY) drawAngerMark(x + b.w / 2 + 6, head + 4);
+  else if (e == EMOTE_DIZZY) drawDizzyStars(x, head - 8, now);
+}
+
+// ---- la comida que cae y el huevo (fase Y3) ----
+static const char *const *const YARD_FOOD_ICON[4] = { SPR_ICON_FOOD, SPR_ICON_BERRY_B, SPR_ICON_BERRY_G, SPR_ICON_CAKE };
+
+// la comida en el suelo: cae desde arriba con un bote, espera, y en el bocado se encoge y se va
+void yardDrawFood(uint32_t now) {
+  const YardFood &f = yardFood;
+  if (f.phase == YF_NONE) return;
+  uint32_t el = now - f.t0;
+  int lift = 0, s = 2;
+  if (f.phase == YF_FALL) {
+    float t = (float)el / YARD_FOOD_FALL_MS;
+    if (t > 1) t = 1;
+    if (t < 0.7f) {  // la caida (acelera)
+      float k = 1.0f - t / 0.7f;
+      lift = (int)(170 * k * k);
+    } else {  // un bote
+      lift = (int)(16 * sinf((t - 0.7f) / 0.3f * (float)PI));
+    }
+  } else if (f.phase == YF_EAT) {
+    float t = (float)el / YARD_FOOD_EAT_MS;
+    if (t > 0.75f) return;  // ya se la comio
+    if (t > 0.4f) s = 1;     // a bocados: mas pequena
+  }
+  int sw = 26 - lift / 10;  // la sombra crece al acercarse al suelo
+  if (sw > 6) yardShadow(f.x, f.y, sw);
+  drawMap(YARD_FOOD_ICON[f.kind & 3], 16, f.x - 8 * s, f.y - 15 * s - lift, s, false);
+}
+
+// lo de encima del bicho de casa por la comida: el "!" al verla, y el corazon que sale al acabarsela
+void yardDrawFoodFx(uint32_t now) {
+  if (!yardW.p[0].on) return;
+  YardPet &p = yardW.p[0];
+  int head = yardPetHeadY(0), w = yardBodyOf(0).w;
+  uint32_t el = now - yardFood.t0;
+  if (yardFood.phase == YF_NOTICE || (yardFood.phase == YF_WALK && el < 450))
+    drawExclaim((int)p.x + w / 2 + 14, head - 12 + (int)(3 * sinf(now * 0.012f)));
+  uint32_t pop = now - yardHeartPopAt;
+  if (yardHeartPopAt && pop < 1000 && !pet.showHeart()) {  // (le encanta o la tarta: ya sale el suyo)
+    int y = head + 4 - (int)(pop * 30 / 1000);  // al lado de la cabeza (encima va el globo "Nam nam!")
+    drawMap(SPR_HEART, 32, (int)p.x + w / 2 + 2, y, 1, false);
+  }
+}
+
+// el huevo en el patio: tambalea al sacudir la placa (como en su pantalla) o al tocarlo; un destello si
+// es raro. Mientras se rompe lo dibuja drawHatchFx
+void yardDrawEgg(uint32_t now) {
+  if (!pet.isEgg() || yardEggX < 0) return;
+  int dx = 0;
+  if (pet.emote() == EMOTE_WOBBLE) dx = (int)(10.0f * (1.0f - pet.emoteT()) * sinf(now * 0.035f));
+  uint32_t te = now - yardEggTapAt;
+  if (yardEggTapAt && te < 600) dx += (int)(6.0f * (1.0f - te / 600.0f) * sinf(te * 0.05f));
+  yardShadow(yardEggX, yardEggY, 54);
+  drawEggAt(yardEggX + dx, yardEggY - YARD_EGG_MID, YARD_EGG_S, pet.eggCracks());
+  if (pet.eggRarity() >= R_RARO && (now / 400) % 3 != 0) {  // raro o legendario: brilla
+    int k = (int)((now / 1200) % 2);
+    drawMap(SPR_STAR, 16, yardEggX + 22 + dx - k * 50, yardEggY - 80 + k * 26, 1, false);
+  }
+}
+
+// el globo del huevo: el inicial (a toques) dice lo de siempre; el del patio, lo que falta un rato tras
+// un toque o una sacudida, alternando con la pista de agitarlo (mientras las sacudidas aun cuenten)
+void yardDrawEggBubble(uint32_t now) {
+  if (!pet.isEgg() || yardEggX < 0 || fxHatchHidesPet(now)) return;
+  int tip = yardEggY - YARD_EGG_MID * 2 - 8;
+  if (!pet.yardEgg()) {
+    yardBubbleAt(yardEggX, tip, eggMsg());
+    return;
+  }
+  if (!timeLeft(yardEggInfoUntil)) return;
+  char left[12];
+  eggLeftText(left, sizeof(left), pet.eggMinutesLeft());
+  const char *opts[3] = { left, nullptr, nullptr };
+  int n = 1;
+  if (pet.eggSavedMinutes() < EGG_SHAKE_CAP) opts[n++] = T(S_EGG_SHAKE);
+  if (pet.eggRarity() >= R_RARO) opts[n++] = T(pet.eggRarity() == R_LEGENDARIO ? S_EGG_LEGEND : S_EGG_RARE);
+  uint32_t since = 2600 - timeLeft(yardEggInfoUntil);
+  yardBubbleAt(yardEggX, tip, opts[yardCycleIndex(n, since, 900)]);
+}
+
+// el huevo o la comida (lo que este en el suelo) en su sitio del orden de dibujo; INT32_MAX: nada
+static int32_t yardObjY() {
+  if (pet.isEgg() && yardEggX >= 0) return yardEggY;
+  if (yardFood.phase != YF_NONE) return yardFood.y;
+  return INT32_MAX;
+}
+static void yardDrawObj(uint32_t now) {
+  yardDrawEgg(now);
+  yardDrawFood(now);
+}
+
+void yardDrawPets(uint32_t now) {
+  uint8_t order[YARD_PETS_MAX];
+  int n = yardDrawOrder(yardW, order);
+  // el huevo se rompe donde estaba (Y3); sin sitio, donde el bicho de casa
+  if (yardEggX >= 0) hatchAt(yardEggX, yardEggY - YARD_EGG_MID, YARD_EGG_S);
+  else if (yardW.p[0].on) hatchAt((int)yardW.p[0].x, (int)yardW.p[0].y - YARD_EGG_MID, YARD_EGG_S);
+  else hatchAt(CX, PET_CY, 5);
+  bool hatching = drawHatchFx(now);  // el huevo aun se rompe: el de casa no se ve
+  int32_t objY = yardObjY();
+  bool objDone = objY == INT32_MAX;
+  for (int k = 0; k < n; k++) {
+    int i = order[k];
+    if (!objDone && yardW.p[i].y > objY) {  // lo del suelo que queda detras de este bicho
+      yardDrawObj(now);
+      objDone = true;
+    }
+    if (i == 0 && (hatching || pet.evolving())) continue;
+    yardDrawPet(i, now);
+  }
+  if (!objDone) yardDrawObj(now);
+  if (pet.evolving()) drawEvolveFX(now);  // la evolucion, grande en el centro como siempre
+}
+
+// bicho bajo el dedo (el de encima primero): 0 el de casa, 1 el de la caja, -1 ninguno
+int yardPetAt(int16_t x, int16_t y) {
+  uint8_t order[YARD_PETS_MAX];
+  int n = yardDrawOrder(yardW, order);
+  for (int k = n - 1; k >= 0; k--) {
+    int i = order[k];
+    YardBody b = yardBodyOf(i);
+    if (yardPetHit(x, y, yardW.p[i].x, yardW.p[i].y, b.w, b.h)) return i;
+  }
+  return -1;
+}
+
+// ---- las cosas del suelo: cacas y regalos ----
+// Las cacas guardadas siguen siendo un numero (y sus huecos, pet.poopSlots); su sitio en el patio
+// solo vive en RAM: una nueva cae junto a los pies del bicho, y al arrancar se reparten al azar
+int16_t yardPoopX[POOP_MAX], yardPoopY[POOP_MAX];
+uint8_t yardPoopHave = 0;   // huecos con sitio
+bool yardPoopBooted = false;
+#define YARD_GIFTS_SHOWN 3
+int16_t yardGiftX[YARD_GIFTS_SHOWN], yardGiftY[YARD_GIFTS_SHOWN];
+uint8_t yardGiftN = 0;
+int8_t yardGiftTapped = -1;  // el que se toco: es el que desaparece al abrirse
+
+// lo que ya hay en el suelo (para no amontonar)
+static int yardThings(int16_t *ox, int16_t *oy, int skipPoop) {
+  int n = 0;
+  for (int i = 0; i < POOP_MAX; i++)
+    if ((yardPoopHave & (1 << i)) && i != skipPoop) {
+      ox[n] = yardPoopX[i];
+      oy[n++] = yardPoopY[i];
+    }
+  for (int i = 0; i < yardGiftN; i++) {
+    ox[n] = yardGiftX[i];
+    oy[n++] = yardGiftY[i];
+  }
+  return n;
+}
+
+void yardSyncThings() {
+  int16_t ox[POOP_MAX + YARD_GIFTS_SHOWN], oy[POOP_MAX + YARD_GIFTS_SHOWN];
+  uint8_t m = pet.poopSlots();
+  for (int i = 0; i < POOP_MAX; i++) {
+    uint8_t bit = 1 << i;
+    if (!(m & bit)) {
+      yardPoopHave &= ~bit;
+      continue;
+    }
+    bool have = yardPoopHave & bit;
+    if (have && yardSpotOk(yardWalk, yardPoopX[i], yardPoopY[i])) continue;
+    yardPoopHave &= ~bit;
+    int n = yardThings(ox, oy, i), x, y;
+    bool ok = (yardPoopBooted && !have && yardW.p[0].on)
+                  ? yardDropSpot(yardWalk, yardW.p[0].x, yardW.p[0].y, ox, oy, n, &x, &y)  // recien hecha: a sus pies
+                  : yardFreeSpot(yardW, yardWalk, yardW.rng, ox, oy, n, &x, &y);        // al arrancar o con otro mapa
+    if (!ok) continue;
+    yardPoopX[i] = (int16_t)x;
+    yardPoopY[i] = (int16_t)y;
+    yardPoopHave |= bit;
+  }
+  yardPoopBooted = true;
+  // el huevo (Y3): en una celda libre cerca del centro (donde nacera el bicho). Su sitio se queda hasta
+  // que acaba de romperse: el bicho de casa sale de ahi
+  if (pet.isEgg()) {
+    if (yardEggX < 0 || !yardSpotOk(yardWalk, yardEggX, yardEggY - YBG_CELL / 2)) {
+      int c = yardNearestFreeCell(yardWalk, CX, 250);
+      if (c >= 0) {
+        yardEggX = (int16_t)yardCellCenter(yardCellCX(c));
+        yardEggY = (int16_t)(yardCellCenter(yardCellCY(c)) + 10);
+      }
+    }
+  } else if (!fxo.find(FXO_HATCH) && yardEggX >= 0) {
+    yardEggX = -1;
+  }
+  uint8_t want = pet.giftCount() < YARD_GIFTS_SHOWN ? pet.giftCount() : YARD_GIFTS_SHOWN;
+  while (yardGiftN > want) {  // se abrio uno: se va el tocado
+    int k = (yardGiftTapped >= 0 && yardGiftTapped < yardGiftN) ? yardGiftTapped : yardGiftN - 1;
+    for (int j = k; j + 1 < yardGiftN; j++) {
+      yardGiftX[j] = yardGiftX[j + 1];
+      yardGiftY[j] = yardGiftY[j + 1];
+    }
+    yardGiftN--;
+    yardGiftTapped = -1;
+  }
+  for (int i = 0; i < yardGiftN; i++)  // otro mapa: el que quede en algo bloqueado se mueve
+    if (!yardSpotOk(yardWalk, yardGiftX[i], yardGiftY[i])) {
+      for (int j = i; j + 1 < yardGiftN; j++) {
+        yardGiftX[j] = yardGiftX[j + 1];
+        yardGiftY[j] = yardGiftY[j + 1];
+      }
+      yardGiftN--;
+      i--;
+    }
+  while (yardGiftN < want) {
+    int n = yardThings(ox, oy, -1), x, y;
+    if (!yardFreeSpot(yardW, yardWalk, yardW.rng, ox, oy, n, &x, &y)) break;
+    yardGiftX[yardGiftN] = (int16_t)x;
+    yardGiftY[yardGiftN++] = (int16_t)y;
+  }
+}
+
+void yardDrawThings(uint32_t now) {
+  // SPR_POOP (32x32) a escala 2, como en la casa de lado: la tinta ~32x40 con los pies del monton en y
+  for (int i = 0; i < POOP_MAX; i++)
+    if (yardPoopHave & (1 << i)) drawMap(SPR_POOP, 32, yardPoopX[i] - 34, yardPoopY[i] - 58, 2, false);
+  uint32_t left = timeLeft(poopPuffUntil);
+  if (left && poopPuffSlot >= 0) {  // la que se acaba de limpiar: destellos donde estaba
+    int cx = yardPoopX[poopPuffSlot], cy = yardPoopY[poopPuffSlot] - 20;
+    int r = 4 + (int)((POOP_PUFF_MS - left) / 30);
+    for (int k = 0; k < 4; k++) {
+      int sx = cx + ((k & 1) ? r : -r), sy = cy + ((k & 2) ? r : -r);
+      uint16_t col = (k % 2) ? UI_BAR_WARN : UI_WHITE;
+      gfx->fillRect(sx - 4, sy - 1, 9, 3, col);
+      gfx->fillRect(sx - 1, sy - 4, 3, 9, col);
+    }
+  }
+  for (int i = 0; i < yardGiftN; i++) {
+    int bob = (int)lroundf(2.0f * sinf(now * 0.004f + i * 2.1f));
+    yardShadow(yardGiftX[i], yardGiftY[i], 30);
+    drawMap(SPR_GIFT, 16, yardGiftX[i] - 16, yardGiftY[i] - 30 + bob, 2, false);
+  }
+  if (pet.giftCount() > YARD_GIFTS_SHOWN && yardGiftN) {
+    char t[6];
+    snprintf(t, sizeof(t), "+%u", (unsigned)(pet.giftCount() - YARD_GIFTS_SHOWN));
+    int k = yardGiftN - 1;
+    yShadowText(yardGiftX[k] + 18, yardGiftY[k] - 30, t, 2, Y_TEXT);
+  }
+}
+
+#define YARD_THING_HIT_R 28
+int yardPoopAt(int16_t x, int16_t y) {
+  for (int i = 0; i < POOP_MAX; i++) {
+    if (!(yardPoopHave & (1 << i))) continue;
+    int dx = x - yardPoopX[i], dy = y - (yardPoopY[i] - 20);
+    if (dx * dx + dy * dy <= YARD_THING_HIT_R * YARD_THING_HIT_R) return i;
+  }
+  return -1;
+}
+bool yardEggAt(int16_t x, int16_t y) {
+  if (!pet.isEgg() || yardEggX < 0) return false;
+  int dx = x - yardEggX, dy = y - (yardEggY - YARD_EGG_MID);
+  return dx * dx + dy * dy <= 46 * 46;
+}
+int yardGiftAt(int16_t x, int16_t y) {
+  for (int i = 0; i < yardGiftN; i++) {
+    int dx = x - yardGiftX[i], dy = y - (yardGiftY[i] - 14);
+    if (dx * dx + dy * dy <= YARD_THING_HIT_R * YARD_THING_HIT_R) return i;
+  }
+  return -1;
+}
+
+// suelta la comida del panel Cuidar (kind: baya 0-2, tarta 3) cerca del bicho de casa. 1 cae, 0 ya hay
+// una en el suelo, -1 no hay bicho en el patio
+int yardDropFood(uint8_t kind) {
+  if (yardFood.phase != YF_NONE) return 0;
+  if (!yardW.p[0].on || !yardHomeNow() || pet.isEgg()) return -1;
+  YardPet &p = yardW.p[0];
+  int16_t ox[POOP_MAX + YARD_GIFTS_SHOWN + 1], oy[POOP_MAX + YARD_GIFTS_SHOWN + 1];
+  int n = yardThings(ox, oy, -1);
+  if (yardW.p[1].on) {  // tampoco a los pies del de la caja
+    ox[n] = (int16_t)yardW.p[1].x;
+    oy[n++] = (int16_t)yardW.p[1].y;
+  }
+  int c = yardFoodCell(yardWalkNow(), p.x, p.y, p.face, ox, oy, n);
+  yardFoodDrop(yardFood, kind, c, p.x, p.y, millis(), pet.uid);
+  Serial.printf("FOOD drop kind=%u cell=%d at %d,%d\n", kind, c, yardFood.x, yardFood.y);
+  return 1;
+}
+
+// ---- el globo sobre el bicho ----
+// lo que pasa ahora mismo (uno solo, por orden de importancia), o nullptr
+const char *yardEventMsg() {
+  if (timeLeft(cakeHintUntil)) return T(S_NO_CAKE);
+  if (timeLeft(tastesMsgUntil) && !pet.sleeping) return T(S_TASTES);
+  if (bathUntil) return "Splish splash!";
+  if (pet.emote() == EMOTE_ANGRY) return T(S_GRUMPY);
+  if (pet.emote() == EMOTE_DIZZY) return T(S_DIZZY);
+  if (pet.sleeping) return "Zzz...";
+  if (timeLeft(revivedMsgUntil)) return T(S_REVIVED);
+  if (pet.eating()) return T(S_EATING);
+  if (pet.showHeart()) return T(S_LIKES);
+  return nullptr;
+}
+
+// las necesidades bajas, todas (el globo pasa de una a otra cada segundo)
+int yardNeedList(const char **out) {
+  int n = 0;
+  if (pet.neglected()) {  // abandono (v1.60): solo eso
+    out[n++] = T(pet.bond > 0 ? S_ABANDONED : S_WEAK);
+    return n;
+  }
+  if (pet.sleepy()) out[n++] = T(S_SLEEPY);
+  if (pet.fullness < 25) out[n++] = T(S_HUNGRY);
+  if (pet.hygiene < 25) out[n++] = T(S_NEEDS_BATH);
+  if (pet.energy < 25) out[n++] = T(S_EXHAUSTED);
+  if (pet.joy < 25) out[n++] = T(S_SAD);
+  return n;
+}
+
+// globo blanco con la cola hacia (cx, tipY), dentro del circulo (como yBubble, que solo acota la x)
+void yardBubbleAt(int cx, int tipY, const char *text) {
+  setSize(2);
+  int tw = textW(text, 2), w = tw + 20, h = 30;
+  const int R = 214;  // radio util para el globo (el marco redondo y la orbita)
+  if (tipY < 52) tipY = 52;
+  int top, hc;
+  for (;;) {  // baja hasta que el globo cabe a lo ancho a su altura
+    top = tipY - 8 - h;
+    int dy = top < Y_CY ? Y_CY - top : top + h - Y_CY;
+    hc = dy < R ? (int)sqrtf((float)(R * R - dy * dy)) : 0;
+    if (2 * hc >= w || tipY > 300) break;
+    tipY += 4;
+  }
+  int x = cx - w / 2;
+  if (x < Y_CX - hc) x = Y_CX - hc;
+  if (x + w > Y_CX + hc) x = Y_CX + hc - w;
+  int tail = cx < x + 14 ? x + 14 : cx > x + w - 14 ? x + w - 14 : cx;
+  gfx->fillRoundRect(x + 2, top + 2, w, h, 10, Y_SHADOW);
+  gfx->fillRoundRect(x, top, w, h, 10, Y_TEXT);
+  gfx->fillTriangle(tail - 7, top + h - 1, tail + 7, top + h - 1, tail, tipY, Y_TEXT);
+  gfx->setTextColor(UI_INK);
+  setCur(x + 10, top + (h - 14) / 2);
+  printT(text);
+}
+
+const char *yardBubblePrev = nullptr, *yardBubbleLatched = nullptr;
+uint32_t yardBubbleUntil = 0;
+void yardDrawBubble(uint32_t now) {
+  if (pet.isEgg()) {  // Y3: el huevo en el patio
+    yardDrawEggBubble(now);
+    return;
+  }
+  if (pet.evolving() || fxHatchHidesPet(now)) return;
+  const char *ev = yardEventMsg();
+  if (ev && ev != yardBubblePrev) {  // un suceso nuevo: se queda al menos Y_BUBBLE_MS aunque acabe antes
+    yardBubbleLatched = ev;
+    yardBubbleUntil = now + Y_BUBBLE_MS;
+  }
+  yardBubblePrev = ev;
+  const char *txt = ev ? ev : (timeLeft(yardBubbleUntil) ? yardBubbleLatched : nullptr);
+  if (!txt) {
+    const char *needs[6];
+    int n = yardNeedList(needs);
+    int k = yardCycleIndex(n, now, Y_BUBBLE_CYCLE_MS);
+    if (k >= 0) txt = needs[k];
+  }
+  if (!txt) return;
+  yardBubbleAt((int)yardW.p[0].x, yardPetHeadY(0) - 4, txt);
+}
+
+// "LIM +10": lo que cambio una necesidad, subiendo sobre el bicho (el patio no tiene barras)
+void yardStatPill(uint8_t a, int16_t v, float t) {
+  char s[24];
+  snprintf(s, sizeof(s), v > 0 ? "%s +%d" : "%s %d", T((StrId)(S_BAR_FOOD + (a & 3))), v);
+  setSize(2);
+  int w = textW(s, 2) + 16;
+  int cx = petFootX(), y = yardPetHeadY(0) - 70 - (a & 1) * 28 - (int)(t * 26);
+  if (y < 44) y = 44;
+  if (cx - w / 2 < 40) cx = 40 + w / 2;
+  if (cx + w / 2 > 426) cx = 426 - w / 2;
+  gfx->fillRoundRect(cx - w / 2, y - 4, w, 24, 8, v > 0 ? Y_ACCENT_GO : Y_ACCENT_BAD);
+  gfx->setTextColor(Y_TEXT);
+  setCur(cx - w / 2 + 8, y);
+  printT(s);
+}
+
+// ---- el HUD: bateria, hora y dock ----
+// la bateria sobre el mapa: contorno doble claro con sombra (drawBattery es para el fondo crema)
+void drawBatteryHud(int x, int y) {
+  int pc = batPercent();
+  if (pc < 0) return;
+  const int w = 24, h = 12;
+  bool charging = batCharging();
+  uint16_t col = charging ? UI_BAR_OK : (pc >= 40) ? Y_TEXT : (pc >= 15) ? UI_BAR_WARN : UI_BAR_BAD;
+  for (int k = 0; k < 2; k++) {  // la sombra y luego el dibujo
+    int ox = k ? 0 : 2;
+    uint16_t c = k ? col : Y_SHADOW;
+    gfx->drawRoundRect(x + ox, y + ox, w, h, 3, c);
+    gfx->drawRoundRect(x + ox + 1, y + ox + 1, w - 2, h - 2, 2, c);
+    gfx->fillRect(x + ox + w, y + ox + 3, 3, h - 6, c);
+  }
+  if (charging) {
+    uint16_t bolt = C565(0xff, 0xd9, 0x4a);
+    int bx = x + w / 2;
+    gfx->fillTriangle(bx + 3, y + 2, bx - 4, y + 7, bx + 1, y + 7, bolt);
+    gfx->fillTriangle(bx - 1, y + 6, bx + 4, y + 6, bx - 3, y + 11, bolt);
+  } else {
+    int fw = (w - 6) * pc / 100;
+    if (fw > 0) gfx->fillRect(x + 3, y + 3, fw, h - 6, col);
+  }
+}
+
+// boton del dock -> boton de la fila vieja, para los efectos de pulsar y temblar (fx.h)
+static int yardDockFx(int d) { return d == 0 ? BTN_CARE : d == 1 ? 1 : BTN_BAG; }
+// dormido: Cuidar (despertarlo) y la Mochila (mirar) siguen; Jugar solo con bichos en la caja (fases)
+// con el huevo (Y3): Cuidar no (no hay a quien), Jugar solo con bichos en la caja
+static bool yardDockOff(int d) {
+  if (pet.isEgg()) return d == 0 || (d == 1 && !pet.boxHasPets());
+  return d == 1 && pet.sleeping && !pet.boxHasPets();
+}
+
+#define YARD_CLOCK_Y 30  // la hora a tamano 5 (40 px de alto); debajo queda sitio para las monedas (Y4)
+#define YARD_COIN_Y 76   // la cartera: debajo de la hora (30 + 40 px)
+#define YARD_BAT_Y 12
+void yardDrawHud() {
+  drawBatteryHud(Y_CX - BAT_ICON_W / 2, YARD_BAT_Y);
+  uint32_t e = pet.lastSeenEpoch;
+  if (e) {  // sin hora del reloj no se inventa una
+    char t[8];
+    snprintf(t, sizeof(t), "%02u:%02u", (unsigned)((e / 3600) % 24), (unsigned)((e / 60) % 60));
+    yShadowText(centerX(t, 5), YARD_CLOCK_Y, t, 5, Y_TEXT);
+  }
+  yCoinBadge(Y_CX, YARD_COIN_Y, pet.coins, true);  // la cartera (Y4), debajo de la hora
+  YDockItem dock[Y_DOCK_N] = {
+    { SPR_ICON_CARE, Y_DOCK_CARE, yardDockOff(0) },
+    { SPR_ICON_PLAY, Y_DOCK_PLAY, yardDockOff(1) },
+    { SPR_ICON_BAG, Y_DOCK_BAG, yardDockOff(2) },
+  };
+  int pressed = -1;
+  for (int d = 0; d < Y_DOCK_N; d++)
+    if (fxo.find(FXO_PRESS, yardDockFx(d))) pressed = d;
+  yDock(dock, pressed);
+}
+
+// ---- un frame de la casa (el fondo ya esta copiado) ----
+void renderYardHome(uint32_t now) {
+  yardSyncPets();
+  yardTick(now);
+  yardSyncThings();
+  yardDrawThings(now);
+  yardDrawPets(now);
+  drawBath();               // la espuma, sobre el bicho
+  drawBoxAppear(now);       // recien guardado o despertado: sale de una luz
+  yardDrawBubble(now);
+  yardDrawFoodFx(now);     // Y3: el "!" al ver la comida y el corazon al acabarsela
+  yardDrawHud();
+}
+
+// ---- toques ----
+void yardTap(int16_t x, int16_t y) {
+  int d = yDockHit(x, y);
+  if (d >= 0) {
+    Serial.printf("DOCK %d\n", d);
+    fxo.push(FXO_PRESS, yardDockFx(d), 0, millis());
+    if (yardDockOff(d)) {
+      sfxPlay(SFX_DENY);
+      fxo.push(FXO_DENY, yardDockFx(d), 0, millis());
+      return;
+    }
+    sfxPlay(SFX_TAP);
+    if (d == 0) openCarePanel();
+    else if (d == 1) openPlayPanel();
+    else openBag();
+    return;
+  }
+  if (yardEggAt(x, y)) {  // Y3: el huevo se tambalea; el del patio dice lo que falta, el inicial se abre a toques
+    yardEggTapAt = millis();
+    sfxPlay(SFX_TAP);
+    if (pet.yardEgg()) {
+      yardEggInfo();
+      Serial.printf("EGG tap left=%u\n", pet.eggMinutesLeft());
+    } else {
+      pet.eggTap();
+    }
+    return;
+  }
+  int pp = yardPoopAt(x, y);  // una caca: fuera con un toque (como en la casa de lado)
+  if (pp >= 0) {
+    FxNeedSnap ns = fxSnap();
+    if (pet.cleanPoop(pp)) {
+      Serial.printf("POOP clean %d\n", pp);
+      sfxPlay(SFX_TAP);
+      fxNeeds(ns);
+      poopPuffSlot = pp;
+      poopPuffUntil = millis() + POOP_PUFF_MS;
+    } else {
+      sfxPlay(SFX_DENY);
+    }
+    return;
+  }
+  int g = yardGiftAt(x, y);
+  if (g >= 0) {
+    yardGiftTapped = (int8_t)g;
+    openGiftTap();
+    return;
+  }
+  int who = yardPetAt(x, y);
+  if (who == 0) {  // el de casa: su ficha
+    Serial.println("PET card");
+    sfxPlay(SFX_TAP);
+    cardOpen = true;
+    cardPage = 0;
+  } else if (who == 1) {  // el de la caja: la caja (su ficha esta ahi)
+    Serial.println("PET box");
+    if (boxCanOpen()) {
+      sfxPlay(SFX_TAP);
+      openBox();
+    } else {
+      sfxPlay(SFX_DENY);
+    }
   }
 }
 
@@ -6029,11 +7897,12 @@ void closeForDying() {
   }
   if (boxOpen && boxMove == BOXMV_NONE) closeBox();
   closeStages();
-  kbOpen = clockOpen = bagOpen = cardOpen = false;
+  kbOpen = clockOpen = cardOpen = false;
+  closeBag();
   itemConfirm = 0;
   choiceKind = 0;
   confirmUntil = 0;
-  menuKind = MENU_NONE;
+  panelKind = PANEL_NONE;
   bathUntil = 0;
   bathPending = false;
 }
@@ -6164,10 +8033,6 @@ void drawEvolveFX(uint32_t now) {
 
 void drawPet() {
   if (drawHatchFx(millis())) return;  // eclosion (fx.h): aun se rompe el huevo
-  if (pmd.loaded) {
-    drawPetPMD();
-    return;
-  }
   if (mon.loaded) {
     drawPetSD();
     return;
@@ -6229,11 +8094,12 @@ void startBath() {
   if (pet.isEgg() || pet.sleeping || pet.ceremony || bathUntil) return;
   bathUntil = millis() + 3000;
   bathPending = true;
-  int cx = (int)beh.x;
+  int cx = petFootX(), foot = petFootY(), body = petBodyH();
+  bool small = body < 120;  // el bicho del patio, mas pequeno: espuma mas junta y mas fina
   for (auto &b : bubbles) {
-    b.x = cx - 70 + random(140);
-    b.y = PET_GROUND - random(150);
-    b.r = 8 + random(16);
+    b.x = cx - (small ? 44 : 70) + random(small ? 88 : 140);
+    b.y = foot - random(small ? body + 10 : 150);
+    b.r = small ? 6 + random(11) : 8 + random(16);
     b.ph = random(64);
   }
 }
@@ -6248,12 +8114,7 @@ void drawBath() {
       pet.clean();
       fxNeeds(ns);  // "+60" de higiene
       // pose de alegria al quedar limpio
-      if (pmd.has(PMD_POSE)) {
-        beh.mode = 2;
-        beh.act = PMD_POSE;
-        beh.t0 = now;
-        beh.until = now + pmdActTotalMs(pmd.acts[PMD_POSE]) * 2;
-      }
+      if (pmd.has(PMD_POSE)) fxPose(PMD_POSE, now, pmdActTotalMs(pmd.acts[PMD_POSE]) * 2);
     }
     return;
   }
@@ -6312,6 +8173,12 @@ void drawPmdActM(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool
   if (sBase > maxS) sBase = maxS;
   uint8_t s = sBase;
   while (s > 2 && a.h * s > 250) s--;  // acciones con frame grande (ataque)
+  drawPmdActS(m, actId, cx, groundY, t, loop, sil, s);
+}
+// lo mismo a una escala fija s (el patio, v2.0: los bichos van mas pequenos que en la casa de lado)
+void drawPmdActS(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint8_t s) {
+  const PmdAct &a = m.acts[actId];
+  if (!a.frames) return;
   uint8_t fi = pmdFrameAt(a, t, loop);
   const uint8_t *fr = a.data + (uint32_t)fi * a.w * a.h;
   // anclar por los pies (a.base), no por el alto del lienzo: asi las acciones
@@ -6397,125 +8264,6 @@ int dizzyWobble(uint32_t now) {
   return (int)(7.0f * (1.0f - pet.emoteT()) * sinf(now * 0.03f));
 }
 
-// elige el siguiente capricho del bicho cuando esta contento
-void behNext() {
-  uint32_t now = millis();
-  beh.t0 = now;
-  int r = random(100);
-  if (r < 35 && (pmd.has(PMD_WALKL) || pmd.has(PMD_WALKR))) {
-    beh.mode = 1;  // paseo
-    beh.targetX = 150 + random(176);
-    beh.until = now + 15000;
-  } else if (r < 60) {
-    // gesto aleatorio entre los disponibles
-    // (Hop fuera: salta demasiado alto; Sit fuera: mira hacia atras)
-    static const uint8_t flair[] = { PMD_POSE, PMD_NOD, PMD_BREATH };
-    uint8_t pick[3], n = 0;
-    for (uint8_t f : flair)
-      if (pmd.has(f)) pick[n++] = f;
-    if (n) {
-      beh.mode = 2;
-      beh.act = pick[random(n)];
-      beh.until = now + pmdActTotalMs(pmd.acts[beh.act]);
-      return;
-    }
-    beh.mode = 0;
-    beh.until = now + 2000 + random(3000);
-  } else {
-    beh.mode = 0;  // mirar al frente
-    beh.until = now + 2000 + random(3000);
-  }
-}
-
-void drawPetPMD() {
-  uint32_t now = millis();
-
-  if (pet.evolving()) {
-    drawEvolveFX(now);
-    return;
-  }
-  if (evoPmd.loaded) evoPmd.unload();  // termino la evolucion: libera la forma anterior
-
-  PetMood m = pet.mood();
-  uint8_t act;
-  bool loop = true;
-  int8_t surprised = 0;  // resbalando por la inclinacion: lado hacia el que va
-  if (m == MOOD_SLEEPING && pmd.has(PMD_SLEEP)) {
-    act = PMD_SLEEP;
-    beh.mode = 0;
-  } else if (m == MOOD_EATING && pmd.has(PMD_EAT)) {
-    act = PMD_EAT;
-    beh.t0 = 0;
-  } else if (m == MOOD_SAD && pmd.has(PMD_HURT)) {
-    act = PMD_HURT;
-  } else if (imuPresent() && imuTiltSide() && !bathUntil && pet.emote() == EMOTE_NONE) {
-    // inclinada (FR-2.3): camina hacia el lado bajo; de mas, resbala sorprendido
-    // con el frame de andar quieto. Al nivelarla, vuelve a pasear enseguida.
-    int8_t side = imuTiltSide();
-    bool slide = imuTiltSlide();
-    static uint32_t tiltLast = 0;
-    uint32_t dt = (tiltLast && now - tiltLast < 400) ? now - tiltLast : 100;
-    tiltLast = now;
-    float edge = side > 0 ? 334 : 132;
-    float d = edge - beh.x;
-    float step = (slide ? 150.0f : 50.0f) * dt / 1000.0f;
-    if (step > fabsf(d)) step = fabsf(d);
-    beh.x += d > 0 ? step : -step;
-    beh.mode = 0;
-    beh.until = now + 800;  // nivelada, mira al frente un momento y sigue con lo suyo
-    walkLast = 0;
-    act = side > 0 ? PMD_WALKR : PMD_WALKL;
-    if (!pmd.has(act)) act = PMD_IDLE;
-    if (slide) {
-      beh.t0 = now;  // frame 0 del paseo, sin dar pasos
-      loop = false;
-      surprised = side;
-    } else if (fabsf(d) < 1) {
-      act = PMD_IDLE;  // en el borde: espera
-    }
-  } else {
-    // contento: el planificador decide (idle / paseo / gesto)
-    if (now > beh.until) behNext();
-    if (beh.mode != 1) walkLast = 0;  // al volver a caminar no se cuenta el tiempo parado
-    if (beh.mode == 1) {
-      float d = beh.targetX - beh.x;
-      if (fabsf(d) < 4) {
-        behNext();
-        act = PMD_IDLE;
-      } else {
-        // 30 px/s de diseno (3 px por frame a 10 fps), midiendo el tiempo real: con menos frames
-        // por segundo camina igual de rapido
-        uint32_t dt = walkLast ? now - walkLast : 100;
-        uint32_t cap = frameIntervalMs(powerCtx(now)) + 100;  // un hueco mayor (otra pantalla de por medio) no es un paso largo
-        if (dt > cap) dt = cap;
-        walkLast = now;
-        float step = 30.0f * dt / 1000.0f;
-        if (step > fabsf(d)) step = fabsf(d);  // un frame lento no sobrepasa el destino
-        beh.x += d > 0 ? step : -step;
-        act = (d > 0) ? PMD_WALKR : PMD_WALKL;
-      }
-    } else {
-      act = (beh.mode == 2) ? beh.act : PMD_IDLE;
-      loop = false;
-    }
-    if (!pmd.has(act)) act = PMD_IDLE;
-  }
-
-  int px = (int)beh.x + dizzyWobble(now);
-  drawPmdAct(act, px, PET_GROUND, now - beh.t0, loop || act == PMD_IDLE, false, 5);
-
-  if (pet.showHeart()) drawMap(SPR_HEART, 32, (int)beh.x + 50, PET_GROUND - 190, 2, false);
-  int head = PET_GROUND - pmdIdleHeight() + 24;
-  if (head < 130) head = 130;  // sin pisar la cabecera
-  drawEmote(px, head);
-  if (surprised) {  // "!" de sorpresa, por detras de la marcha
-    setSize(4);
-    gfx->setTextColor(UI_BAR_BAD);
-    setCur(px + (surprised > 0 ? -60 : 40), head - 30);
-    printT("!");
-  }
-}
-
 // sprite animado desde la SD: zoom entero por pixel, frames a su ritmo
 void drawPetSD() {
   int s = mon.scale;
@@ -6565,36 +8313,6 @@ void overlayMouth(const Species &sp, int x, int y, int s, bool open) {
   }
 }
 
-// regalos (v1.55): lo encontrado caminando espera envuelto en el suelo, a la derecha, donde no llegan
-// las cacas (a la izquierda) ni el bicho (su zona tactil acaba en x 356). Hasta 3 cajitas en un
-// monton que se mece un poco; con mas, "+N". Un toque abre la primera (openGiftTap).
-#define GIFT_ZONE_X 358
-#define GIFT_ZONE_Y 236  // por debajo del boton de despedida (176-234)
-#define GIFT_ZONE_H 76
-static const int16_t GIFT_POS[3][2] = { { 368, 270 }, { 404, 266 }, { 386, 238 } };  // esquina, a escala 2
-
-void drawGifts() {
-  uint8_t n = pet.giftCount();
-  if (!n) return;
-  uint32_t now = millis();
-  for (int i = 0; i < n && i < 3; i++) {
-    int bob = (int)lroundf(2.0f * sinf(now * 0.004f + i * 2.1f));
-    drawMap(SPR_GIFT, 16, GIFT_POS[i][0], GIFT_POS[i][1] + bob, 2, false);
-  }
-  if (n > 3) {
-    char m[4];
-    snprintf(m, sizeof(m), "+%u", (unsigned)(n - 3));
-    setSize(2);
-    gfx->setTextColor(inkColor());
-    setCur(424, 240);
-    printT(m);
-  }
-}
-
-bool inGiftZone(int16_t x, int16_t y) {
-  return pet.giftCount() && x >= GIFT_ZONE_X && y >= GIFT_ZONE_Y && y <= GIFT_ZONE_Y + GIFT_ZONE_H;
-}
-
 // tocar un regalo: con el bicho despierto se abre, se alegra y sale el aviso "REGALO!" (drawWalkNews);
 // si no cabe en la mochila el aviso lo dice y sigue envuelto. Dormido, espera
 void openGiftTap() {
@@ -6627,17 +8345,6 @@ void drawPoops() {
   }
 }
 
-void drawBars() {
-  // cada barra se desliza a su valor nuevo en FX_TWEEN_MS (fx.h) en vez de saltar
-  uint32_t now = millis();
-  const uint8_t v[4] = { pet.fullness, pet.joy, pet.energy, pet.hygiene };
-  for (int i = 0; i < 4; i++) fxBar[i].target(v[i], now);
-  drawBar(78, 318, T(S_BAR_FOOD), (uint8_t)fxBar[0].value(now), pet.sated());
-  drawBar(244, 318, T(S_BAR_JOY), (uint8_t)fxBar[1].value(now), false);
-  drawBar(78, 346, T(S_BAR_ENE), (uint8_t)fxBar[2].value(now), false);
-  drawBar(244, 346, T(S_BAR_HYG), (uint8_t)fxBar[3].value(now), false);
-}
-
 // Separacion entre la etiqueta y su barra en la fila de necesidades. Estaba fija
 // en 48 px, justo lo que ocupan 4 letras latinas a escala 2, sin margen. Las
 // etiquetas japonesas son mas anchas (ごきげん son 4 kana, ~64 px) y se metian
@@ -6654,45 +8361,6 @@ static int barLabelGap() {
   // por debajo del umbral original se deja EXACTAMENTE 48, para no mover nada en
   // los idiomas latinos; por encima se anade aire para que la etiqueta respire
   return ancho <= 48 ? 48 : ancho + 8;
-}
-
-#define UI_BAR_SATED 0xF474  // #f08ca0, el rosa de la tarta: la comida esta llena y no baja (v1.54)
-
-void drawBar(int x, int y, const char *label, uint8_t val, bool sated) {
-  gfx->setTextColor(inkColor());
-  setSize(2);
-  setCur(x, y);
-  printT(label);
-  int gap = barLabelGap();
-  // las dos columnas empiezan en 78 y 244: la barra de la primera tiene que
-  // acabar antes de la etiqueta de la segunda, y ambas se pintan igual de anchas
-  int bw = 232 - (78 + gap);
-  if (bw > 100) bw = 100;   // con etiquetas latinas sale 100, como estaba
-  int bx = x + gap, bh = 15;
-  uint16_t fill = sated ? UI_BAR_SATED : (val >= 50) ? UI_BAR_OK : (val >= 25) ? UI_BAR_WARN : UI_BAR_BAD;
-  gfx->fillRoundRect(bx, y, bw, bh, 4, UI_TRACK);
-  int fw = (bw - 4) * val / 100;
-  if (fw > 0) gfx->fillRoundRect(bx + 2, y + 2, fw, bh - 4, 3, fill);
-}
-
-void drawButtons() {
-  uint32_t now = millis();
-  for (int i = 0; i < 4; i++) {
-    // durmiendo: cuidados y mochila (y jugar, por las fases, si hay bichos en la caja)
-    bool off = pet.sleeping && i != BTN_CARE && i != BTN_BAG && !(i == 1 && pet.boxHasPets());
-    // efectos (fx.h): el boton tocado se hunde 2 px; si no se puede usar, tiembla de lado
-    int ox = 0, oy = 0;
-    bool pressed = fxo.find(FXO_PRESS, i) != nullptr;
-    if (pressed) oy = 2;
-    if (const FxOverlay *d = fxo.find(FXO_DENY, i)) {
-      float t = FxOverlays::t(*d, now);
-      ox = (int)(4.0f * (1.0f - t) * sinf(t * 6.0f * (float)PI));  // 3 vaivenes que se calman
-    }
-    int bx = buttons[i].cx - BTN_HALF + ox, by = buttons[i].cy - BTN_HALF + oy;
-    if (!pet.sleeping || pressed) gfx->fillRoundRect(bx, by, 2 * BTN_HALF, 2 * BTN_HALF, 14, pressed ? UI_TRACK : UI_WHITE);
-    gfx->drawRoundRect(bx, by, 2 * BTN_HALF, 2 * BTN_HALF, 14, inkColor());
-    if (!off) drawMap(buttons[i].icon, 16, buttons[i].cx - 16 + ox, buttons[i].cy - 16 + oy, 2, false);
-  }
 }
 
 // Casa vacia (v1.39): sin bicho ni huevo hasta encontrar uno caminando. La silueta del huevo donde
@@ -6741,30 +8409,6 @@ const char *eggMsg() {
   }
 }
 
-const char *statusMsg() {
-  if (pet.evolving()) return T(S_EVOLVING);
-  if (timeLeft(cakeHintUntil)) return T(S_NO_CAKE);  // tocar la tarta sin ninguna (v1.54)
-  if (timeLeft(tastesMsgUntil) && !pet.sleeping) return T(S_TASTES);  // evoluciono y cambio de baya (v1.57)
-  if (bathUntil) return "Splish splash!";  // onomatopeya universal
-  if (pet.emote() == EMOTE_ANGRY) return T(S_GRUMPY);
-  if (pet.emote() == EMOTE_DIZZY) return T(S_DIZZY);
-  if (pet.sleeping) return "Zzz...";
-  if (timeLeft(revivedMsgUntil)) return T(S_REVIVED);  // v1.60
-  // abandono (v1.60): el vinculo se apaga, y ya sin el, se muere en DEATH_MIN minutos
-  if (pet.neglected()) return T(pet.bond > 0 ? S_ABANDONED : S_WEAK);
-  if (pet.eating()) return T(S_EATING);
-  if (pet.showHeart()) return T(S_LIKES);
-  if (pet.sleepy()) return T(S_SLEEPY);  // la noche (v1.63): hora de acostarlo
-  if (pet.fullness < 25) return T(S_HUNGRY);
-  if (pet.hygiene < 25) return T(S_NEEDS_BATH);
-  if (pet.energy < 25) return T(S_EXHAUSTED);
-  if (pet.joy < 25) return T(S_SAD);
-  if (pet.sated()) return T(S_SO_FULL);  // la tarta (v1.54): la barra rosa, lleno 3 h
-  if (pet.weight > 60) return T(S_CHUBBY);
-  if (pet.shiny && pet.ageMinutes < 15) return T(S_IS_SHINY);
-  return T(S_HAPPY);
-}
-
 // dibuja un mapa de n x n pixeles escalado; silhouette=true lo pinta en tinta
 void drawMap(const char *const *map, int n, int x, int y, int s, bool silhouette) {
   for (int r = 0; r < n; r++) {
@@ -6796,18 +8440,37 @@ enum : uint8_t { BT_OFF = 0, BT_INTRO, BT_FIGHT, BT_END, BT_SWAP };  // (BT_END 
 // pantalla para cargar el especial, y el siguiente toque cerraba el resultado sin dejarlo ver.
 // La pista "toca: volver" aparece cuando ya se puede tocar.
 #define BT_END_LOCK_MS 1800
-#define BT_HORIZON 150
-#define BT_ME_X 140        // tu bicho: abajo a la izquierda
-#define BT_ME_GROUND 352
-#define BT_FOE_X 318       // el rival: arriba a la derecha
-#define BT_FOE_GROUND 198
-#define BT_ME_BOX_X 222    // cuadro de vida del aliado (con la tira del equipo dentro)...
-#define BT_ME_BOX_Y 258
-#define BT_FOE_BOX_X 80    // ...y el del rival (con su "1/3" o JEFE debajo)
-#define BT_FOE_BOX_Y 64
-#define BT_PIP_R 5         // tira del equipo: una pastilla por bicho
-#define BT_PIP_PITCH 16
-#define BT_PIP_DEAD 0x9492 // gris del caido
+// El patio (v2.0, fase Y1): panel oscuro con "Fase N" y el nombre de la fase arriba, los nombres y
+// las dos barras de vida (aliado verde a la izquierda, rival rojo a la derecha), una ventana
+// redondeada con la pelea sobre el bioma de la fase, el registro de dos lineas debajo, el medidor
+// del especial y la tira del equipo abajo. Toda la pantalla sigue cargando el especial.
+#define BT_NAME_Y 96       // nombres; debajo "cur/max" y el nivel, y la barra
+#define BT_HP_Y 138
+#define BT_HP_W 160
+#define BT_ME_HP_X 62
+#define BT_FOE_HP_X 244
+#define BT_WIN_X 44        // la ventana de la pelea
+#define BT_WIN_Y 158
+#define BT_WIN_W 378
+#define BT_WIN_H 156
+#define BT_WIN_R Y_CARD_RAD
+#define BT_HORIZON (BT_WIN_Y + 52)
+#define BT_ME_X 146        // tu bicho: abajo a la izquierda
+#define BT_ME_GROUND 302
+#define BT_FOE_X 314       // el rival: arriba a la derecha
+#define BT_FOE_GROUND 238
+#define BT_LOG_Y 322       // registro: dos lineas (la segunda atenuada)
+#define BT_LOG_GAP 22
+#define BT_PIP_Y 420       // tira del equipo: una pastilla por bicho
+#define BT_PIP_W 20
+#define BT_PIP_H 10
+#define BT_PIP_PITCH 28
+#define BT_PIP_DEAD Y_TEXT_DIM // contorno del caido
+#define BT_RES_HEAD_Y 100  // resultado: el titular, la ventana con el ganador y la tarjeta del premio
+#define BT_RES_WIN_Y 130
+#define BT_RES_WIN_H 124
+#define BT_RES_GROUND 242
+#define BT_RES_CARD_Y 264
 #define BT_NAME_LEN 13     // nombre de un aliado (apodo de 11 + margen)
 
 PmdMon foePmd;   // sprite del rival en curso
@@ -6903,7 +8566,7 @@ void startStage(uint8_t stage, const uint32_t *uids, uint8_t n) {
   bt.run.begin(stage, mates, m, seed);
   battleLoadFoe();  // antes de la intro: leer la SD bloquea el loop
   battleLoadAlly();
-  menuKind = MENU_NONE;
+  panelKind = PANEL_NONE;
   bt.phase = BT_INTRO;
   bt.t0 = millis();
   sfxPlay(SFX_BATTLE);
@@ -7044,8 +8707,72 @@ uint16_t battleShownHp(uint8_t side, uint32_t now) {
   return (uint16_t)(a + ((int32_t)b - a) * (int32_t)(dt - t0) / BT_HPBAR_MS);
 }
 
-// fondo del campo: cielo por la hora, el suelo del bioma de tu aliado en curso y dos tarimas
-void drawBattleField(int shake) {
+// recorte de la ventana de la pelea: los bichos (que entran andando desde fuera, se lanzan y se
+// hunden al caer) no salen de ella
+static int btClipX0 = 0, btClipY0 = 0, btClipX1 = 466, btClipY1 = 466;
+static void btSetClip(int x, int y, int w, int h) {
+  btClipX0 = x;
+  btClipY0 = y;
+  btClipX1 = x + w;
+  btClipY1 = y + h;
+}
+static void btFill(int x, int y, int w, int h, uint16_t c) {
+  if (x < btClipX0) { w -= btClipX0 - x; x = btClipX0; }
+  if (y < btClipY0) { h -= btClipY0 - y; y = btClipY0; }
+  if (x + w > btClipX1) w = btClipX1 - x;
+  if (y + h > btClipY1) h = btClipY1 - y;
+  if (w > 0 && h > 0) gfx->fillRect(x, y, w, h, c);
+}
+
+// drawPmdActM recortado a la ventana (mismo escalado y mismo anclaje por los pies)
+static void btPmd(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint8_t maxS) {
+  const PmdAct &a = m.acts[actId];
+  if (!a.frames) return;
+  uint8_t s = m.acts[PMD_IDLE].h ? 170 / m.acts[PMD_IDLE].h : 5;
+  if (s < 2) s = 2;
+  if (s > maxS) s = maxS;
+  while (s > 2 && a.h * s > 250) s--;  // acciones con frame grande (ataque)
+  uint8_t fi = pmdFrameAt(a, t, loop);
+  const uint8_t *fr = a.data + (uint32_t)fi * a.w * a.h;
+  int x0 = cx - a.w * s / 2, y0 = groundY - (a.base ? a.base : a.h) * s;
+  for (int r = 0; r < a.h; r++) {
+    int ry = y0 + r * s;
+    if (ry + s <= btClipY0) continue;
+    if (ry >= btClipY1) break;
+    const uint8_t *row = fr + r * a.w;
+    forRuns(a.w, [&](int c) { return indexedKey(row[c], sil); },
+            [&](int c0, int len, int k) { btFill(x0 + c0 * s, ry, len * s, s, sil ? INK_K : m.pal[k]); });
+  }
+}
+
+// drawThumb recortado a la ventana
+static void btThumb(const uint8_t *b, int x, int y, int s, bool sil) {
+  uint8_t w = b[0], h = b[1], n = b[2];
+  const uint8_t *pal = b + 3;
+  const uint8_t *d = pal + n * 2;
+  int ox = x + (GAL_CELL - w * s) / 2, oy = y + (GAL_CELL - h * s) / 2;
+  for (int r = 0; r < h; r++) {
+    const uint8_t *row = d + r * w;
+    forRuns(w, [&](int c) { return indexedKey(row[c], sil); },
+            [&](int c0, int len, int k) {
+              uint16_t col = sil ? INK_K : (uint16_t)(pal[k * 2] | (pal[k * 2 + 1] << 8));
+              btFill(ox + c0 * s, oy + r * s, len * s, s, col);
+            });
+  }
+}
+
+// el bioma de la fase: el del jefe (planta: bosque, agua: playa, fuego: volcan...)
+uint8_t battleBiome() {
+  uint8_t st = bt.run.stage < STAGE_COUNT ? bt.run.stage : 0;
+  int16_t boss = STAGES[st].bossDex;
+  uint8_t bio = (boss >= 1 && boss <= DEX_COUNT) ? DEX_TBL[boss].biome : 0;
+  return bio < BIOME_COUNT ? bio : 0;
+}
+
+// la ventana de la pelea (de BT_WIN_X a lo ancho, de y a y+h): cielo por la hora hasta hz, el suelo
+// del bioma de la fase y las tarimas (dos en la pelea; una en el centro, en el resultado)
+void drawBattleWindow(int y, int h, int hz, int shake, bool result) {
+  const int X = BT_WIN_X, W = BT_WIN_W;
   int hh = sceneHour();
   bool night = hh < 6 || hh >= 20;
   uint16_t top, bot;
@@ -7053,33 +8780,41 @@ void drawBattleField(int shake) {
   else if (hh < 8) { top = C565(0xd1, 0x6a, 0x86); bot = C565(0xf3, 0xb8, 0x7c); }
   else if (hh < 18){ top = C565(0x8f, 0xc8, 0xea); bot = C565(0xdc, 0xee, 0xe6); }
   else             { top = C565(0xc7, 0x5a, 0x4a); bot = C565(0xf0, 0xae, 0x64); }
-  for (int y = 0; y < BT_HORIZON; y += 8) gfx->fillRect(0, y, 466, 8, lerp565(top, bot, y, BT_HORIZON));
-  if (night)
-    for (auto &st : STARS) gfx->fillRect(st[0], st[1] / 2 + 20, 4, 4, UI_WHITE);
-  uint8_t bio = DEX_TBL[battleDex(0)].biome;
-  uint16_t soil = BIOME_SOIL[bio < BIOME_COUNT ? bio : 0];
+  uint16_t soil = BIOME_SOIL[battleBiome()];
   if (night) soil = lerp565(soil, C565(0x16, 0x1c, 0x30), 9, 16);
-  gfx->fillRect(0, BT_HORIZON, 466, 466 - BT_HORIZON, soil);
+  gfx->fillRoundRect(X, y, W, h, BT_WIN_R, soil);              // el suelo, con las esquinas de abajo
+  gfx->fillRoundRect(X, y, W, 2 * BT_WIN_R, BT_WIN_R, top);    // las de arriba, en el color del cielo
+  for (int yy = y + BT_WIN_R; yy < hz; yy += 6)
+    gfx->fillRect(X, yy, W, hz - yy < 6 ? hz - yy : 6, lerp565(top, bot, yy - y, hz - y));
+  gfx->drawFastHLine(X, hz, W, lerp565(soil, C565(0x10, 0x18, 0x20), 3, 16));  // el horizonte
+  if (night)
+    for (auto &st : STARS)
+      gfx->fillRect(X + 16 + st[0] * (W - 32) / 466, y + 8 + (st[1] - 90) * (hz - y - 18) / 140, 3, 3, UI_WHITE);
   uint16_t pad = lerp565(soil, C565(0x10, 0x18, 0x20), 4, 16);
-  gfx->fillEllipse(BT_FOE_X + shake, BT_FOE_GROUND - 4, 74, 15, pad);
-  gfx->fillEllipse(BT_ME_X + shake, BT_ME_GROUND - 4, 88, 17, pad);
+  if (result) {
+    gfx->fillEllipse(CX, BT_RES_GROUND - 4, 70, 12, pad);
+  } else {
+    gfx->fillEllipse(BT_FOE_X + shake, BT_FOE_GROUND - 3, 56, 11, pad);
+    gfx->fillEllipse(BT_ME_X + shake, BT_ME_GROUND - 3, 70, 13, pad);
+  }
 }
 
-// uno de los dos: su sprite PMD; si no lo hay, la miniatura; si tampoco, "?"
+// uno de los dos, recortado a la ventana: su sprite PMD; si no lo hay, la miniatura; si tampoco, "?"
 // maxS: tu bicho x3 y el rival x2 en el campo (los frames de ATTACK son grandes)
 void drawFighter(uint8_t side, uint8_t act, int x, int ground, uint32_t t, bool loop, bool sil, uint8_t maxS) {
   PmdMon &m = battleMon(side);
   int16_t dex = battleDex(side);
   if (m.loaded) {
     if (!m.has(act)) act = PMD_IDLE;
-    drawPmdActM(m, act, x, ground, t, loop, sil, maxS);
+    btPmd(m, act, x, ground, t, loop, sil, maxS);
     return;
   }
   const uint8_t *th = thumbs.get(dex);
   if (th) {
-    drawThumb(th, x - GAL_CELL / 2, ground - GAL_CELL, 2, sil);
+    btThumb(th, x - GAL_CELL / 2, ground - GAL_CELL, 2, sil);
     return;
   }
+  if (x < btClipX0 + 18 || x > btClipX1 - 18) return;
   gfx->setTextColor(UI_INK);
   setSize(6);
   setCur(x - 18, ground - 60);
@@ -7120,66 +8855,62 @@ void renderScreensaver() {
 }
 
 // tira del equipo: una pastilla por bicho, en orden, desde x (centro de la primera) a la altura y.
-// Llena = en pie, hueca y gris = caido; el que esta en el campo, con un aro.
+// Llena y verde = en pie, hueca y gris = caido; el que esta en el campo, con un aro blanco.
 void drawTeamPips(int x, int y, uint32_t now) {
   const StageRun &r = bt.run;
   for (uint8_t i = 0; i < r.teamN; i++) {
-    int px = x + i * BT_PIP_PITCH;
+    int px = x + i * BT_PIP_PITCH - BT_PIP_W / 2, py = y - BT_PIP_H / 2;
     bool cur = i == r.ally && bt.phase != BT_END;
     bool alive = (i == r.ally && bt.phase == BT_FIGHT) ? battleShownHp(0, now) > 0 : r.allyHp(i) > 0;
-    if (alive) {
-      gfx->fillCircle(px, y, BT_PIP_R, UI_BAR_BAD);
-      gfx->drawCircle(px, y, BT_PIP_R, UI_INK);
-    } else {
-      gfx->drawCircle(px, y, BT_PIP_R, BT_PIP_DEAD);
-      gfx->drawCircle(px, y, BT_PIP_R - 1, BT_PIP_DEAD);
-    }
-    if (cur && alive) gfx->drawCircle(px, y, BT_PIP_R + 2, UI_INK);
+    if (alive) gfx->fillRoundRect(px, py, BT_PIP_W, BT_PIP_H, BT_PIP_H / 2, Y_ACCENT_GO);
+    else gfx->drawRoundRect(px, py, BT_PIP_W, BT_PIP_H, BT_PIP_H / 2, BT_PIP_DEAD);
+    if (cur && alive) gfx->drawRoundRect(px - 3, py - 3, BT_PIP_W + 6, BT_PIP_H + 6, BT_PIP_H / 2 + 3, Y_TEXT);
   }
 }
 
-// cuadro de vida: nombre, nivel, barra (y en el tuyo los numeros y la tira del equipo)
-void drawHpBox(uint8_t side, int x, int y, uint16_t hp, uint32_t now) {
+// fondo del panel del combate en una sola pasada (yPanelBg pinta negro y luego el disco: el doble de
+// pixeles en cada frame de 85 ms). Fuera del disco no se ve: el marco redondo lo tapa.
+void btPanelBg() {
+  gfx->fillScreen(Y_PANEL_BG);
+}
+
+// cabecera de las pantallas del combate: "Fase N" y el nombre de la fase debajo
+void drawBattleHeader() {
+  char t[24];
+  snprintf(t, sizeof(t), T(S_STAGE_FMT), (unsigned)(bt.run.stage + 1));
+  yTitle(t, stageName(bt.run.stage));
+}
+
+// nombre, "cur/max", nivel y barra de uno de los dos: el aliado a la izquierda (verde), el rival a la
+// derecha (rojo) con el nombre pegado a su borde derecho
+void drawHpRow(uint8_t side, uint16_t hp) {
   const Fighter &f = bt.run.eng.f[side];
-  int h = side == 0 ? 70 : 54;
-  gfx->fillRoundRect(x, y, 182, h, 10, UI_WHITE);
-  gfx->drawRoundRect(x, y, 182, h, 10, UI_INK);
-  gfx->setTextColor(DEX_TBL[battleDex(side)].accent);
+  int x = side == 0 ? BT_ME_HP_X : BT_FOE_HP_X;
+  const char *nm = battleName(side);
+  gfx->setTextColor(Y_TEXT);
   setSize(2);
-  setCur(x + 10, y + 8);
-  printT(battleName(side));
+  setCur(side == 0 ? x : x + BT_HP_W - textW(nm, 2), BT_NAME_Y);
+  printT(nm);
+  yHpBar(x, BT_HP_Y, BT_HP_W, hp, f.maxHp, side == 0 ? Y_ACCENT_GO : Y_ACCENT_BAD);
   char lv[10];
   snprintf(lv, sizeof(lv), T(S_LVL_FMT), (unsigned)f.level);
-  gfx->setTextColor(UI_INK);
-  setCur(x + 10, y + 30);
+  gfx->setTextColor(Y_TEXT_DIM);
+  setSize(2);
+  setCur(x + BT_HP_W - textW(lv, 2), BT_HP_Y - 20);
   printT(lv);
-  int bx = x + 92, bw = 80, by = y + 32;
-  int fw = f.maxHp ? (int)((uint32_t)(bw - 4) * hp / f.maxHp) : 0;
-  uint32_t pct = f.maxHp ? (uint32_t)hp * 100 / f.maxHp : 0;
-  uint16_t col = pct > 50 ? UI_BAR_OK : pct > 20 ? UI_BAR_WARN : UI_BAR_BAD;
-  gfx->fillRoundRect(bx, by, bw, 12, 4, UI_TRACK);
-  if (fw > 0) gfx->fillRoundRect(bx + 2, by + 2, fw, 8, 3, col);
-  if (side == 0) {
-    char n[16];
-    snprintf(n, sizeof(n), "%u/%u", (unsigned)hp, (unsigned)f.maxHp);
-    setCur(x + 172 - textW(n, 2), y + 50);
-    printT(n);
-    drawTeamPips(x + 18, y + 56, now);
-  }
 }
 
-// bajo el cuadro del rival: cual de los tres es ("1/3", "2/3") o JEFE en rojo
-void drawFoeTag(int x, int y) {
+// arriba a la derecha de la ventana: cual de los tres rivales es ("1/3", "2/3") o JEFE en rojo
+void drawFoeTag() {
   char n[8];
   const char *s = n;
   bool boss = bt.run.isBoss();
   if (boss) s = T(S_BOSS);
   else snprintf(n, sizeof(n), "%u/%u", (unsigned)(bt.run.foeIdx + 1), (unsigned)STAGE_FOES);
   setSize(2);
-  int tw = textW(s, 2), w = tw + 16;
-  gfx->fillRoundRect(x, y, w, 24, 8, boss ? UI_BAR_BAD : UI_WHITE);
-  gfx->drawRoundRect(x, y, w, 24, 8, UI_INK);
-  gfx->setTextColor(boss ? UI_WHITE : UI_INK);
+  int tw = textW(s, 2), w = tw + 16, x = BT_WIN_X + BT_WIN_W - 8 - w, y = BT_WIN_Y + 8;
+  gfx->fillRoundRect(x, y, w, 24, 12, boss ? Y_ACCENT_BAD : Y_PANEL_BG);
+  gfx->setTextColor(Y_TEXT);
   setCur(x + 8, y + 5);
   printT(s);
 }
@@ -7190,8 +8921,9 @@ void drawFoeTag(int x, int y) {
 #define METER_H 12     // media altura
 #define METER_T 6      // grueso de cada brazo, en horizontal
 #define METER_PITCH 21
-#define METER_X 236    // la primera flecha; el cartel "Toca!" va detras de la ultima
-#define METER_Y 350
+#define METER_TAP_GAP 10  // de la punta de la ultima flecha al cartel "Toca!"
+#define METER_TAP_MIN 64  // ancho minimo del cartel
+#define METER_Y 380    // el medidor, centrado como grupo (flechas + cartel) bajo el registro
 void drawChevron(int x, int y, bool filled, uint16_t fill, uint16_t edge) {
   int tip = x + METER_W, notch = x + METER_W - METER_T;
   if (filled) {
@@ -7209,111 +8941,118 @@ void drawChevron(int x, int y, bool filled, uint16_t fill, uint16_t edge) {
 }
 
 // medidor del especial (v1.38): "> > > > >" y un cartel "Toca!" mientras los toques cargan.
-// Llenas laten cuando esta listo; bloqueado tras un especial, en gris y sin cartel.
+// Las cargadas en ambar, laten cuando esta listo; bloqueado tras un especial, huecas y sin cartel.
+// El grupo se centra siempre con el ancho del cartel, para que las flechas no se muevan.
 void drawSpecialMeter(uint32_t now) {
   const SpecialMeter &mt = bt.run.meter;
   bool armed = mt.armed(), locked = mt.locked();
+  const char *tap = T(S_TAP_BOX);
+  setSize(2);
+  // ancho minimo: con la fuente coreana textW() se queda corto (mide la tinta, no el avance)
+  int tw = textW(tap, 2), bw = tw + 16 < METER_TAP_MIN ? METER_TAP_MIN : tw + 16, bh = 28;
+  int arrows = (SPECIAL_TAPS - 1) * METER_PITCH + METER_W;
+  int x0 = CX - (arrows + METER_TAP_GAP + bw) / 2;
   for (int i = 0; i < SPECIAL_TAPS; i++) {
-    int x = METER_X + i * METER_PITCH;
+    int x = x0 + i * METER_PITCH;
     if (locked) {
-      drawChevron(x, METER_Y, false, 0, UI_TRACK);
+      drawChevron(x, METER_Y, false, 0, Y_CARD_HI);
     } else if (i < mt.pips) {
       uint16_t c = (armed && (now / 160) % 2) ? UI_WHITE : UI_BAR_WARN;
-      drawChevron(x, METER_Y, true, c, UI_INK);
+      drawChevron(x, METER_Y, true, c, c);
     } else {
-      drawChevron(x, METER_Y, true, UI_WHITE, UI_INK);
+      drawChevron(x, METER_Y, true, Y_CARD_HI, Y_CARD_HI);
     }
   }
   // el cartel: solo cuando un toque cuenta (ni lleno, ni bloqueado, ni con el combate decidido)
   if (locked || mt.pips >= SPECIAL_TAPS || bt.run.eng.over()) return;
-  const char *tap = T(S_TAP_BOX);
-  setSize(2);
-  // ancho minimo: con la fuente coreana textW() se queda corto (mide la tinta, no el avance)
-  int tw = textW(tap, 2), bw = tw + 16 < 64 ? 64 : tw + 16, bh = 28;
-  int bx = METER_X + (SPECIAL_TAPS - 1) * METER_PITCH + METER_W + 10, by = METER_Y - bh / 2;
-  gfx->fillRoundRect(bx, by, bw, bh, 8, UI_BAR_WARN);
-  gfx->drawRoundRect(bx, by, bw, bh, 8, UI_INK);
+  int bx = x0 + arrows + METER_TAP_GAP, by = METER_Y - bh / 2;
+  gfx->fillRoundRect(bx, by, bw, bh, bh / 2, UI_BAR_WARN);
   gfx->setTextColor(UI_INK);
   setCur(bx + (bw - tw) / 2, by + (bh - 14) / 2);
   printT(tap);
 }
 
-// tarjeta VS: el primer rival arriba, tu primer aliado abajo, cada mitad del color de su tipo; encima
-// la fase ("Fase 3 - Roca") y debajo la tira del equipo
+// tarjeta VS: la fase arriba ("Fase 3" / "Roca"), el primer rival en una tarjeta del color de su tipo,
+// el disco VS y tu primer aliado en la suya; debajo la tira del equipo
 void drawVsCard() {
-  uint16_t ink = UI_INK;
-  gfx->fillRect(0, 0, 466, CY - 6, lerp565(DEX_TBL[battleDex(1)].accent, UI_WHITE, 5, 8));
-  gfx->fillRect(0, CY + 6, 466, 466 - CY - 6, lerp565(DEX_TBL[battleDex(0)].accent, UI_WHITE, 5, 8));
-  gfx->fillRect(0, CY - 6, 466, 12, ink);
-  char head[40];
-  snprintf(head, sizeof(head), T(S_STAGE_FMT), (unsigned)(bt.run.stage + 1));
-  size_t hl = strlen(head);
-  snprintf(head + hl, sizeof(head) - hl, " - %s", stageName(bt.run.stage));
-  gfx->setTextColor(ink);
-  setSize(2);
-  setCur(centerX(head, 2), 54);
-  printT(head);
+  btPanelBg();
+  drawBattleHeader();
   char lv[10];
+  const int cx = 70, cw = 326, ch = 82;
   for (uint8_t side = 0; side < 2; side++) {
+    int y = side ? 108 : 276;
+    gfx->fillRoundRect(cx, y, cw, ch, Y_CARD_RAD, lerp565(DEX_TBL[battleDex(side)].accent, Y_CARD, 5, 8));
     const char *nm = battleName(side);
-    int y = side ? 100 : 292;
     setSize(3);
-    uint8_t ts = textW(nm, 3) <= 300 ? 3 : 2;
+    uint8_t ts = textW(nm, 3) <= cw - 24 ? 3 : 2;
     setSize(ts);
-    gfx->setTextColor(ink);
-    setCur(centerX(nm, ts), y);
+    gfx->setTextColor(Y_TEXT);
+    setCur(centerX(nm, ts), y + (ts == 3 ? 14 : 18));
     printT(nm);
     snprintf(lv, sizeof(lv), T(S_LVL_FMT), (unsigned)bt.run.eng.f[side].level);
-    gfx->setTextColor(ink);
+    gfx->setTextColor(Y_TEXT_DIM);
     setSize(2);
-    setCur(centerX(lv, 2), y + 38);
+    setCur(centerX(lv, 2), y + 52);
     printT(lv);
   }
-  drawTeamPips(CX - (bt.run.teamN - 1) * BT_PIP_PITCH / 2, 376, millis());
-  gfx->fillCircle(CX, CY, 46, UI_WHITE);
-  gfx->drawCircle(CX, CY, 46, ink);
-  gfx->drawCircle(CX, CY, 45, ink);
-  gfx->setTextColor(UI_BAR_BAD);
-  setSize(5);
-  setCur(CX - 29, CY - 18);
+  drawTeamPips(CX - (bt.run.teamN - 1) * BT_PIP_PITCH / 2, 392, millis());
+  gfx->fillCircle(CX, CY, 36, Y_ACCENT_BAD);
+  gfx->drawCircle(CX, CY, 36, Y_PANEL_BG);
+  gfx->drawCircle(CX, CY, 37, Y_PANEL_BG);
+  gfx->setTextColor(Y_TEXT);
+  setSize(4);
+  setCur(CX - textW("VS", 4) / 2, CY - 15);
   printT("VS");
+}
+
+// registro de dos lineas bajo la ventana: la primera en blanco (o en su color), la segunda atenuada
+// (salvo los avisos en rojo). Con una sola linea, va arriba.
+void drawBattleLog(const char *l1, uint16_t c1, const char *l2, uint16_t c2) {
+  if (!l1) {
+    l1 = l2;
+    c1 = c2 == Y_TEXT_DIM ? Y_TEXT : c2;
+    l2 = nullptr;
+  }
+  setSize(2);
+  if (l1) {
+    gfx->setTextColor(c1);
+    setCur(centerX(l1, 2), BT_LOG_Y);
+    printT(l1);
+  }
+  if (l2) {
+    gfx->setTextColor(c2);
+    setCur(centerX(l2, 2), BT_LOG_Y + BT_LOG_GAP);
+    printT(l2);
+  }
 }
 
 // rotulos del ultimo golpe (desde que llega hasta el siguiente)
 void drawBattleCaption(uint32_t now) {
   const char *l1 = nullptr, *l2 = nullptr;
-  uint16_t c1 = UI_INK, c2 = UI_INK;
+  uint16_t c1 = Y_TEXT, c2 = Y_TEXT_DIM;
+  bool hint = false;
   bool hit = bt.haveEv && now - bt.evAt >= BT_HIT_MS;
   if (!hit) {
-    if (!bt.haveEv && bt.phase == BT_FIGHT) { l2 = T(S_TAP_CHARGE); c2 = UI_TRACK; }  // pista hasta el primer golpe
+    if (!bt.haveEv && bt.phase == BT_FIGHT) { l2 = T(S_TAP_CHARGE); hint = true; }  // pista hasta el primer golpe
   } else if (!bt.ev.eff4) {
     l1 = T(S_NO_EFFECT);
   } else {
-    if (bt.ev.special) { l1 = T(S_SPECIAL); c1 = UI_BAR_BAD; }
+    if (bt.ev.special) { l1 = T(S_SPECIAL); c1 = Y_HILITE; }
     else if (bt.ev.crit) l1 = T(S_CRITICAL);
     if (bt.ev.eff4 >= 8) l2 = T(S_SUPER_EFF);
     else if (bt.ev.eff4 <= 2) l2 = T(S_NOT_EFF);
   }
   // muerte subita: este ataque o el que viene ya cuentan (la partida no sale de ella)
   if (bt.haveEv && bt.run.eng.attacks > 0 && bt.run.eng.attacks >= SUDDEN_DEATH_AT) {
-    if (!l1) { l1 = T(S_SUDDEN_DEATH); c1 = UI_BAR_BAD; }
-    else { l2 = T(S_SUDDEN_DEATH); c2 = UI_BAR_BAD; }
+    if (!l1) { l1 = T(S_SUDDEN_DEATH); c1 = Y_ACCENT_BAD; }
+    else { l2 = T(S_SUDDEN_DEATH); c2 = Y_ACCENT_BAD; }
   }
-  if (bt.haveEv && bt.ev.recoil && now - bt.evAt >= BT_RECOIL_MS) { l2 = T(S_RECOIL); c2 = UI_BAR_BAD; }
-  setSize(2);
-  if (l1) {
-    gfx->setTextColor(c1);
-    setCur(centerX(l1, 2), l2 ? 382 : 392);
-    printT(l1);
-  }
-  if (l2) {
-    gfx->setTextColor(c2);
-    setCur(centerX(l2, 2), l1 ? 404 : 392);
-    printT(l2);
-  }
+  if (bt.haveEv && bt.ev.recoil && now - bt.evAt >= BT_RECOIL_MS) { l2 = T(S_RECOIL); c2 = Y_ACCENT_BAD; }
+  if (hint && !l1) { l1 = l2; c1 = Y_TEXT_DIM; l2 = nullptr; }  // la pista se queda atenuada
+  drawBattleLog(l1, c1, l2, c2);
 }
 
-// cartel del relevo, donde va el medidor: "Siguiente rival" (y JEFE en grande si lo es) o "Adelante, X!"
+// el relevo, en el registro: "Siguiente rival" (y JEFE en rojo si lo es) o "Adelante, X!"
 void drawSwapCaption() {
   char go[40];
   const char *l1, *l2 = nullptr;
@@ -7324,25 +9063,7 @@ void drawSwapCaption() {
     snprintf(go, sizeof(go), T(S_GO_FMT), battleName(0));
     l1 = go;
   }
-  setSize(2);
-  int w1 = textW(l1, 2), w2 = 0;
-  if (l2) {
-    setSize(3);
-    w2 = textW(l2, 3);
-  }
-  int bw = (w1 > w2 ? w1 : w2) + 28, bh = l2 ? 66 : 38, by = l2 ? 354 : 364;
-  gfx->fillRoundRect(CX - bw / 2, by, bw, bh, 12, UI_WHITE);
-  gfx->drawRoundRect(CX - bw / 2, by, bw, bh, 12, UI_INK);
-  gfx->setTextColor(UI_INK);
-  setSize(2);
-  setCur(CX - w1 / 2, by + 12);
-  printT(l1);
-  if (l2) {
-    gfx->setTextColor(UI_BAR_BAD);
-    setSize(3);
-    setCur(CX - w2 / 2, by + 34);
-    printT(l2);
-  }
+  drawBattleLog(l1, Y_TEXT, l2, Y_ACCENT_BAD);
 }
 
 // Dibuja un frame del combate. false = se acaba de cerrar (render pinta la casa).
@@ -7428,7 +9149,10 @@ bool renderBattle() {
     }
   }
 
-  drawBattleField(shake);
+  btPanelBg();
+  drawBattleHeader();
+  drawBattleWindow(BT_WIN_Y, BT_WIN_H, BT_HORIZON, shake, false);
+  btSetClip(BT_WIN_X, BT_WIN_Y, BT_WIN_W, BT_WIN_H);
   // el rival primero (esta mas lejos); en pleno ataque, el atacante encima
   uint8_t order[2] = { 1, 0 };
   if (bt.haveEv && bt.phase == BT_FIGHT) {
@@ -7438,92 +9162,93 @@ bool renderBattle() {
   for (uint8_t side : order)
     if (!hidden[side])
       drawFighter(side, act[side], x[side] + shake, g[side], at[side], loop[side], sil[side], side == 0 ? 3 : 2);
-  drawHpBox(1, BT_FOE_BOX_X, BT_FOE_BOX_Y, battleShownHp(1, now), now);
-  drawFoeTag(BT_FOE_BOX_X + 10, BT_FOE_BOX_Y + 58);
-  drawHpBox(0, BT_ME_BOX_X, BT_ME_BOX_Y, battleShownHp(0, now), now);
+  if (flash) gfx->fillRoundRect(BT_WIN_X, BT_WIN_Y, BT_WIN_W, BT_WIN_H, BT_WIN_R, UI_WHITE);
+  drawFoeTag();
+  gfx->drawRoundRect(BT_WIN_X, BT_WIN_Y, BT_WIN_W, BT_WIN_H, BT_WIN_R, Y_CARD_HI);
+  drawHpRow(1, battleShownHp(1, now));
+  drawHpRow(0, battleShownHp(0, now));
   if (bt.phase == BT_FIGHT) {
     drawSpecialMeter(now);
     drawBattleCaption(now);
   } else if (bt.phase == BT_SWAP) {
     drawSwapCaption();
   }
-  if (flash) gfx->fillCircle(CX, CY, 231, UI_WHITE);
+  drawTeamPips(CX - (bt.run.teamN - 1) * BT_PIP_PITCH / 2, BT_PIP_Y, now);
   gfx->flush();
   return true;
 }
 
-// Resultado: el que quedo en pie posa en el centro (tu aliado si se supero, el rival si no), el
-// titulo arriba, el objeto del jefe debajo y lo que pago stageDone abajo: la insignia nueva, el
-// premio del equipo y la felicidad. Un toque, la tecla USER o BT_END_MS lo cierran.
+// Resultado: arriba la fase; el titular en verde (superada) o rojo (perdida); en la ventana posa el
+// que quedo en pie (tu aliado si se supero, el rival si no) y debajo, en una tarjeta, lo que pago
+// stageDone: el objeto del jefe, la insignia nueva, el premio del equipo y la felicidad. Un toque,
+// la tecla USER o BT_END_MS lo cierran.
 void drawBattleResult(uint32_t now) {
-  drawBattleField(0);
+  btPanelBg();
+  drawBattleHeader();
   uint32_t t = now - bt.t0;
-  drawFighter(bt.cleared ? 0 : 1, PMD_POSE, CX, 296, t, true, false, 4);
-  const char *l1 = T(bt.cleared ? S_STAGE_CLEAR : S_STAGE_LOST);
-  gfx->fillRoundRect(98, 50, 270, 50, 14, UI_BAR_WARN);
-  gfx->drawRoundRect(98, 50, 270, 50, 14, UI_INK);
-  gfx->setTextColor(UI_INK);
+  const char *head = T(bt.cleared ? S_STAGE_CLEAR : S_STAGE_LOST);
   setSize(3);
-  uint8_t ts = textW(l1, 3) <= 256 ? 3 : 2;
+  uint8_t ts = textW(head, 3) <= 330 ? 3 : 2;
   setSize(ts);
-  setCur(centerX(l1, ts), ts == 3 ? 64 : 68);
-  printT(l1);
-  // el objeto del jefe: una pildora bajo el titulo con la cajita y "Regalo en casa!" (lo que es se ve
-  // al abrirlo); con la casa vacia va a la mochila, y se ve el objeto con "MOCHILA"
+  gfx->setTextColor(bt.cleared ? Y_ACCENT_GO : Y_ACCENT_BAD);
+  setCur(centerX(head, ts), BT_RES_HEAD_Y + (ts == 3 ? 0 : 4));
+  printT(head);
+  drawBattleWindow(BT_RES_WIN_Y, BT_RES_WIN_H, BT_RES_WIN_Y + 44, 0, true);
+  btSetClip(BT_WIN_X, BT_RES_WIN_Y, BT_WIN_W, BT_RES_WIN_H);
+  drawFighter(bt.cleared ? 0 : 1, PMD_POSE, CX, BT_RES_GROUND, t, true, false, 3);
+  gfx->drawRoundRect(BT_WIN_X, BT_RES_WIN_Y, BT_WIN_W, BT_RES_WIN_H, BT_WIN_R, Y_CARD_HI);
+  // la tarjeta: solo lo que de verdad se dio. El objeto del jefe con la cajita y "Regalo en casa!" (lo
+  // que es se ve al abrirlo); con la casa vacia va a la mochila, y se ve el objeto con "MOCHILA"
+  const char *ln[4];
+  uint16_t lc[4];
+  const char *const *icon[4] = { nullptr, nullptr, nullptr, nullptr };
+  uint8_t n = 0;
   if (bt.rw.item < IT_COUNT) {
     bool bag = pet.isVacant();
-    const char *g = T(bag ? S_BACKPACK : S_BATTLE_GIFT);
-    setSize(2);
-    int w = 32 + 8 + textW(g, 2), gx = CX - w / 2;
-    gfx->fillRoundRect(gx - 12, 106, w + 24, 42, 14, UI_WHITE);
-    gfx->drawRoundRect(gx - 12, 106, w + 24, 42, 14, UI_INK);
-    drawMap(bag ? ITEM_ICON[bt.rw.item] : SPR_GIFT, 16, gx, 111, 2, false);
-    gfx->setTextColor(UI_BAR_BAD);
-    setCur(gx + 40, 121);
-    printT(g);
+    icon[n] = bag ? ITEM_ICON[bt.rw.item] : SPR_GIFT;
+    ln[n] = T(bag ? S_BACKPACK : S_BATTLE_GIFT);
+    lc[n++] = Y_HILITE;
   }
-  // lo demas, en un cuadro bajo el ganador (solo lo que de verdad se dio)
-  const char *ln[3];
-  uint16_t lc[3];
-  uint8_t n = 0;
-  if (bt.rw.newBadge) { ln[n] = T(S_NEW_BADGE); lc[n++] = UI_BAR_BAD; }
-  if (bt.rw.paid) { ln[n] = T(S_TEAM_REWARD); lc[n++] = UI_INK; }
+  if (bt.rw.newBadge) { icon[n] = BADGE_ICON[bt.run.stage]; ln[n] = T(S_NEW_BADGE); lc[n++] = Y_HILITE; }
+  if (bt.rw.paid) { ln[n] = T(S_TEAM_REWARD); lc[n++] = Y_TEXT; }
   char joy[40];
   if (bt.rw.joy) {
     snprintf(joy, sizeof(joy), T(S_PRACTICE_JOY_FMT), (unsigned)bt.rw.joy);
     ln[n] = joy;
-    lc[n++] = UI_BAR_OK;
+    lc[n++] = Y_ACCENT_GO;
   }
-  // y la pista "toca: volver" en su ultima fila, reservada desde el principio (el cuadro no crece)
+  // y la pista "toca: volver" en su ultima fila, reservada desde el principio (la tarjeta no crece)
   bool hint = t >= BT_END_LOCK_MS;
-  if (!n && !hint) return;
+  bool coinRow = bt.rw.coins > 0;  // las monedas (Y4): moneda + "+N", en su fila
+  if (!n && !hint && !coinRow) return;
   setSize(2);
-  int bw = textW(T(S_BACK), 2), bh = 12 + 20;
+  int bw = textW(T(S_BACK), 2), bh = 12 + 20 + (coinRow ? 22 : 0);
   for (uint8_t i = 0; i < n; i++) {
-    bool badge = bt.rw.newBadge && i == 0;
-    int w = textW(ln[i], 2) + (badge ? 40 : 0);
+    int w = textW(ln[i], 2) + (icon[i] ? 40 : 0);
     if (w > bw) bw = w;
-    bh += badge ? 32 : 20;
+    bh += icon[i] ? 32 : 20;
   }
   bw += 28;
-  int y = 304;
-  gfx->fillRoundRect(CX - bw / 2, y, bw, bh, 14, UI_WHITE);
-  gfx->drawRoundRect(CX - bw / 2, y, bw, bh, 14, UI_INK);
+  int y = BT_RES_CARD_Y;
+  yCard(CX - bw / 2, y, bw, bh, false);
   int ly = y + 6;
   for (uint8_t i = 0; i < n; i++) {
-    bool badge = bt.rw.newBadge && i == 0;
-    int w = textW(ln[i], 2) + (badge ? 40 : 0), lx = CX - w / 2;
-    if (badge) {
-      drawMap(BADGE_ICON[bt.run.stage], 16, lx, ly, 2, false);
+    int w = textW(ln[i], 2) + (icon[i] ? 40 : 0), lx = CX - w / 2;
+    if (icon[i]) {
+      drawMap(icon[i], 16, lx, ly, 2, false);
       lx += 40;
     }
     gfx->setTextColor(lc[i]);
-    setCur(lx, ly + (badge ? 9 : 3));
+    setCur(lx, ly + (icon[i] ? 9 : 3));
     printT(ln[i]);
-    ly += badge ? 32 : 20;
+    ly += icon[i] ? 32 : 20;
+  }
+  if (coinRow) {
+    drawCoinGain(ly + 1, bt.rw.coins, Y_TEXT);
+    ly += 22;
   }
   if (hint) {  // ya se puede cerrar con un toque (v1.38)
-    gfx->setTextColor(UI_TRACK);
+    gfx->setTextColor(Y_TEXT_DIM);
     setCur(centerX(T(S_BACK), 2), ly + 3);
     printT(T(S_BACK));
   }

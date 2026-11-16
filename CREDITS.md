@@ -27,6 +27,12 @@ Huge thanks to that whole community for an enormous amount of work.
 > package the sprites from the original sources with `tools/pack_*.py` (or the web
 > installer).
 
+## Yard backgrounds
+
+| Asset | Author / source |
+|---|---|
+| Yard map tiles (`tools/yard/legends/sunnyside.txt`) | [Sunnyside World](https://danieldiggle.itch.io/sunnyside) by Daniel Diggle. Not in this repository: its licence forbids repackaging, so each builder downloads it into `tools/yard/tilesets/`, and the packed backgrounds only go to the SD card |
+
 ## Software / hardware
 
 | Component | Author / source |

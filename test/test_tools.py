@@ -6,6 +6,7 @@
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -196,6 +197,44 @@ class TestGeneratedFiles(unittest.TestCase):
             self.assertIn('GENERADO', head, f'{name} deberia decir que esta generado')
 
 
+def _tpk2_records(buf):
+    """(nActs, [(id, w, h, nf, contado)], fin) de un .bin TPK2 (tools/pack_pmd.py)."""
+    nacts = buf[4]
+    (palcount,) = struct.unpack_from('<H', buf, 5)
+    p = 7 + palcount * 2
+    recs = []
+    while p + 4 <= len(buf):
+        aid, w, h, nf = buf[p:p + 4]
+        recs.append((aid, w, h, nf, len(recs) < nacts))
+        p += 4 + nf * 2 + w * h * nf
+    return nacts, recs, p
+
+
+class TestPmdSprites(unittest.TestCase):
+    """Los sprites de la SD (tools/sdcard/mons) los lee sdmon.cpp, tambien el firmware viejo."""
+
+    def test_los_bin_se_leen_hasta_el_final(self):
+        mons = os.path.join(TOOLS, 'sdcard', 'mons')
+        files = sorted(f for f in os.listdir(mons) if re.fullmatch(r'ps?\d{3}\.bin', f))
+        self.assertEqual(len(files), 302)
+        for name in files:
+            with self.subTest(sprite=name):
+                with open(os.path.join(mons, name), 'rb') as fh:
+                    buf = fh.read()
+                self.assertEqual(buf[:4], b'TPK2')
+                self.assertLessEqual(len(buf), 3 * 1024 * 1024)  # tope de PmdMon::load
+                nacts, recs, end = _tpk2_records(buf)
+                self.assertEqual(end, len(buf), 'el ultimo registro no acaba justo al final')
+                ids = [r[0] for r in recs]
+                self.assertEqual(len(ids), len(set(ids)), 'accion repetida')
+                self.assertIn(0, ids)  # Idle
+                for aid, w, h, nf, counted in recs:
+                    self.assertTrue(w and h and 1 <= nf <= 24)
+                    # el firmware <= v1.68 rechaza ids >= 12: solo pueden ir en la cola sin contar
+                    self.assertEqual(counted, aid < 12, f'accion {aid} mal colocada')
+                    self.assertLess(aid, 14)  # PMD_NACTS en sdmon.h
+
+
 class TestSketchSanity(unittest.TestCase):
     """Comprobaciones baratas sobre el .ino que no necesitan compilarlo."""
 
@@ -261,6 +300,7 @@ class TestBuffersDeTexto(unittest.TestCase):
         'S_FAREWELL_BTN': ('nombre_o_apodo',),
         'S_DYING_FMT': ('nombre_o_apodo',),  # v1.60 (S_RUNAWAY_BTN ya no tiene %s)
         'S_USE_FMT': ('objeto',),
+        'S_BUY_FMT': ('objeto',),
         # la caja (v1.37): S_NOW_FMT tambien recibe "HUEVO", mas corto que cualquier nombre
         'S_STORE_Q_FMT': ('nombre_o_apodo',),
         'S_WAKE_Q_FMT': ('nombre_o_apodo',),
@@ -354,6 +394,251 @@ class TestBuffersDeTexto(unittest.TestCase):
                         peor, tam,
                         f'TamaPoke.ino:{n}: {var}[{tam}] con {sid} en {lang} necesita {peor} bytes')
         self.assertGreater(revisadas, 10, 'el patron de snprintf ya no encuentra las llamadas')
+
+
+def _pil_ok():
+    try:
+        from PIL import Image
+        Image.new('RGB', (4, 4)).quantize(colors=4)
+        return True
+    except Exception:
+        return False
+
+
+class TestPackYard(unittest.TestCase):
+    """tools/pack_yard.py (v2.0): mapas de texto -> TPY1. Usa un paquete de baldosas falso de 4x4
+    baldosas lisas (el de verdad no esta en git)."""
+
+    LEGEND = '\n'.join([
+        'pack = fake',
+        'sheet = sheet.png',
+        'autotiles = set.yy',
+        'g = 0,0 1,0  weights 3 1      # hierba',
+        'w = autotile "Water" over g !  # agua con bordes',
+        'R = stamp 2x2 2,2 !           # roca',
+        'f = 3,0                       # flores (se pisan)',
+        'u = 3,1 !                     # tocon',
+    ]) + '\n'
+
+    def setUp(self):
+        import pack_yard
+        self.py = pack_yard
+        self.tmp = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.tmp, 'legends'))
+        os.makedirs(os.path.join(self.tmp, 'maps'))
+        self.write('legends/fake.txt', self.LEGEND)
+        fake = os.path.join(self.tmp, 'tilesets', 'fake')
+        os.makedirs(fake)
+        # juego de bordes: la posicion es la mascara de esquinas de fondo; baldosa 0 = vacia
+        tiles = [4 * 3 + 0] + [4 * 3 + 1] * 14 + [0]
+        with open(os.path.join(fake, 'set.yy'), 'w') as fh:
+            fh.write('{"out_columns": 4, "autoTileSets": [{"name": "Water", "tiles": %s,},],}' % tiles)
+        if _pil_ok():
+            from PIL import Image
+            sheet = Image.new('RGBA', (64, 64))
+            for i in range(16):
+                sheet.paste((i * 15, 255 - i * 15, (i * 40) % 256, 255), ((i % 4) * 16, (i // 4) * 16, (i % 4) * 16 + 16, (i // 4) * 16 + 16))
+            sheet.save(os.path.join(fake, 'sheet.png'))
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def write(self, rel, text):
+        with open(os.path.join(self.tmp, rel), 'w') as fh:
+            fh.write(text)
+
+    def mapa(self, ground=None, objects=None, head='name: Test\nlegend: fake\nseed: 1\n'):
+        ground = ground or ['g' * 15] * 15
+        objects = objects or ['.' * 15] * 15
+        text = head + 'ground:\n' + '\n'.join(ground) + '\nobjects:\n' + '\n'.join(objects) + '\n'
+        self.write('maps/01-test.txt', text)
+        return os.path.join(self.tmp, 'maps', '01-test.txt')
+
+    def falla(self, patron, path=None):
+        path = path or os.path.join(self.tmp, 'maps', '01-test.txt')
+        with self.assertRaisesRegex(self.py.MapError, patron):
+            self.py.compose(path, self.tmp, os.path.join(self.tmp, 'tilesets'))
+
+    def con_objeto(self, fila, texto):
+        objs = ['.' * 15] * 15
+        objs[fila] = texto
+        return objs
+
+    # ---- errores del mapa y de la leyenda (no necesitan Pillow hasta componer) ----
+    def test_fila_de_ancho_equivocado(self):
+        g = ['g' * 15] * 15
+        g[3] = 'g' * 14
+        path = self.mapa(ground=g)
+        with self.assertRaisesRegex(self.py.MapError, r'01-test.txt:8: ground row has 14 characters'):
+            self.py.parse_map(path)
+
+    def test_faltan_filas(self):
+        path = self.mapa(ground=['g' * 15] * 14)
+        with self.assertRaisesRegex(self.py.MapError, 'ground layer has 14 rows'):
+            self.py.parse_map(path)
+
+    def test_falta_el_nombre(self):
+        path = self.mapa(head='legend: fake\n')
+        with self.assertRaisesRegex(self.py.MapError, 'missing "name'):
+            self.py.parse_map(path)
+
+    def test_leyenda_sin_hoja(self):
+        self.write('legends/bad.txt', 'pack = fake\ng = 0,0\n')
+        with self.assertRaisesRegex(self.py.MapError, 'missing "sheet'):
+            self.py.parse_legend(os.path.join(self.tmp, 'legends', 'bad.txt'))
+
+    def test_leyenda_pesos_que_no_cuadran(self):
+        self.write('legends/bad.txt', 'pack = fake\nsheet = s.png\ng = 0,0 1,0 weights 1\n')
+        with self.assertRaisesRegex(self.py.MapError, r'bad.txt:3: 2 tiles but 1 weights'):
+            self.py.parse_legend(os.path.join(self.tmp, 'legends', 'bad.txt'))
+
+    def test_leyenda_clave_larga(self):
+        self.write('legends/bad.txt', 'pack = fake\nsheet = s.png\ngg = 0,0\n')
+        with self.assertRaisesRegex(self.py.MapError, 'one character'):
+            self.py.parse_legend(os.path.join(self.tmp, 'legends', 'bad.txt'))
+
+    def test_falta_el_paquete_y_dice_que_hacer(self):
+        shutil.rmtree(os.path.join(self.tmp, 'tilesets'))
+        self.mapa()
+        self.falla('tile pack not found(.|\n)*not in git')
+
+    def test_nombre_de_fichero(self):
+        self.write('maps/meadow.txt', 'x')
+        with self.assertRaisesRegex(self.py.MapError, 'NN-name.txt'):
+            self.py.map_files(self.tmp, [])
+
+    def test_mapa_pedido_que_no_existe(self):
+        self.mapa()
+        with self.assertRaisesRegex(self.py.MapError, 'no map numbered 07'):
+            self.py.map_files(self.tmp, ['7'])
+
+    # ---- errores al componer ----
+    @unittest.skipUnless(_pil_ok(), 'Pillow no disponible')
+    def test_caracter_desconocido(self):
+        self.mapa(objects=self.con_objeto(2, '....Z..........'))
+        self.falla(r'01-test.txt:23:5: unknown character .Z. in objects')
+
+    @unittest.skipUnless(_pil_ok(), 'Pillow no disponible')
+    def test_sello_fuera_de_la_rejilla(self):
+        self.mapa(objects=self.con_objeto(14, '..............R'))
+        self.falla("stamp 'R' \\(2x2\\) runs off the grid")
+
+    @unittest.skipUnless(_pil_ok(), 'Pillow no disponible')
+    def test_sellos_que_se_pisan(self):
+        objs = ['.' * 15] * 15
+        objs[3] = '...R...........'
+        objs[4] = '....R..........'
+        self.mapa(objects=objs)
+        self.falla("stamp 'R' overlaps 'R'")
+
+    @unittest.skipUnless(_pil_ok(), 'Pillow no disponible')
+    def test_autotile_en_objetos(self):
+        self.mapa(objects=self.con_objeto(0, 'w..............'))
+        self.falla('autotile .w. only allowed in the ground layer')
+
+    @unittest.skipUnless(_pil_ok(), 'Pillow no disponible')
+    def test_sello_en_el_suelo(self):
+        g = ['g' * 15] * 15
+        g[5] = 'R' + 'g' * 14
+        self.mapa(ground=g)
+        self.falla('stamp .R. not allowed in the ground layer')
+
+    @unittest.skipUnless(_pil_ok(), 'Pillow no disponible')
+    def test_juego_de_bordes_desconocido(self):
+        self.write('legends/fake.txt', self.LEGEND.replace('"Water"', '"Lava"'))
+        g = ['g' * 15] * 15
+        g[7] = 'gggggggwggggggg'
+        self.mapa(ground=g)
+        self.falla("autotile set 'Lava' not found")
+
+    # ---- el fichero TPY1 ----
+    @unittest.skipUnless(_pil_ok(), 'Pillow no disponible')
+    def test_tpy1_vuelve_a_dar_la_imagen_y_la_mascara(self):
+        g = ['g' * 15] * 15
+        g[7] = 'gggggggwggggggg'
+        self.mapa(ground=g, objects=self.con_objeto(4, '....R.....f.u..'))
+        meta, img, blocked = self.py.compose(os.path.join(self.tmp, 'maps', '01-test.txt'), self.tmp,
+                                             os.path.join(self.tmp, 'tilesets'))
+        self.assertEqual(meta['name'], 'Test')
+        data, colours = self.py.encode_tpy1(img, blocked)
+        self.assertEqual(data[:7], b'TPY1\x01\xf0\xf0')  # firma, version 1, 240x240
+        pal, walk, px = self.py.decode_tpy1(data)
+        self.assertEqual(len(px), 240 * 240)
+        # cada pixel decodificado es el color original pasado a RGB565 (pocos colores: sin perdida)
+        rgb = img.tobytes()
+        for i in range(0, 240 * 240, 97):
+            r, g_, b = rgb[3 * i:3 * i + 3]
+            self.assertEqual(pal[px[i]], self.py.rgb565(r, g_, b), f'pixel {i}')
+
+        def bit(x, y):
+            k = y * 15 + x
+            return (walk[k // 8] >> (k % 8)) & 1
+        self.assertEqual(bit(4, 4), 1)   # roca (sello de 2x2 bloqueante)
+        self.assertEqual(bit(5, 5), 1)
+        self.assertEqual(bit(12, 4), 1)  # tocon
+        self.assertEqual(bit(10, 4), 0)  # flores: se pisan
+        self.assertEqual(bit(7, 7), 1)   # el agua maciza bloquea
+        self.assertEqual(bit(7, 8), 0)   # su borde no
+        self.assertEqual(bit(7, 1), 1)   # zona de la hora
+        self.assertEqual(bit(7, 13), 1)  # zona del dock
+        self.assertEqual(bit(0, 0), 1)   # fuera del circulo
+        self.assertEqual(bit(9, 9), 0)   # hierba libre
+
+    def test_tpy1_corto_o_con_otra_firma(self):
+        with self.assertRaises(ValueError):
+            self.py.decode_tpy1(b'TPY2' + bytes(100))
+        with self.assertRaises(ValueError):
+            self.py.decode_tpy1(b'TPY1\x01\xf0\xf0\x01' + bytes(10))
+
+
+_REAL_TILESETS = os.environ.get('TAMAPOKE_TILESETS', '/home/ale/projects/TamaPoke/tools/yard/tilesets')
+
+
+@unittest.skipUnless(_pil_ok(), 'Pillow no disponible')
+@unittest.skipUnless(os.path.isdir(os.path.join(_REAL_TILESETS, 'sunnyside')),
+                     'paquete Sunnyside no instalado (TAMAPOKE_TILESETS)')
+class TestYardMapsRealPack(unittest.TestCase):
+    """Empaqueta cada mapa de tools/yard/maps con el paquete de baldosas de verdad (no esta en git:
+    se salta si falta). Sin vistas previas: el resize de Pillow del sistema puede estar roto."""
+
+    # celdas sueltas (fuera de la zona grande) que ya tenian los mapas anteriores a esta prueba;
+    # los mapas nuevos no pueden tener ninguna
+    KNOWN_POCKETS = {'01-meadow': 2, '02-quarry': 6}
+
+    def regiones(self, walk):
+        libres = {(x, y) for y in range(15) for x in range(15)
+                  if not (walk[(y * 15 + x) // 8] >> ((y * 15 + x) % 8)) & 1}
+        tamanos = []
+        while libres:
+            pila = [libres.pop()]
+            n = 1
+            while pila:
+                x, y = pila.pop()
+                for v in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                    if v in libres:
+                        libres.remove(v)
+                        pila.append(v)
+                        n += 1
+            tamanos.append(n)
+        return sorted(tamanos, reverse=True)
+
+    def test_todos_los_mapas(self):
+        import pack_yard
+        yard = os.path.join(ROOT, 'tools', 'yard')
+        maps = pack_yard.map_files(yard, [])
+        self.assertGreaterEqual(len(maps), 5)
+        for mp in maps:
+            with self.subTest(mapa=mp.stem):
+                meta, img, blocked = pack_yard.compose(mp, yard, _REAL_TILESETS)
+                data, colores = pack_yard.encode_tpy1(img, blocked)
+                self.assertLessEqual(colores, 256)
+                self.assertLessEqual(len(data), 60 * 1024)
+                _, walk, _ = pack_yard.decode_tpy1(data)
+                regiones = self.regiones(walk)
+                self.assertGreaterEqual(regiones[0], 40, f'zona para pasear: {regiones}')
+                self.assertLessEqual(sum(regiones[1:]), self.KNOWN_POCKETS.get(mp.stem, 0),
+                                     f'celdas sueltas fuera de la zona grande: {regiones}')
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

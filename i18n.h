@@ -16,9 +16,9 @@ extern Lang gLang;  // idioma activo (definido en i18n.cpp)
 
 // IDs de cadena. El orden debe coincidir con la tabla STRINGS de i18n.cpp.
 enum StrId : uint8_t {
-  // estado del bicho (statusMsg)
-  S_EVOLVING, S_EATING, S_LIKES, S_HUNGRY, S_NEEDS_BATH,
-  S_EXHAUSTED, S_SAD, S_CHUBBY, S_IS_SHINY, S_HAPPY,
+  // estado del bicho
+  S_EATING, S_LIKES, S_HUNGRY, S_NEEDS_BATH,
+  S_EXHAUSTED, S_SAD,
   // ceremonias de despedida
   S_FAREWELL, S_DIED, S_GOODBYE,  // la segunda: la muerte por abandono (v1.60, era la escapada)
   // huevo
@@ -90,8 +90,8 @@ enum StrId : uint8_t {
   S_TRAIN_LEGEND,
   // v1.53: la mochila con su boton: como se usa y dormido solo se mira
   S_BAG_HINT, S_BAG_ASLEEP,
-  // v1.54: la tarta: lleno durante 3 h, y tocarla sin ninguna
-  S_SO_FULL, S_NO_CAKE,
+  // v1.54: tocar la tarta sin ninguna
+  S_NO_CAKE,
   // v1.56: el botin de un combate ganado, que espera envuelto en casa
   S_BATTLE_GIFT,
   // v1.57: al evolucionar cambio la baya favorita (vuelve a ser un secreto)
@@ -108,6 +108,14 @@ enum StrId : uint8_t {
   // stages: la lista de fases, el equipo, los carteles de la pelea y las insignias
   S_STAGES, S_BADGES, S_PICK_TEAM, S_START, S_BOSS, S_LOCKED, S_STAGE_CLEAR, S_STAGE_LOST,
   S_NEXT_RIVAL, S_GO_FMT, S_NEW_BADGE, S_LV_RANGE_FMT, S_TEAM_REWARD, S_REWARD_TODAY, S_STAGE_FMT,
+  // el patio (v2.0): la tienda, sus botones y las etiquetas del dock (Cuidar / Jugar / Mochila)
+  S_SHOP, S_BUY, S_USE, S_PURCHASED, S_DOCK_CARE, S_DOCK_PLAY, S_DOCK_BAG,
+  // el huevo del patio (v2.0, Y3): la pista de agitarlo (en el globo, con lo que le falta)
+  S_EGG_SHAKE,
+  // la tienda de la mochila y los fondos (v2.0, Y4)
+  S_TAB_ITEMS, S_BACKGROUNDS, S_BUY_FMT, S_NOT_ENOUGH, S_BAG_FULL,
+  S_MAP_1, S_MAP_2, S_MAP_3, S_MAP_4, S_MAP_5,
+  S_USING, S_NOT_ON_SD, S_SHOP_HINT,
   STR_COUNT
 };
 

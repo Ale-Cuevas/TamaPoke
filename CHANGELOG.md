@@ -6,7 +6,94 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
-## [Unreleased]
+## [2.0] - 2026-11-16
+
+**The yard.** A new look and home (design: `docs/yard-prototype/DESIGN_YARD_UI.md`): the pet lives in a top-down
+pixel-art yard with a floating HUD and a 3-button dock, menus are dark panels, and coins buy items and yard
+backgrounds in a Shop. Updating keeps your Pokémon, items and Box; you start with 0 coins and the meadow.
+To see the maps, pack them and send them to the SD card (`tools/pack_yard.py`, `tools/send_sd.py --yard`;
+see the README); without them the yard is a flat ground. The re-packed sprites (walking up and down) are in the
+new `web/sprites.pak` / `tools/send_sd.py`; old sprite files still work.
+
+### Added
+
+- **Yard UI kit (phase Y0).** The dark-panel and world-HUD pieces of the new look (`yard_ui.h` + "kit del patio" in
+  the sketch): panel disc, title, cards, pills, coin badge, chevrons, pager, round back button, 3-button dock,
+  green toast, speech bubble and HP bar. Every tap zone is at least 48 px and inside the round frame (host test).
+  A demo screen shows them (serial `YARDUI [0-2]`: shop panel, home HUD, stage); nothing else changes yet.
+  The dock is icons only: labels are unreadable at size 1 and overlap at size 2 ("Mochila").
+- **Yard backgrounds pipeline (phase Y1b).** `tools/pack_yard.py` turns text maps (`tools/yard/maps/NN-name.txt`,
+  15x15 tiles) and a legend (`tools/yard/legends/sunnyside.txt`) into `TPY1` files: a 240x240 indexed image, its
+  RGB565 palette and a 15x15 walk mask (objects, water, the round edge and the HUD zones are blocked), plus a round
+  preview and a debug image. Two maps so far (01 meadow, 02 quarry, about 58 KB each). The Sunnyside World tile pack
+  is not in git (its licence forbids repackaging): unzip it into `tools/yard/tilesets/sunnyside/`. Run the script with
+  `uv run --no-project --with pillow` (Debian's Pillow on Python 3.14 crashes in `resize`).
+  `yardbg.h` reads and checks the files on the board, expands them to the 466x466 canvas, answers "can a pet stand
+  here", and tints the palette for dawn, dusk and night. `tools/send_sd.py --yard` sends them to `/yard/NN.bin`;
+  the board now accepts `PUT yard/...` and `LS` lists both folders.
+
+- **The yard home (phase Y2, `TP_YARD`, on by default).** The home is now a top-down map from the SD card
+  (`/yard/NN.bin`) picked by the species biome: meadow, quarry, forest, beach or ruins (maps 03-05 are new). Dawn,
+  dusk and night tint the map. Without the SD map: a flat ground in the biome colour. The home pet and the first
+  Box pet (still hibernating) wander on the walkable cells (`yard.h`), sleep where they stand and drift when the
+  board is tilted. The HUD is the clock, the battery and a 3-button dock: Care, Play, Bag. No more need bars,
+  name or status line: the pet says how it is in a speech bubble, cycling every second when several needs are low.
+  Poops drop where the pet stands and gifts lie on the grass; tap them as before. Tap the pet for its card (the
+  Box pet opens the Box). Serial `YARDBG n` forces a map (0 = the chosen one, 255 = fallback); `PERF` shows the yard
+  timings. The egg, the empty home and the farewell/Revive screens are unchanged for now.
+- **World actions (phase Y3).**
+  - Pets walk up and down with their back or front sprite (new PMD actions 12 WalkUp and 13 WalkDown, stored after
+    the counted actions so older firmware still reads the new SD files). All sprites were re-packed (SD and
+    `web/sprites.pak` +12 %); Cubone and Ditto pick up upstream SpriteCollab updates.
+  - Food from the Care panel drops into the yard: the pet sees it ("!"), walks over, eats it, and only then the
+    berry or cake takes effect. One item at a time; it waits if you leave the yard, and is cancelled (nothing used)
+    if the pet falls asleep.
+  - Eggs sit in the yard and hatch 2 h after they are placed (real time, also while the board is off). Each shake
+    (once every 30 s) takes 5 min off, up to 1 h, so the fastest hatch is 1 h (first built as 4 h / 2 h; halved
+    after trying it on the board). Tapping the egg shows the time left or "Shake me!"; cracks show with 1 h and
+    30 min left. The very first starter egg still hatches with 3 taps. New save keys `yegg` / `ysav`;
+    an egg already in progress from an older version finishes the old way. Serial `EGGT <min>`, `HATCH`.
+- **Tweaks after the first look on the board.** The ruins map (05, power plant and ruins biomes) is now a ghostly
+  purple with lavender mist (`tools/pack_yard.py` gained optional `hue:`, `tint:` and `mist:` lines per map). The
+  dock buttons are 72 px apart instead of 56, with a 16 px dead gap between their tap zones. The stat card's first
+  page shows the 4 need bars (food, joy, energy, hygiene) under the portrait, since the yard has no bars.
+- **Care and Play panels.** The FOOD/PLAY/CARE popups became two dark panels opened from the dock: Care (berries,
+  cake, light, bath) and Play (ball, stages, sack, sled, waterfall). They don't close by themselves; a refused
+  card shakes inside the panel.
+- **Coins and the Shop (phase Y4).**
+  - Coins (`economy.h`, first numbers to tune): each minigame pays 3-8 by result, a stage's first clear 50 and a
+    repeat clear 10 (once per stage per day), walk goals 10 / 20 / 40. Games and repeat clears stop at 150 coins a
+    day; first clears and walk goals always pay. Max 9999. The yard shows the balance under the clock and every
+    result screen shows "+N" with a coin.
+  - The Bag has two tabs, ITEMS and SHOP (tap or swipe). The Shop sells golden berries 30, cake 40, protein, iron
+    and carbos 60, Revive 80 and rare candy 150 (eggs and the charm are not sold), with a confirm card, a
+    "Purchased!" toast, and "Not enough coins" / "Backpack full" when it can't.
+  - Backgrounds: a picker previews each yard map on the whole screen (`<` `>` or swipe). Backgrounds belong to the
+    player, not the pet: everyone starts with the meadow, and a map bought (150-250) stays yours with every pet
+    and egg that lives at home. The yard shows the chosen map; it no longer follows the species biome (first
+    built with the biome map free for each pet; changed after the board test, so maps feel like progress).
+  - New save keys `cn`, `cnD`, `cnT`, `ybg`, `ybgO` (an old save starts at 0 coins). Serial `COINS [n]`, `SHOP`,
+    `BUY <item>`, `BUYMAP <n>`; `STATS` shows coins and maps.
+
+### Changed
+
+- **Menus on the dark panel (phase Y1).** Backpack, the 5 stat-card pages, the rename keyboard, the Box, the badges,
+  the Pokédex, settings, the stage list, the team picker and the stage battle now use the yard look: near-black
+  disc, white title, rounded cards, green/red pills, and a round blue back button at the bottom that does what the
+  USER key does. Paged screens show `<` `>` chevrons (same as the swipe) and a "1/2" counter. Nothing else changes:
+  same content, actions and battle engine.
+  - Settings: "swipe up: cancel" is gone (the back button cancels); the version text is smaller.
+  - Battle: HP bars with numbers on top, the fight in a window on the stage's biome (taken from the stage boss),
+    a two-line log, the special meter and the team strip below. The VS card and the result use cards.
+  - Badges sit on a light plate (their dark outlines vanished on the panel); unseen Pokédex entries are slate
+    silhouettes; the use-item question uses green Use / red No pills.
+
+### Removed
+
+- **The old side-view home** (cream panel with four bars, four buttons, name and status lines, code-drawn biome
+  scenery behind the pet) and the `TP_YARD` build switch: the yard is the only home. The biome scenery is still
+  drawn behind the evolution, farewell and Revive scenes and in battles. A long press on an empty home no longer
+  opens the release dialog. The status lines only the old home used ("It's happy", "So full!"...) are gone.
 
 ## [1.68] - 2026-11-15
 

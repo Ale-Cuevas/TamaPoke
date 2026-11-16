@@ -37,13 +37,20 @@ bool PmdMon::load(uint8_t dexNum, bool shiny) {
 
   const uint8_t *p = blob + 7 + palCount * 2;
   const uint8_t *end = blob + size;
-  for (uint8_t i = 0; i < nActs && p + 4 <= end; i++) {
+  // las nActs contadas y luego la cola de acciones extra (ids >= 12, WalkU/WalkD): el firmware
+  // viejo solo lee las contadas. Un id desconocido se salta; un registro roto en las contadas
+  // invalida el fichero, en la cola solo corta la lectura
+  for (uint16_t i = 0; p + 4 <= end; i++) {
+    bool counted = i < nActs;
     uint8_t id = p[0], w = p[1], h = p[2], nf = p[3];
     p += 4;
-    if (id >= PMD_NACTS || nf > 24) { unload(); return false; }
     // valida que ms[] y los datos del frame caben en el blob (archivo truncado)
     uint32_t bytes = (uint32_t)nf * 2 + (uint32_t)w * h * nf;
-    if (w == 0 || h == 0 || nf == 0 || p + bytes > end) { unload(); return false; }
+    if (nf > 24 || w == 0 || h == 0 || nf == 0 || p + bytes > end) {
+      if (counted) { unload(); return false; }
+      break;
+    }
+    if (id >= PMD_NACTS) { p += bytes; continue; }
     PmdAct &a = acts[id];
     a.w = w;
     a.h = h;
@@ -146,10 +153,29 @@ bool sdBegin() {
   if (sdReady) {
     Serial.printf("SD montada: %llu MB\n", SD_MMC.cardSize() / (1024ULL * 1024ULL));
     SD_MMC.mkdir("/mons");
+    SD_MMC.mkdir("/yard");  // fondos del patio (v2.0): /yard/NN.bin, de tools/pack_yard.py
   } else {
     Serial.println("SD no detectada (el juego usa los sprites de flash)");
   }
   return sdReady;
+}
+
+uint8_t *sdReadYardMap(uint8_t n, size_t maxLen, size_t *len) {
+  *len = 0;
+  if (!sdReady) return nullptr;
+  char path[20];
+  snprintf(path, sizeof(path), "/yard/%02u.bin", n);
+  File f = SD_MMC.open(path, FILE_READ);
+  if (!f) return nullptr;
+  size_t size = f.size();
+  uint8_t *buf = (size && size <= maxLen) ? (uint8_t *)ps_malloc(size) : nullptr;
+  if (buf && f.read(buf, size) != size) {
+    free(buf);
+    buf = nullptr;
+  }
+  f.close();
+  if (buf) *len = size;
+  return buf;
 }
 
 bool SdMon::load(uint8_t dexNum, bool shiny) {
@@ -227,7 +253,7 @@ void SdMon::unload() {
 // ---------------------------------------------------------------------------
 // Protocolo de carga por USB (para llenar la SD sin sacarla de la placa):
 //   PUT <ruta> <bytes>\n  + datos crudos   -> "OK" ... "DONE"
-//   LS\n                                   -> listado de /mons
+//   LS\n                                   -> listado de /mons y /yard
 // Usar con tools/send_sd.py
 // ---------------------------------------------------------------------------
 
@@ -241,11 +267,11 @@ bool sdSerialCommand(const String &line) {
       return true;
     }
     if (!path.startsWith("/")) path = "/" + path;
-    // acota la escritura a /mons/: la ruta llega tal cual de la linea serie, sin
-    // sanear, asi que un PUT manipulado podria escribir en cualquier sitio de la
+    // acota la escritura a /mons/ y /yard/: la ruta llega tal cual de la linea serie,
+    // sin sanear, asi que un PUT manipulado podria escribir en cualquier sitio de la
     // tarjeta. Los dos clientes reales (tools/send_sd.py y web/index.html) ya
-    // mandan nombres con el prefijo mons/.
-    if (!path.startsWith("/mons/") || path.indexOf("..") >= 0) {
+    // mandan nombres con el prefijo mons/ (o yard/, los fondos del patio, v2.0).
+    if (!(path.startsWith("/mons/") || path.startsWith("/yard/")) || path.indexOf("..") >= 0) {
       Serial.println("ERR");
       return true;
     }
@@ -284,11 +310,12 @@ bool sdSerialCommand(const String &line) {
     Serial.println("DONE");
     return true;
   } else if (line == "LS") {
-    File dir = SD_MMC.open("/mons");
-    if (dir) {
+    for (const char *d : { "/mons", "/yard" }) {
+      File dir = SD_MMC.open(d);
+      if (!dir) continue;
       File e;
       while ((e = dir.openNextFile())) {
-        Serial.printf("%s %u\n", e.name(), (uint32_t)e.size());
+        Serial.printf("%s/%s %u\n", d + 1, e.name(), (uint32_t)e.size());
         e.close();
       }
       dir.close();
