@@ -9,11 +9,8 @@
 // puesto pero aun sin hora: no avanza hasta que se sepa la hora (eggStamp).
 #include <stdint.h>
 #include <stdio.h>
+#include "tuning.h"  // EGG_HATCH_MIN, EGG_SHAKE_MIN, EGG_SHAKE_CAP, EGG_SHAKE_COOLDOWN_MS: se afinan alli
 
-#define EGG_HATCH_MIN 120           // 2 h de tiempo real (era 4 h: se hacia muy largo)
-#define EGG_SHAKE_MIN 5             // lo que quita una sacudida
-#define EGG_SHAKE_CAP 60            // como mucho 1 h en total: lo mas rapido, 1 h
-#define EGG_SHAKE_COOLDOWN_MS 30000 // entre dos sacudidas que cuentan
 #define EGG_EPOCH_MIN 1000000000UL  // 2001: menos que esto no es una hora de verdad
 #define EGG_NO_CLOCK 1UL            // puesto sin hora (se fecha al saberla)
 

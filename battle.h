@@ -14,23 +14,10 @@
 // Las fases (stage.h) encadenan combates con Battle::beginCarry: la vida no se
 // recupera entre uno y otro, no hay tope de ataques y siempre acaba en KO.
 //
-// Valores de partida, para afinar jugando (la tabla de constantes de FEATURES.md).
+// Los numeros del combate (potencia, golpes, especial, muerte subita...) estan en tuning.h.
+#include "tuning.h"
 
-#define BATTLE_LEVEL_CAP 100   // nivel que entra en las cuentas (a nivel 999 decidiria todo)
-#define ATK_POWER 40           // potencia de un ataque normal
-#define SPECIAL_POWER_PCT 130  // el especial: +30 %
-#define SPECIAL_TAPS 5         // toques para cargarlo
-#define SPECIAL_COOLDOWN 2     // ataques normales propios antes de volver a cargar
-#define HIT_MIN_PCT 2          // cada golpe, entre el 2 y el 60 % de la vida maxima del rival...
-#define HIT_MAX_PCT 60
-#define SPECIAL_MAX_PCT 70     // ...o el 70 % si es especial: un KO pide al menos 2 golpes
-#define CRIT_ONE_IN 16         // golpe critico (x1,5)
-#define SUDDEN_DEATH_AT 20     // desde el ataque 21 (index 20) de un combate de fase: sin DEF y con retroceso
-#define RECOIL_PCT 10          // retroceso: % de la vida maxima del propio atacante (minimo 1)
-#define MAX_ATTACKS 15         // tope: luego gana quien conserve mas % de vida
-#define ATTACK_MS 1300         // tiempo por ataque en pantalla
 #define INTRO_MS 3000          // tarjeta VS + jingle + entrada al campo
-#define PRACTICE_AI_TAPS 2     // el jefe de un estadio "toca" 2 veces por ataque suyo
 
 // resultado
 enum : uint8_t { BR_NONE = 0, BR_WIN_A, BR_WIN_B, BR_DRAW };

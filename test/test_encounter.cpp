@@ -234,10 +234,13 @@ static double dailyRate(bool walk, int days) {
   return hits * 100.0 / days;
 }
 
-TEST(encounter, un_dia_normal_10_por_ciento_y_paseando_25) {
+// las probabilidades salen de tuning.h: hoy un 10 % (ENC_BASE_PERMIL) y, paseando, un 25 % el dia
+TEST(encounter, un_dia_normal_y_paseando_salen_a_su_probabilidad) {
   double base = dailyRate(false, 4000), walk = dailyRate(true, 4000);
-  CHECK_MSG(base > 8.5 && base < 11.5, "base " + std::to_string(base));
-  CHECK_MSG(walk > 22.5 && walk < 27.5, "paseando " + std::to_string(walk));
+  double wantBase = ENC_BASE_PERMIL / 10.0;
+  double wantWalk = 100.0 * (1.0 - (1.0 - ENC_BASE_PERMIL / 1000.0) * (1.0 - ENC_WALK_PERMIL / 1000.0));
+  CHECK_MSG(base > wantBase - 1.5 && base < wantBase + 1.5, "base " + std::to_string(base));
+  CHECK_MSG(walk > wantWalk - 2.5 && walk < wantWalk + 2.5, "paseando " + std::to_string(walk));
 }
 
 TEST(encounter, la_tirada_base_espera_a_su_hora_y_solo_uno_al_dia) {

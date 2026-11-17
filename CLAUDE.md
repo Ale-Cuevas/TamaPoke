@@ -9,6 +9,15 @@
   any pointers that moved, and the version + commit line at the top. If line numbers drift, prefer fixing them to
   leaving them stale.
 
+## Balance numbers: `tuning.h`
+
+- Every balance number (drain rates, timers, odds, rewards, prices) lives in `tuning.h`. New ones go there too, not
+  as a literal in the code or a `#define` in a module.
+- Keep values that size saved data (NVS blobs, item ids, the Box record) out of it: changing those needs a save
+  migration.
+- A test that checks a mechanism reads the value from `tuning.h`. A test that pins a design promise on purpose says
+  so in a comment.
+
 ## Languages: English and Spanish only
 
 The firmware has 8 languages (ES, EN, FR, DE, IT, PT, JA, KO), but only **English and Spanish** matter for now.

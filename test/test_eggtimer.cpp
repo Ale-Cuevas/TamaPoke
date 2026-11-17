@@ -1,37 +1,41 @@
-// El huevo del patio (v2.0, fase Y3; eggtimer.h + Pet): eclosiona solo a las 4 h de tiempo real desde
-// que se pone en el patio; cada sacudida (una cada 30 s como mucho) le quita 5 min, hasta 2 h. El
-// tiempo es el del RTC: corre tambien apagada. El inicial y uno a medias del sistema de toques (sin la
-// clave "yegg") siguen con los 3 toques.
+// El huevo del patio (v2.0, fase Y3; eggtimer.h + Pet): eclosiona solo a las EGG_HATCH_MIN minutos de
+// tiempo real desde que se pone en el patio (2 h hoy); cada sacudida (una cada EGG_SHAKE_COOLDOWN_MS como
+// mucho) le quita EGG_SHAKE_MIN, hasta EGG_SHAKE_CAP en total. El tiempo es el del RTC: corre tambien
+// apagada. El inicial y uno a medias del sistema de toques (sin la clave "yegg") siguen con los 3 toques.
+// Los valores salen de tuning.h: estos tests comprueban el mecanismo, no los numeros.
 #include "framework.h"
 #include "shim/Arduino.h"
 #include "shim/Preferences.h"
 #include "../pet.h"
 
 static const uint32_t T0 = 20000UL * 86400 + 10 * 3600;  // un dia cualquiera a las 10:00
+static const uint16_t H = EGG_HATCH_MIN;                 // lo que tarda sin sacudidas
+static const uint16_t CAP = EGG_SHAKE_CAP;               // lo que pueden quitar las sacudidas
+static_assert(EGG_HATCH_MIN > EGG_SHAKE_CAP + 15, "estos tests suponen que las sacudidas no lo abren solas");
 
 // ---------------------------------------------------------------- logica pura
 
-TEST(eggtimer, dos_horas_de_tiempo_real) {
-  CHECK_EQ(eggMinutesLeft(T0, T0, 0), (uint16_t)120);
-  CHECK_EQ(eggMinutesLeft(T0, T0 + 59, 0), (uint16_t)120);
-  CHECK_EQ(eggMinutesLeft(T0, T0 + 60, 0), (uint16_t)119);
-  CHECK_EQ(eggMinutesLeft(T0, T0 + 3600, 0), (uint16_t)60);
-  CHECK_EQ(eggMinutesLeft(T0, T0 + 2 * 3600, 0), (uint16_t)0);
+TEST(eggtimer, su_hora_de_tiempo_real) {
+  CHECK_EQ(eggMinutesLeft(T0, T0, 0), H);
+  CHECK_EQ(eggMinutesLeft(T0, T0 + 59, 0), H);
+  CHECK_EQ(eggMinutesLeft(T0, T0 + 60, 0), (uint16_t)(H - 1));
+  CHECK_EQ(eggMinutesLeft(T0, T0 + (H / 2) * 60, 0), (uint16_t)(H - H / 2));
+  CHECK_EQ(eggMinutesLeft(T0, T0 + H * 60, 0), (uint16_t)0);
   CHECK_EQ(eggMinutesLeft(T0, T0 + 30 * 86400, 0), (uint16_t)0);
-  CHECK_EQ(eggMinutesLeft(T0, T0 - 3600, 0), (uint16_t)120);  // el reloj fue hacia atras: no avanza
+  CHECK_EQ(eggMinutesLeft(T0, T0 - 3600, 0), H);  // el reloj fue hacia atras: no avanza
 }
 
 TEST(eggtimer, sin_hora_no_avanza) {
   CHECK(!eggClockKnown(EGG_NO_CLOCK));
   CHECK(eggClockKnown(T0));
-  CHECK_EQ(eggMinutesLeft(EGG_NO_CLOCK, T0, 0), (uint16_t)120);
-  CHECK_EQ(eggMinutesLeft(EGG_NO_CLOCK, T0, 30), (uint16_t)90);  // las sacudidas si
+  CHECK_EQ(eggMinutesLeft(EGG_NO_CLOCK, T0, 0), H);
+  CHECK_EQ(eggMinutesLeft(EGG_NO_CLOCK, T0, CAP / 2), (uint16_t)(H - CAP / 2));  // las sacudidas si
 }
 
-TEST(eggtimer, las_sacudidas_quitan_hasta_dos_horas) {
-  CHECK_EQ(eggMinutesLeft(T0, T0, 60), (uint16_t)60);
-  CHECK_EQ(eggMinutesLeft(T0, T0, 200), (uint16_t)60);  // mas del tope no cuenta
-  CHECK_EQ(eggMinutesLeft(T0, T0 + 3600, 60), (uint16_t)0);  // lo mas rapido: 1 h
+TEST(eggtimer, las_sacudidas_quitan_hasta_su_tope) {
+  CHECK_EQ(eggMinutesLeft(T0, T0, CAP), (uint16_t)(H - CAP));
+  CHECK_EQ(eggMinutesLeft(T0, T0, 200), (uint16_t)(H - CAP));  // mas del tope no cuenta
+  CHECK_EQ(eggMinutesLeft(T0, T0 + (H - CAP) * 60, CAP), (uint16_t)0);  // lo mas rapido: H - CAP
   uint8_t saved = 0;
   uint32_t last = 0;
   bool have = false;
@@ -48,7 +52,7 @@ TEST(eggtimer, las_sacudidas_quitan_hasta_dos_horas) {
     counted += eggShake(&saved, &last, &have, t);
   }
   CHECK_EQ(saved, (uint8_t)EGG_SHAKE_CAP);
-  CHECK_EQ(counted, EGG_SHAKE_CAP / EGG_SHAKE_MIN);  // 12 sacudidas utiles
+  CHECK_EQ(counted, (EGG_SHAKE_CAP + EGG_SHAKE_MIN - 1) / EGG_SHAKE_MIN);  // 12 sacudidas utiles hoy
 }
 
 TEST(eggtimer, la_primera_sacudida_cuenta_aunque_millis_sea_pequeno) {
@@ -59,10 +63,13 @@ TEST(eggtimer, la_primera_sacudida_cuenta_aunque_millis_sea_pequeno) {
 }
 
 TEST(eggtimer, grietas_y_texto) {
-  CHECK_EQ(eggCracksFor(120), (uint8_t)0);
-  CHECK_EQ(eggCracksFor(61), (uint8_t)0);
-  CHECK_EQ(eggCracksFor(60), (uint8_t)1);
-  CHECK_EQ(eggCracksFor(31), (uint8_t)1);
+  // una grieta a mitad de camino y dos en la ultima media hora
+  CHECK_EQ(eggCracksFor(H), (uint8_t)0);
+  if (H / 2 > 30) {
+    CHECK_EQ(eggCracksFor(H / 2 + 1), (uint8_t)0);
+    CHECK_EQ(eggCracksFor(H / 2), (uint8_t)1);
+    CHECK_EQ(eggCracksFor(31), (uint8_t)1);
+  }
   CHECK_EQ(eggCracksFor(30), (uint8_t)2);
   char s[16];
   eggLeftText(s, sizeof(s), 240);
@@ -73,8 +80,8 @@ TEST(eggtimer, grietas_y_texto) {
   CHECK_STREQ(s, "45m");
   eggLeftText(s, sizeof(s), 0);
   CHECK_STREQ(s, "1m");
-  CHECK_EQ(eggMinutesLeft(eggPlacedFor(T0, 100), T0, 0), (uint16_t)20);
-  CHECK_EQ(eggMinutesLeft(eggPlacedFor(T0, 500), T0, 0), (uint16_t)0);
+  CHECK_EQ(eggMinutesLeft(eggPlacedFor(T0, H - 20), T0, 0), (uint16_t)20);
+  CHECK_EQ(eggMinutesLeft(eggPlacedFor(T0, H + 380), T0, 0), (uint16_t)0);
 }
 
 // ---------------------------------------------------------------- en Pet
@@ -132,19 +139,19 @@ TEST(yardegg, abrir_uno_de_la_mochila_lo_pone_en_el_patio) {
   CHECK(p.isEgg());
   CHECK(p.yardEgg());
   CHECK_EQ(p.eggPlacedEpoch(), p.lastSeenEpoch);
-  CHECK_EQ(p.eggMinutesLeft(), (uint16_t)120);
+  CHECK_EQ(p.eggMinutesLeft(), H);
   // tocarlo no lo abre
   for (int k = 0; k < 5; k++) p.eggTap();
   CHECK(p.isEgg());
   CHECK_EQ(p.eggCracks(), (uint8_t)0);
-  minutes(p, 60);
+  minutes(p, H / 2);
   CHECK(p.isEgg());
-  CHECK_EQ(p.eggCracks(), (uint8_t)1);
-  minutes(p, 55);
+  if (H - H / 2 > 30) CHECK_EQ(p.eggCracks(), (uint8_t)1);
+  minutes(p, H - H / 2 - 5);
   CHECK_EQ(p.eggCracks(), (uint8_t)2);
   CHECK(p.isEgg());
   minutes(p, 5);
-  CHECK(!p.isEgg());  // a las 2 h justas
+  CHECK(!p.isEgg());  // a su hora justa
   CHECK(!p.yardEgg());
   CHECK_EQ(p.eggPlacedEpoch(), 0u);
 }
@@ -167,11 +174,11 @@ TEST(yardegg, las_sacudidas_lo_adelantan_sin_escribir_en_flash) {
     p.shaken();
   }
   CHECK_EQ(p.eggSavedMinutes(), (uint8_t)EGG_SHAKE_CAP);
-  CHECK_EQ(p.eggMinutesLeft(), (uint16_t)60);
-  minutes(p, 59);
+  CHECK_EQ(p.eggMinutesLeft(), (uint16_t)(H - CAP));
+  minutes(p, H - CAP - 1);
   CHECK(p.isEgg());
   minutes(p, 1);
-  CHECK(!p.isEgg());  // lo mas rapido: 1 h
+  CHECK(!p.isEgg());  // lo mas rapido: H - CAP
 }
 
 TEST(yardegg, sobrevive_a_un_reinicio_y_cuenta_apagada) {
@@ -189,15 +196,16 @@ TEST(yardegg, sobrevive_a_un_reinicio_y_cuenta_apagada) {
   CHECK(q.yardEgg());
   CHECK_EQ(q.eggPlacedEpoch(), placed);
   CHECK_EQ(q.eggSavedMinutes(), (uint8_t)EGG_SHAKE_MIN);
-  // apagada 1 h: sigue siendo huevo, con una hora menos
-  q.syncClock(p.lastSeenEpoch + 3600);
+  // apagada un rato: sigue siendo huevo, con ese rato menos
+  const uint16_t off = (H - 10 - EGG_SHAKE_MIN) / 2;
+  q.syncClock(p.lastSeenEpoch + off * 60);
   CHECK(q.isEgg());
-  CHECK_EQ(q.eggMinutesLeft(), (uint16_t)(120 - 10 - 60 - EGG_SHAKE_MIN));
-  // apagada 5 h mas: eclosiona en tu ausencia, y el resto del tiempo ya es del bicho
+  CHECK_EQ(q.eggMinutesLeft(), (uint16_t)(H - 10 - off - EGG_SHAKE_MIN));
+  // apagada bastante mas: eclosiona en tu ausencia, y el resto del tiempo ya es del bicho
   Pet r;
   r.timedEggs = true;
   r.begin();
-  r.syncClock(p.lastSeenEpoch + 6 * 3600);
+  r.syncClock(p.lastSeenEpoch + (H + 240) * 60);
   CHECK(!r.isEgg());
   CHECK(r.level() >= 1);
   CHECK(r.growMin > 0);
@@ -268,9 +276,9 @@ TEST(yardegg, serie_eggt_y_hatch) {
   Pet p;
   vacantWithEgg(p);
   CHECK(p.hatchFromBag());
-  p.dbgEggElapsed(80);
+  p.dbgEggElapsed(H - 40);
   CHECK_EQ(p.eggMinutesLeft(), (uint16_t)40);
-  p.dbgEggElapsed(240);
+  p.dbgEggElapsed(2 * H);
   CHECK_EQ(p.eggMinutesLeft(), (uint16_t)0);
   minutes(p, 1);
   CHECK(!p.isEgg());
@@ -295,5 +303,5 @@ TEST(yardegg, puesto_sin_hora_se_fecha_al_saberla) {
   mockAdvanceMillis(PET_TICK_MS);
   p.update(millis());
   CHECK_EQ(p.eggPlacedEpoch(), now);
-  CHECK_EQ(p.eggMinutesLeft(), (uint16_t)120);
+  CHECK_EQ(p.eggMinutesLeft(), H);
 }

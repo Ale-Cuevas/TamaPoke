@@ -16,20 +16,7 @@
 #include "dex.h"
 #include "battle.h"  // battleRand, evolveForLevel
 #include "stage.h"   // STAGES: el nivel sale del ultimo estadio vencido
-
-#define ENC_BASE_PERMIL 100       // la tirada base del dia: 10 %
-#define ENC_WALK_STEPS 6000       // pasos del dia para la tirada de pasear...
-#define ENC_WALK_PERMIL 167       // ...que deja el dia en el 25 %
-#define ENC_TRAVEL_PERMIL_H 30    // cada viaje: 3 % por hora
-#define ENC_FIRST_MIN (9 * 60)    // la hora de la tirada base: de las 9:00...
-#define ENC_LAST_MIN (20 * 60)    // ...a las 20:00
-#define ENC_LIFETIME_MIN 360      // 6 h en el patio
-#define ENC_EXCL_PCT 5            // de cada 100 encuentros, 5 son de una especie exclusiva
-#define ENC_MAP_WEIGHT 3          // las lineas del tipo del mapa salen 3 veces mas
-#define ENC_LV_CENTER_NONE 10     // sin ningun estadio vencido, el nivel ronda el 10
-#define ENC_LV_MIN 2
-#define ENC_LV_MAX 100
-#define ENC_TR_NONE_MAX 10        // sin estadios, entrenamiento 0..10
+#include "tuning.h"  // las probabilidades, la hora, lo que dura y el nivel (ENC_*): se afinan alli
 
 // lo que se mueve en el patio, segun el mapa
 enum : uint8_t { ENC_OBJ_BUSH = 0, ENC_OBJ_ROCK, ENC_OBJ_SAND };
@@ -155,7 +142,8 @@ static inline uint8_t encLevelCenter(uint8_t badges) {
 
 // centro +-15: la suma de dos +-7 y un +-1 (casi siempre cerca del centro, alguna vez a 15 de el)
 static inline uint8_t encRollLevel(uint8_t center, uint32_t &rng) {
-  int v = center + (int)(battleRand(rng) % 15) - 7 + (int)(battleRand(rng) % 15) - 7 + (int)(battleRand(rng) % 3) - 1;
+  int v = center + (int)(battleRand(rng) % (2 * ENC_LV_SPREAD + 1)) - ENC_LV_SPREAD +
+          (int)(battleRand(rng) % (2 * ENC_LV_SPREAD + 1)) - ENC_LV_SPREAD + (int)(battleRand(rng) % 3) - 1;
   if (v < ENC_LV_MIN) v = ENC_LV_MIN;
   if (v > ENC_LV_MAX) v = ENC_LV_MAX;
   return (uint8_t)v;

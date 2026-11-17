@@ -118,7 +118,8 @@ Pending: linked battles (designed, not implemented), soak test. See **Roadmap**.
 
 ## Game manual (the actual numbers)
 
-A quick reference to how the game really works (values straight from the code).
+A quick reference to how the game really works (values straight from the code). Every one of these numbers is
+defined in [`tuning.h`](tuning.h): change it there to tune the game.
 
 ### Time & leveling
 - **1 real minute = 1 in-game minute.** Each level costs more than the last (v1.35; faster
