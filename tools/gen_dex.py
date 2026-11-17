@@ -7,7 +7,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from dex_data import DEX, TYPE_ACCENTS, TYPE_ORDER, TYPE2, CLASSIC, RARE, LEGENDARY
+from dex_data import DEX, TYPE_ACCENTS, TYPE_ORDER, TYPE2, CLASSIC, RARE, LEGENDARY, ENCOUNTER_ONLY
 from dex_stats import BASE_STATS
 from dex_names import LOCAL_NAMES
 
@@ -58,13 +58,14 @@ def main():
         out.append(f"  TY_{t.upper()}{' = 0' if i == 0 else ''},\n")
     out.append("  TY_COUNT,\n  TY_NONE = 0xFF\n};\n\n")
     out.append(
-        "// rareza: 0 = solo por evolucion, 1 = comun, 2 = raro, 3 = legendario\n"
-        "enum : uint8_t { R_EVO = 0, R_COMUN, R_RARO, R_LEGENDARIO };\n\n"
+        "// rareza: 0 = solo por evolucion, 1 = comun, 2 = raro, 3 = legendario, 4 = solo por encuentro\n"
+        "// salvaje (v2.2, encounter.h): no sale de huevos al azar\n"
+        "enum : uint8_t { R_EVO = 0, R_COMUN, R_RARO, R_LEGENDARIO, R_ENCUENTRO };\n\n"
         "struct DexEntry {\n"
         "  const char *name;\n"
         "  uint8_t evolvesTo;    // numero de dex, 0 = forma final\n"
         "  uint8_t evolveLevel;\n"
-        "  uint8_t rarity;       // sale de huevo si > 0\n"
+        "  uint8_t rarity;       // sale de huevo al azar si es R_COMUN..R_LEGENDARIO\n"
         "  uint16_t accent;      // color RGB565 del tipo para la UI\n"
         "  uint8_t bHp, bAtk, bDef, bSpe;  // base stats reales de gen 1\n"
         "  uint8_t biome;        // 0 pradera 1 playa 2 bosque 3 volcan 4 montana 5 nieve 6 central 7 pantano 8 ruinas\n"
@@ -82,6 +83,8 @@ def main():
         acc = rgb565(TYPE_ACCENTS[typ])
         if num in evolved:
             rar = 'R_EVO'
+        elif num in ENCOUNTER_ONLY:
+            rar = 'R_ENCUENTRO'
         elif num in LEGENDARY:
             rar = 'R_LEGENDARIO'
         elif num in RARE:
@@ -133,7 +136,8 @@ def main():
     out.append(f"#define NUM_CLASSIC_DEX {len(CLASSIC)}\n")
     from collections import Counter
     c = Counter(rarities)
-    print(f"bases: {c['R_COMUN']} comunes, {c['R_RARO']} raras, {c['R_LEGENDARIO']} legendarias, {c['R_EVO']} solo-evolucion")
+    print(f"bases: {c['R_COMUN']} comunes, {c['R_RARO']} raras, {c['R_LEGENDARIO']} legendarias, "
+          f"{c['R_ENCUENTRO']} de encuentro, {c['R_EVO']} solo-evolucion")
 
     path = os.path.join(os.path.dirname(__file__), '..', 'dex.h')
     open(path, 'w').write(''.join(out))

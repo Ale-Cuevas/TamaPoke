@@ -45,12 +45,13 @@ class TestDexData(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from dex_data import DEX, TYPE_ACCENTS, TYPE_ORDER, TYPE2, CLASSIC, RARE, LEGENDARY, SLUGS
+        from dex_data import DEX, TYPE_ACCENTS, TYPE_ORDER, TYPE2, CLASSIC, RARE, LEGENDARY, ENCOUNTER_ONLY, SLUGS
         from dex_stats import BASE_STATS
         from dex_names import LOCAL_NAMES
         cls.DEX, cls.ACCENTS, cls.CLASSIC = DEX, TYPE_ACCENTS, CLASSIC
         cls.ORDER, cls.TYPE2 = TYPE_ORDER, TYPE2
         cls.RARE, cls.LEGENDARY, cls.SLUGS = RARE, LEGENDARY, SLUGS
+        cls.ENCOUNTER_ONLY = ENCOUNTER_ONLY
         cls.STATS, cls.NAMES = BASE_STATS, LOCAL_NAMES
         cls.byNum = {row[0]: row for row in DEX}
 
@@ -132,11 +133,13 @@ class TestDexData(unittest.TestCase):
 
     def test_las_rarezas_apuntan_a_formas_base(self):
         evolucionadas = {row[4] for row in self.DEX if row[4]}
-        for num in sorted(self.RARE | self.LEGENDARY):
+        for num in sorted(self.RARE | self.LEGENDARY | self.ENCOUNTER_ONLY):
             self.assertIn(num, self.byNum, f'rareza para una especie inexistente: {num}')
             self.assertNotIn(num, evolucionadas,
                              f'{self.byNum[num][2]} solo sale por evolucion: la rareza no le sirve')
         self.assertFalse(self.RARE & self.LEGENDARY, 'una especie no puede ser rara y legendaria')
+        self.assertFalse((self.RARE | self.LEGENDARY) & self.ENCOUNTER_ONLY,
+                         'una especie de encuentro (v2.2) no sale de huevos: ni rara ni legendaria')
 
     def test_los_iniciales_clasicos_existen(self):
         evolucionadas = {row[4] for row in self.DEX if row[4]}
@@ -310,6 +313,11 @@ class TestBuffersDeTexto(unittest.TestCase):
         'S_TRV_BACK_FMT': ('nombre_o_apodo',),  # los viajes (Y5b): el aviso de vuelta, la caja y la coleccion
         'S_TRV_AWAY_FMT': ('nombre_o_apodo',),
         'S_TRV_FOUND_FMT': ('fecha',),  # DD/MM
+        # encuentros salvajes (v2.2): el nombre de la especie salvaje
+        'S_WILD_APPEARED_FMT': ('nombre',),
+        'S_CAPTURED_FMT': ('nombre',),
+        'S_WILD_LEFT_FMT': ('nombre',),
+        'S_WILD_FLED_FMT': ('nombre',),
     }
     CIFRAS = {'u': 5, 'd': 5, 'lu': 10}
     ESPEC = re.compile(r'%0?\d*(lu|u|d|s)')

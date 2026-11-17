@@ -146,8 +146,9 @@ static_assert(ODDS_BERRY + ODDS_CAKE + ODDS_VITAMIN + ODDS_CHARM + ODDS_REVIVE =
 // IT_RARECANDY, IT_EGG, IT_CAKE e IT_REVIVE van al final: la mochila se guarda por posicion ("bpack") y
 // un guardado anterior trae solo las 5 (6, 7, 8) primeras. El huevo (v1.39) tampoco se usa a mano: va a
 // casa solo. La tarta (v1.54) se come desde el menu de comida o desde la mochila. El Revivir (v1.59)
-// tampoco se usa a mano: se ofrece cuando el bicho se muere de abandono.
-enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_RARECANDY, IT_EGG, IT_CAKE, IT_REVIVE, IT_COUNT };
+// tampoco se usa a mano: se ofrece cuando el bicho se muere de abandono. La Poke Ball (v2.2) tampoco: se
+// lanza al ganar a un bicho salvaje (encounter.h).
+enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_RARECANDY, IT_EGG, IT_CAKE, IT_REVIVE, IT_BALL, IT_COUNT };
 
 // --- trucos del IMU (Tarea 2)
 #define GRUMPY_JOY 5                 // despertarlo agitando: -5 felicidad...
@@ -163,18 +164,52 @@ enum : uint8_t { EMOTE_NONE = 0, EMOTE_ANGRY, EMOTE_DIZZY, EMOTE_WOBBLE };
 // --- combate (felicidad del final de un estadio)
 #define PRACTICE_JOY 3                 // felicidad del final de un estadio...
 #define PRACTICE_EVERY_MS 3600000UL    // ...como mucho una vez por hora
-// tabla del botin (v1.56; hoy el objeto del jefe de un estadio). Tabla (%): tarta 35, baya dorada 25,
-// vitaminas 21 (7 cada una), Caramelo Raro 7, Revivir 5 (v1.59, le quita 5 a la tarta), amuleto 4 (con
-// uno ya, tarta), huevo 3: el mas raro
-#define BDROP_CAKE 35
+// tabla del botin (v1.56; hoy el objeto del jefe de un estadio). Tabla (%): tarta 27, baya dorada 25,
+// vitaminas 21 (7 cada una), Caramelo Raro 7, Poke Ball 8 (v2.2, le quita 8 a la tarta), Revivir 5 (v1.59,
+// le quita 5 a la tarta), amuleto 4 (con uno ya, tarta), huevo 3: el mas raro
+#define BDROP_CAKE 27
 #define BDROP_GOLDEN 25
 #define BDROP_VITAMIN 21
 #define BDROP_RARECANDY 7
 #define BDROP_CHARM 4
 #define BDROP_REVIVE 5
 #define BDROP_EGG 3
-static_assert(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDROP_CHARM + BDROP_REVIVE + BDROP_EGG == 100,
+#define BDROP_BALL 8
+static_assert(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDROP_CHARM + BDROP_REVIVE + BDROP_EGG +
+                      BDROP_BALL == 100,
               "el botin suma 100");
+
+// --- encuentros salvajes (v2.2, encounter.h). Ganar da al que peleo ENC_WIN_GROW_MIN minutos de crecimiento
+// (la hora de un estadio) y al de casa ENC_WIN_JOY de felicidad, y con un ENC_DROP_PCT % un objeto de su
+// tabla (nunca monedas ni Poke Balls): tarta 30, baya dorada 30, vitaminas 21 (7 cada una), Caramelo Raro 8,
+// Revivir 7, amuleto 4 (con uno ya, tarta). Despues, una Poke Ball lo captura seguro: un huevo de su forma
+// base a la mochila, que nace a nivel 1. Perder: se escapa.
+#define ENC_WIN_GROW_MIN 60
+#define ENC_WIN_JOY 3
+#define ENC_DROP_PCT 50
+#define WDROP_CAKE 30
+#define WDROP_GOLDEN 30
+#define WDROP_VITAMIN 21
+#define WDROP_RARECANDY 8
+#define WDROP_REVIVE 7
+#define WDROP_CHARM 4
+static_assert(WDROP_CAKE + WDROP_GOLDEN + WDROP_VITAMIN + WDROP_RARECANDY + WDROP_REVIVE + WDROP_CHARM == 100,
+              "lo que suelta un salvaje suma 100");
+#define CAP_EGG_MAX 4   // huevos de captura esperando en la mochila (cada uno sabe su especie)
+#define BALL_START 3    // Poke Balls de una partida nueva (y una vez, un guardado de antes de v2.2)
+// el estado del encuentro de hoy (flags de "enc")
+enum : uint8_t { ENCF_SHINY = 1, ENCF_EXCL = 2, ENCF_WON = 4 };
+// por que no se puede lanzar la Poke Ball
+enum : uint8_t { CAP_OK = 0, CAP_NO_BALL, CAP_NO_ROOM, CAP_NONE };
+
+// lo que dio ganar (o perder) a un bicho salvaje (encounterDone)
+struct EncReward {
+  bool won;
+  uint8_t item;      // el objeto que solto (a la mochila), o IT_COUNT
+  bool itemLost;     // no cabia en la mochila
+  uint16_t lvBefore, lvAfter;  // el nivel del que peleo
+  uint8_t joy;       // felicidad del de casa
+};
 
 // --- estadios: 8 estadios tematicos, cada uno con su jefe, que combate un equipo ordenado de 1 a 4
 // bichos (el de casa y/o los de la caja). stage.h define los mismos valores: de ahi los #ifndef.
@@ -328,7 +363,8 @@ public:
   // un huevo en casa: el que esperaba en la incubadora, o uno nuevo (que se sortea ahora). No mira
   // la mochila: quien libera la casa usa freeHome(). saveNow=false solo marca el guardado (pasos)
   // heir (v1.60): la especie del huevo que deja un bicho al morir (0 = la que salga en el sorteo)
-  void newEgg(bool saveNow = true, int16_t heir = 0);
+  // shinyForce (v2.2): el huevo de una captura, con su especie (heir) y su tirada shiny (0/1; -1 = sortear)
+  void newEgg(bool saveNow = true, int16_t heir = 0, int8_t shinyForce = -1);
   void release();  // soltar (pulsacion larga + confirmar)
   void syncClock(uint32_t nowEpoch);  // aplica el tiempo transcurrido apagado
   void setClock(uint32_t nowEpoch);   // fija la hora sin aplicar progresion
@@ -585,6 +621,42 @@ public:
   // "pagado hoy" y la medalla se escriben antes que los premios (se puede perder parte del premio,
   // nunca cobrarlo dos veces)
   StageReward stageDone(uint8_t stage, bool cleared, const uint32_t *uids, uint8_t n);
+
+  // --- encuentros salvajes (v2.2, encounter.h). Del jugador: sobreviven a eclosiones y finales. "enc" guarda
+  // el dia, las tiradas hechas, el salvaje y cuando salio; "cegg" los huevos de captura de la mochila
+  void encCheck();           // el tick, syncClock y los pasos: dia nuevo, tiradas, y se va a las 6 h
+  void encTravelRoll(uint16_t hours);  // un viaje acaba de volver: su tirada (3 % por hora)
+  bool encActive() const;    // hay uno en el patio sin pelear (vivo)
+  bool encWonPending() const { return encSpawnAt && (encFlags & ENCF_WON); }  // ganado: falta la Poke Ball
+  bool encShown() const { return encActive() || encWonPending(); }  // se ve en el patio
+  int16_t encDex() const { return encDexV; }
+  uint8_t encLevel() const { return encLv; }
+  bool encShiny() const { return encFlags & ENCF_SHINY; }
+  bool encExclusive() const { return encFlags & ENCF_EXCL; }
+  uint8_t encTraining(uint8_t i) const { return i < 3 ? encTr[i] : 0; }
+  uint32_t encSpawnEpoch() const { return encSpawnAt; }
+  uint16_t encMinutesLeft() const;
+  uint8_t encRolledMask() const { return encDay == today() ? encRolled : 0; }  // serie ENC?
+  // acaba de salir: la UI lo lee (despierto) y suena SFX_WILD una vez
+  bool encSoundPending() const { return encSound && encShown(); }
+  void takeEncSound() { encSound = false; }
+  bool encSpawnNow(int16_t dex = 0);   // serie ENC [dex] y renderizador: sale ya (dex 0 = sorteo)
+  void encClear();                     // serie ENCEND: se va sin mas
+  void dbgEncSet(uint8_t lv, bool sh) {  // renderizador: el nivel y el shiny del que hay
+    encLv = lv ? lv : encLv;
+    encFlags = sh ? (encFlags | ENCF_SHINY) : (encFlags & ~ENCF_SHINY);
+  }
+  // fin del combate contra el salvaje (una vez; guarda). Perder: se escapa. Ganar: el premio al uid que
+  // peleo y queda pendiente de la Poke Ball (encWonPending)
+  EncReward encounterDone(bool won, uint32_t fighter);
+  uint8_t captureBlock() const;        // CAP_OK o por que no
+  bool captureWild();                  // la Poke Ball: un huevo de captura a la mochila; guarda
+  void releaseWild();                  // sin Poke Ball (o "no"): vuelve a la hierba; guarda
+  uint8_t rollWildItem();              // lo que suelta (publica para las pruebas)
+  uint8_t captureEggs() const { return capN; }
+  int16_t captureEggSpecies(uint8_t i) const { return i < capN ? capDex[i] : 0; }
+  bool eggIsCaptured() const { return eggCap; }  // el huevo de casa es de una captura
+  void setBalls(uint8_t n) { items[IT_BALL] = n > ITEM_MAX ? ITEM_MAX : n; save(); }  // serie BALLS
   void setBadges(uint8_t mask) { badges = mask; pendingSave = true; }    // serie y renderizador
   void clearStageDay() { stageDay = 0; stageMask = 0; pendingSave = true; }  // premios de hoy otra vez
 
@@ -730,6 +802,25 @@ private:
   uint8_t stageMask = 0;
   uint32_t team[TEAM_MAX] = { 0 };
   bool payStageDay(uint8_t stage);  // marca el premio de hoy en la NVS; false = no se pudo (no se paga)
+  // encuentros salvajes (v2.2): "enc" (16 bytes) y "cegg" ([n, dex, shiny] x CAP_EGG_MAX)
+  uint32_t encDay = 0;       // dia de encRolled
+  uint8_t encRolled = 0;     // tiradas hechas ese dia (ENC_ROLL_*) y si ya salio uno
+  uint32_t encSpawnAt = 0;   // cuando salio (epoch); 0 = no hay
+  int16_t encDexV = 0;
+  uint8_t encLv = 0;
+  uint8_t encFlags = 0;      // ENCF_*
+  uint8_t encTr[3] = { 0, 0, 0 };
+  bool encSound = false;     // solo RAM: acaba de salir y aun no sono
+  uint8_t capN = 0;
+  uint8_t capDex[CAP_EGG_MAX] = { 0 };
+  bool capShiny[CAP_EGG_MAX] = { false };
+  bool eggCap = false;       // "ecap": el huevo de casa (o el de la incubadora) es de una captura
+  bool encCanRoll() const;   // hay alguien con quien pelear (y la partida empezo)
+  void encStart(int16_t dex, uint32_t rng);
+  void encEnd();
+  void capPush(int16_t dex, bool sh, bool front);
+  void bagEggOut(bool saveNow);  // un huevo de la mochila a casa: primero los de captura
+  void encPersist();
 
   uint32_t today() const { return lastSeenEpoch ? lastSeenEpoch / 86400 : 0; }
   void registerCare(bool saveNow = true);   // primer cuidado del dia: racha + vinculo

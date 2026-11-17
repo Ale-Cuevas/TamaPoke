@@ -40,6 +40,7 @@
 #include "steps.h"  // STEP_FLUSH_MS
 #include "battle.h" // motor del combate (logica pura)
 #include "stage.h"  // fases de combate: 3 rivales seguidos contra un equipo de 1 a 4 (logica pura)
+#include "encounter.h" // encuentros salvajes (v2.2): tiradas del dia, nivel y especie (logica pura)
 #include "wind.h"   // viento del paisaje: hierba, flores y copas que se mecen (logica pura)
 #include "burnin.h" // contra el quemado del AMOLED: orbita de la imagen y salvapantallas (logica pura)
 #include "fx.h"     // efectos de respuesta: celebraciones en cola, "+N", botones, eclosion (logica pura)
@@ -57,7 +58,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "2.1"
+#define FW_VERSION "2.2"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -143,6 +144,23 @@ uint32_t teamPick[TEAM_MAX] = { 0 };  // uids elegidos, en orden
 uint8_t teamPickN = 0;
 int8_t stShakeIdx = -1;       // casilla (fase o bicho) que no se puede usar: tiembla
 uint32_t stShakeUntil = 0;
+// encuentros salvajes (v2.2, encounter.h): la pantalla del encuentro (bandas negras y el salvaje en un circulo),
+// el selector de equipo en modo "un luchador" y lo que hay en el patio
+enum : uint8_t { ENCU_OFF = 0, ENCU_INTRO, ENCU_BALL, ENCU_THROW, ENCU_DONE };
+enum : uint8_t { ENCD_CAUGHT = 0, ENCD_LEFT, ENCD_FLED };
+uint8_t encUi = ENCU_OFF;     // la pantalla del encuentro abierta (y en que paso)
+uint32_t encUiAt = 0;         // cuando empezo ese paso (los toques de justo despues no cuentan)
+uint8_t encDoneKind = ENCD_CAUGHT;
+int16_t encShowDex = 0;       // el salvaje que ensena la pantalla (al acabar ya no esta en Pet)
+uint8_t encShowLv = 0;
+bool encShowShiny = false;
+uint32_t encDenyUntil = 0;    // la pastilla de Lanzar tiembla (sin bolas o sin sitio)
+bool teamWild = false;        // el selector de equipo elige el luchador del encuentro (uno solo)
+int16_t yardEncX = -1, yardEncY = 0;  // donde se mueve en el patio (los pies; solo RAM, -1 = sin sitio)
+#define ENC_TAP_LOCK_MS 700
+uint8_t encSndStep = 0;       // los sonidos de la Poke Ball ya dados (uno por fase de la animacion)
+#define ENC_THROW_MS 2600     // la Poke Ball: vuela, se cierra, 3 sacudidas y click
+#define encOpen() (encUi != ENCU_OFF)  // (macro: una funcion aqui arriba adelantaria los prototipos del .ino)
 int boxNowCx = 233;           // centro de la miniatura del activo (de ahi sale o ahi llega la luz)
 
 bool screenOff = false;       // pulsacion corta del boton PWR (la tercera de cada vuelta, v1.32)
@@ -169,12 +187,13 @@ uint32_t shopToastUntil = 0;
 uint8_t yardMapPreview = 0;   // selector de fondos abierto en el mapa n (1..YARD_MAPS); solo RAM; 0 = cerrado
 enum : uint8_t { SHT_NONE = 0, SHT_OK, SHT_BROKE, SHT_FULL };
 #define SHOP_TOAST_MS 1500UL
-uint32_t bagReviveHintUntil = 0;  // la pista del Revivir en la mochila (v1.59)
+uint32_t bagReviveHintUntil = 0;  // la pista del Revivir en la mochila (v1.59)...
+uint8_t bagHintItem = IT_REVIVE;  // ...o la de la Poke Ball (v2.2): las dos dicen para que sirven
 uint32_t revivedMsgUntil = 0;     // "Revivido!" en el estado tras usar un Revivir (v1.60)
 bool foundShown = false;      // el ultimo frame enseno un hallazgo: un toque lo cierra
 uint32_t cakeHintUntil = 0;
 uint32_t tastesMsgUntil = 0;  // la baya favorita cambio al evolucionar (v1.57): "Sus gustos cambiaron!"   // tocar la tarta sin ninguna (v1.54): la cabecera dice donde se encuentra
-static_assert(S_IT_REVIVE - S_IT_GOLDEN == IT_REVIVE - IT_GOLDEN && IT_REVIVE + 1 == IT_COUNT, "nombres de objeto en el orden de IT_*");
+static_assert(S_IT_BALL - S_IT_GOLDEN == IT_BALL - IT_GOLDEN && IT_BALL + 1 == IT_COUNT, "nombres de objeto en el orden de IT_*");
 bool clockOpen = false;       // pantalla de ajuste de hora (deslizar abajo)
 static int barLabelGap();  // (mas abajo, con drawBar; la usan antes la ficha y el patio)
 #define YDEMO_PAGES 3
@@ -495,7 +514,7 @@ void loop() {
   // la noche (v1.63): con un juego, combate, evolucion o movimiento de la caja en marcha no se duerme
   // solo a las 23 (lo hace al acabar)
   pet.nightHold = pet.evolving() || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen() ||
-                  boxMove != BOXMV_NONE;
+                  boxMove != BOXMV_NONE || encOpen() || teamWild;
   pet.update(now);
 
   // el amplificador sigue al estado de sueno (la llamada sale sola si no cambia).
@@ -507,6 +526,12 @@ void loop() {
   if (pet.morningWake) {
     pet.morningWake = false;
     sfxPlay(SFX_MORNING);
+  }
+  // v2.2: algo se mueve en el patio. Suena una vez, tambien con la pantalla apagada; dormido espera a que se
+  // despierte (el amplificador esta apagado), y en pleno combate, a que acabe
+  if (pet.encSoundPending() && !pet.sleeping && !battleOpen()) {
+    pet.takeEncSound();
+    sfxPlay(SFX_WILD);
   }
   fxCollect(now);  // subidas de nivel, medallas, metas... (fx.h)
 
@@ -642,7 +667,7 @@ void onShake() {
   if (dimStage > 0) { wakeUI(); return; }
   wakeUI();
   if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen()) return;
-  if (galleryOpen || boxOpen || stagesOpen || teamOpen || cardOpen || bagOpen || kbOpen || clockOpen || panelKind) return;  // el bicho no esta en pantalla
+  if (galleryOpen || boxOpen || stagesOpen || teamOpen || cardOpen || bagOpen || kbOpen || clockOpen || panelKind || encOpen()) return;  // el bicho no esta en pantalla
   if (pet.sleeping) pet.wakeGrumpy();
   else if (pet.shaken()) yardEggInfo();  // tambien el huevo: se tambalea (el del patio dice lo que le queda)
 }
@@ -665,7 +690,7 @@ PowerCtx powerCtx(uint32_t now) {
   c.idleMs = idleSince(now, lastInteract);
   c.screenOff = screenOff;
   c.sleeping = pet.sleeping;
-  c.gameOpen = gameOpen || sackOpen || zenOpen || dashOpen || battleOpen() || boxMove;  // combate y luz de la caja, tambien a 85 ms
+  c.gameOpen = gameOpen || sackOpen || zenOpen || dashOpen || battleOpen() || boxMove || encOpen();  // combate, luz de la caja y encuentro (v2.2), a 85 ms
   c.usb = usbPresent();
   c.charging = batCharging();
   c.batPct = batPercent();
@@ -705,6 +730,7 @@ PwrView pwrPress() {
     return next;
   }
   if (battleOpen()) closeBattle();
+  if (encOpen()) closeEncUi();  // v2.2: el encuentro sigue en el patio (o esperando la Poke Ball)
   zenOpen = false;  // la cascada tambien se abandona (sin premio)
   if (dashOpen) closeDash();  // y la carrera
   if (next == VIEW_SAVER) {
@@ -1216,6 +1242,25 @@ void handleSerial() {
   } else if (line.startsWith("FACEDOWN")) {  // FACEDOWN: boca abajo; FACEDOWN 0: la levantan
     onFaceDown(!(line.length() > 9 && line.substring(9).toInt() == 0));
     Serial.println("DONE");
+  } else if (line == "ENC?") {  // v2.2: el encuentro de hoy (tiradas, hora de la base, el salvaje)
+    encReport();
+    Serial.println("DONE");
+  } else if (line == "ENC" || line.startsWith("ENC ")) {  // ENC [dex]: sale ya (dex: esa especie)
+    long d = line.length() > 4 ? line.substring(4).toInt() : 0;
+    if (!pet.encSpawnNow((int16_t)(d >= 1 && d <= DEX_COUNT ? d : 0))) Serial.println("enc: sin hora (pon TIME)");
+    yardEncX = -1;  // se coloca de nuevo
+    wakeUI();
+    encReport();
+    Serial.println("DONE");
+  } else if (line == "ENCEND") {  // se va sin mas
+    if (encOpen()) closeEncUi();
+    pet.encClear();
+    encReport();
+    Serial.println("DONE");
+  } else if (line == "BALLS" || line.startsWith("BALLS ")) {  // BALLS <n>: Poke Balls en la mochila
+    if (line.length() > 6) pet.setBalls((uint8_t)constrain(line.substring(6).toInt(), 0, ITEM_MAX));
+    Serial.printf("balls=%u capEggs=%u eggs=%u\n", pet.items[IT_BALL], pet.captureEggs(), pet.items[IT_EGG]);
+    Serial.println("DONE");
   } else if (line == "TRAVELEND") {  // TRAVELEND: el viaje termina ya (y se cobra)
     pet.travelFinishNow();
     travelReport();
@@ -1435,7 +1480,7 @@ void handleTouch() {
     tXl = x;
     tYl = y;
     // pulsacion larga sin moverse sobre el bicho -> dialogo de soltar
-    if (!holdFired && !swallowGesture && !yardDemoOpen && !galleryOpen && !boxOpen && !stagesOpen && !teamOpen && !cardOpen && !bagOpen && !kbOpen && !clockOpen && !panelKind && millis() - tStart > 3000 &&
+    if (!holdFired && !swallowGesture && !yardDemoOpen && !galleryOpen && !boxOpen && !stagesOpen && !teamOpen && !cardOpen && !bagOpen && !kbOpen && !clockOpen && !panelKind && !encOpen() && millis() - tStart > 3000 &&
         abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && holdOnPet(tX0, tY0) &&
         !pet.isEgg() && !confirmUntil && !pet.busyEnding()) {
       confirmUntil = millis() + 10000;
@@ -1459,7 +1504,7 @@ void openClock();  // prototipo
 
 void onSwipeV(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (gameOpen || galleryOpen || boxOpen || stagesOpen || teamOpen || bagOpen || panelKind || kbOpen || sackOpen || zenOpen || dashOpen || battleOpen() || pet.busyEnding()) return;
+  if (gameOpen || galleryOpen || boxOpen || stagesOpen || teamOpen || bagOpen || panelKind || kbOpen || sackOpen || zenOpen || dashOpen || battleOpen() || encOpen() || pet.busyEnding()) return;
   if (clockOpen) { clockOpen = false; return; }
   if (cardOpen) {
     if (dir < 0) cardOpen = false;  // arriba cierra la ficha
@@ -1484,7 +1529,7 @@ void onSwipe(int dir) {
     bagSwipe(dir);
     return;
   }
-  if (gameOpen || sackOpen || zenOpen || dashOpen || panelKind || kbOpen || clockOpen || battleOpen()) return;
+  if (gameOpen || sackOpen || zenOpen || dashOpen || panelKind || kbOpen || clockOpen || battleOpen() || encOpen()) return;
   if (pet.isDying()) return;  // v1.60: el dialogo del Revivir no se esquiva
   if (cardOpen) {  // dentro de la ficha: cambiar entre las CARD_PAGES paginas
     int p = (int)cardPage + (dir > 0 ? -1 : 1);  // izquierda avanza
@@ -1591,8 +1636,12 @@ void onBack() {
     closeDash();
     return;
   }
-  if (battleOpen()) {                 // abandona el combate (sin premio)
+  if (battleOpen()) {                 // abandona el combate (sin premio; el salvaje se escapa)
     closeBattle();
+    return;
+  }
+  if (encOpen()) {                    // v2.2: el encuentro se queda en el patio (o esperando la Poke Ball)
+    closeEncUi();
     return;
   }
   if (galleryOpen) {
@@ -1645,6 +1694,10 @@ void onTap(int16_t x, int16_t y) {
   }
   if (yardDemoOpen) {
     yardDemoTap(x, y);
+    return;
+  }
+  if (encOpen()) {  // v2.2
+    encTap(x, y);
     return;
   }
   if (galleryOpen) {
@@ -2317,7 +2370,7 @@ void mixPanelKey(uint32_t &h);
 void mixTravelKey(uint32_t &h);
 static bool staticScreen() {
   if (pet.awaitingStarter()) return true;
-  if (galleryOpen || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen()) return false;  // la galeria gestiona su propio repintado
+  if (galleryOpen || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen() || encOpen()) return false;  // la galeria gestiona su propio repintado
   if (stagesOpen || teamOpen) return !timeLeft(stShakeUntil);  // menus quietos, salvo la casilla que tiembla
   if (panelKind) return !timeLeft(panelShakeUntil);  // paneles Cuidar / Jugar (v2.0, Y2): quietos salvo una tarjeta que tiembla
   if (boxOpen) return !boxMove && !timeLeft(boxShakeUntil);  // la caja, quieta salvo la luz o un hueco que tiembla
@@ -2357,7 +2410,7 @@ static uint32_t screenKey() {
   } else if (bagOpen) {
     for (uint8_t n : pet.items) h = mixKey(h, n);
     for (uint32_t v : { (uint32_t)pet.eggsOwned(), (uint32_t)itemConfirm, (uint32_t)pet.sleeping, (uint32_t)gLang,
-                        (uint32_t)(timeLeft(bagReviveHintUntil) > 0),
+                        (uint32_t)(timeLeft(bagReviveHintUntil) > 0), (uint32_t)bagHintItem,
                         // v2.0 (Y4b): pestana, tienda, aviso, selector de fondos y lo que lo cambia
                         (uint32_t)bagTab, (uint32_t)shopBuyId, (uint32_t)shopToast, (uint32_t)yardMapPreview,
                         (uint32_t)pet.coins, (uint32_t)pet.yardOwned, (uint32_t)pet.yardChosen,
@@ -2425,6 +2478,10 @@ bool render() {
   }
   if (galleryOpen) {
     renderGallery();
+    return true;
+  }
+  if (encOpen()) {  // v2.2: el encuentro salvaje (bandas negras y el salvaje en su circulo)
+    renderEncounter(millis());
     return true;
   }
   if (teamOpen) {
@@ -3888,7 +3945,7 @@ static const char *const *const BADGE_ICON[STAGE_COUNT] = {
 
 static const char *const *const ITEM_ICON[IT_COUNT] = {
   SPR_ICON_GOLDEN, SPR_ICON_PROTEIN, SPR_ICON_IRON, SPR_ICON_CARBOS, SPR_ICON_CHARM, SPR_ICON_RARECANDY, SPR_ICON_EGG,
-  SPR_ICON_CAKE, SPR_ICON_REVIVE,
+  SPR_ICON_CAKE, SPR_ICON_REVIVE, SPR_ICON_PLAY,  // la Poke Ball (v2.2) es la del boton Jugar
 };
 
 // llama + numero de racha arriba a la izquierda
@@ -4726,10 +4783,10 @@ void renderCardWalk() {
 
 // ---------- mochila (v1.53) ----------
 // Pantalla propia, desde su boton en la fila de abajo (antes era una fila de la pagina de paseo de
-// la ficha). Una rejilla de 3 x 3 casillas (v1.59, era 4 x 2: entra el Revivir), cada objeto con su
+// la ficha). Una rejilla de 4 x 3 casillas (v2.2, era 3 x 3: entra la Poke Ball), cada objeto con su
 // cuenta; tocar uno que se pueda usar pide confirmacion y lo usa. Se abre tambien con el bicho
 // dormido, para mirar: canUseItem ya no deja usar nada dormido.
-#define BAG_COLS 3
+#define BAG_COLS 4  // v2.2: 4 x 3 (era 3 x 3: entra la Poke Ball; la tienda, 8 objetos y los Fondos)
 #define BAG_ROWS 3
 #define BAG_SLOT_W 76
 #define BAG_SLOT_H 76
@@ -4739,15 +4796,15 @@ void renderCardWalk() {
 #define BAG_HINT_Y (BAG_Y + BAG_ROWS * BAG_SLOT_H + (BAG_ROWS - 1) * BAG_GAP + 14)
 #define BAG_REVIVE_HINT_MS 3000UL  // tocar el Revivir: dice para que sirve (no se usa a mano)
 // "usar objeto?" (Y1): una tarjeta que tapa la rejilla entera, con dos pastillas, Usar (verde) y NO
-#define BAG_ASK_X 88
+#define BAG_ASK_X (BAG_X - 4)
 #define BAG_ASK_Y (BAG_Y - 4)
-#define BAG_ASK_W 290
+#define BAG_ASK_W (BAG_COLS * BAG_SLOT_W + (BAG_COLS - 1) * BAG_GAP + 8)
 #define BAG_ASK_H (BAG_ROWS * BAG_SLOT_H + (BAG_ROWS - 1) * BAG_GAP + 8)
 #define BAG_ASK_PILL_Y (BAG_ASK_Y + 170)
 #define BAG_ASK_PILL_GAP 24
 // orden en pantalla: lo que se come, las vitaminas, el caramelo y lo que no se usa a mano
 static const uint8_t BAG_ORDER[] = { IT_GOLDEN, IT_CAKE, IT_RARECANDY, IT_PROTEIN, IT_IRON, IT_CARBOS,
-                                     IT_CHARM, IT_EGG, IT_REVIVE };
+                                     IT_CHARM, IT_EGG, IT_REVIVE, IT_BALL };
 #define BAG_SLOTS (sizeof(BAG_ORDER) / sizeof(BAG_ORDER[0]))
 static_assert(BAG_SLOTS == IT_COUNT, "cada objeto tiene su casilla en la mochila");
 
@@ -4787,7 +4844,7 @@ void closeBag() {
 
 // ---------- pestanas y tienda (v2.0, Y4b) ----------
 #define BAG_COIN_Y 78     // las monedas, centradas bajo las pestanas
-#define SHOP_BG_SLOT 7    // el 8o hueco: la tarjeta "Fondos", de ancho doble
+#define SHOP_BG_SLOT 8    // el 9o hueco (v2.2; era el 8o): la tarjeta "Fondos", de ancho doble
 #define SHOP_PRICE_OFF yRgb(0x5A5E74)  // precio que no se puede pagar
 #define PICK_TOAST_Y 282
 #define PICK_PAGER_Y 322
@@ -5176,7 +5233,7 @@ void renderBag() {
   // como se usa
   bool empty = pet.itemCount() == 0 && !pet.eggsOwned();
   bool reviveHint = timeLeft(bagReviveHintUntil) > 0;
-  const char *hint = reviveHint            ? T(S_REVIVE_HINT)
+  const char *hint = reviveHint            ? T(bagHintItem == IT_BALL ? S_BALL_HINT : S_REVIVE_HINT)
                      : empty               ? T(S_BACKPACK_EMPTY)
                      : pet.sleeping        ? T(S_BAG_ASLEEP)
                      : pet.eggsOwned()     ? T(S_EGG_HINT)
@@ -5270,8 +5327,10 @@ void bagTap(int16_t x, int16_t y) {
       itemConfirm = i + 1;
       itemConfirmUntil = millis() + 10000;
       sfxPlay(SFX_TAP);
-    } else if (i == IT_REVIVE && pet.items[i]) {
-      bagReviveHintUntil = millis() + BAG_REVIVE_HINT_MS;  // se guarda para cuando se muera (v1.59)
+    } else if ((i == IT_REVIVE || i == IT_BALL) && pet.items[i]) {
+      // el Revivir se guarda para cuando se muera (v1.59); la Poke Ball, para un salvaje vencido (v2.2)
+      bagReviveHintUntil = millis() + BAG_REVIVE_HINT_MS;
+      bagHintItem = i;
       sfxPlay(SFX_TAP);
     } else if (i == IT_EGG ? pet.eggsOwned() : pet.items[i]) {
       sfxPlay(SFX_DENY);  // el amuleto se lleva y el huevo va solo a casa; o dormido, o entrenamiento al maximo
@@ -6081,6 +6140,23 @@ void eggReport() {
 
 // comando BOX: la caja por serie (uid, especie, nivel, CRC) y el huevo de la incubadora
 // TRAVEL (Y5): el viaje de ahora, lo que falta y la coleccion
+// v2.2: el estado del encuentro (serie ENC?)
+void encReport() {
+  uint32_t d = pet.dayNumber();
+  uint16_t bm = encBaseMinute(d);
+  uint8_t m = pet.encRolledMask();
+  Serial.printf("enc: day=%lu base=%02u:%02u rolled base=%d walk=%d spawned=%d steps=%lu/%u\n", (unsigned long)d,
+                bm / 60, bm % 60, (m & ENC_ROLL_BASE) ? 1 : 0, (m & ENC_ROLL_WALK) ? 1 : 0, (m & ENC_ROLL_SPAWNED) ? 1 : 0,
+                (unsigned long)pet.stepsOn(d), (unsigned)ENC_WALK_STEPS);
+  Serial.printf("enc: active=%d won=%d dex=#%d %s nv.%u shiny=%d excl=%d left=%u min obj=%d at %d,%d ui=%u\n",
+                pet.encActive() ? 1 : 0, pet.encWonPending() ? 1 : 0, pet.encDex(),
+                pet.encShown() ? dexName(pet.encDex()) : "-", pet.encLevel(), pet.encShiny() ? 1 : 0,
+                pet.encExclusive() ? 1 : 0, pet.encMinutesLeft(), encMapObject(yardMapNow()), yardEncX, yardEncY, encUi);
+  Serial.printf("enc: balls=%u capEggs=%u", pet.items[IT_BALL], pet.captureEggs());
+  for (uint8_t i = 0; i < pet.captureEggs(); i++) Serial.printf(" #%d", pet.captureEggSpecies(i));
+  Serial.printf(" homeEggCaptured=%d\n", pet.eggIsCaptured() ? 1 : 0);
+}
+
 void travelReport() {
   if (pet.travelling()) {
     Serial.printf("travel away slot=%u map=%u tier=%u start=%lu seed=%08lx left=%lus elapsed=%um\n", pet.travelSlot(),
@@ -6225,6 +6301,7 @@ bool stagesCanOpen() { return pet.canBattle() || pet.boxHasPets(); }
 void closeStages() {
   stagesOpen = false;
   teamOpen = false;
+  teamWild = false;
   stShakeUntil = 0;
   stShakeIdx = -1;
 }
@@ -6252,6 +6329,24 @@ void openTeam(uint8_t stage) {
 
 void closeTeam() {
   teamOpen = false;
+  teamWild = false;
+  stShakeUntil = 0;
+  stShakeIdx = -1;
+}
+
+// v2.2: el selector en modo encuentro: un solo luchador, precargado con el de casa si puede pelear (si no, el
+// primero del ultimo equipo que pueda, o nadie)
+void openTeamWild() {
+  teamWild = true;
+  teamPickN = 0;
+  if (pet.canBattle() && !pet.isEgg()) {
+    teamPick[teamPickN++] = pet.uid;
+  } else {
+    const uint32_t *last = pet.teamUids();
+    for (uint8_t i = 0; i < TEAM_MAX && !teamPickN; i++)
+      if (last[i] && pet.teamCanFight(last[i])) teamPick[teamPickN++] = last[i];
+  }
+  teamOpen = true;
   stShakeUntil = 0;
   stShakeIdx = -1;
 }
@@ -6262,6 +6357,7 @@ void mixStageKey(uint32_t &h) {
   h = mixKey(h, pet.stageRewardMask());
   h = mixKey(h, gLang);
   h = mixKey(h, stageSel);
+  h = mixKey(h, teamWild);
   h = mixKey(h, teamPickN);
   for (uint8_t i = 0; i < teamPickN; i++) h = mixKey(h, teamPick[i]);
   h = mixKey(h, pet.canBattle());
@@ -6424,11 +6520,16 @@ void renderTeam() {
   yPanelBg();
   // el titulo va a tamano 2: "Elige tu equipo" a 3 no cabe arriba del circulo
   gfx->setTextColor(Y_TEXT);
-  printTight(T(S_PICK_TEAM), CX, Y_TITLE_Y + 4, 220);
+  printTight(T(teamWild ? S_WILD_PICK : S_PICK_TEAM), CX, Y_TITLE_Y + 4, 220);
   char sub[40];
   char stg[32];
-  snprintf(stg, sizeof(stg), T(S_STAGE_FMT), (unsigned)stageSel + 1);
-  snprintf(sub, sizeof(sub), "%s: %s", stg, stageName(stageSel));
+  if (teamWild) {  // v2.2: contra quien ("PIDGEY Nv.23")
+    snprintf(stg, sizeof(stg), T(S_LVL_FMT), (unsigned)pet.encLevel());
+    snprintf(sub, sizeof(sub), "%s %s", dexName(pet.encDex()), stg);
+  } else {
+    snprintf(stg, sizeof(stg), T(S_STAGE_FMT), (unsigned)stageSel + 1);
+    snprintf(sub, sizeof(sub), "%s: %s", stg, stageName(stageSel));
+  }
   gfx->setTextColor(Y_TEXT_DIM);
   printTight(sub, CX, Y_SUB_Y - 4, 290);
   for (uint8_t i = 0; i < teamCandN; i++) drawTeamCard(i, teamCandN);
@@ -6452,9 +6553,14 @@ void teamTap(int16_t x, int16_t y) {
     }
     uint32_t uids[TEAM_MAX];
     uint8_t n = teamPickN, st = stageSel;
+    bool wild = teamWild;
     memcpy(uids, teamPick, sizeof(uids));
     sfxPlay(SFX_TAP);
     closeStages();
+    if (wild) {
+      if (pet.encActive()) startWild(uids[0]);  // v2.2 (se pudo ir mientras se elegia: 6 h)
+      return;
+    }
     startStage(st, uids, n);
     return;
   }
@@ -6473,9 +6579,10 @@ void teamTap(int16_t x, int16_t y) {
         if (teamPick[j] != uid) teamPick[n++] = teamPick[j];
       teamPickN = n;
       sfxPlay(SFX_TAP);
-    } else if (!pet.teamCanFight(uid) || teamPickN >= TEAM_MAX) {
+    } else if (!pet.teamCanFight(uid) || (!teamWild && teamPickN >= TEAM_MAX)) {
       stDeny(i);
     } else {
+      if (teamWild) teamPickN = 0;  // v2.2: uno solo; tocar otro lo cambia
       teamPick[teamPickN++] = uid;
       sfxPlay(SFX_TAP);
     }
@@ -7770,10 +7877,13 @@ void yardSyncPets() {
 // la mascara de paso de ahora: la del mapa y, con el huevo en el suelo (Y3), su celda bloqueada (el de
 // la caja pasea a su alrededor, no por encima)
 const uint8_t *yardWalkNow() {
-  if (!pet.isEgg() || yardEggX < 0) return yardWalk;
+  bool egg = pet.isEgg() && yardEggX >= 0, enc = yardEncX >= 0;  // v2.2: lo que se mueve, tambien
+  if (!egg && !enc) return yardWalk;
   static uint8_t w[YBG_WALK_BYTES];
   memcpy(w, yardWalk, sizeof(w));
-  int c = yardCellAt(yardEggX, yardEggY - YBG_CELL / 2);
+  int c = egg ? yardCellAt(yardEggX, yardEggY - YBG_CELL / 2) : -1;
+  if (c >= 0) w[c >> 3] |= (uint8_t)(1 << (c & 7));
+  c = enc ? yardCellAt(yardEncX, yardEncY - YBG_CELL / 2) : -1;
   if (c >= 0) w[c >> 3] |= (uint8_t)(1 << (c & 7));
   return w;
 }
@@ -7986,7 +8096,8 @@ void yardDrawEggBubble(uint32_t now) {
   const char *opts[3] = { left, nullptr, nullptr };
   int n = 1;
   if (pet.eggSavedMinutes() < EGG_SHAKE_CAP) opts[n++] = T(S_EGG_SHAKE);
-  if (pet.eggRarity() >= R_RARO) opts[n++] = T(pet.eggRarity() == R_LEGENDARIO ? S_EGG_LEGEND : S_EGG_RARE);
+  if (pet.eggIsCaptured()) opts[n++] = T(S_EGG_CAPTURED);  // v2.2: el de una captura (ya se sabe que es)
+  else if (pet.eggRarity() >= R_RARO) opts[n++] = T(pet.eggRarity() == R_LEGENDARIO ? S_EGG_LEGEND : S_EGG_RARE);
   uint32_t since = 2600 - timeLeft(yardEggInfoUntil);
   yardBubbleAt(yardEggX, tip, opts[yardCycleIndex(n, since, 900)]);
 }
@@ -8012,16 +8123,22 @@ void yardDrawPets(uint32_t now) {
   bool hatching = drawHatchFx(now);  // el huevo aun se rompe: el de casa no se ve
   int32_t objY = yardObjY();
   bool objDone = objY == INT32_MAX;
+  bool encDone = yardEncX < 0;  // v2.2: lo que se mueve tambien se ordena con los bichos
   for (int k = 0; k < n; k++) {
     int i = order[k];
     if (!objDone && yardW.p[i].y > objY) {  // lo del suelo que queda detras de este bicho
       yardDrawObj(now);
       objDone = true;
     }
+    if (!encDone && yardW.p[i].y > yardEncY) {
+      yardDrawEnc(now);
+      encDone = true;
+    }
     if (i == 0 && (hatching || pet.evolving())) continue;
     yardDrawPet(i, now);
   }
   if (!objDone) yardDrawObj(now);
+  if (!encDone) yardDrawEnc(now);
   if (pet.evolving()) drawEvolveFX(now);  // la evolucion, grande en el centro como siempre
 }
 
@@ -8060,11 +8177,16 @@ static int yardThings(int16_t *ox, int16_t *oy, int skipPoop) {
     ox[n] = yardGiftX[i];
     oy[n++] = yardGiftY[i];
   }
+  if (yardEncX >= 0) {  // v2.2
+    ox[n] = yardEncX;
+    oy[n++] = yardEncY;
+  }
   return n;
 }
+#define YARD_THINGS_MAX (POOP_MAX + YARD_GIFTS_SHOWN + 1)
 
 void yardSyncThings() {
-  int16_t ox[POOP_MAX + YARD_GIFTS_SHOWN], oy[POOP_MAX + YARD_GIFTS_SHOWN];
+  int16_t ox[YARD_THINGS_MAX], oy[YARD_THINGS_MAX];
   uint8_t m = pet.poopSlots();
   for (int i = 0; i < POOP_MAX; i++) {
     uint8_t bit = 1 << i;
@@ -8123,6 +8245,87 @@ void yardSyncThings() {
     yardGiftX[yardGiftN] = (int16_t)x;
     yardGiftY[yardGiftN++] = (int16_t)y;
   }
+  // v2.2: el encuentro salvaje, en un sitio libre (lejos del huevo, que esta cerca del centro); se va con el
+  if (!pet.encShown()) {
+    yardEncX = -1;
+  } else if (yardEncX < 0 || !yardSpotOk(yardWalk, yardEncX, yardEncY)) {
+    yardEncX = -1;
+    int n = yardThings(ox, oy, -1), x, y;
+    if (pet.isEgg() && yardEggX >= 0 && n < YARD_THINGS_MAX) {
+      ox[n] = yardEggX;
+      oy[n++] = yardEggY;
+    }
+    // es ancho (64 px): que tampoco pise agua ni rocas a los lados ni detras (si no hay sitio asi, donde sea)
+    for (int tries = 0; tries < 16; tries++) {
+      if (!yardFreeSpot(yardW, yardWalk, yardW.rng, ox, oy, n, &x, &y)) break;
+      bool roomy = yardSpotOk(yardWalk, x - 30, y - 4) && yardSpotOk(yardWalk, x + 30, y - 4) &&
+                   yardSpotOk(yardWalk, x, y - 44) && yardSpotOk(yardWalk, x - 24, y - 40) && yardSpotOk(yardWalk, x + 24, y - 40);
+      if (roomy || yardEncX < 0) {
+        yardEncX = (int16_t)x;
+        yardEncY = (int16_t)y;
+      }
+      if (roomy) break;
+    }
+  }
+}
+
+// ---- el encuentro salvaje (v2.2): un arbusto, una roca o un monton de arena (segun el mapa) que se sacude
+// cada poco con dos rayas rojas curvas a cada lado; el de una especie exclusiva, ademas, brilla ----
+#define ENC_RUSTLE_EVERY 2400
+#define ENC_RUSTLE_MS 800
+#define ENC_MARK_COL C565(0xe8, 0x2c, 0x2c)
+
+// una raya curva: un arco de circulo de radio r cuyo punto medio esta en (ax, ay), abombado hacia midDeg
+static void encArc(int ax, int ay, int r, float midDeg, uint16_t col) {
+  float m = midDeg * (float)PI / 180.0f;
+  float cx = ax - r * cosf(m), cy = ay - r * sinf(m);
+  for (int d = -32; d <= 32; d += 4) {
+    float a = m + d * (float)PI / 180.0f;
+    gfx->fillCircle((int)(cx + r * cosf(a)), (int)(cy + r * sinf(a)), 2, col);
+  }
+}
+
+void yardDrawEnc(uint32_t now) {
+  if (yardEncX < 0) return;
+  uint8_t kind = encMapObject(yardMapNow());
+  const char *const *spr = kind == ENC_OBJ_ROCK ? SPR_WILD_ROCK : kind == ENC_OBJ_SAND ? SPR_WILD_SAND : SPR_WILD_BUSH;
+  bool live = pet.encActive();
+  uint32_t ph = now % ENC_RUSTLE_EVERY;
+  bool rustle = live && ph < ENC_RUSTLE_MS;
+  int dx = 0, dy = 0;
+  if (rustle) {
+    float k = 1.0f - (float)ph / ENC_RUSTLE_MS;
+    dx = (int)lroundf(5.0f * k * sinf(ph * 0.07f));
+    dy = ((ph / 70) % 2) ? -2 : 0;
+  }
+  int x = yardEncX, y = yardEncY;
+  yardShadow(x, y, 64);
+  drawMap(spr, 32, x - 32 + dx, y - 62 + dy, 2, false);
+  if (rustle && ph > 60) {  // ( (   ) ): las rayas, la de fuera un poco despues
+    encArc(x - 44, y - 40, 14, 200, ENC_MARK_COL);
+    encArc(x + 44, y - 40, 14, -20, ENC_MARK_COL);
+    if (ph > 220) {
+      encArc(x - 56, y - 50, 20, 205, ENC_MARK_COL);
+      encArc(x + 56, y - 50, 20, -25, ENC_MARK_COL);
+    }
+  }
+  if (pet.encExclusive()) {  // brilla: cuatro destellos dorados y blancos que giran alrededor y laten
+    for (int k = 0; k < 4; k++) {
+      float a = now * 0.0022f + k * 1.571f;
+      int sx = x + (int)(42 * cosf(a)), sy = y - 34 + (int)(30 * sinf(a));
+      int sz = 4 + (int)((now / 100 + k * 3) % 5);
+      uint16_t col = (k & 1) ? UI_BAR_WARN : UI_WHITE;
+      gfx->fillRect(sx - sz, sy - 1, 2 * sz + 1, 3, col);
+      gfx->fillRect(sx - 1, sy - sz, 3, 2 * sz + 1, col);
+      gfx->fillRect(sx - 1, sy - 1, 3, 3, UI_WHITE);
+    }
+    if ((now / 300) % 4 == 0) drawMap(SPR_STAR, 16, x - 8, y - 92, 1, false);  // y una estrella encima, a ratos
+  }
+  if (pet.encWonPending()) drawExclaim(x + 30, y - 78 + (int)(3 * sinf(now * 0.012f)));  // vencido: falta la Poke Ball
+}
+
+bool yardEncAt(int16_t x, int16_t y) {
+  return yardEncX >= 0 && abs(x - yardEncX) < 46 && y > yardEncY - 80 && y < yardEncY + 16;
 }
 
 void yardDrawThings(uint32_t now) {
@@ -8181,7 +8384,7 @@ int yardDropFood(uint8_t kind) {
   if (yardFood.phase != YF_NONE) return 0;
   if (!yardW.p[0].on || !yardHomeNow() || pet.isEgg()) return -1;
   YardPet &p = yardW.p[0];
-  int16_t ox[POOP_MAX + YARD_GIFTS_SHOWN + 1], oy[POOP_MAX + YARD_GIFTS_SHOWN + 1];
+  int16_t ox[YARD_THINGS_MAX + 1], oy[YARD_THINGS_MAX + 1];  // + el de la caja
   int n = yardThings(ox, oy, -1);
   if (yardW.p[1].on) {  // tampoco a los pies del de la caja
     ox[n] = (int16_t)yardW.p[1].x;
@@ -8383,6 +8586,11 @@ void yardTap(int16_t x, int16_t y) {
     }
     return;
   }
+  if (yardEncAt(x, y)) {  // v2.2: lo que se mueve: el encuentro salvaje
+    Serial.println("ENC tap");
+    openEncounter();
+    return;
+  }
   int pp = yardPoopAt(x, y);  // una caca: fuera con un toque (como en la casa de lado)
   if (pp >= 0) {
     FxNeedSnap ns = fxSnap();
@@ -8577,6 +8785,7 @@ void closeForDying() {
   zenOpen = false;
   if (dashOpen) closeDash();
   if (battleOpen()) closeBattle();
+  if (encOpen()) closeEncUi();
   gameOpen = false;
   if (galleryOpen) {
     galleryOpen = false;
@@ -9205,6 +9414,8 @@ struct {
   char name[TEAM_MAX][BT_NAME_LEN] = {};
   bool cleared = false;  // resultado: fase superada
   StageReward rw = { false, false, (uint8_t)IT_COUNT, 0, 0 };  // lo que pago stageDone
+  bool wild = false;     // v2.2: un encuentro salvaje (un rival, un luchador; paga encounterDone)
+  EncReward erw = { false, (uint8_t)IT_COUNT, false, 0, 0, 0 };
 } bt;
 
 bool battleOpen() { return bt.phase != BT_OFF; }
@@ -9218,9 +9429,22 @@ const char *battlePhaseName() {
 // cierra la fase en cualquier momento (resultado, USER, PWR, el dialogo de la muerte): sin premio si
 // no habia acabado (stageDone solo se llama al entrar en el resultado)
 void closeBattle() {
+  bool wild = bt.wild, ended = bt.phase == BT_END, won = bt.cleared;
   bt.phase = BT_OFF;
-  foePmd.unload();
+  bt.wild = false;
   allyPmd.unload();
+  if (wild) {
+    // v2.2: tras el resultado, la Poke Ball (ganado) o "huyo" (perdido); el sprite del salvaje sigue cargado.
+    // Abandonar a mitad (USER, PWR, el dialogo de la muerte) cuenta como perder: se escapa
+    if (!ended) {
+      pet.encounterDone(false, 0);
+      foePmd.unload();
+      return;
+    }
+    openEncUiAfterBattle(won);
+    return;
+  }
+  foePmd.unload();
 }
 
 // quien esta en el campo: 0 = el aliado en curso, 1 = el rival en curso
@@ -9231,12 +9455,68 @@ PmdMon &battleMon(uint8_t side) { return side ? foePmd : (bt.home[bt.run.ally] ?
 // sprites (bloquean el loop: solo al empezar y en el relevo)
 void battleLoadFoe() {
   foePmd.unload();
-  foePmd.load((uint8_t)battleDex(1), false);
+  foePmd.load((uint8_t)battleDex(1), bt.wild && encShowShiny);  // v2.2: un salvaje puede ser shiny
 }
 void battleLoadAlly() {
   allyPmd.unload();
   uint8_t a = bt.run.ally;
   if (!bt.home[a]) allyPmd.load((uint8_t)bt.dex[a], bt.shiny[a]);
+}
+
+// el bicho uid como el aliado m del combate (bt.dex/shiny/home/name/uid y su Fighter). false: no esta, no puede
+// pelear o ya va en el equipo
+static bool btAddMate(uint32_t id, uint8_t m, Fighter &out) {
+  for (uint8_t j = 0; j < m; j++)
+    if (bt.uid[j] == id) return false;
+  int8_t k = pet.teamSlotOf(id);
+  if (k < 0 || !pet.teamCanFight(id)) return false;
+  if (k == TEAM_HOME) {
+    out = makeFighter(pet.speciesId, pet.level(), pet.geneAtk, pet.geneDef, pet.geneSpe, pet.trAtk, pet.trDef, pet.trSpe);
+    bt.dex[m] = pet.speciesId;
+    bt.shiny[m] = pet.shiny;
+    bt.home[m] = true;
+    snprintf(bt.name[m], BT_NAME_LEN, "%.*s", (int)sizeof(pet.nick), pet.nick[0] ? pet.nick : dexName(pet.speciesId));
+  } else {
+    const PetRecord &r = pet.boxRecord((uint8_t)k);
+    out = makeFighter(r.speciesId, levelFor(r.growMin), r.geneAtk, r.geneDef, r.geneSpe, r.trAtk, r.trDef, r.trSpe);
+    bt.dex[m] = r.speciesId;
+    bt.shiny[m] = (r.flags & REC_SHINY) != 0;
+    bt.home[m] = false;
+    snprintf(bt.name[m], BT_NAME_LEN, "%.*s", (int)sizeof(r.nick), recName(r));
+  }
+  bt.uid[m] = id;
+  return true;
+}
+
+// v2.2: el combate contra el salvaje del patio, con el bicho uid (el selector en modo un luchador). Las reglas
+// de una fase con un solo rival (StageRun::beginWild); al acabar paga encounterDone (battleEnd)
+void startWild(uint32_t id) {
+  if (battleOpen() || !pet.encActive()) return;
+  bt = decltype(bt){};
+  Fighter mate;
+  if (!btAddMate(id, 0, mate)) return;
+  StageFoe w;
+  w.dex = pet.encDex();
+  w.level = pet.encLevel();
+  w.tAtk = pet.encTraining(0);
+  w.tDef = pet.encTraining(1);
+  w.tSpe = pet.encTraining(2);
+  w.aiTaps = 1;
+  encShowDex = w.dex;
+  encShowLv = w.level;
+  encShowShiny = pet.encShiny();
+  bt.wild = true;
+  uint32_t seed = (uint32_t)random(0x7FFFFFFF) ^ (millis() << 7);
+  bt.run.beginWild(mate, w, seed);
+  battleLoadFoe();  // antes de la intro: leer la SD bloquea el loop
+  battleLoadAlly();
+  panelKind = PANEL_NONE;
+  bt.phase = BT_INTRO;
+  bt.t0 = millis();
+  sfxPlay(SFX_BATTLE);
+  wakeUI();
+  Serial.printf("wild: #%d nv.%u contra #%d nv.%u ent.%u/%u/%u\n", bt.dex[0], bt.run.team[0].level, w.dex, w.level,
+                w.tAtk, w.tDef, w.tSpe);
 }
 
 // Empieza la fase `stage` con el equipo `uids` en orden (el selector de equipo). Se salta los que no
@@ -9247,30 +9527,8 @@ void startStage(uint8_t stage, const uint32_t *uids, uint8_t n) {
   bt = decltype(bt){};
   Fighter mates[TEAM_MAX];
   uint8_t m = 0;
-  for (uint8_t i = 0; i < n && m < TEAM_MAX; i++) {
-    uint32_t id = uids[i];
-    bool dup = false;
-    for (uint8_t j = 0; j < m; j++) dup |= (bt.uid[j] == id);
-    int8_t k = pet.teamSlotOf(id);
-    if (dup || k < 0 || !pet.teamCanFight(id)) continue;
-    if (k == TEAM_HOME) {
-      mates[m] = makeFighter(pet.speciesId, pet.level(), pet.geneAtk, pet.geneDef, pet.geneSpe, pet.trAtk,
-                             pet.trDef, pet.trSpe);
-      bt.dex[m] = pet.speciesId;
-      bt.shiny[m] = pet.shiny;
-      bt.home[m] = true;
-      snprintf(bt.name[m], BT_NAME_LEN, "%.*s", (int)sizeof(pet.nick), pet.nick[0] ? pet.nick : dexName(pet.speciesId));
-    } else {
-      const PetRecord &r = pet.boxRecord((uint8_t)k);
-      mates[m] = makeFighter(r.speciesId, levelFor(r.growMin), r.geneAtk, r.geneDef, r.geneSpe, r.trAtk, r.trDef,
-                             r.trSpe);
-      bt.dex[m] = r.speciesId;
-      bt.shiny[m] = (r.flags & REC_SHINY) != 0;
-      bt.home[m] = false;
-      snprintf(bt.name[m], BT_NAME_LEN, "%.*s", (int)sizeof(r.nick), recName(r));
-    }
-    bt.uid[m++] = id;
-  }
+  for (uint8_t i = 0; i < n && m < TEAM_MAX; i++)
+    if (btAddMate(uids[i], m, mates[m])) m++;
   if (!m) return;
   pet.setTeam(bt.uid, m);  // el ultimo equipo (sin escribir ya en flash)
   uint32_t seed = (uint32_t)random(0x7FFFFFFF) ^ (millis() << 7);
@@ -9334,6 +9592,13 @@ void battleTap(int16_t x, int16_t y) {
 // fin de la fase: paga (una sola vez, y guarda) y pasa al resultado
 void battleEnd(bool cleared) {
   bt.cleared = cleared;
+  if (bt.wild) {  // v2.2: el salvaje (una vez, y guarda)
+    bt.erw = pet.encounterDone(cleared, bt.uid[0]);
+    bt.phase = BT_END;
+    bt.t0 = millis();
+    sfxPlay(cleared ? SFX_WIN : SFX_LOSE);
+    return;
+  }
   bt.rw = pet.stageDone(bt.run.stage, cleared, bt.uid, bt.run.teamN);
   bt.phase = BT_END;
   bt.t0 = millis();  // despues de la escritura en flash: el bloqueo del toque cuenta desde aqui
@@ -9474,6 +9739,11 @@ static void btThumb(const uint8_t *b, int x, int y, int s, bool sil) {
 
 // el bioma de la fase: el del jefe (planta: bosque, agua: playa, fuego: volcan...)
 uint8_t battleBiome() {
+  if (bt.wild) {  // v2.2: el del mapa del patio (prado, cantera = montana, bosque, playa, ruinas)
+    static const uint8_t MAP_BIOME[YARD_MAPS + 1] = { 0, 0, 4, 2, 1, 8 };
+    uint8_t m = pet.yardMapWanted();
+    return MAP_BIOME[m <= YARD_MAPS ? m : 0];
+  }
   uint8_t st = bt.run.stage < STAGE_COUNT ? bt.run.stage : 0;
   int16_t boss = STAGES[st].bossDex;
   uint8_t bio = (boss >= 1 && boss <= DEX_COUNT) ? DEX_TBL[boss].biome : 0;
@@ -9587,6 +9857,10 @@ void btPanelBg() {
 
 // cabecera de las pantallas del combate: "Fase N" y el nombre de la fase debajo
 void drawBattleHeader() {
+  if (bt.wild) {  // v2.2: "Salvaje" y su nombre
+    yTitle(T(S_WILD), dexName(bt.run.foeInfo().dex));
+    return;
+  }
   char t[24];
   snprintf(t, sizeof(t), T(S_STAGE_FMT), (unsigned)(bt.run.stage + 1));
   yTitle(t, stageName(bt.run.stage));
@@ -9613,6 +9887,7 @@ void drawHpRow(uint8_t side, uint16_t hp) {
 
 // arriba a la derecha de la ventana: cual de los tres rivales es ("1/3", "2/3") o JEFE en rojo
 void drawFoeTag() {
+  if (bt.wild) return;  // v2.2: un solo rival
   char n[8];
   const char *s = n;
   bool boss = bt.run.isBoss();
@@ -9897,7 +10172,7 @@ void drawBattleResult(uint32_t now) {
   btPanelBg();
   drawBattleHeader();
   uint32_t t = now - bt.t0;
-  const char *head = T(bt.cleared ? S_STAGE_CLEAR : S_STAGE_LOST);
+  const char *head = bt.wild ? T(bt.cleared ? S_WILD_WON : S_WILD_LOST) : T(bt.cleared ? S_STAGE_CLEAR : S_STAGE_LOST);
   setSize(3);
   uint8_t ts = textW(head, 3) <= 330 ? 3 : 2;
   setSize(ts);
@@ -9914,23 +10189,37 @@ void drawBattleResult(uint32_t now) {
   uint16_t lc[4];
   const char *const *icon[4] = { nullptr, nullptr, nullptr, nullptr };
   uint8_t n = 0;
-  if (bt.rw.item < IT_COUNT) {
-    bool bag = pet.isVacant();
-    icon[n] = bag ? ITEM_ICON[bt.rw.item] : SPR_GIFT;
-    ln[n] = T(bag ? S_BACKPACK : S_BATTLE_GIFT);
-    lc[n++] = Y_HILITE;
-  }
-  if (bt.rw.newBadge) { icon[n] = BADGE_ICON[bt.run.stage]; ln[n] = T(S_NEW_BADGE); lc[n++] = Y_HILITE; }
-  if (bt.rw.paid) { ln[n] = T(S_TEAM_REWARD); lc[n++] = Y_TEXT; }
   char joy[40];
-  if (bt.rw.joy) {
-    snprintf(joy, sizeof(joy), T(S_PRACTICE_JOY_FMT), (unsigned)bt.rw.joy);
-    ln[n] = joy;
-    lc[n++] = Y_ACCENT_GO;
+  if (bt.wild) {  // v2.2: la hora de crecimiento, el objeto que solto (a la mochila) y la felicidad
+    if (bt.erw.won) { ln[n] = T(S_WILD_GROW); lc[n++] = Y_ACCENT_GO; }
+    if (bt.erw.item < IT_COUNT) {
+      icon[n] = ITEM_ICON[bt.erw.item];
+      ln[n] = T(bt.erw.itemLost ? S_BACKPACK_FULL : S_BACKPACK);
+      lc[n++] = bt.erw.itemLost ? Y_ACCENT_BAD : Y_HILITE;
+    }
+    if (bt.erw.joy) {
+      snprintf(joy, sizeof(joy), T(S_PRACTICE_JOY_FMT), (unsigned)bt.erw.joy);
+      ln[n] = joy;
+      lc[n++] = Y_ACCENT_GO;
+    }
+  } else {
+    if (bt.rw.item < IT_COUNT) {
+      bool bag = pet.isVacant();
+      icon[n] = bag ? ITEM_ICON[bt.rw.item] : SPR_GIFT;
+      ln[n] = T(bag ? S_BACKPACK : S_BATTLE_GIFT);
+      lc[n++] = Y_HILITE;
+    }
+    if (bt.rw.newBadge) { icon[n] = BADGE_ICON[bt.run.stage]; ln[n] = T(S_NEW_BADGE); lc[n++] = Y_HILITE; }
+    if (bt.rw.paid) { ln[n] = T(S_TEAM_REWARD); lc[n++] = Y_TEXT; }
+    if (bt.rw.joy) {
+      snprintf(joy, sizeof(joy), T(S_PRACTICE_JOY_FMT), (unsigned)bt.rw.joy);
+      ln[n] = joy;
+      lc[n++] = Y_ACCENT_GO;
+    }
   }
   // y la pista "toca: volver" en su ultima fila, reservada desde el principio (la tarjeta no crece)
   bool hint = t >= BT_END_LOCK_MS;
-  bool coinRow = bt.rw.coins > 0;  // las monedas (Y4): moneda + "+N", en su fila
+  bool coinRow = !bt.wild && bt.rw.coins > 0;  // las monedas (Y4): moneda + "+N", en su fila (un salvaje no da)
   if (!n && !hint && !coinRow) return;
   setSize(2);
   int bw = textW(T(S_BACK), 2), bh = 12 + 20 + (coinRow ? 22 : 0);
@@ -9963,4 +10252,273 @@ void drawBattleResult(uint32_t now) {
     setCur(centerX(T(S_BACK), 2), ly + 3);
     printT(T(S_BACK));
   }
+}
+
+// ---------- encuentros salvajes (v2.2, encounter.h) ----------
+// Tocar lo que se mueve en el patio abre esta pantalla: dos bandas negras (arriba y abajo) entran como en el
+// cine y en la franja del medio, sobre el mapa, el salvaje en un circulo. Un toque: el selector de equipo
+// (un luchador) y el combate (bt.wild). Ganado: la misma pantalla pregunta por la Poke Ball (Lanzar / NO);
+// lanzarla la anima (vuela, se cierra, tres sacudidas y click) y el huevo va a la mochila. Perdido: huyo.
+#define ENC_BAND_H 138       // alto de cada banda negra
+#define ENC_BAND_MS 350      // las bandas entran...
+#define ENC_RING_MS 650      // ...y el circulo crece hasta aqui
+#define ENC_R 80             // radio del circulo
+#define ENC_GROUND (CY + 58) // los pies del salvaje en el circulo
+#define ENC_PILL_Y 362
+#define ENC_PILL_GAP 24
+
+void encLoadWild() {
+  foePmd.unload();
+  if (encShowDex >= 1 && encShowDex <= DEX_COUNT) foePmd.load((uint8_t)encShowDex, encShowShiny);
+}
+
+void closeEncUi() {
+  encUi = ENCU_OFF;
+  encDenyUntil = 0;
+  if (!battleOpen()) foePmd.unload();
+}
+
+// desde el patio: el salvaje (o, ya vencido, la pregunta de la Poke Ball)
+void openEncounter() {
+  if (!pet.encShown()) return;
+  encShowDex = pet.encDex();
+  encShowLv = pet.encLevel();
+  encShowShiny = pet.encShiny();
+  encLoadWild();  // leer la SD bloquea el loop: antes de que empiece la animacion
+  encUi = pet.encWonPending() ? ENCU_BALL : ENCU_INTRO;
+  encUiAt = millis();
+  encDenyUntil = 0;
+  sfxPlay(encUi == ENCU_INTRO ? SFX_WILD : SFX_TAP);
+  wakeUI();
+  Serial.printf("ENC open %s #%d nv.%u\n", encUi == ENCU_INTRO ? "intro" : "ball", encShowDex, encShowLv);
+}
+
+// al cerrar el resultado de su combate (closeBattle): ganado, la Poke Ball; perdido, huyo
+void openEncUiAfterBattle(bool won) {
+  encUi = (won && pet.encWonPending()) ? ENCU_BALL : ENCU_DONE;
+  encDoneKind = ENCD_FLED;
+  encUiAt = millis();
+  encDenyUntil = 0;
+}
+
+static void encDone(uint8_t kind) {
+  encUi = ENCU_DONE;
+  encDoneKind = kind;
+  encUiAt = millis();
+}
+
+// las dos pastillas de la pregunta (Lanzar / NO), centradas como pareja
+static void encBallPills(int &xT, int &wT, int &xN, int &wN) {
+  wT = yPillWidth(T(S_THROW));
+  wN = yPillWidth(T(S_NO));
+  xT = CX - (wT + ENC_PILL_GAP + wN) / 2;
+  xN = xT + wT + ENC_PILL_GAP;
+}
+
+void encTap(int16_t x, int16_t y) {
+  uint32_t now = millis();
+  if (now - encUiAt < ENC_TAP_LOCK_MS) return;  // el toque que la abrio (o uno de mas) no cuenta
+  if (encUi == ENCU_INTRO) {
+    closeEncUi();
+    if (!pet.encActive()) return;  // se fue mientras se miraba (6 h)
+    sfxPlay(SFX_TAP);
+    openTeamWild();
+    return;
+  }
+  if (encUi == ENCU_BALL) {
+    int xT, wT, xN, wN;
+    encBallPills(xT, wT, xN, wN);
+    if (yPillHit(x, y, xT, ENC_PILL_Y, wT)) {
+      if (pet.captureBlock() != CAP_OK || !pet.captureWild()) {
+        sfxPlay(SFX_DENY);
+        encDenyUntil = now + 500;
+        return;
+      }
+      encUi = ENCU_THROW;  // ya esta guardado: la animacion solo lo cuenta
+      encUiAt = now;
+      encSndStep = 0;
+      sfxPlay(SFX_TAP);
+    } else if (yPillHit(x, y, xN, ENC_PILL_Y, wN)) {
+      pet.releaseWild();
+      sfxPlay(SFX_TAP);
+      encDone(ENCD_LEFT);
+    }
+    return;
+  }
+  if (encUi == ENCU_DONE) {
+    sfxPlay(SFX_TAP);
+    closeEncUi();
+  }
+}
+
+// el salvaje dentro de su circulo (recortado), o la miniatura, o "?"
+static void encDrawWild(uint8_t act, int dx, uint32_t t, bool loop) {
+  btSetClip(CX - ENC_R, CY - ENC_R, 2 * ENC_R, 2 * ENC_R);
+  if (foePmd.loaded) {
+    if (!foePmd.has(act)) act = PMD_IDLE;
+    btPmd(foePmd, act, CX + dx, ENC_GROUND, t, loop, false, 3);
+  } else if (const uint8_t *th = thumbs.get(encShowDex)) {
+    btThumb(th, CX + dx - GAL_CELL / 2, ENC_GROUND - GAL_CELL, 2, false);
+  } else {
+    gfx->setTextColor(UI_INK);
+    setSize(6);
+    setCur(CX - 18 + dx, CY - 30);
+    printT("?");
+  }
+  btSetClip(0, 0, 466, 466);
+}
+
+// el fondo de todos los pasos: el mapa, las bandas (entran en ENC_BAND_MS) y el circulo (crece hasta ENC_RING_MS)
+static int encFrame(uint32_t t, bool animate) {
+  yardDrawBg();
+  int bh = ENC_BAND_H;
+  if (animate && t < ENC_BAND_MS) bh = (int)(ENC_BAND_H * (float)t / ENC_BAND_MS);
+  gfx->fillRect(0, 0, 466, bh, RGB565_BLACK);
+  gfx->fillRect(0, 466 - bh, 466, bh, RGB565_BLACK);
+  int r = ENC_R;
+  if (animate) {
+    if (t < ENC_BAND_MS) return 0;
+    if (t < ENC_RING_MS) r = (int)(ENC_R * (float)(t - ENC_BAND_MS) / (ENC_RING_MS - ENC_BAND_MS));
+  }
+  uint16_t acc = (encShowDex >= 1 && encShowDex <= DEX_COUNT) ? DEX_TBL[encShowDex].accent : Y_CARD;
+  gfx->fillCircle(CX, CY, r + 4, UI_WHITE);
+  if (r < 1) return r;
+  gfx->fillCircle(CX, CY, r, lerp565(acc, UI_WHITE, 11, 16));
+  if (r >= 16) gfx->fillEllipse(CX, ENC_GROUND - 3, r * 5 / 8, r / 7 + 1, lerp565(acc, UI_WHITE, 7, 16));  // su tarima
+  return r;
+}
+
+// un destello en cruz (como al limpiar una caca)
+static void encSpark(int x, int y, int s, uint16_t col) {
+  gfx->fillRect(x - s, y - 1, 2 * s + 1, 3, col);
+  gfx->fillRect(x - 1, y - s, 3, 2 * s + 1, col);
+}
+
+// el shiny brilla dentro del circulo: tres destellos que giran
+static void encShinySparks(uint32_t now) {
+  if (!encShowShiny) return;
+  for (int k = 0; k < 3; k++) {
+    float a = now * 0.002f + k * 2.094f;
+    int x = CX + (int)((ENC_R - 16) * cosf(a)), y = CY + (int)((ENC_R - 16) * sinf(a));
+    encSpark(x, y, 4 + (int)((now / 120 + k) % 3), (k & 1) ? UI_BAR_WARN : UI_WHITE);
+  }
+}
+
+// el nombre con el "*" del shiny delante (naranja), centrado
+static void encNameLine(const char *s, int y, uint16_t col) {
+  setSize(2);
+  int w = textW(s, 2), sw = encShowShiny ? textW("* ", 2) : 0, x = CX - (w + sw) / 2;
+  if (encShowShiny) {
+    gfx->setTextColor(UI_BAR_WARN);
+    setCur(x, y);
+    printT("* ");
+  }
+  gfx->setTextColor(col);
+  setCur(x + sw, y);
+  printT(s);
+}
+
+void renderEncounter(uint32_t now) {
+  uint32_t t = now - encUiAt;
+  char line[64];
+  if (encUi == ENCU_INTRO) {
+    int r = encFrame(t, true);
+    if (r == ENC_R) {
+      bool posing = t < ENC_RING_MS + 1400;
+      encDrawWild(posing ? PMD_POSE : PMD_IDLE, 0, posing ? t - ENC_RING_MS : t, !posing);
+      encShinySparks(now);
+    }
+    if (t >= ENC_BAND_MS) {
+      snprintf(line, sizeof(line), T(S_WILD_APPEARED_FMT), dexName(encShowDex));
+      encNameLine(line, 98, Y_TEXT);
+      char lv[12];
+      snprintf(lv, sizeof(lv), T(S_LVL_FMT), (unsigned)encShowLv);
+      gfx->setTextColor(Y_TEXT);
+      setSize(2);
+      setCur(centerX(lv, 2), 340);
+      printT(lv);
+      if (t >= ENC_TAP_LOCK_MS && (now / 500) % 3 != 0) {  // la pista late
+        gfx->setTextColor(Y_TEXT_DIM);
+        setCur(centerX(T(S_WILD_TAP), 2), 372);
+        printT(T(S_WILD_TAP));
+      }
+    }
+  } else if (encUi == ENCU_BALL) {
+    encFrame(t, false);
+    encDrawWild(PMD_IDLE, 0, now, true);
+    encShinySparks(now);
+    encNameLine(dexName(encShowDex), 76, Y_TEXT_DIM);
+    gfx->setTextColor(Y_TEXT);
+    printTight(T(S_THROW_BALL), CX, 102, 380);
+    uint8_t why = pet.captureBlock();
+    const char *note;
+    char left[24];
+    if (why == CAP_NO_BALL) note = T(S_NO_BALLS);
+    else if (why == CAP_NO_ROOM) note = T(S_NO_ROOM);
+    else {
+      snprintf(left, sizeof(left), T(S_BALLS_LEFT_FMT), (unsigned)pet.items[IT_BALL]);
+      note = left;
+    }
+    int nx = CX - (textW(note, 2) + 28) / 2;
+    drawMap(SPR_ICON_PLAY, 16, nx, 332, 1, false);
+    gfx->setTextColor(why == CAP_OK ? Y_TEXT : Y_ACCENT_BAD);
+    setSize(2);
+    setCur(nx + 28, 333);
+    printT(note);
+    int xT, wT, xN, wN;
+    encBallPills(xT, wT, xN, wN);
+    int shake = timeLeft(encDenyUntil) ? (int)(5 * sinf(now * 0.08f)) : 0;
+    yPill(xT + shake, ENC_PILL_Y, T(S_THROW), why == CAP_OK ? Y_ACCENT_GO : Y_CARD_HI);
+    yPill(xN, ENC_PILL_Y, T(S_NO), Y_ACCENT_BAD);
+  } else if (encUi == ENCU_THROW) {
+    uint8_t &sndStep = encSndStep;
+    encFrame(t, false);
+    gfx->setTextColor(Y_TEXT);
+    printTight(dexName(encShowDex), CX, 98, 380);
+    int bx = CX, by = CY + 18;  // donde se queda la bola
+    if (t < 500) {  // vuela en arco desde abajo
+      float p = t / 500.0f;
+      encDrawWild(PMD_IDLE, 0, now, true);
+      bx = CX + (int)(60 * (1 - p));
+      by = (int)(430 + (CY - 10 - 430) * p - 160 * p * (1 - p));
+    } else if (t < 760) {  // se cierra: destello blanco
+      if (sndStep < 1) { sndStep = 1; sfxPlay(SFX_STORE); }
+      uint8_t k = (uint8_t)(16 - (t - 500) * 16 / 260);
+      gfx->fillCircle(CX, CY, ENC_R, lerp565(lerp565(DEX_TBL[encShowDex].accent, UI_WHITE, 11, 16), UI_WHITE, k, 16));
+    } else if (t < 2100) {  // tres sacudidas
+      uint32_t w = (t - 760) % 450;
+      uint8_t n = (uint8_t)((t - 760) / 450);
+      if (w < 260) bx += (int)(9 * sinf(w * 0.048f));
+      if (w < 30 && sndStep < 2 + n) { sndStep = 2 + n; sfxPlay(SFX_TAP); }
+    } else {  // click: estrellas
+      if (sndStep < 10) { sndStep = 10; sfxPlay(SFX_LEVELUP); }
+      int d = 20 + (int)((t - 2100) / 8);
+      for (int k = 0; k < 4; k++)
+        drawMap(SPR_STAR, 16, bx - 8 + ((k & 1) ? d : -d), by - 8 + ((k & 2) ? d / 2 : -d / 2) - 10, 1, false);
+    }
+    drawMap(SPR_ICON_PLAY, 16, bx - 24, by - 24, 3, false);
+    if (t >= ENC_THROW_MS) encDone(ENCD_CAUGHT);
+  } else {  // ENCU_DONE
+    encFrame(t, false);
+    if (encDoneKind == ENCD_CAUGHT) {
+      snprintf(line, sizeof(line), T(S_CAPTURED_FMT), dexName(encShowDex));
+      int bob = (int)(3 * sinf(now * 0.006f));
+      drawEggAt(CX, CY + 6 + bob, 2, 0);
+      drawMap(SPR_ICON_PLAY, 16, CX + 26, CY + 30, 2, false);
+      encShinySparks(now);
+      gfx->setTextColor(Y_TEXT_DIM);
+      printTight(T(S_CAPTURE_EGG), CX, 340, 380);
+    } else {
+      snprintf(line, sizeof(line), T(encDoneKind == ENCD_FLED ? S_WILD_FLED_FMT : S_WILD_LEFT_FMT), dexName(encShowDex));
+      if (t < 1200) encDrawWild(PMD_WALKR, (int)(t / 8), t, true);  // se va andando
+    }
+    encNameLine(line, 98, encDoneKind == ENCD_FLED ? Y_ACCENT_BAD : Y_TEXT);
+    if (t >= ENC_TAP_LOCK_MS) {
+      gfx->setTextColor(Y_TEXT_DIM);
+      setSize(2);
+      setCur(centerX(T(S_BACK), 2), 372);
+      printT(T(S_BACK));
+    }
+  }
+  gfx->flush();
 }

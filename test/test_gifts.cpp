@@ -194,7 +194,8 @@ TEST(battle_drop, la_tabla_y_el_huevo_es_lo_mas_raro) {
   int n[IT_COUNT] = { 0 };
   for (int i = 0; i < N; i++) n[p.rollBattleItem()]++;
   auto pct = [&](int c) { return 100.0 * c / N; };
-  CHECK_MSG(pct(n[IT_CAKE]) > 34 && pct(n[IT_CAKE]) < 36, "tarta " + std::to_string(pct(n[IT_CAKE])));
+  CHECK_MSG(pct(n[IT_CAKE]) > 26 && pct(n[IT_CAKE]) < 28, "tarta " + std::to_string(pct(n[IT_CAKE])));  // v2.2: 35 - 8
+  CHECK_MSG(pct(n[IT_BALL]) > 7.5 && pct(n[IT_BALL]) < 8.5, "poke ball " + std::to_string(pct(n[IT_BALL])));
   CHECK_MSG(pct(n[IT_REVIVE]) > 4.5 && pct(n[IT_REVIVE]) < 5.5, "revivir " + std::to_string(pct(n[IT_REVIVE])));
   CHECK_MSG(pct(n[IT_GOLDEN]) > 24 && pct(n[IT_GOLDEN]) < 26, "baya " + std::to_string(pct(n[IT_GOLDEN])));
   int vit = n[IT_PROTEIN] + n[IT_IRON] + n[IT_CARBOS];
@@ -212,6 +213,8 @@ TEST(battle_drop, la_tabla_y_el_huevo_es_lo_mas_raro) {
   CHECK_EQ(p.rollBattleItem(), (uint8_t)IT_CHARM);
   mockForceRandom(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDROP_CHARM);
   CHECK_EQ(p.rollBattleItem(), (uint8_t)IT_REVIVE);  // v1.59
+  mockForceRandom(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDROP_CHARM + BDROP_REVIVE);
+  CHECK_EQ(p.rollBattleItem(), (uint8_t)IT_BALL);  // v2.2
   mockForceRandom(99);
   CHECK_EQ(p.rollBattleItem(), (uint8_t)IT_EGG);
 }

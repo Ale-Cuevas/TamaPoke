@@ -6,6 +6,42 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [2.2] - 2026-11-17
+
+### Added
+
+- **Wild encounters.** Once in a while something moves in the yard: a bush (Meadow, Forest), a rock (Quarry,
+  Ruins) or a lump of sand (Beach) that shakes every couple of seconds with two red curved marks on each side,
+  and an excited jingle plays when it appears (it waits until the pet wakes up). It stays for 6 h. Tap it: two
+  black bands close in and the wild pet appears in a circle ("A wild PIDGEY appeared!", its level). A tap
+  opens the team picker for **one** fighter (home or Box), then a normal battle with the stage rules against
+  one foe. Win: the fighter gets 1 h of growth (+3 JOY for the home pet), and half the time the wild pet drops
+  an item (cake, golden berry, a vitamin, Rare Candy, Revive or charm; never coins or balls) straight into the
+  Backpack. Lose (or quit the fight): it flees.
+- **How often.** At most one per day. A 10 % roll at a random time between 9:00 and 20:00; walking 6,000 steps
+  that day adds a roll that brings the day to 25 %; every trip that comes back adds 3 % per hour travelled
+  (1 h 3 %, 3 h 9 %, 8 h 24 %). Rolls missed with the board off happen when it turns on.
+- **Wild level and species.** The level is centred on the boss level of the highest stage you have cleared
+  (10 with none) and spreads up to ±15, mostly close to the centre; the species evolves to fit that level.
+  Lines whose type fits the yard map are 3× as likely (water on the Beach, rock/ground in the Quarry and
+  Ruins, bug/grass in the Forest, normal/grass on the Meadow). Shiny odds are the egg's.
+- **Exclusive species.** Omanyte, Kabuto, Aerodactyl, Dratini and Mew no longer hatch from random eggs: 5 % of
+  encounters are one of them (Mew the rarest), and their object sparkles in the yard. Pets you already own
+  keep them.
+- **Poké Ball.** A new item (shop 100 coins, stage boss loot 8 %, travel finds). After a win the same screen
+  asks "Throw a Poké Ball?" (Throw / NO): a throw always catches. The ball flies, closes with a flash, shakes
+  three times and clicks; an egg goes into the Backpack and hatches the **first form** of the caught pet's line
+  at Lv 1, shiny if it was. Captured eggs come out of the Backpack before random ones; up to 4 can wait. Every
+  save gets 3 Poké Balls once. With no balls or no room for an egg, the screen says so.
+- New save keys `enc`, `cegg`, `ecap`, `ballg`. Serial `ENC [dex]`, `ENC?`, `ENCEND`, `BALLS [n]`.
+
+### Changed
+
+- **Backpack 4 × 3.** The Backpack and the Shop grids have 4 columns (the Poké Ball is the 10th item). The
+  Backgrounds card is the 9th slot of the Shop.
+- **Boss loot:** cake 35 → 27 % to make room for the Poké Ball (8 %). **Travel items:** golden berry 40 → 30 %,
+  Poké Ball 10 %.
+
 ## [2.1] - 2026-11-17
 
 ### Added

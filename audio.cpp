@@ -144,6 +144,9 @@ static const Note N_ALERT[]   = {{1568, 70}, {0, 70}, {1568, 70}, {0, 70}, {1568
 // buenos dias (v1.63): sube como un despertador amable (sol, si, re, sol) y repite la ultima nota.
 // Mas lento que la subida de nivel (notas de 110 ms), sin el aire de fanfarria de la eclosion
 static const Note N_MORNING[] = {{784, 110}, {988, 110}, {1175, 110}, {1568, 160}, {0, 60}, {1568, 220}};
+// encuentro salvaje (v2.2): dos toques de aviso, un arpegio que sube, un trino nervioso y la nota alta (~1,2 s)
+static const Note N_WILD[]    = {{659, 55}, {0, 25}, {659, 55}, {0, 40}, {880, 60}, {1047, 60}, {1319, 70}, {0, 30},
+                                 {1319, 45}, {1568, 45}, {1319, 45}, {1568, 45}, {1319, 45}, {1568, 45}, {0, 30}, {2093, 260}};
 
 struct SfxDef { const Note *n; uint8_t len; };
 #define SFX_ENTRY(n) { n, (uint8_t)(sizeof(n) / sizeof(n[0])) }
@@ -155,7 +158,7 @@ static const SfxDef SFX[] = {
   SFX_ENTRY(N_EVOLVE), SFX_ENTRY(N_MEDAL), SFX_ENTRY(N_DENY), SFX_ENTRY(N_BYE), SFX_ENTRY(N_LEVEL),
   SFX_ENTRY(N_BATTLE), SFX_ENTRY(N_HIT), SFX_ENTRY(N_CRIT), SFX_ENTRY(N_SPECIAL), SFX_ENTRY(N_WIN),
   SFX_ENTRY(N_LOSE), SFX_ENTRY(N_LEVELUP), SFX_ENTRY(N_OOPS), SFX_ENTRY(N_STORE), SFX_ENTRY(N_WAKE),
-  SFX_ENTRY(N_POOP), SFX_ENTRY(N_ALERT), SFX_ENTRY(N_MORNING),
+  SFX_ENTRY(N_POOP), SFX_ENTRY(N_ALERT), SFX_ENTRY(N_MORNING), SFX_ENTRY(N_WILD),
 };
 static_assert(sizeof(SFX) / sizeof(SFX[0]) == SFX_COUNT, "SFX[] tiene que tener un efecto por cada Sfx");
 

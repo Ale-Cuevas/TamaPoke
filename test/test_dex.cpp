@@ -152,7 +152,7 @@ TEST(dex, las_stats_base_son_plausibles) {
     CHECK_MSG(e.bHp > 0 && e.bAtk > 0 && e.bDef > 0 && e.bSpe > 0,
               std::string("stat base a cero en ") + e.name);
     CHECK_MSG(e.biome <= 8, std::string("bioma desconocido en ") + e.name);
-    CHECK_MSG(e.rarity <= R_LEGENDARIO, std::string("rareza desconocida en ") + e.name);
+    CHECK_MSG(e.rarity <= R_ENCUENTRO, std::string("rareza desconocida en ") + e.name);
   }
 }
 
@@ -210,9 +210,9 @@ TEST(dex, los_iniciales_clasicos_son_validos) {
 }
 
 TEST(dex, hay_al_menos_una_especie_de_cada_rareza) {
-  int count[4] = { 0, 0, 0, 0 };
+  int count[R_ENCUENTRO + 1] = { 0 };
   for (int d = 1; d <= N; d++) count[DEX_TBL[d].rarity]++;
-  for (int r = 0; r <= R_LEGENDARIO; r++)
+  for (int r = 0; r <= R_ENCUENTRO; r++)
     CHECK_MSG(count[r] > 0, "hay una rareza sin especies: el sorteo del huevo se quedaria sin candidatos");
 }
 

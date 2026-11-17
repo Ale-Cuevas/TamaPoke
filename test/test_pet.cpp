@@ -1917,7 +1917,7 @@ TEST(items, baya_dorada_y_vitaminas) {
   CHECK_EQ(p.trAtk, (uint8_t)(a + VITAMIN_TRAIN));
   CHECK_EQ(p.trDef, (uint8_t)(d + VITAMIN_TRAIN));
   CHECK_EQ(p.trSpe, (uint8_t)(s + VITAMIN_TRAIN));
-  CHECK_EQ(p.itemCount(), (uint8_t)REVIVE_START);  // solo quedan los Revivir de la partida nueva
+  CHECK_EQ(p.itemCount(), (uint8_t)(REVIVE_START + BALL_START));  // solo quedan los Revivir y las Poke Balls de la partida nueva
 }
 
 TEST(items, topes_y_cuando_no_se_pueden_usar) {
@@ -2035,7 +2035,7 @@ TEST(steps, un_guardado_antiguo_carga_con_todo_a_cero) {
   b.begin();
   CHECK_EQ(b.stepsToday, (uint32_t)0);
   CHECK_EQ(b.stepsTotal, (uint32_t)0);
-  CHECK_EQ(b.itemCount(), (uint8_t)REVIVE_START);  // nada mas que los Revivir de la partida nueva (v1.59)
+  CHECK_EQ(b.itemCount(), (uint8_t)(REVIVE_START + BALL_START));  // nada mas que los Revivir (v1.59) y las Poke Balls (v2.2)
 }
 
 // ---------------------------------------------------------------- Revivir (v1.59)

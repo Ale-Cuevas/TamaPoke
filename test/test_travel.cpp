@@ -104,8 +104,9 @@ TEST(travel, sin_raros_en_1h_y_el_resto_de_reglas) {
   CHECK_EQ(souv[2], N);
   CHECK_RANGE(rare[1] * 100.0 / souv[1], 6.0, 10.0);   // 8 % de los recuerdos de 3 h
   CHECK_RANGE(rare[2] * 100.0 / souv[2], 22.0, 28.0);  // 25 % de los de 8 h
-  // el reparto de objetos de 3 h: baya 40, tarta 15, vitaminas 10, caramelo 10, revivir 5 (de los que traen)
-  CHECK_RANGE(itemId[IT_GOLDEN] * 100.0 / item[1], 37.0, 43.0);
+  // el reparto de objetos de 3 h: baya 30, tarta 15, vitaminas 10, caramelo 10, revivir 5, Poke Ball 10 (v2.2)
+  CHECK_RANGE(itemId[IT_GOLDEN] * 100.0 / item[1], 27.0, 33.0);
+  CHECK_RANGE(itemId[IT_BALL] * 100.0 / item[1], 8.0, 12.0);
   CHECK_RANGE(itemId[IT_CAKE] * 100.0 / item[1], 12.0, 18.0);
   CHECK_RANGE(itemId[IT_PROTEIN] * 100.0 / item[1], 8.0, 12.0);
   CHECK_RANGE(itemId[IT_RARECANDY] * 100.0 / item[1], 8.0, 12.0);
