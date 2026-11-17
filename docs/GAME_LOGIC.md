@@ -61,7 +61,7 @@ To tune the game, change it there (see §17, "Tuning").
 | A minigame's rules | `ballgame.h`, `zengame.h`, `dashgame.h` (pure); the bag is only in `TamaPoke.ino` (`startSack` `:2768`) |
 | A minigame's reward | `Pet::playResult` `pet.cpp:808`, `trainStrength` `:827`, `zenResult` `:853`, `dashResult` `:874` |
 | Battle damage / types / special | `battle.h` (`hitDamage` `:113`, `TYPE_CHART` `:39`, `SpecialMeter` `:245`) |
-| Stages, foes, team | `stage.h` (`STAGES` `:49`, `stageRollFoes` `:88`, `StageRun` `:132`) |
+| Stages, foes, team | `stage.h` (`STAGES` `:49`, `stageRollFoes` `:88`, `StageRun` `:115`) |
 | Stage rewards / loot | `Pet::stageDone` `pet.cpp:1654`, `rollBattleItem` `:1389`, `BDROP_*` in `tuning.h` |
 | Wild encounters | `encounter.h` (rolls, level, species), `Pet::encCheck` `pet.cpp:1758`, `encounterDone` `:1834`, `captureWild` `:1882` |
 | Coins, prices, daily cap | `economy.h`; `Pet::addCoins` `pet.cpp:1443`, `spendCoins` `:1462`, `buyItem` `:1469` |
@@ -343,7 +343,7 @@ press), and an idle ladder: dim at 90 s, saver at 120 s.
 
 | Group | Fields | Notes |
 |---|---|---|
-| Needs 0–100 | `fullness`, `joy`, `energy`, `hygiene` (start 80/80/80/100), `poops` (≤ `POOP_MAX` 3), `weight` | `lowestStat()` `pet.h:351`; `mood()` `pet.cpp:1908` |
+| Needs 0–100 | `fullness`, `joy`, `energy`, `hygiene` (start 80/80/80/100), `poops` (≤ `POOP_MAX` 3), `weight` | `lowestStat()` `pet.h:353`; `mood()` `pet.cpp:1908` |
 | Identity | `speciesId` (−1 = egg or vacant), `vacant`, `shiny`, `nick[12]`, `uid` (0 for egg/vacant), `berryKnown` | `isEgg()` is **also true for a vacant home**; use `isVacant()` |
 | Time | `ageMinutes` (real age), `growMin` (level comes only from this), `lastSeenEpoch` | `level() = levelFor(growMin)` |
 | Battle | `geneAtk/Def/Spe` (90–110), `trAtk/Def/Spe` (0–100) | §9 |
@@ -388,7 +388,7 @@ flowchart TD
 | Day nap | −1 every 2 min, floors 30 / 35 | −1 every 3 min, floor 45 |
 | Night (22:00–08:00) | −1 every 4 min, floor 50 | −1 every 6 min, floor 55 |
 
-`dropTo(v, d, floor)` (`pet.cpp:266`) applies the floors. No poops, slip-ups or neglect happen while asleep.
+`dropTo(v, d, floor)` (`pet.cpp:270`) applies the floors. No poops, slip-ups or neglect happen while asleep.
 
 ### Sleep and night (needs the clock)
 
@@ -517,7 +517,7 @@ stateDiagram-v2
 
 ### Endings
 
-All endings go through `endLife(cer)` (`pet.cpp:182`). It unwraps gifts into the Backpack, moves a waiting incubator
+All endings go through `endLife(cer)` (`pet.cpp:186`). It unwraps gifts into the Backpack, moves a waiting incubator
 egg to the Backpack, adds the gift egg if needed, and leaves the home **vacant**. A vacant home shows "Hatch an egg
 (N)" (`hatchFromBag` `pet.cpp:225`).
 
@@ -664,8 +664,8 @@ skipped while cake-full.
 - **Special** (`SpecialMeter` `:245`): 5 taps arm it, it adds +30 % power, then rests for 2 attacks. The player
   charges it by tapping during `BT_FIGHT`. The AI gets `aiTaps` per attack: minion 1 has 0, minion 2 has 1, the
   boss has 2, a wild foe has 1.
-- **How the `.ino` drives it** (`TamaPoke.ino:9360-9700`): `battleStep` (`:9684`) calls `run.attack()` once every
-  `ATTACK_MS` 1300. After a KO, `battleAfterKo` (`:9662`) calls `run.advance()`. Phases are `BT_INTRO` (VS card) →
+- **How the `.ino` drives it** (`TamaPoke.ino:9360-9700`): `battleStep` (`:9690`) calls `run.attack()` once every
+  `ATTACK_MS` 1300. After a KO, `battleAfterKo` (`:9668`) calls `run.advance()`. Phases are `BT_INTRO` (VS card) →
   `BT_FIGHT` ↔ `BT_SWAP` → `BT_END` (7 s; taps ignored for the first 1.8 s).
 
 ### Stages (`stage.h`)
@@ -677,7 +677,7 @@ skipped while cake-full.
 - **Unlocking.** `stageUnlocked(s)` = `s == 0 || hasBadge(s−1)`. `badges` is an 8-bit mask, NVS `"bdg"`, and
   belongs to the player.
 - **Team.** 1–4 fighters from the home pet (if awake) and the Box pets that are not travelling (`teamCanFight`
-  `pet.cpp:1428`). The last team is pre-selected.
+  `pet.cpp:1433`). The last team is pre-selected.
 
 ```mermaid
 flowchart TD
@@ -778,8 +778,8 @@ flowchart TD
 ### Coins and the Shop
 
 - **Storage.** `Pet::coins`, NVS `"cn"`, max 9 999. The daily cap counter is `coinToday`/`coinDay`.
-- **Functions.** `addCoins(n, capped)` (`pet.cpp:1439`) only marks a pending save. `spendCoins` and `buyItem`
-  (`:1457`, `:1464`) and `buyMap` save at once.
+- **Functions.** `addCoins(n, capped)` (`pet.cpp:1443`) only marks a pending save. `spendCoins` and `buyItem`
+  (`:1469`, `:1464`) and `buyMap` save at once.
 - **Prices** (`ECO_ITEM_PRICE` `economy.h:38`, values in `tuning.h`): berry 30, cake 40, vitamins 60, Revive 80, Poké Ball 100, Rare
   Candy 150. Maps cost 150, 150, 200 and 250 (owned mask NVS `"ybgO"`). Purchases check, in order: not sold, then
   full, then not enough coins (`shopCheckItem`).
@@ -972,7 +972,8 @@ flowchart LR
 
 These are typed at 115200 baud and handled by `handleSerial()` (`TamaPoke.ino:815`). `sdSerialCommand`
 (`sdmon.cpp:260`) is tried first for `PUT`, `LS` and `SDINFO`. Every command answers `DONE`. They are the fastest way
-to test on the board (see also the memory note on opening the port without resetting the board).
+to test on the board: `~/.platformio/penv/bin/python tools/board.py cmd STATS ...` sends them without restarting it
+(skill `tamapoke-board-test`).
 
 | Area | Commands |
 |---|---|
@@ -1015,7 +1016,8 @@ to test on the board (see also the memory note on opening the port without reset
   writes 480×480 PNGs to `.pio/render/screens/`. To render a new screen, add a scene to `tools/render/render.cpp`.
 - **CI jobs:** arduino-cli build, PlatformIO build, render, generated-files diff, `ruff check tools/`, host tests
   with ASan, and i18n.
-- **Release bump:** `FW_VERSION` (`TamaPoke.ino:61`), `web/manifest.json`, `CHANGELOG.md`, and
+- **Release bump** (skill `tamapoke-release`; `tools/release.py bump X.Y` / `row` / `pointers --fix` / `check` do the
+  mechanical parts): `FW_VERSION` (`TamaPoke.ino:62`), `web/manifest.json`, `CHANGELOG.md`, and
   `bash tools/build_web.sh` for `web/firmware/tamapoke.bin`. **Also update the version and commit line at the top of
   this guide.**
 - **Board checks:** `docs/PENDING_TESTS.md` (numbered open checks) and `docs/DEVICE_TESTS.md` (procedures). EN and
