@@ -6,6 +6,17 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [2.5] - 2026-11-17
+
+### Changed
+
+- **The yard fills the whole 2.16" screen.** The map now reaches the corners and the edges of the square panel
+  instead of sitting in a black circle. Nothing else moves: pets, poop, gifts, the egg, bubbles, the HUD, the
+  dock and every tap stay inside the same round area, and anything drawn there is still cut at the circle. The
+  border follows the burn-in orbit and the day/night tint. The map picker in the Shop shows maps the same way.
+  Every other screen keeps the round look with black around it. On the round 1.75" board nothing changes.
+- Serial `YARDFULL 0|1`: turns the full-screen yard off and on, to compare.
+
 ## [2.4] - 2026-11-17
 
 ### Added

@@ -15,7 +15,9 @@ This is a port of [socquique/TamaPoke](https://github.com/socquique/TamaPoke),
 which was designed for the round **AMOLED-1.75**. The round screen is kept: the
 game draws its original 466×466 UI and the display layer centres it on the
 square panel inside a smooth round frame, with the rest of the panel black (on
-an AMOLED, black pixels are simply off). How and why:
+an AMOLED, black pixels are simply off). The yard is the exception (v2.5): its
+map fills the whole square panel, while the pets, the HUD and every tap stay
+in the same circle. How and why:
 **[docs/AMOLED-2.16.md](docs/AMOLED-2.16.md)**.
 
 ![TamaPoke v2.1 on the AMOLED-2.16: the yard, a pet back from a trip, the trip view, the return banner, the Collection and the Shop](docs/images/screens-216.png)

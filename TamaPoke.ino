@@ -59,7 +59,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "2.4"
+#define FW_VERSION "2.5"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -229,6 +229,8 @@ void openCarePanel();
 void openPlayPanel();
 void panelTap(int16_t x, int16_t y);
 void renderPanel();
+void yardShowFull();
+extern bool gYardFull;  // (con el fondo del patio, mas abajo)
 
 // minijuego "toques": mantener la pokeball en el aire
 bool gameOpen = false;
@@ -959,6 +961,11 @@ void handleSerial() {
     if (line.length() > 7) yardForceMap((uint8_t)line.substring(7).toInt());
     wakeUI();
     yardReport();
+    Serial.println("DONE");
+  } else if (line.startsWith("YARDFULL")) {  // YARDFULL 0|1: el patio a toda la pantalla (v2.5) o en su circulo negro
+    if (line.length() > 9) gYardFull = line.substring(9).toInt() != 0;
+    wakeUI();
+    Serial.printf("yardfull=%u (build %u)\n", gYardFull ? 1 : 0, (unsigned)TP_FULL_YARD);
     Serial.println("DONE");
   } else if (line.startsWith("ORBIT")) {  // ORBIT <n>: fija la posicion de la orbita; ORBIT: la del reloj
     gOrbitForce = line.length() > 6 ? (int8_t)(line.substring(6).toInt() % ORBIT_POSITIONS) : -1;
@@ -2557,6 +2564,7 @@ bool render() {
   uint32_t sceneT0 = micros();
   if (yard) {
     yardDrawBg();  // el mapa ya expandido (en PSRAM), copiado al lienzo
+    yardShowFull();  // v2.5: y alrededor del circulo, hasta el borde del panel
   } else {
     drawScene(homeBiome(), millis(), gNight);
     hatchAt(CX, PET_CY, 5);  // la eclosion, en el centro (el patio pone la suya)
@@ -5028,6 +5036,7 @@ static void renderPicker() {
   uint8_t n = yardMapPreview;
   yardDrawBg();  // honra yardMapPreview: carga el mapa n (o el de respaldo si falta)
   bool ok = yardMapNow() == n;  // el que de verdad se ve
+  if (ok) yardShowFull();  // v2.5: el mapa como se vera, a toda la pantalla
   const char *name = T((StrId)(S_MAP_1 + n - 1));
   if (!ok) yPanelBg();  // sin el .bin (o sin SD): un panel oscuro con el aviso
   yShadowText(centerX(name, 3), Y_TITLE_Y, name, 3, Y_TEXT);
@@ -7123,7 +7132,7 @@ extern uint16_t *yardBg;  // (se define con el fondo del patio, mas abajo)
 // esquinas redondas. Sin fondo (sin PSRAM): una tarjeta lisa
 static void yardWindow(int x, int y, int w, int h, int sy, int r) {
   uint16_t *fb = (uint16_t *)gfx->getFramebuffer();
-  if (!yardBg || !fb || sy < 0 || sy + h > YBG_CANVAS) {
+  if (!yardBg || !fb || sy < 0 || sy + h > YBG_CANVAS) {  // (sy en filas del lienzo)
     gfx->fillRoundRect(x, y, w, h, r, Y_CARD_HI);
     return;
   }
@@ -7134,7 +7143,7 @@ static void yardWindow(int x, int y, int w, int h, int sy, int r) {
       float dy = (float)(r - jj) - 0.5f;
       inset = r - (int)(sqrtf((float)(r * r) - dy * dy) + 0.5f);
     }
-    memcpy(fb + (size_t)(y + j) * YBG_CANVAS + x + inset, yardBg + (size_t)(sy + j) * YBG_CANVAS + x + inset,
+    memcpy(fb + (size_t)(y + j) * YBG_CANVAS + x + inset, yardBgCanvasRow(yardBg, sy + j) + x + inset,
            (size_t)(w - 2 * inset) * 2);
   }
   gfx->drawRoundRect(x - 1, y - 1, w + 2, h + 2, r + 1, Y_CARD_HI);
@@ -7630,7 +7639,7 @@ void yardEggInfo() {
   yardEggInfoUntil = millis() + 2600;
 }
 
-static_assert(YBG_CANVAS == UI_SIZE, "el mapa se copia tal cual al lienzo");
+static_assert(YBG_CANVAS == UI_SIZE, "el lienzo es la ventana (YBG_CROP, YBG_CROP) del mapa");
 
 // ---- el fondo ----
 // el mapa del patio es del jugador (Pet::yardMapWanted: el elegido, o el prado del principio), igual para
@@ -7640,7 +7649,8 @@ static_assert(YBG_CANVAS == UI_SIZE, "el mapa se copia tal cual al lienzo");
 
 uint8_t *yardFile = nullptr;       // el .bin entero en PSRAM (yardView.px apunta dentro)
 YardBgView yardView;
-uint16_t *yardBg = nullptr;        // 466x466 RGB565 ya tintado, en PSRAM (434 KB)
+uint16_t *yardBg = nullptr;        // 480x480 RGB565 ya tintado, en PSRAM (460 KB); el lienzo es la ventana (7, 7)
+bool gYardFull = true;             // v2.5: el mapa tambien fuera del circulo (YARDFULL 0 lo apaga)
 uint8_t yardWalk[YBG_WALK_BYTES];  // la mascara de paso (solo la zona conectada mas grande)
 uint8_t yardMapForced = 0;         // YARDBG <n>; 0 = el elegido
 uint8_t yardMapWant = 0;           // el pedido la ultima vez (0 = ninguno aun)
@@ -7705,13 +7715,16 @@ void yardEnsureMap() {
   Serial.printf("yard map fallback (%s)\n", yardWhy);
 }
 
+// un rectangulo en el mapa entero (480x480), en coordenadas del lienzo (como todo el patio)
 static void yBufRect(uint16_t *b, int x, int y, int w, int h, uint16_t c) {
+  x += YBG_CROP;
+  y += YBG_CROP;
   if (x < 0) { w += x; x = 0; }
   if (y < 0) { h += y; y = 0; }
-  if (x + w > YBG_CANVAS) w = YBG_CANVAS - x;
-  if (y + h > YBG_CANVAS) h = YBG_CANVAS - y;
+  if (x + w > YBG_FULL) w = YBG_FULL - x;
+  if (y + h > YBG_FULL) h = YBG_FULL - y;
   for (int j = 0; j < h; j++)
-    for (int i = 0; i < w; i++) b[(y + j) * YBG_CANVAS + x + i] = c;
+    for (int i = 0; i < w; i++) b[(y + j) * YBG_FULL + x + i] = c;
 }
 
 // sin mapa: suelo liso del color del bioma, en cuadros de una celda apenas distintos, y unas matas
@@ -7749,13 +7762,13 @@ void yardEnsureBg() {
   uint8_t biome = homeBiome();
   int32_t key = (int32_t)tint | (yardMapLoaded << 2) | (biome << 10);
   if (key == yardBgKey) return;
-  if (!yardBg) yardBg = (uint16_t *)ps_malloc((size_t)YBG_CANVAS * YBG_CANVAS * 2);
+  if (!yardBg) yardBg = (uint16_t *)ps_malloc((size_t)YBG_FULL * YBG_FULL * 2);
   if (!yardBg) return;  // sin PSRAM: yardDrawBg pinta el suelo liso cada frame
   yardBgKey = key;
   if (yardFile) {
     static uint16_t pal[256];
     yardTintPalette(yardView.pal, pal, yardView.palCount, tint);
-    yardBgExpand(yardView.px, pal, yardBg);
+    yardBgExpandFull(yardView.px, pal, yardBg);
   } else {
     yardPaintFallback(yardBg, biome, tint);
   }
@@ -7763,8 +7776,16 @@ void yardEnsureBg() {
 
 void yardDrawBg() {
   yardEnsureBg();
-  if (yardBg) memcpy(gfx->getFramebuffer(), yardBg, (size_t)YBG_CANVAS * YBG_CANVAS * 2);
-  else gfx->fillScreen(yardTint565(BIOME_SOIL[homeBiome() % BIOME_COUNT], yardTintAt((uint8_t)sceneHour(), pet.sleeping)));
+  if (yardBg) {
+    uint16_t *fb = gfx->getFramebuffer();
+    for (int y = 0; y < YBG_CANVAS; y++) memcpy(fb + (size_t)y * YBG_CANVAS, yardBgCanvasRow(yardBg, y), YBG_CANVAS * 2);
+  } else gfx->fillScreen(yardTint565(BIOME_SOIL[homeBiome() % BIOME_COUNT], yardTintAt((uint8_t)sceneHour(), pet.sleeping)));
+}
+
+// v2.5: este frame, el mapa tambien en las esquinas y el borde del panel (fuera del circulo, que
+// sigue cortando todo lo dibujado). Se pide en cada frame del patio; las demas pantallas, en negro.
+void yardShowFull() {
+  if (gYardFull && yardBg) roundCanvas->showUnder(yardBg, YBG_FULL, YBG_CROP, (uint32_t)yardBgKey);
 }
 
 void yardForceMap(uint8_t n) {

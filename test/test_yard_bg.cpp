@@ -64,22 +64,38 @@ TEST(yard_bg, rechaza_ficheros_malos) {
   CHECK_EQ(yardBgParse(idx.data(), idx.size(), &view), YBG_INDEX);
 }
 
-TEST(yard_bg, expande_a_466_con_bloques_de_2x2_y_recorte_de_7) {
+TEST(yard_bg, expande_a_480_con_bloques_de_2x2) {
   auto d = tpy1(63);
   CHECK_EQ(yardBgParse(d.data(), d.size(), &view), YBG_OK);
-  std::vector<uint16_t> canvas(YBG_CANVAS * YBG_CANVAS + 1, 0xBEEF);
-  yardBgExpand(view.px, view.pal, canvas.data());
-  CHECK_EQ(canvas.back(), (uint16_t)0xBEEF);  // no escribe fuera
+  std::vector<uint16_t> full(YBG_FULL * YBG_FULL + 1, 0xBEEF);
+  yardBgExpandFull(view.px, view.pal, full.data());
+  CHECK_EQ(full.back(), (uint16_t)0xBEEF);  // no escribe fuera
   int malos = 0;
-  for (int y = 0; y < YBG_CANVAS; y++)
+  for (int y = 0; y < YBG_FULL; y++)
+    for (int x = 0; x < YBG_FULL; x++)
+      if (full[y * YBG_FULL + x] != view.pal[view.px[(y / 2) * YBG_SRC + x / 2]]) malos++;
+  CHECK_EQ(malos, 0);
+}
+
+// el lienzo es la ventana (7, 7) del mapa entero: el pixel (x, y) del lienzo sale del (x+7)/2, (y+7)/2 de la fuente
+TEST(yard_bg, el_lienzo_es_la_ventana_con_recorte_de_7) {
+  auto d = tpy1(63);
+  CHECK_EQ(yardBgParse(d.data(), d.size(), &view), YBG_OK);
+  std::vector<uint16_t> full(YBG_FULL * YBG_FULL);
+  yardBgExpandFull(view.px, view.pal, full.data());
+  CHECK_EQ(YBG_CANVAS + 2 * YBG_CROP, YBG_FULL);
+  int malos = 0;
+  for (int y = 0; y < YBG_CANVAS; y++) {
+    const uint16_t *row = yardBgCanvasRow(full.data(), y);
     for (int x = 0; x < YBG_CANVAS; x++) {
       int sx = (x + YBG_CROP) / 2, sy = (y + YBG_CROP) / 2;
-      if (canvas[y * YBG_CANVAS + x] != view.pal[view.px[sy * YBG_SRC + sx]]) malos++;
+      if (row[x] != view.pal[view.px[sy * YBG_SRC + sx]]) malos++;
     }
+  }
   CHECK_EQ(malos, 0);
   // el pixel de la fuente (120,120) cubre el bloque (233,233)-(234,234) del lienzo: el centro
-  CHECK_EQ(canvas[233 * YBG_CANVAS + 233], view.pal[view.px[120 * YBG_SRC + 120]]);
-  CHECK_EQ(canvas[234 * YBG_CANVAS + 234], view.pal[view.px[120 * YBG_SRC + 120]]);
+  CHECK_EQ(yardBgCanvasRow(full.data(), 233)[233], view.pal[view.px[120 * YBG_SRC + 120]]);
+  CHECK_EQ(yardBgCanvasRow(full.data(), 234)[234], view.pal[view.px[120 * YBG_SRC + 120]]);
 }
 
 TEST(yard_bg, la_mascara_de_paso) {
