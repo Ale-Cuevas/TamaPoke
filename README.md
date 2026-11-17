@@ -1,7 +1,7 @@
 # TamaPoke
 
 ![Board](https://img.shields.io/badge/board-ESP32--S3%20AMOLED%202.16-E7352C?logo=espressif&logoColor=white)
-![Firmware](https://img.shields.io/badge/firmware-v2.0-8A2BE2)
+![Firmware](https://img.shields.io/badge/firmware-v2.1-8A2BE2)
 [![CI](https://github.com/Ale-Cuevas/TamaPoke/actions/workflows/ci.yml/badge.svg)](https://github.com/Ale-Cuevas/TamaPoke/actions/workflows/ci.yml)
 ![Code](https://img.shields.io/badge/code-MIT-blue)
 ![Languages](https://img.shields.io/badge/languages-8-FFCB05)
@@ -18,7 +18,7 @@ square panel inside a smooth round frame, with the rest of the panel black (on
 an AMOLED, black pixels are simply off). How and why:
 **[docs/AMOLED-2.16.md](docs/AMOLED-2.16.md)**.
 
-![TamaPoke v2.0 on the AMOLED-2.16: the yard by day and at night, stat card, Shop, background picker and Pokédex](docs/images/screens-216.png)
+![TamaPoke v2.1 on the AMOLED-2.16: the yard, a pet back from a trip, the trip view, the return banner, the Collection and the Shop](docs/images/screens-216.png)
 
 <sub>Rendered from the real firmware drawing code by `tools/render/render.sh`:
 these are the pixels the panel receives.</sub>
@@ -31,11 +31,18 @@ these are the pixels the panel receives.</sub>
 
 **v2.0: the yard.** The home is now a top-down pixel-art yard where the pet (and the first pet of the Box)
 wanders, eats food dropped on the grass, leaves poops and finds gifts where it stands, and says how it feels
-in speech bubbles. A thin HUD floats on top: the clock, the battery, your **coins** and a 3-button dock
+in speech bubbles. A thin HUD floats on top: the battery, your **coins** and a 3-button dock
 (**Care**, **Play**, **Bag**). Eggs sit in the yard and hatch in 2 h (shake the board to speed them up).
 Games, stages and walks earn coins to spend in the **Shop** (a tab of the Bag): items, and new
 **backgrounds** for the yard. Menus are dark panels. The maps come from the Sunnyside World tile pack and are
 packed on your PC (see [Yard backgrounds](#yard-backgrounds)). Design: [docs/yard-prototype/DESIGN_YARD_UI.md](docs/yard-prototype/DESIGN_YARD_UI.md).
+
+**v2.1: travel and the Collection.** From the Play panel, send a Box pet on a 1 h, 3 h or 8 h trip to one of
+your backgrounds (real time, also with the board off; needs the clock set). The trip view shows a countdown
+and a log of what happened. Back home, the pet waits in the yard with its suitcase and a "!": tap it to see
+what it brought (coins, growth, sometimes an item, often a souvenir). The 25 souvenirs, 5 per background,
+fill the **Collection**, the third tab of the Bag. Serial `TRAVEL`, `TRAVEL <slot> <map> <0-2>`,
+`TRAVELT <min>`, `TRAVELEND`, `SOUV [mask]`.
 
 **AMOLED-2.16 port (v1.19):** builds (PlatformIO and arduino-cli, pinned
 versions), passes the host test suite, and every screen has been rendered and
@@ -742,7 +749,7 @@ python3 tools/send_sd.py --yard                          # send them to the boar
 
 Each map is a 15×15 text grid (`tools/yard/maps/NN-name.txt`) with a legend
 (`tools/yard/legends/sunnyside.txt`); the packer also writes the walk mask (where pets may stand) and keeps
-the clock, the dock and the round edge clear. Serial `YARDBG <n>` previews a map without buying it.
+the HUD, the dock and the round edge clear. Serial `YARDBG <n>` previews a map without buying it.
 
 ## Layout
 

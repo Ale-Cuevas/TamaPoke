@@ -6,7 +6,7 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
-## [Unreleased]
+## [2.1] - 2026-11-17
 
 ### Added
 

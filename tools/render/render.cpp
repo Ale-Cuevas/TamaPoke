@@ -1464,7 +1464,7 @@ static const std::vector<Scene> &scenes() {
 }
 
 // the README's contact sheet: a few screens on the square glass
-static const char *const SHEET[] = { "yard-home-two", "yard-home-night", "card-profile", "shop-rich", "picker-notowned", "gallery" };
+static const char *const SHEET[] = { "yard-home-two", "travel-back-yard", "travel-trip-late", "travel-back-new", "collection-partial", "shop-rich" };
 
 int main(int argc, char **argv) {
   if (argc < 2) {
