@@ -1008,8 +1008,6 @@ to test on the board (see also the memory note on opening the port without reset
 
 **README / comments versus code** (the code is the truth)
 
-- README "Care slip-up … 30-min cooldown". The code sets `mistakeCooldown = 60` awake ticks (`pet.cpp:418`).
-- Comments at `pet.h:438` and `pet.cpp:441` say the farewell comes at "7 días". `FAREWELL_AGE_MIN` is 3 days.
-- Comments at `TamaPoke.ino:459` and `:7586` say the egg takes "4 h". `EGG_HATCH_MIN` is 120 (2 h).
-- `test/README.md` gives old battle numbers (5–25 % hits, 30 % special, 6 languages). The code is 2–60 %, special
-  70 %, 8 languages.
+None known. The ones found when this guide was written (slip-up cooldown in the README, "7 días" farewell and "4 h"
+egg comments, old battle and language numbers in `test/README.md`) were fixed right after. List any new mismatch
+here until it is fixed.

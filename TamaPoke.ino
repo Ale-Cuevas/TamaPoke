@@ -456,7 +456,7 @@ void setup() {
   // de arranque, pero solo cuenta al encender: despues es una entrada normal
   pinMode(BOARD_BTN_BOOT, INPUT);
 
-  pet.timedEggs = true;  // Y3: los huevos se ponen en el patio y eclosionan a las 4 h
+  pet.timedEggs = true;  // Y3: los huevos se ponen en el patio y eclosionan a las 2 h (EGG_HATCH_MIN)
   pet.begin();
   sdBegin();
   thumbs.load();
@@ -7597,8 +7597,8 @@ void yardDemoTap(int16_t x, int16_t y) {
 //   juego, un combate) la comida le espera en el suelo y sigue al volver; si ya no puede comer (se
 //   duerme, ceremonia, se muere, otro bicho en casa) desaparece sin gastarse nada: la tarta solo se
 //   descuenta al comersela.
-// - El huevo esta en el patio (el de la caja pasea a su alrededor) y eclosiona solo a las 4 h reales;
-//   cada sacudida (una cada 30 s) le quita 5 min, hasta 2 h (eggtimer.h). Tocarlo lo tambalea y dice lo
+// - El huevo esta en el patio (el de la caja pasea a su alrededor) y eclosiona solo a las 2 h reales;
+//   cada sacudida (una cada 30 s) le quita 5 min, hasta 1 h (eggtimer.h). Tocarlo lo tambalea y dice lo
 //   que falta. El inicial (y uno a medias del sistema de antes) tambien se ve aqui, pero se abre con 3
 //   toques como siempre.
 

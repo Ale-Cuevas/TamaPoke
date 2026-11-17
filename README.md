@@ -157,7 +157,7 @@ While **awake**, per minute:
 
 - ~**5 %/min** chance to poop (only if FOOD > 40; about one every 20 min, it was 15 % before v1.58).
   Poops tank hygiene fast. **Tap a poop** to clean just that one (+10 HYG), awake or asleep.
-- **Care slip-up** = letting any stat hit **≤ 10** (30-min cooldown so it counts once).
+- **Care slip-up** = letting any stat hit **≤ 10** (then it takes 60 awake minutes before another one can count).
   Each slip-up **delays evolution by 1 level** and cools the bond.
 
 ### Actions
