@@ -479,6 +479,25 @@ static const char* const SPR_SOUV_LANTERN[16] = {
   "................",
 };
 
+static const char* const SPR_ICON_TRAVEL[16] = {
+  "................",
+  ".....YyyyyY.....",
+  ".....y....Y.....",
+  ".....y....Y.....",
+  ".....y....Y.....",
+  "..kkkkkkkkkkkk..",
+  ".kyycccccccccCk.",
+  ".kccwfccccffcCk.",
+  ".kCCffCCCCffCCk.",
+  ".kccffccccffcCk.",
+  ".kcccccbbbcccCk.",
+  ".kcccccbwbcccCk.",
+  ".kCCCCCbbbCCCCk.",
+  ".kCCCCCCCCCCCCk.",
+  ".kkkkkkkkkkkkkk.",
+  "................",
+};
+
 static const char *const *const SOUV_ICON[25] = {
   SPR_SOUV_CLOVER, SPR_SOUV_DAISY, SPR_SOUV_FEATHER, SPR_SOUV_HONEY, SPR_SOUV_ACORN,
   SPR_SOUV_PEBBLE, SPR_SOUV_QUARTZ, SPR_SOUV_FOSSIL, SPR_SOUV_ORE, SPR_SOUV_MOONSTONE,

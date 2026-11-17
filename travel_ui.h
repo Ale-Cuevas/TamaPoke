@@ -87,20 +87,20 @@ inline uint8_t trvPetPages(uint8_t n) { return n ? (uint8_t)((n + TRV_PET_PAGE -
 #define TRV_DEST_HIT_H 48
 #define TRV_DEST_HIT_LX (TRV_BAN_X - 23)
 #define TRV_DEST_HIT_RX (TRV_BAN_X + TRV_BAN_W - 45)
-#define TRV_PET_W 86       // tarjetas de bicho
-#define TRV_PET_H 70
-#define TRV_PET_GAP 8
+#define TRV_PET_W 92       // tarjetas de bicho
+#define TRV_PET_H 74
+#define TRV_PET_GAP 6
 #define TRV_PET_Y 148
 #define TRV_PET_ARROW_X 58 // flechas de las paginas de bichos
-#define TRV_PET_ARROW_Y 183
+#define TRV_PET_ARROW_Y 185
 #define TRV_PET_ARROW_W 56
 #define TRV_TIER_W 84      // tarjetas de duracion
 #define TRV_TIER_H 62
 #define TRV_TIER_GAP 8
-#define TRV_TIER_Y 232
+#define TRV_TIER_Y 238
 #define TRV_GO_W 120       // pastilla Ir
-#define TRV_GO_Y 314
-#define TRV_HINT_Y 352
+#define TRV_GO_Y 320
+#define TRV_HINT_Y 358
 
 inline int trvPetX(int i) { return Y_CX - (TRV_PET_PAGE * TRV_PET_W + (TRV_PET_PAGE - 1) * TRV_PET_GAP) / 2 + i * (TRV_PET_W + TRV_PET_GAP); }
 inline int trvTierX(int i) { return Y_CX - (TRV_TIERS * TRV_TIER_W + (TRV_TIERS - 1) * TRV_TIER_GAP) / 2 + i * (TRV_TIER_W + TRV_TIER_GAP); }
@@ -130,8 +130,8 @@ inline TrvHit trvHit(int x, int y) {
 #define TRV_WIN_X 83       // la ventana del destino con el bicho
 #define TRV_WIN_Y 118
 #define TRV_WIN_W 300
-#define TRV_WIN_H 96
-#define TRV_LOG_Y 228      // el registro: filas de 2 lineas
+#define TRV_WIN_H 108
+#define TRV_LOG_Y 240      // el registro: filas de 2 lineas
 #define TRV_LOG_X 78
 #define TRV_LOG_W 310
 #define TRV_LOG_LINE 20
@@ -143,12 +143,12 @@ inline TrvHit trvHit(int x, int y) {
 #define SOUV_CELL_H 48
 #define SOUV_GAP 4
 #define SOUV_GRID_Y 106
-#define SOUV_TITLE_Y 78
+#define SOUV_TITLE_Y 80
 #define SOUV_HINT_Y 372
 #define SOUV_TIP_X 73      // la tarjeta de un recuerdo
 #define SOUV_TIP_Y 112
 #define SOUV_TIP_W 320
-#define SOUV_TIP_H 232
+#define SOUV_TIP_H 212
 inline int souvCellX(int id) { return Y_CX - (SOUV_COLS * SOUV_CELL_W + (SOUV_COLS - 1) * SOUV_GAP) / 2 + (id % SOUV_COLS) * (SOUV_CELL_W + SOUV_GAP); }
 inline int souvCellY(int id) { return SOUV_GRID_Y + (id / SOUV_COLS) * (SOUV_CELL_H + SOUV_GAP); }
 // recuerdo bajo el toque (0..24) o -1

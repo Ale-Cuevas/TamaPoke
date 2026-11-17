@@ -364,6 +364,22 @@ def lantern():
     return g.rows()
 
 
+def suitcase():
+    # la maleta del viaje (tarjeta de Jugar, marca de la caja): marron con asa, dos cierres y una pegatina
+    g = G(16)
+    g.rect(1, 5, 14, 14, 'c'); g.rect(13, 5, 14, 14, 'C'); g.rect(1, 12, 14, 14, 'C')
+    g.px(1, 5, '.'); g.px(14, 5, '.')
+    g.outline()
+    g.rect(4, 0, 11, 4, '.')
+    g.rect(5, 1, 10, 1, 'y'); g.rect(5, 2, 5, 4, 'y'); g.rect(10, 2, 10, 4, 'y')
+    g.rect(5, 1, 5, 1, 'Y'); g.rect(10, 2, 10, 4, 'Y'); g.rect(10, 1, 10, 1, 'Y')
+    g.rect(2, 8, 13, 8, 'C')
+    g.rect(4, 7, 5, 9, 'f'); g.rect(10, 7, 11, 9, 'f'); g.px(4, 7, 'w')
+    g.rect(7, 10, 9, 12, 'b'); g.px(8, 11, 'w')
+    g.px(3, 6, 'y'); g.px(2, 6, 'y')
+    return g.rows()
+
+
 ICONS = [
     ("CLOVER", clover), ("DAISY", daisy), ("FEATHER", feather), ("HONEY", honey), ("ACORN", acorn),
     ("PEBBLE", pebble), ("QUARTZ", quartz), ("FOSSIL", fossil), ("ORE", ore), ("MOONSTONE", moonstone),
@@ -419,6 +435,10 @@ def emit(icons, path):
         for r in rows:
             out.append(f'  "{r}",\n')
         out.append("};\n\n")
+    out.append("static const char* const SPR_ICON_TRAVEL[16] = {\n")
+    for r in suitcase():
+        out.append(f'  "{r}",\n')
+    out.append("};\n\n")
     out.append("static const char *const *const SOUV_ICON[25] = {\n")
     for i in range(0, 25, 5):
         out.append("  " + ", ".join(f"SPR_SOUV_{n}" for n, _ in icons[i:i + 5]) + ",\n")
@@ -436,3 +456,4 @@ if __name__ == '__main__':
         emit(icons, os.path.join(ROOT, 'souvenir_icons.h'))
     if 'png' in sys.argv:
         render(icons, sys.argv[sys.argv.index('png') + 1])
+        render([("SUITCASE", suitcase())], sys.argv[sys.argv.index('png') + 1].replace('.png', '-case.png'), 8)
