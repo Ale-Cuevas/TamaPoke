@@ -23,11 +23,12 @@ static const uint8_t TRV_EVENTS[TRV_TIERS] = { 1, 2, 3 };            // sucesos 
 #define TRV_EVENTS_MAX 3
 #define TRV_DUP_COINS 10  // un recuerdo repetido se cambia por monedas
 
-// objetos que pueden traer y su peso (suman 100): baya dorada, tarta, 3 vitaminas, caramelo raro, revivir
-#define TRV_POOL_N 7
+// objetos que pueden traer y su peso (suman 100): baya dorada, tarta, 3 vitaminas, caramelo raro, revivir y
+// (v2.2) la Poke Ball, que le quita 10 a la baya
+#define TRV_POOL_N 8
 static constexpr uint8_t TRV_POOL_ID[TRV_POOL_N] = { 0 /*GOLDEN*/, 7 /*CAKE*/, 1 /*PROTEIN*/, 2 /*IRON*/, 3 /*CARBOS*/,
-                                                 5 /*RARECANDY*/, 8 /*REVIVE*/ };
-static const uint8_t TRV_POOL_W[TRV_POOL_N] = { 40, 15, 10, 10, 10, 10, 5 };
+                                                 5 /*RARECANDY*/, 8 /*REVIVE*/, 9 /*BALL*/ };
+static const uint8_t TRV_POOL_W[TRV_POOL_N] = { 30, 15, 10, 10, 10, 10, 5, 10 };
 
 // ---- recuerdos: 5 mapas x 5. id = (mapa - 1) * 5 + i, i = 0..4 ----
 #define TRV_DESTS 5  // = YARD_MAPS (economy.h); pet.cpp lo comprueba

@@ -44,6 +44,12 @@ what it brought (coins, growth, sometimes an item, often a souvenir). The 25 sou
 fill the **Collection**, the third tab of the Bag. Serial `TRAVEL`, `TRAVEL <slot> <map> <0-2>`,
 `TRAVELT <min>`, `TRAVELEND`, `SOUV [mask]`.
 
+**v2.2: wild encounters.** Once in a while (10 % of days, 25 % if you walk 6,000 steps, more after trips)
+a bush, rock or lump of sand starts shaking in the yard with an excited jingle. Tap it to meet a wild pet,
+pick one fighter and battle it; win to grow your pet and maybe find an item, then throw a **Poké Ball** to
+catch it as an egg that hatches its first form at Lv 1. Omanyte, Kabuto, Aerodactyl, Dratini and Mew only come
+this way. See [Wild encounters](#wild-encounters-v22).
+
 **AMOLED-2.16 port (v1.19):** builds (PlatformIO and arduino-cli, pinned
 versions), passes the host test suite, and every screen has been rendered and
 checked on the PC. **Tested on a real 2.16" board on 2026-11-04**: bring-up and
@@ -105,8 +111,7 @@ progression, battery (AXP2101) and PWR button, AMOLED burn-in protection (pixel 
 **sound (ES8311)**, **8 UI languages (English default)**, **starter choice on
 first run**, and a one-click **web installer**.
 
-Pending: wild encounters / linked battles (designed, not implemented), 3D case, soak
-test. See **Roadmap**.
+Pending: linked battles (designed, not implemented), soak test. See **Roadmap**.
 
 ## Game manual (the actual numbers)
 
@@ -215,11 +220,13 @@ While **awake**, per minute:
 
 | Tier | Base chance | After a proper goodbye | # species |
 |---|---|---|---|
-| ✨ Legendary | ~3 %\* | ~10 % | 5 |
-| 🔵 Rare | ~27 % | ~45 % | 27 |
+| ✨ Legendary | ~3 %\* | ~10 % | 4 |
+| 🔵 Rare | ~27 % | ~45 % | 23 |
 | ⚪ Common | the rest | the rest | 47 |
 
   \* Legendaries only start appearing once you've **registered ≥ 25** Pokémon.
+- **Not from eggs (v2.2):** Omanyte, Kabuto, Aerodactyl, Dratini and Mew only come from
+  [wild encounters](#wild-encounters-v22).
 - A daily **streak** and high **bond** push rare/legendary odds higher.
 - A clean **goodbye blesses** the next egg; a **death by neglect curses** it (forces Common).
 - Within a tier it favors species whose **evolution line you haven't finished** (so
@@ -367,7 +374,8 @@ pre-selected. **Start** begins; tap the title to go back to the list.
 
   | Loot | Odds |
   |---|---|
-  | Cake | 35 % |
+  | Cake | 27 % |
+  | Poké Ball (v2.2) | 8 % |
   | Golden Berry | 25 % |
   | Protein / Iron / Carbos | 21 % (7 % each) |
   | Rare Candy | 7 % |
@@ -380,6 +388,41 @@ badges page, swipe **left** to go back (and once more to leave the Box). It show
 the ones you've earned in colour with the stage's name, the rest as a grey silhouette with "???".
 
 Battles between two boards over the air are next (see the roadmap).
+
+### Wild encounters (v2.2)
+- **When:** at most **one a day**. A **10 %** roll at a random time between 9:00 and 20:00 (the same time all
+  day, a restart doesn't change it). Walking **6,000 steps** that day adds a roll that brings the day to
+  **25 %**. Every trip that comes back adds a roll of **3 % per hour** (1 h 3 %, 3 h 9 %, 8 h 24 %). Rolls need
+  the clock set and someone to fight (the home pet or a Box pet); missed ones happen when the board turns on.
+- **In the yard:** a bush (Meadow, Forest), a rock (Quarry, Ruins) or a lump of sand (Beach) that shakes every
+  2.4 s with two red curved marks on each side, for **6 hours**. It plays an excited jingle when it appears
+  (after the pet wakes, if it was asleep). An exclusive one sparkles.
+- **The encounter:** tap it. Two black bands close in and the wild pet appears in a circle with its level;
+  tap again to choose **one** fighter, then the battle (the stage rules, one foe). Its level is centred on the
+  boss level of the **highest stage you've cleared** (10 with none), ±15 at most and usually within ±7; it
+  has evolved as far as that level allows, and is trained like that stage's minions.
+- **Who:** 95 % a common or rare line (no legendaries); lines whose type fits the yard map are **3×** as
+  likely. 5 % one of the **exclusives**: Omanyte, Kabuto, Aerodactyl, Dratini (24 % each) or Mew (4 %).
+  Shiny with the egg's odds.
+- **Win:** the fighter gets **1 h of growth** (the home pet also +3 JOY), and **50 %** of the time an item
+  goes straight into the Backpack:
+
+  | Drop | Odds |
+  |---|---|
+  | Cake | 30 % |
+  | Golden Berry | 30 % |
+  | Protein / Iron / Carbos | 21 % (7 % each) |
+  | Rare Candy | 8 % |
+  | Revive | 7 % |
+  | Shiny Charm | 4 % (a cake if you already hold one) |
+
+- **Poké Ball:** then "Throw a Poké Ball?" (Throw / NO). A throw **always catches**: the ball shakes three
+  times and clicks, and an **egg** goes into the Backpack. It hatches the **first form** of the caught pet's
+  line (a Dragonite gives a Dratini) at **Lv 1**, shiny if it was. Captured eggs come out of the Backpack
+  before the others; up to 4 can wait, and the egg's bubble says "Captured egg!". NO lets it go. Balls: 3 to
+  start (and once on updating), Shop 100 coins, stage boss loot (8 %), travel finds.
+- **Lose** (or quit the fight with USER / PWR): it **flees**. Leaving the intro or the picker with back keeps it
+  in the yard.
 
 ### Steps, finds & the Backpack (v1.20)
 
@@ -428,9 +471,9 @@ waving it around doesn't farm anything.
   | Egg | every 8000–15000 steps (v1.39), apart from the finds above and their daily cap; wrapped as a gift since v1.55 (straight home if the home is empty) | Not used by hand: it comes home by itself when home is free (an ending, or the pet stored in the Box). |
 
 - The **Backpack** holds up to 9 of each item. Since v1.53 it has its own button (the
-  backpack, last on the bottom row): every item with its count (a 3 × 3 grid since v1.59), greyed
-  when you have none, and a hint below. Tap an item to use it (a YES / NO dialog); the Charm, eggs
-  and the Revive aren't used by hand (a tap on the Revive says what it's for). It opens while the
+  backpack, last on the bottom row): every item with its count (a 4 × 3 grid since v2.2), greyed
+  when you have none, and a hint below. Tap an item to use it (a YES / NO dialog); the Charm, eggs,
+  the Revive and the Poké Ball aren't used by hand (a tap on the Revive or the ball says what it's for). It opens while the
   pet sleeps too, just to look.
 - The stat card's 5th page, **WALK** (swipe up, then left four times), shows today's steps with
   a ring toward the next goal and a flag per goal reached, the total and today's finds (random
@@ -607,7 +650,7 @@ yard: tap it to see the time left, shake the board to speed it up.
 
 **Coins (v2.0):** each minigame pays 3–8 by result, a stage's first clear 50 and a repeat clear 10 (once per
 stage per day), walk goals 10 / 20 / 40. Games and repeat clears stop at 150 a day. They are spent in the
-Shop: berries 30, cake 40, protein / iron / carbos 60, Revive 80, rare candy 150, and backgrounds 150–250.
+Shop: berries 30, cake 40, protein / iron / carbos 60, Revive 80, Poké Ball 100 (v2.2), rare candy 150, and backgrounds 150–250.
 Backgrounds are yours, not the pet's: you start with the meadow, and a map you buy works for every pet.
 
 **Touch gestures:**
@@ -853,7 +896,9 @@ form shows the farewell button) · `TAP <x> <y>` (a tap at
 canvas coordinates, through the same path as a finger; prints the battle phase) · `COINS [n]` (coins and
 today's capped earnings; with n, set them) · `SHOP` (prices, counts, maps owned) · `BUY <item>` /
 `BUYMAP <n>` (buy as if from the Shop) · `YARDBG <n>` (show yard map n, 0 = the chosen one) · `EGGT <min>`
-(fast-forward the yard egg).
+(fast-forward the yard egg) · `ENC [dex]` (a wild encounter appears now; with a dex number, that
+species) · `ENC?` (today's rolls, the base roll's time, the wild pet, the captured eggs) · `ENCEND` (it goes
+away) · `BALLS [n]` (Poké Balls; with n, set them).
 
 To test fast: lower `PET_TICK_MS` and `FAREWELL_AGE_MIN` in `pet.h` (levels count game minutes, so they
 speed up with the tick; the per-level costs are in `growth.h`), or jump levels with `LVL <n>` over serial.
@@ -877,7 +922,8 @@ Specified in [docs/FEATURES.md](docs/FEATURES.md), each one its own task:
 - **Link** — two nearby boards meet over ESP-NOW for playdates (visit & play,
   gifts, friendship egg) and battles, on the v1.24 engine; includes a build for
   the round 1.75" board.
-- **Wild encounters** — later, reusing the battle engine.
+- ~~**Wild encounters**~~ — done in v2.2: a rustling bush, rock or sand in the yard, one fighter against a
+  wild pet, and Poké Balls to catch it as an egg.
 - **Soak test** 24–48 h (instrumentation ready: `HEALTH` command/heartbeat).
 
 *(Done: 3D-printed case [published on MakerWorld](https://makerworld.com/es/models/2937822-tamapoke-a-pokemon-pokeball-tamagotchi); repo public with the browser installer + one-click sprite bundle.)*

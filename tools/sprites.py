@@ -824,6 +824,50 @@ def gift():
     return g.rows()
 
 
+def wild_bush():
+    # encuentro salvaje (v2.2): el arbusto que se mueve en el prado y el bosque. Tres matas verdes con brillo
+    g = G()
+    g.disk(9.5, 19, 8, 7.5, 'g', 'G')
+    g.disk(22.5, 19, 8, 7.5, 'g', 'G')
+    g.disk(16, 13, 9, 8.5, 'g', 'G')
+    g.disk(16, 22, 11, 6.5, 'g', 'G')
+    g.rect(5, 26, 27, 28, 'G')
+    g.outline()
+    for x, y in ((11, 8), (12, 9), (13, 7), (5, 15), (6, 14), (19, 9), (25, 14), (26, 15), (14, 17), (21, 19)):
+        g.px(x, y, 't')
+    for x, y in ((9, 22), (17, 24), (23, 23), (13, 26), (20, 27)):
+        g.px(x, y, 'd')
+    return g.rows()
+
+
+def wild_rock():
+    # encuentro salvaje (v2.2): la roca de la cantera y las ruinas, gris con una grieta
+    g = G()
+    g.disk(16, 20, 13.5, 9.5, 's', 'S')
+    g.disk(13, 13, 8, 7, 's', 'S')
+    g.rect(3, 26, 29, 28, 'S')
+    g.outline()
+    for x, y in ((10, 9), (11, 8), (12, 8), (9, 10), (20, 15), (21, 15), (6, 18)):
+        g.px(x, y, 'w')
+    for x, y in ((18, 18), (19, 19), (19, 20), (20, 21), (21, 22), (21, 23), (15, 12), (16, 13)):
+        g.px(x, y, 'k')
+    return g.rows()
+
+
+def wild_sand():
+    # encuentro salvaje (v2.2): el monton de arena de la playa, con chinas y una concha
+    g = G()
+    g.disk(16, 25, 14.5, 7.5, 'y', 'Y')
+    g.disk(14, 20, 8, 5.5, 'y', 'Y')
+    g.rect(3, 28, 29, 29, 'Y')
+    g.outline()
+    for x, y in ((9, 22), (21, 25), (14, 27), (25, 22)):
+        g.px(x, y, 'c')
+    g.px(11, 17, 'w'); g.px(12, 16, 'w'); g.px(6, 23, 'w')
+    g.rect(18, 19, 20, 20, 'p'); g.px(19, 18, 'p')  # concha
+    return g.rows()
+
+
 def star():
     # estrella amarilla para marcar una baya (escala 1, 16 px): gruesa y llena
     return [
@@ -1060,6 +1104,9 @@ SPRITES = {
     "HEART": heart(),
     "GIFT": gift(),
     "STAR": star(),
+    "WILD_BUSH": wild_bush(),
+    "WILD_ROCK": wild_rock(),
+    "WILD_SAND": wild_sand(),
 }
 
 # comentario a medida en la declaracion C (por defecto "NxN") y linea de

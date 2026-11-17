@@ -64,6 +64,7 @@ enum StrId : uint16_t {
   S_GRUMPY, S_DIZZY,
   // nombres de los objetos, en el orden de IT_* (pet.h)
   S_IT_GOLDEN, S_IT_PROTEIN, S_IT_IRON, S_IT_CARBOS, S_IT_CHARM, S_IT_RARECANDY, S_IT_EGG, S_IT_CAKE, S_IT_REVIVE,
+  S_IT_BALL,  // v2.2
   // combate de practica (v1.24): tarjeta VS, rotulos de cada golpe, resultado
   S_PRACTICE, S_SUPER_EFF, S_NOT_EFF, S_NO_EFFECT, S_CRITICAL, S_SPECIAL, S_TAP_CHARGE,
   S_SUDDEN_DEATH, S_RECOIL,  // v1.67: muerte subita (ataque 21 en adelante)
@@ -122,6 +123,10 @@ enum StrId : uint16_t {
   // los viajes, las pantallas (v2.0, Y5b)
   S_TRV_TITLE, S_TRV_TRAVELLING, S_TRV_ONWAY, S_TRV_BACK_FMT, S_TRV_AWAY, S_TRV_GO, S_TRV_BAGFULL, S_TRV_NEW,
   S_TRV_FOUND_FMT, S_COLLECTION, S_TRV_NOPETS, S_TRV_NOCLOCK, S_RAR_0, S_RAR_1, S_RAR_2, S_TRV_AWAY_FMT,
+  // encuentros salvajes (v2.2): la pista de la Poke Ball, la pantalla del encuentro, el resultado y la captura
+  S_BALL_HINT, S_WILD_APPEARED_FMT, S_WILD_TAP, S_WILD_PICK, S_WILD, S_WILD_WON, S_WILD_LOST,
+  S_WILD_GROW, S_THROW_BALL, S_BALLS_LEFT_FMT, S_THROW, S_CAPTURED_FMT, S_CAPTURE_EGG, S_WILD_LEFT_FMT,
+  S_WILD_FLED_FMT, S_NO_BALLS, S_NO_ROOM, S_EGG_CAPTURED,
   STR_COUNT
 };
 

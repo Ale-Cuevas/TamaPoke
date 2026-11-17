@@ -231,7 +231,10 @@ CLASSIC = [1, 4, 7, 25, 133]
 
 # rarezas de las formas base (lo que no este aqui y sea base = comun)
 RARE = {58, 77, 83, 88, 95, 106, 107, 108, 111, 113, 114, 115, 122, 123,
-        124, 125, 126, 127, 128, 131, 132, 137, 138, 140, 142, 143, 147}
-LEGENDARY = {144, 145, 146, 150, 151}
+        124, 125, 126, 127, 128, 131, 132, 137, 143}
+LEGENDARY = {144, 145, 146, 150}
+# solo por encuentro salvaje (v2.2, encounter.h): no salen de huevos al azar. Se capturan con una Poke
+# Ball y su huevo nace en la forma base. Antes eran raros (fosiles y Dratini) y legendario (Mew)
+ENCOUNTER_ONLY = {138, 140, 142, 147, 151}
 
 SLUGS = {n: s for n, s, *_ in DEX}

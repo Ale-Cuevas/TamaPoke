@@ -3,6 +3,7 @@
 #include "audio.h"
 #include "zengame.h"
 #include "dashgame.h"
+#include "encounter.h"  // encuentros salvajes (v2.2): tiradas del dia, nivel y especie (logica pura)
 
 void Pet::begin() {
   prefs.begin("tamapoke", false);
@@ -12,8 +13,10 @@ void Pet::begin() {
     prefs.putUChar("gcv", GROW_CURVE_VER);
     prefs.putBool("init", true);
     items[IT_REVIVE] = REVIVE_START;  // v1.59: una partida nueva trae 3 Revivir (newEgg guarda la mochila)
+    items[IT_BALL] = BALL_START;      // v2.2: y 3 Poke Balls
     newEgg();
     prefs.putBool("rvg", true);       // despues: un corte antes deja la partida sin "rvg" y los da load()
+    prefs.putBool("ballg", true);
   } else {
     load();
     migrateGrowthCurve();  // los contadores de la curva v1 (3 h) pasan a la nueva (2 h)
@@ -57,7 +60,7 @@ void Pet::resetHome() {
   wokeUp();
 }
 
-void Pet::newEgg(bool saveNow, int16_t heir) {
+void Pet::newEgg(bool saveNow, int16_t heir, int8_t shinyForce) {
   resetHome();
   vacant = false;
   if (eggHeldFlag) {
@@ -72,9 +75,12 @@ void Pet::newEgg(bool saveNow, int16_t heir) {
     starterPick = (registeredCount() == 0);  // primera partida: el jugador elige inicial
     // amuleto shiny de la mochila: lo gasta este huevo. No el inicial, ni
     // pickEggSpecies(), que tambien usa la simulacion de tiradas (comando EGGS).
-    bool charm = items[IT_CHARM] && !starterPick;
+    // v2.2: el huevo de una captura ya trae su tirada (la del salvaje) y no gasta el amuleto
+    bool charm = items[IT_CHARM] && !starterPick && shinyForce < 0;
     if (charm) items[IT_CHARM] = 0;
     eggShiny = (random(shinyOdds(charm)) == 0);
+    if (shinyForce >= 0) eggShiny = shinyForce > 0;
+    eggCap = shinyForce >= 0;
     eggTaps = 0;
     eggPlaced = 0;
     eggSaved = 0;
@@ -117,11 +123,49 @@ void Pet::freeHome() {
   if (eggHeldFlag) {
     newEgg();
   } else if (items[IT_EGG]) {
-    items[IT_EGG]--;
-    newEgg();
+    bagEggOut(true);
   } else {
     vacate();
   }
+}
+
+// un huevo de la mochila pasa a casa (v2.2): primero los de captura, con su especie y su tirada shiny
+void Pet::bagEggOut(bool saveNow) {
+  if (!items[IT_EGG]) return;
+  items[IT_EGG]--;
+  if (capN) {
+    int16_t d = capDex[0];
+    bool sh = capShiny[0];
+    for (uint8_t i = 1; i < capN; i++) {
+      capDex[i - 1] = capDex[i];
+      capShiny[i - 1] = capShiny[i];
+    }
+    capN--;
+    newEgg(saveNow, d, sh ? 1 : 0);
+    return;
+  }
+  newEgg(saveNow);
+}
+
+// un huevo de captura a la cola (al principio: el de la incubadora que vuelve a la mochila)
+void Pet::capPush(int16_t dex, bool sh, bool front) {
+  if (dex < 1 || dex > DEX_COUNT) return;
+  if (capN >= CAP_EGG_MAX) {
+    if (!front) return;
+    capN = CAP_EGG_MAX - 1;  // (no deberia pasar: captureBlock lo impide) se pierde el ultimo
+  }
+  if (front) {
+    for (uint8_t i = capN; i > 0; i--) {
+      capDex[i] = capDex[i - 1];
+      capShiny[i] = capShiny[i - 1];
+    }
+    capDex[0] = (uint8_t)dex;
+    capShiny[0] = sh;
+  } else {
+    capDex[capN] = (uint8_t)dex;
+    capShiny[capN] = sh;
+  }
+  capN++;
 }
 
 // Fin de una crianza (soltar, despedida, escapada; v1.41): ningun huevo llega solo a casa. La casa se
@@ -145,8 +189,12 @@ void Pet::endLife(uint8_t cer) {
     // mochila; si esta llena, se pierde y lo dice (como el premio de la despedida)
     if (eggHeldFlag) {
       eggHeldFlag = false;
-      if (items[IT_EGG] < ITEM_MAX) items[IT_EGG]++;
-      else queueFound(IT_EGG, true, false);
+      if (items[IT_EGG] < ITEM_MAX) {
+        items[IT_EGG]++;
+        if (eggCap) capPush(eggTarget, eggShiny, true);  // v2.2: sigue siendo el de la captura
+      } else {
+        queueFound(IT_EGG, true, false);
+      }
     }
     newEgg(true, heir);
     return;
@@ -157,6 +205,7 @@ void Pet::endLife(uint8_t cer) {
       return;
     }
     items[IT_EGG]++;
+    if (eggCap) capPush(eggTarget, eggShiny, true);  // v2.2: sigue siendo el de la captura
     eggHeldFlag = false;
   }
   if (!items[IT_EGG] && !boxHasPets()) giveFound(IT_EGG, true);
@@ -183,18 +232,19 @@ void Pet::vacate(bool saveNow) {
   if (!eggHeldFlag) {  // (el de la incubadora conserva su hora)
     eggPlaced = 0;
     eggSaved = 0;
+    eggCap = false;
   }
   persist(saveNow);
 }
 
 void Pet::eggToHome(bool saveNow) {
   if (!vacant || !items[IT_EGG]) return;
-  items[IT_EGG]--;
-  newEgg(saveNow);
+  bagEggOut(saveNow);
 }
 
 void Pet::setBagEggs(uint8_t n) {
   items[IT_EGG] = n > ITEM_MAX ? ITEM_MAX : n;
+  if (capN > items[IT_EGG]) capN = items[IT_EGG];  // v2.2: los de captura son de los de la mochila
   save();  // v1.40: con la casa vacia se quedan en la mochila (el boton de la casa los abre)
 }
 
@@ -228,6 +278,7 @@ void Pet::syncClock(uint32_t nowEpoch) {
   lastSeenEpoch = nowEpoch;
   if (nowEpoch == 0) return;
   travelCheck();  // Y5: un viaje que acabo con la placa apagada vuelve ahora
+  encCheck();     // v2.2: el encuentro de hoy (las tiradas que tocaban apagada, y el que ya se fue)
   uint32_t mins = (seen && nowEpoch > seen) ? (nowEpoch - seen) / 60 : 0;
   // v1.64: la hora del Revivir es real: apagada tambien corre (el resto del tiempo esta parado)
   if (dying && ceremony == CER_NONE && mins) {
@@ -288,6 +339,7 @@ void Pet::update(uint32_t nowMs) {
 
 void Pet::tick() {
   travelCheck();  // Y5: el viaje de un bicho de la caja (no depende del de casa)
+  encCheck();     // v2.2: el encuentro salvaje del dia (del jugador: tampoco depende del de casa)
   // muriendose (v1.64): solo corre la hora del Revivir; al acabarse, la UI dice que murio
   if (dying && ceremony == CER_NONE && dyingMin < REVIVE_LIMIT_MIN) {
     if (++dyingMin >= REVIVE_LIMIT_MIN) {
@@ -654,6 +706,7 @@ void Pet::release() {
 
 void Pet::hatch() {
   speciesId = eggTarget;
+  eggCap = false;  // v2.2: ya nacio
   eggPlaced = 0;  // el huevo del patio ya no esta
   eggSaved = 0;
   shiny = eggShiny;
@@ -1072,6 +1125,7 @@ void Pet::addSteps(uint32_t n, uint32_t day) {
       goalBannerCoins += addCoins(coinsForGoal(tier), false);  // fuera del tope diario; con el bicho dormido tambien
       goalReward(tier, rewarded);
     }
+    encCheck();  // v2.2: los ENC_WALK_STEPS pasos del dia dan otra tirada de encuentro
   }
 }
 
@@ -1233,7 +1287,8 @@ uint8_t Pet::itemCount() const {
 bool Pet::canUseItem(uint8_t it) const {
   // el amuleto, el huevo y el Revivir no se usan a mano: uno se lleva, otro va a casa cuando queda
   // libre, y el Revivir se ofrece cuando el bicho se muere (v1.59)
-  if (it >= IT_COUNT || it == IT_CHARM || it == IT_EGG || it == IT_REVIVE || !items[it]) return false;
+  // (v2.2) la Poke Ball tampoco: se lanza al ganar a un bicho salvaje
+  if (it >= IT_COUNT || it == IT_CHARM || it == IT_EGG || it == IT_REVIVE || it == IT_BALL || !items[it]) return false;
   if (isEgg() || sleeping || busyEnding()) return false;
   if (it == IT_PROTEIN) return trAtk < 100;
   if (it == IT_IRON) return trDef < 100;
@@ -1334,6 +1389,7 @@ uint8_t Pet::rollBattleItem() {
   else if ((r -= BDROP_VITAMIN) < BDROP_RARECANDY) it = IT_RARECANDY;
   else if ((r -= BDROP_RARECANDY) < BDROP_CHARM) it = IT_CHARM;
   else if ((r -= BDROP_CHARM) < BDROP_REVIVE) it = IT_REVIVE;
+  else if ((r -= BDROP_REVIVE) < BDROP_BALL) it = IT_BALL;  // v2.2
   else it = IT_EGG;
   if (it == IT_CHARM && items[IT_CHARM]) it = IT_CAKE;  // solo se lleva un amuleto
   return it;
@@ -1374,7 +1430,7 @@ bool Pet::teamCanFight(uint32_t id) const {
 }
 
 // ---------- monedas (Y4) ----------
-static_assert(IT_REVIVE + 1 == ECO_ITEMS, "economy.h: un precio por objeto de pet.h");
+static_assert(IT_BALL + 1 == ECO_ITEMS, "economy.h: un precio por objeto de pet.h");
 
 uint16_t Pet::coinsEarnedToday() const { return coinDay == today() ? coinToday : 0; }
 
@@ -1437,7 +1493,7 @@ void Pet::chooseMap(uint8_t n) {
 static_assert(TRV_DESTS == YARD_MAPS, "travel.h: un destino por mapa del patio");
 static_assert(TRV_POOL_ID[0] == IT_GOLDEN && TRV_POOL_ID[1] == IT_CAKE && TRV_POOL_ID[2] == IT_PROTEIN &&
                 TRV_POOL_ID[3] == IT_IRON && TRV_POOL_ID[4] == IT_CARBOS && TRV_POOL_ID[5] == IT_RARECANDY &&
-                TRV_POOL_ID[6] == IT_REVIVE,
+                TRV_POOL_ID[6] == IT_REVIVE && TRV_POOL_ID[7] == IT_BALL,
               "travel.h: los ids de objeto son los de pet.h");
 
 uint8_t Pet::souvenirCount() const {
@@ -1540,6 +1596,7 @@ void Pet::travelComplete() {
   trvResult = r;
   trvResPending = true;
   save();  // 3.
+  encTravelRoll(TRV_MIN[trvTier < TRV_TIERS ? trvTier : 0] / 60);  // v2.2: viajar tambien trae encuentros
 }
 
 bool Pet::takeTravelResult(TravelResult *out) {
@@ -1636,6 +1693,203 @@ StageReward Pet::stageDone(uint8_t stage, bool cleared, const uint32_t *uids, ui
   checkMedals(false);  // el de casa puede haber cruzado el 10, 25 o 50 (no hace nada con un huevo)
   save();              // 4. fin de una pantalla de juego: se guarda ya
   return res;
+}
+
+// ---------- encuentros salvajes (v2.2, encounter.h) ----------
+//
+// "enc" (16 bytes, una entrada: o esta o no): dia de las tiradas, cuando salio, el salvaje (especie, nivel,
+// entrenamiento), la mascara de tiradas del dia y sus flags (shiny, exclusivo, ganado). Las tiradas solo
+// marcan el guardado (pasan en el tick o al contar pasos: save() congela ~1 s); pelear y lanzar la Poke Ball
+// son toques y guardan al momento.
+
+void Pet::encPersist() {
+  uint8_t e[16] = { 0 };
+  memcpy(e, &encDay, 4);
+  memcpy(e + 4, &encSpawnAt, 4);
+  memcpy(e + 8, &encDexV, 2);
+  e[10] = encLv;
+  e[11] = encRolled;
+  e[12] = encFlags;
+  memcpy(e + 13, encTr, 3);
+  prefs.putBytes("enc", e, sizeof(e));
+}
+
+bool Pet::encActive() const { return encSpawnAt && !(encFlags & ENCF_WON) && encAlive(encSpawnAt, lastSeenEpoch); }
+
+uint16_t Pet::encMinutesLeft() const { return encActive() ? ::encMinutesLeft(encSpawnAt, lastSeenEpoch) : 0; }
+
+// alguien con quien pelear: el de casa nacido o alguien en la caja (dormido o de viaje tambien: el encuentro
+// espera 6 h). Sin eso no se tira (la tirada se queda para luego)
+bool Pet::encCanRoll() const { return !starterPick && (!isEgg() || boxHasPets()); }
+
+void Pet::encStart(int16_t dex, uint32_t rng) {
+  EncWild w = encRollWild(yardMapWanted(), badges, rng);
+  if (dex >= 1 && dex <= DEX_COUNT) {  // serie ENC <dex>: esa especie, al nivel del sorteo
+    w.dex = dex;
+    w.exclusive = DEX_TBL[DEX_TBL[dex].base].rarity == R_ENCUENTRO;
+  }
+  encDexV = w.dex;
+  encLv = w.level;
+  encTr[0] = w.tAtk;
+  encTr[1] = w.tDef;
+  encTr[2] = w.tSpe;
+  encFlags = (w.exclusive ? ENCF_EXCL : 0) | (random(shinyOdds(false)) == 0 ? ENCF_SHINY : 0);
+  encSpawnAt = lastSeenEpoch;
+  encRolled |= ENC_ROLL_SPAWNED;
+  encSound = true;
+  pendingSave = true;
+  Serial.printf("enc: sale #%d nv.%u%s%s ent.%u/%u/%u\n", encDexV, encLv, encShiny() ? " shiny" : "",
+                encExclusive() ? " exclusivo" : "", encTr[0], encTr[1], encTr[2]);
+}
+
+void Pet::encEnd() {
+  encSpawnAt = 0;
+  encFlags = 0;
+  encSound = false;
+  pendingSave = true;
+}
+
+void Pet::encCheck() {
+  uint32_t now = lastSeenEpoch;
+  if (!eggClockKnown(now)) return;  // sin hora no hay dias ni 6 h
+  if (encSpawnAt && !(encFlags & ENCF_WON) && !encAlive(encSpawnAt, now)) {
+    Serial.println("enc: se fue (6 h)");
+    encEnd();
+  }
+  uint32_t d = today();
+  if (d != encDay) {
+    encDay = d;
+    encRolled = 0;
+    pendingSave = true;
+  }
+  if (encSpawnAt || (encRolled & ENC_ROLL_SPAWNED) || !encCanRoll()) return;
+  uint32_t rng = ((uint32_t)random(0x10000) << 16) | (uint32_t)random(0x10000);
+  if (!(encRolled & ENC_ROLL_BASE) && (now / 60) % 1440 >= encBaseMinute(d)) {
+    encRolled |= ENC_ROLL_BASE;
+    pendingSave = true;
+    bool hit = encHit(ENC_BASE_PERMIL, rng);
+    Serial.printf("enc: tirada base %s\n", hit ? "SI" : "no");
+    if (hit) {
+      encStart(0, rng);
+      return;
+    }
+  }
+  if (!(encRolled & ENC_ROLL_WALK) && stepsOn(d) >= ENC_WALK_STEPS) {
+    encRolled |= ENC_ROLL_WALK;
+    pendingSave = true;
+    bool hit = encHit(ENC_WALK_PERMIL, rng);
+    Serial.printf("enc: tirada de pasear %s\n", hit ? "SI" : "no");
+    if (hit) encStart(0, rng);
+  }
+}
+
+void Pet::encTravelRoll(uint16_t hours) {
+  encCheck();  // el dia al dia (y el que ya se fue, fuera) antes de tirar
+  if (!eggClockKnown(lastSeenEpoch) || encSpawnAt || (encRolled & ENC_ROLL_SPAWNED) || !encCanRoll()) return;
+  uint32_t rng = ((uint32_t)random(0x10000) << 16) | (uint32_t)random(0x10000);
+  bool hit = encHit(encTravelPermil(hours), rng);
+  Serial.printf("enc: tirada del viaje (%u h) %s\n", hours, hit ? "SI" : "no");
+  if (hit) encStart(0, rng);
+}
+
+bool Pet::encSpawnNow(int16_t dex) {
+  if (!eggClockKnown(lastSeenEpoch)) return false;
+  encCheck();
+  if (encDay != today()) {
+    encDay = today();
+    encRolled = 0;
+  }
+  uint32_t rng = ((uint32_t)random(0x10000) << 16) | (uint32_t)random(0x10000);
+  encStart(dex, rng);
+  return true;
+}
+
+void Pet::encClear() {
+  encEnd();
+  save();
+}
+
+uint8_t Pet::rollWildItem() {
+  long r = random(100);
+  uint8_t it;
+  if (r < WDROP_CAKE) it = IT_CAKE;
+  else if ((r -= WDROP_CAKE) < WDROP_GOLDEN) it = IT_GOLDEN;
+  else if ((r -= WDROP_GOLDEN) < WDROP_VITAMIN) it = IT_PROTEIN + random(3);
+  else if ((r -= WDROP_VITAMIN) < WDROP_RARECANDY) it = IT_RARECANDY;
+  else if ((r -= WDROP_RARECANDY) < WDROP_REVIVE) it = IT_REVIVE;
+  else it = IT_CHARM;
+  if (it == IT_CHARM && items[IT_CHARM]) it = IT_CAKE;  // solo se lleva un amuleto
+  return it;
+}
+
+// Fin del combate. Orden de escritura (corte de luz): 1. el que peleo, si es de la caja (writeSlot); 2. save():
+// el de casa, el objeto y "enc" ganado. Un corte entre 1 y 2 deja el encuentro sin pelear y el de la caja con
+// su hora: se puede volver a pelear (peor caso aceptado: una hora de mas), nunca se pierde el salvaje
+EncReward Pet::encounterDone(bool won, uint32_t fighter) {
+  EncReward r = { false, (uint8_t)IT_COUNT, false, 0, 0, 0 };
+  if (!encActive()) return r;
+  if (!won) {
+    Serial.printf("enc: #%d se escapa\n", encDexV);
+    encEnd();
+    save();
+    return r;
+  }
+  r.won = true;
+  int8_t k = teamSlotOf(fighter);
+  if (k == TEAM_HOME && !busyEnding()) {
+    r.lvBefore = level();
+    growMin += ENC_WIN_GROW_MIN;  // las subidas de nivel las ve la UI (fx.h); la evolucion, el boton
+    r.lvAfter = level();
+    uint8_t before = joy;
+    joy = clamp100(joy + ENC_WIN_JOY);
+    r.joy = joy - before;
+  } else if (k >= 0 && k < BOX_SLOTS) {
+    PetRecord rec = boxRec[k];
+    r.lvBefore = levelFor(rec.growMin);
+    rec.growMin += ENC_WIN_GROW_MIN;  // hiberna: evoluciona al despertar (como el premio de un estadio)
+    r.lvAfter = levelFor(rec.growMin);
+    writeSlot((uint8_t)k, rec);  // 1.
+  }
+  if (random(100) < ENC_DROP_PCT) {
+    r.item = rollWildItem();
+    uint8_t cap = (r.item == IT_CHARM) ? 1 : ITEM_MAX;
+    if (items[r.item] < cap) items[r.item]++;
+    else r.itemLost = true;
+  }
+  encFlags |= ENCF_WON;
+  checkMedals(false);
+  save();  // 2.
+  Serial.printf("enc: #%d vencido, nv %u->%u, objeto %d%s\n", encDexV, r.lvBefore, r.lvAfter,
+                r.item == IT_COUNT ? -1 : r.item, r.itemLost ? " (perdido)" : "");
+  return r;
+}
+
+uint8_t Pet::captureBlock() const {
+  if (!encWonPending()) return CAP_NONE;
+  if (!items[IT_BALL]) return CAP_NO_BALL;
+  if (items[IT_EGG] >= ITEM_MAX || capN >= CAP_EGG_MAX) return CAP_NO_ROOM;
+  return CAP_OK;
+}
+
+// la Poke Ball: el salvaje (en su forma base) a la cola de los huevos de captura y un huevo mas en la mochila.
+// Todo en un save(): la mochila (bola gastada, huevo nuevo) antes que "cegg" y "enc"
+bool Pet::captureWild() {
+  if (captureBlock() != CAP_OK) return false;
+  int16_t base = DEX_TBL[encDexV].base;
+  items[IT_BALL]--;
+  items[IT_EGG]++;
+  capPush(base, encShiny(), false);
+  Serial.printf("enc: #%d capturado -> huevo de #%d%s (%u en cola)\n", encDexV, base, encShiny() ? " shiny" : "", capN);
+  encEnd();
+  save();
+  return true;
+}
+
+void Pet::releaseWild() {
+  if (!encWonPending()) return;
+  Serial.printf("enc: #%d vuelve a la hierba\n", encDexV);
+  encEnd();
+  save();
 }
 
 // boca abajo de noche: a dormir, como el boton de luz pero sin escribir ya en flash
@@ -1754,6 +2008,18 @@ void Pet::save() {
     prefs.putBytes("gifts", g, sizeof(g));
   }
   prefs.putBool("eggH", eggHeldFlag);
+  // encuentros (v2.2), despues de la mochila: los huevos de captura son de los de la mochila (un corte
+  // entre las dos deja un huevo de mas sin su especie, nunca una especie sin huevo: load los ajusta)
+  {
+    uint8_t c[1 + 2 * CAP_EGG_MAX] = { capN };
+    for (uint8_t i = 0; i < capN; i++) {
+      c[1 + 2 * i] = capDex[i];
+      c[2 + 2 * i] = capShiny[i] ? 1 : 0;
+    }
+    prefs.putBytes("cegg", c, sizeof(c));
+  }
+  prefs.putBool("ecap", eggCap);
+  encPersist();
   // el resultado de un viaje sin ver (Y5), lo ultimo: un corte antes lo deja sin aviso, pero con el premio
   if (trvResPending) prefs.putBytes("trvR", &trvResult, sizeof(trvResult));
   else if (prefs.isKey("trvR")) prefs.remove("trvR");
@@ -1871,6 +2137,47 @@ void Pet::load() {
     items[IT_REVIVE] = n > ITEM_MAX ? ITEM_MAX : n;
     prefs.putBytes("bpack", items, sizeof(items));
     prefs.putBool("rvg", true);
+  }
+  // v2.2: una partida de antes de la Poke Ball recibe las 3 de una partida nueva, una vez (como "rvg")
+  if (!prefs.isKey("ballg")) {
+    uint16_t n = items[IT_BALL] + BALL_START;
+    items[IT_BALL] = n > ITEM_MAX ? ITEM_MAX : n;
+    prefs.putBytes("bpack", items, sizeof(items));
+    prefs.putBool("ballg", true);
+  }
+  // encuentros (v2.2): un guardado anterior no trae las claves (sin encuentro, sin huevos de captura)
+  capN = 0;
+  if (prefs.isKey("cegg")) {
+    uint8_t c[1 + 2 * CAP_EGG_MAX] = { 0 };
+    if (prefs.getBytes("cegg", c, sizeof(c)) == sizeof(c))
+      for (uint8_t i = 0; i < c[0] && i < CAP_EGG_MAX; i++) {
+        uint8_t d = c[1 + 2 * i];
+        if (d < 1 || d > DEX_COUNT) continue;
+        capDex[capN] = d;
+        capShiny[capN++] = c[2 + 2 * i] != 0;
+      }
+  }
+  if (capN > items[IT_EGG]) capN = items[IT_EGG];
+  eggCap = prefs.getBool("ecap", false);
+  encDay = 0;
+  encRolled = 0;
+  encSpawnAt = 0;
+  encFlags = 0;
+  if (prefs.isKey("enc")) {
+    uint8_t e[16] = { 0 };
+    if (prefs.getBytes("enc", e, sizeof(e)) == sizeof(e)) {
+      memcpy(&encDay, e, 4);
+      memcpy(&encSpawnAt, e + 4, 4);
+      memcpy(&encDexV, e + 8, 2);
+      encLv = e[10];
+      encRolled = e[11];
+      encFlags = e[12];
+      memcpy(encTr, e + 13, 3);
+      if (encDexV < 1 || encDexV > DEX_COUNT || !encLv) {
+        encSpawnAt = 0;
+        encFlags = 0;
+      }
+    }
   }
   coins = prefs.getUShort("cn", 0);  // un guardado anterior no trae las claves: 0
   if (coins > COIN_MAX) coins = COIN_MAX;

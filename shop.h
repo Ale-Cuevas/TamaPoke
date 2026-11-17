@@ -5,9 +5,9 @@
 #include "economy.h"
 
 // los objetos a la venta, en el orden en que aparecen en la tienda (ids de pet.h: IT_GOLDEN=0, PROTEIN,
-// IRON, CARBOS, CHARM, RARECANDY, EGG, CAKE, REVIVE). Solo entran los que cuestan algo.
+// IRON, CARBOS, CHARM, RARECANDY, EGG, CAKE, REVIVE, BALL). Solo entran los que cuestan algo.
 static const uint8_t SHOP_ORDER[] = { 0 /*GOLDEN*/, 7 /*CAKE*/, 5 /*RARECANDY*/, 1 /*PROTEIN*/, 2 /*IRON*/, 3 /*CARBOS*/,
-                                      8 /*REVIVE*/ };
+                                      8 /*REVIVE*/, 9 /*BALL*/ };
 #define SHOP_ITEMS ((int)(sizeof(SHOP_ORDER) / sizeof(SHOP_ORDER[0])))
 
 // cuantos objetos se venden de verdad (precio > 0): el test comprueba que SHOP_ORDER los cubre todos

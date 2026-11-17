@@ -38,7 +38,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "PASEO", "%lu PASOS", "TOTAL %lu", "HALLAZGOS %u/%u", "MOCHILA", "Sin sensor de pasos",
     "META!", "HALLAZGO!", "Mochila llena", "Usar %s?", "Amuleto: huevo shiny", "Vac\241a: sal a pasear!",
     "Est\240 enfadado!", "Qu\202 mareo...",
-    "BAYA DORADA", "PROTEINA", "HIERRO", "CARBURANTE", "AMULETO IRIS", "CARAMELO RARO", "HUEVO", "TARTA", "REVIVIR",
+    "BAYA DORADA", "PROTEINA", "HIERRO", "CARBURANTE", "AMULETO IRIS", "CARAMELO RARO", "HUEVO", "TARTA", "REVIVIR", "POK\220 BALL",
     // combate (v1.24)
     "ENTRENAMIENTO", "Es muy eficaz!", "No es muy eficaz...", "No le afecta...", "Golpe cr\241tico!", "Especial!",
     "Toca para cargar!", "Muerte s\243bita!", "Retroceso!", "GANASTE!", "PERDISTE...", "EMPATE", "Felicidad +%u", "Premio: una vez por hora",
@@ -99,6 +99,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Hizo un castillo de arena", "Explor\242 un pasillo oscuro", "Par\242 a merendar",
     // viajes: pantallas (v2.0, Y5b)
     "Viaje", "De viaje", "De camino...", "\255%s ha vuelto!", "fuera", "Ir", "Mochila llena", "NUEVO", "Hallado el %s", "Colecci\242n", "Guarda un bicho en la Caja\npara mandarlo de viaje", "Pon la hora para viajar", "Com\243n", "Poco com\243n", "Raro", "%s est\240 de viaje",
+    // encuentros salvajes (v2.2)
+    "Para un salvaje vencido", "\255Un %s salvaje!", "Toca para luchar", "Elige luchador", "Salvaje", "\255Ganaste!", "Se escap\242...", "+1 h de crecimiento", "\250Lanzar una Pok\202 Ball?", "Te quedan %u", "Lanzar", "\255%s capturado!", "Su huevo, en la mochila", "%s se march\242", "\255%s huy\242!", "No te quedan Pok\202 Balls", "No caben m\240s huevos", "\255Huevo capturado!",
   },
   // ---------------- EN ----------------
   {
@@ -131,7 +133,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "WALK", "%lu STEPS", "TOTAL %lu", "FINDS %u/%u", "BACKPACK", "No step sensor",
     "GOAL!", "FOUND!", "Backpack full", "Use %s?", "Charm: shinier egg", "Empty: go for a walk!",
     "Grumpy!", "So dizzy...",
-    "GOLDEN BERRY", "PROTEIN", "IRON", "CARBOS", "SHINY CHARM", "RARE CANDY", "EGG", "CAKE", "REVIVE",
+    "GOLDEN BERRY", "PROTEIN", "IRON", "CARBOS", "SHINY CHARM", "RARE CANDY", "EGG", "CAKE", "REVIVE", "POK\220 BALL",
     // combate (v1.24)
     "PRACTICE", "Super effective!", "Not very effective...", "No effect...", "Critical hit!", "Special!",
     "Tap to charge!", "Sudden death!", "Recoil!", "YOU WIN!", "YOU LOST...", "DRAW", "Joy +%u", "Reward: once an hour",
@@ -192,6 +194,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Built a sand castle", "Explored a dark corridor", "Stopped for a snack",
     // viajes: pantallas (v2.0, Y5b)
     "Travel", "Travelling", "On the way...", "%s is back!", "away", "Go", "Bag full", "NEW", "Found on %s", "Collection", "Store a pet in the Box\nto send it travelling", "Set the clock to travel", "Common", "Uncommon", "Rare", "%s is away",
+    // encuentros salvajes (v2.2)
+    "For a beaten wild pet", "A wild %s appeared!", "Tap to fight", "Choose a fighter", "Wild", "You won!", "It got away...", "+1 h of growth", "Throw a Pok\202 Ball?", "%u left", "Throw", "%s captured!", "Its egg is in the Backpack", "%s went away", "%s fled!", "No Pok\202 Balls left", "No room for another egg", "Captured egg!",
   },
   // ---------------- FR ----------------
   {
@@ -224,7 +228,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "BALADE", "%lu PAS", "TOTAL %lu", "TROUV\220S %u/%u", "SAC \205 DOS", "Pas de capteur",
     "OBJECTIF!", "TROUV\220!", "Sac plein", "Utiliser %s?", "Charme: oeuf chroma", "Vide: va te balader!",
     "Grognon!", "Tout \202tourdi...",
-    "BAIE DOR\220E", "PROT\220INE", "FER", "CARBONE", "CHARME CHROMA", "SUPER BONBON", "OEUF", "GATEAU", "RANIMER",
+    "BAIE DOR\220E", "PROT\220INE", "FER", "CARBONE", "CHARME CHROMA", "SUPER BONBON", "OEUF", "GATEAU", "RANIMER", "POKE BALL",
     // combate (v1.24)
     "ENTRA\214NEMENT", "Super efficace!", "Pas tr\212s efficace...", "Aucun effet...", "Coup critique!", "Sp\202cial!",
     "Tape pour charger!", "Mort subite !", "Recul !", "GAGN\220!", "PERDU...", "\220GALIT\220", "Bonheur +%u", "Prix: une fois par heure",
@@ -285,6 +289,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "A fait un chateau de sable", "A explore un couloir sombre", "S'est arrete pour un gouter",
     // viajes: pantallas (v2.0, Y5b)
     "Voyage", "En voyage", "En route...", "%s est de retour !", "absent", "Partir", "Sac plein", "NOUVEAU", "Trouve le %s", "Collection", "Range un bicho dans la Boite\npour l'envoyer en voyage", "Regle l'heure pour voyager", "Commun", "Peu commun", "Rare", "%s est parti",
+    // encuentros salvajes (v2.2)
+    "Pour un sauvage vaincu", "Un %s sauvage!", "Touche pour combattre", "Choisis un combattant", "Sauvage", "Gagne!", "Il a fui...", "+1 h de croissance", "Lancer une Poke Ball?", "Il en reste %u", "Lancer", "%s capture!", "Son oeuf est dans le sac", "%s est parti", "%s a fui!", "Plus de Poke Balls", "Plus de place pour un oeuf", "Oeuf capture!",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -322,7 +328,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "SPAZIERGANG", "%lu SCHRITTE", "GESAMT %lu", "FUNDE %u/%u", "RUCKSACK", "Kein Sensor",
     "ZIEL!", "GEFUNDEN!", "Rucksack voll", "%s nutzen?", "Pin: Ei schillert", "Leer: geh spazieren!",
     "Grummelig!", "Schwindelig...",
-    "GOLDBEERE", "PROTEIN", "EISEN", "CARBON", "SCHILLERPIN", "SONDERBONBON", "EI", "KUCHEN", "BELEBER",
+    "GOLDBEERE", "PROTEIN", "EISEN", "CARBON", "SCHILLERPIN", "SONDERBONBON", "EI", "KUCHEN", "BELEBER", "POKEBALL",
     // combate (v1.24)
     "TRAINING", "Sehr effektiv!", "Nicht sehr effektiv...", "Keine Wirkung...", "Volltreffer!", "Spezial!",
     "Tippen zum Laden!", "Sudden Death!", "R\201cksto\341!", "GEWONNEN!", "VERLOREN...", "UNENTSCHIEDEN", "Laune +%u", "Belohnung: 1x pro Stunde",
@@ -383,6 +389,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Baute eine Sandburg", "Erkundete einen dunklen Gang", "Machte Pause fuer einen Snack",
     // viajes: pantallas (v2.0, Y5b)
     "Reise", "Unterwegs", "Auf dem Weg...", "%s ist zurueck!", "weg", "Los", "Beutel voll", "NEU", "Gefunden am %s", "Sammlung", "Lege ein Tier in die Box,\num es auf Reisen zu schicken", "Stelle die Uhr zum Reisen", "Haeufig", "Selten", "Sehr selten", "%s ist unterwegs",
+    // encuentros salvajes (v2.2)
+    "Fuer ein besiegtes wildes", "Ein wildes %s!", "Tippe zum Kampf", "Waehle einen Kaempfer", "Wild", "Gewonnen!", "Entkommen...", "+1 h Wachstum", "Pokeball werfen?", "Noch %u", "Werfen", "%s gefangen!", "Sein Ei ist im Rucksack", "%s ist weg", "%s ist geflohen!", "Keine Pokebaelle mehr", "Kein Platz fuer ein Ei", "Gefangenes Ei!",
   },
   // ---------------- IT ----------------
   {
@@ -415,7 +423,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "PASSEGGIATA", "%lu PASSI", "TOTALE %lu", "TROVATI %u/%u", "ZAINO", "Nessun sensore",
     "OBIETTIVO!", "TROVATO!", "Zaino pieno", "Usare %s?", "Amuleto: uovo shiny", "Vuoto: fai due passi!",
     "Arrabbiato!", "Che capogiro...",
-    "BACCA D'ORO", "PROTEINA", "FERRO", "CARBURANTE", "CROMAMULETO", "CARAMELLA RARA", "UOVO", "TORTA", "RIANIMA",
+    "BACCA D'ORO", "PROTEINA", "FERRO", "CARBURANTE", "CROMAMULETO", "CARAMELLA RARA", "UOVO", "TORTA", "RIANIMA", "POKE BALL",
     // combate (v1.24)
     "ALLENAMENTO", "Superefficace!", "Non \212 molto efficace...", "Nessun effetto...", "Brutto colpo!", "Speciale!",
     "Tocca per caricare!", "Morte improvvisa!", "Contraccolpo!", "HAI VINTO!", "HAI PERSO...", "PAREGGIO", "Felicit\205 +%u", "Premio: una volta l'ora",
@@ -476,6 +484,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Ha costruito un castello di sabbia", "Ha esplorato un corridoio buio", "Si e fermato per uno spuntino",
     // viajes: pantallas (v2.0, Y5b)
     "Viaggio", "In viaggio", "In cammino...", "%s e tornato!", "via", "Vai", "Zaino pieno", "NUOVO", "Trovato il %s", "Collezione", "Metti un mostro nel Box\nper mandarlo in viaggio", "Imposta l'ora per viaggiare", "Comune", "Non comune", "Raro", "%s e in viaggio",
+    // encuentros salvajes (v2.2)
+    "Per un selvatico battuto", "Un %s selvatico!", "Tocca per lottare", "Scegli chi lotta", "Selvatico", "Vinto!", "E fuggito...", "+1 h di crescita", "Lanciare una Poke Ball?", "Ne restano %u", "Lancia", "%s catturato!", "Il suo uovo e nello zaino", "%s se ne e andato", "%s e fuggito!", "Niente Poke Ball", "Non c'e posto per un uovo", "Uovo catturato!",
   },
   // ---------------- PT ----------------
   {
@@ -508,7 +518,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "PASSEIO", "%lu PASSOS", "TOTAL %lu", "ACHADOS %u/%u", "MOCHILA", "Sem sensor",
     "META!", "ACHOU!", "Mochila cheia", "Usar %s?", "Amuleto: ovo shiny", "Vazia: vai passear!",
     "Zangado!", "Que tontura...",
-    "BAGA DOURADA", "PROTEINA", "FERRO", "CARBOS", "AMULETO BRILHANTE", "DOCE RARO", "OVO", "BOLO", "REVIVER",
+    "BAGA DOURADA", "PROTEINA", "FERRO", "CARBOS", "AMULETO BRILHANTE", "DOCE RARO", "OVO", "BOLO", "REVIVER", "POKE BOLA",
     // combate (v1.24)
     "TREINO", "Super efetivo!", "Pouco efetivo...", "Sem efeito...", "Golpe cr\241tico!", "Especial!",
     "Toque para carregar!", "Morte s\243bita!", "Recuo!", "VENCEU!", "PERDEU...", "EMPATE", "Alegria +%u", "Pr\210mio: 1 vez por hora",
@@ -569,6 +579,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Fez um castelo de areia", "Explorou um corredor escuro", "Parou para um lanche",
     // viajes: pantallas (v2.0, Y5b)
     "Viagem", "Em viagem", "A caminho...", "%s voltou!", "fora", "Ir", "Mochila cheia", "NOVO", "Achado em %s", "Colecao", "Guarde um bicho na Caixa\npara mandar viajar", "Acerte a hora para viajar", "Comum", "Incomum", "Raro", "%s esta viajando",
+    // encuentros salvajes (v2.2)
+    "Para um selvagem vencido", "Um %s selvagem!", "Toca para lutar", "Escolhe quem luta", "Selvagem", "Ganhaste!", "Fugiu...", "+1 h de crescimento", "Lancar uma Poke Bola?", "Restam %u", "Lancar", "%s capturado!", "O ovo esta na mochila", "%s foi embora", "%s fugiu!", "Sem Poke Bolas", "Nao cabem mais ovos", "Ovo capturado!",
   },
   // ---------------- JA ----------------
   {
@@ -623,7 +635,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "さんぽ", "%lu ほ", "ごうけい %lu", "みつけた %u/%u", "リュック", "センサーなし",
     "もくひょう！", "みつけた！", "リュックがいっぱい", "%sをつかう？", "おまもり: いろちがい", "からっぽ: さんぽしよう！",
     "ぷんぷん！", "くらくら...",
-    "きんのみ", "プロテイン", "アイアン", "カーボス", "ひかるおまもり", "ふしぎなアメ", "たまご", "ケーキ", "ふっかつ",
+    "きんのみ", "プロテイン", "アイアン", "カーボス", "ひかるおまもり", "ふしぎなアメ", "たまご", "ケーキ", "ふっかつ", "モンスターボール",
     // combate (v1.24)
     "れんしゅう", "こうかは ばつぐんだ！", "こうかは いまひとつ...", "こうかが ない...", "きゅうしょに あたった！", "ひっさつ！",
     "タッチで ためる！", "サドンデス！", "はんどう！", "かった！", "まけた...", "ひきわけ", "ごきげん +%u", "ごほうびは 1じかんに 1かい",
@@ -684,6 +696,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "すなのおしろをつくった", "くらいろうかをたんけん", "おやつをたべた",
     // viajes: pantallas (v2.0, Y5b)
     "たび", "たびのさいちゅう", "とちゅう...", "%sがかえってきた！", "るす", "ゴー", "ふくろがいっぱい", "あたらしい", "%sにはっけん", "コレクション", "ボックスにあずけてね\nたびにだせるよ", "とけいをあわせてね", "ふつう", "ちょっとめずらしい", "レア", "%sはたびのなか",
+    // encuentros salvajes (v2.2)
+    "かったやせいにつかう", "やせいの%sがあらわれた!", "タッチでたたかう", "たたかうポケモンをえらぶ", "やせい", "かった!", "にげられた...", "+1じかんぶんせいちょう", "ボールをなげる?", "のこり%u", "なげる", "%sをつかまえた!", "タマゴはバッグに", "%sはさっていった", "%sはにげた!", "ボールがない", "タマゴがいっぱい", "つかまえたタマゴ!",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -721,7 +735,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "산책", "%lu 걸음", "누적 %lu", "발견 %u/%u", "배낭", "센서 없음",
     "목표 달성!", "발견!", "배낭이 가득", "%s 사용?", "부적: 이로치 알", "비었어요: 산책하자!",
     "화났어!", "어지러워...",
-    "황금열매", "프로테인", "아이언", "카보스", "빛나는부적", "이상한사탕", "알", "케이크", "부활",
+    "황금열매", "프로테인", "아이언", "카보스", "빛나는부적", "이상한사탕", "알", "케이크", "부활", "몬스터볼",
     // combate (v1.24)
     "연습", "효과가 굉장했다!", "효과가 별로인 듯...", "효과가 없다...", "급소에 맞았다!", "필살기!",
     "탭해서 모으기!", "서든데스!", "반동!", "이겼다!", "졌다...", "무승부", "기분 +%u", "보상은 1시간에 1번",
@@ -782,6 +796,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "모래성을 쌓았어요", "어두운 복도를 탐험했어요", "간식을 먹으려 쉬었어요",
     // viajes: pantallas (v2.0, Y5b)
     "여행", "여행 중", "가는 중...", "%s 돌아왔어요!", "외출", "출발", "가방이 가득", "새로운", "%s에 발견", "수집", "상자에 넣어 두세요\n여행을 보낼 수 있어요", "시계를 맞춰 주세요", "흔함", "드묾", "레어", "%s 여행 중",
+    // encuentros salvajes (v2.2)
+    "이긴 야생에게 사용", "야생 %s 등장!", "터치해서 싸우기", "싸울 포켓몬 선택", "야생", "이겼다!", "도망쳤다...", "+1시간 성장", "볼을 던질까?", "남은 볼 %u", "던지기", "%s 잡았다!", "알은 가방에", "%s 떠났다", "%s 도망쳤다!", "볼이 없다", "알 자리가 없다", "잡은 알!",
   },
 };
 

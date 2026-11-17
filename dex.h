@@ -28,14 +28,15 @@ enum : uint8_t {
   TY_NONE = 0xFF
 };
 
-// rareza: 0 = solo por evolucion, 1 = comun, 2 = raro, 3 = legendario
-enum : uint8_t { R_EVO = 0, R_COMUN, R_RARO, R_LEGENDARIO };
+// rareza: 0 = solo por evolucion, 1 = comun, 2 = raro, 3 = legendario, 4 = solo por encuentro
+// salvaje (v2.2, encounter.h): no sale de huevos al azar
+enum : uint8_t { R_EVO = 0, R_COMUN, R_RARO, R_LEGENDARIO, R_ENCUENTRO };
 
 struct DexEntry {
   const char *name;
   uint8_t evolvesTo;    // numero de dex, 0 = forma final
   uint8_t evolveLevel;
-  uint8_t rarity;       // sale de huevo si > 0
+  uint8_t rarity;       // sale de huevo al azar si es R_COMUN..R_LEGENDARIO
   uint16_t accent;      // color RGB565 del tipo para la UI
   uint8_t bHp, bAtk, bDef, bSpe;  // base stats reales de gen 1
   uint8_t biome;        // 0 pradera 1 playa 2 bosque 3 volcan 4 montana 5 nieve 6 central 7 pantano 8 ruinas
@@ -182,20 +183,20 @@ static const DexEntry DEX_TBL[DEX_COUNT + 1] = {
   { "JOLTEON", 0, 0, R_EVO, 0xBCA1, 65, 65, 60, 130, 6, TY_ELECTRICO, TY_NONE, 133 },  // 135 electrico
   { "FLAREON", 0, 0, R_EVO, 0xEA87, 65, 130, 60, 65, 3, TY_FUEGO, TY_NONE, 133 },  // 136 fuego
   { "PORYGON", 0, 0, R_RARO, 0x8C4D, 65, 60, 70, 40, 0, TY_NORMAL, TY_NONE, 137 },  // 137 normal
-  { "OMANYTE", 139, 40, R_RARO, 0x9407, 35, 40, 100, 35, 1, TY_ROCA, TY_AGUA, 138 },  // 138 roca/agua
+  { "OMANYTE", 139, 40, R_ENCUENTRO, 0x9407, 35, 40, 100, 35, 1, TY_ROCA, TY_AGUA, 138 },  // 138 roca/agua
   { "OMASTAR", 0, 0, R_EVO, 0x9407, 70, 60, 125, 55, 1, TY_ROCA, TY_AGUA, 138 },  // 139 roca/agua
-  { "KABUTO", 141, 40, R_RARO, 0x9407, 30, 80, 90, 55, 1, TY_ROCA, TY_AGUA, 140 },  // 140 roca/agua
+  { "KABUTO", 141, 40, R_ENCUENTRO, 0x9407, 30, 80, 90, 55, 1, TY_ROCA, TY_AGUA, 140 },  // 140 roca/agua
   { "KABUTOPS", 0, 0, R_EVO, 0x9407, 60, 115, 105, 80, 1, TY_ROCA, TY_AGUA, 140 },  // 141 roca/agua
-  { "AERODACTYL", 0, 0, R_RARO, 0x9407, 80, 105, 65, 130, 4, TY_ROCA, TY_VOLADOR, 142 },  // 142 roca/volador
+  { "AERODACTYL", 0, 0, R_ENCUENTRO, 0x9407, 80, 105, 65, 130, 4, TY_ROCA, TY_VOLADOR, 142 },  // 142 roca/volador
   { "SNORLAX", 0, 0, R_RARO, 0x8C4D, 160, 110, 65, 30, 0, TY_NORMAL, TY_NONE, 143 },  // 143 normal
   { "ARTICUNO", 0, 0, R_LEGENDARIO, 0x4DB8, 90, 85, 100, 85, 5, TY_HIELO, TY_VOLADOR, 144 },  // 144 hielo/volador
   { "ZAPDOS", 0, 0, R_LEGENDARIO, 0xBCA1, 90, 90, 85, 100, 6, TY_ELECTRICO, TY_VOLADOR, 145 },  // 145 electrico/volador
   { "MOLTRES", 0, 0, R_LEGENDARIO, 0xEA87, 90, 100, 90, 90, 3, TY_FUEGO, TY_VOLADOR, 146 },  // 146 fuego/volador
-  { "DRATINI", 148, 30, R_RARO, 0x5A98, 41, 64, 45, 50, 1, TY_DRAGON, TY_NONE, 147 },  // 147 dragon
+  { "DRATINI", 148, 30, R_ENCUENTRO, 0x5A98, 41, 64, 45, 50, 1, TY_DRAGON, TY_NONE, 147 },  // 147 dragon
   { "DRAGONAIR", 149, 55, R_EVO, 0x5A98, 61, 84, 65, 70, 1, TY_DRAGON, TY_NONE, 147 },  // 148 dragon
   { "DRAGONITE", 0, 0, R_EVO, 0x5A98, 91, 134, 95, 80, 1, TY_DRAGON, TY_VOLADOR, 147 },  // 149 dragon/volador
   { "MEWTWO", 0, 0, R_LEGENDARIO, 0xD28F, 106, 110, 90, 130, 8, TY_PSIQUICO, TY_NONE, 150 },  // 150 psiquico
-  { "MEW", 0, 0, R_LEGENDARIO, 0xD28F, 100, 100, 100, 100, 8, TY_PSIQUICO, TY_NONE, 151 },  // 151 psiquico
+  { "MEW", 0, 0, R_ENCUENTRO, 0xD28F, 100, 100, 100, 100, 8, TY_PSIQUICO, TY_NONE, 151 },  // 151 psiquico
 };
 
 // Nombres oficiales por idioma. FR y DE son los unicos latinos que difieren

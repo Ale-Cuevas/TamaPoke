@@ -86,6 +86,11 @@ static const ExpectedFmt EXPECTED[] = {
   { S_TRV_BACK_FMT,    "%s" },  // Y5b
   { S_TRV_FOUND_FMT,   "%s" },
   { S_TRV_AWAY_FMT,    "%s" },
+  { S_WILD_APPEARED_FMT, "%s" },  // v2.2: encuentros salvajes
+  { S_BALLS_LEFT_FMT,  "%u" },
+  { S_CAPTURED_FMT,    "%s" },
+  { S_WILD_LEFT_FMT,   "%s" },
+  { S_WILD_FLED_FMT,   "%s" },
 };
 static const int NUM_EXPECTED = (int)(sizeof(EXPECTED) / sizeof(EXPECTED[0]));
 

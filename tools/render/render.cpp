@@ -235,6 +235,13 @@ static void resetUi() {
   roundCanvas->setShift(0, 0);
   briToastUntil = briSaveAt = 0;
   screenKeyValid = false;
+  // encuentros salvajes (v2.2): nada en el patio, pantallas cerradas, sin huevos de captura
+  encUi = ENCU_OFF;
+  encDenyUntil = 0;
+  teamWild = false;
+  yardEncX = -1;
+  pet.encClear();
+  pet.setBagEggs(0);
   if (gLang != LANG_EN) { setLang(LANG_EN); applyLangFont(); }
 }
 
@@ -605,6 +612,51 @@ static void collectionTip(uint32_t mask, uint8_t id) {
   onTap(souvCellX(id) + SOUV_CELL_W / 2, souvCellY(id) + SOUV_CELL_H / 2);
 }
 
+// v2.2: a wild encounter in the yard: `dex` at level lv on map `map` (its object: bush, rock or sand)
+static void encScene(int16_t dex, uint8_t map, uint8_t lv = 12, bool shiny = false, int hour = 13) {
+  pokemon(25, hour);
+  if (!pet.uid) pet.uid = 0x7E57u;  // pokemon() never hatched it: no uid
+  yardForceMap(map);
+  pet.encSpawnNow(dex);
+  pet.dbgEncSet(lv, shiny);
+  pet.takeEncSound();
+  pet.items[IT_BALL] = BALL_START;
+}
+// ...the frame `ms` into its rustle (each one lasts 800 ms every 2.4 s)
+static void encRustleAt(uint32_t ms) {
+  uint32_t ph = gHostMillis % 2400;
+  gHostMillis += (2400 + ms - ph - 85) % 2400;  // the capture adds 85
+}
+// tap the object in the yard (the intro opens)
+static void encTapYard() {
+  render();
+  onTap(yardEncX, yardEncY - 30);
+}
+// the fight against it with the home pet at level `lv` (strong: it wins; weak: it loses), to the result
+static void encFight(uint16_t lv) {
+  pet.setLevel(lv);
+  pet.trAtk = pet.trDef = pet.trSpe = lv > 30 ? 80 : 0;
+  startWild(pet.uid);
+  battleUntil([] { return bt.phase == BT_END; });
+}
+// ...and past the result (closeBattle: the Poke Ball question, or "fled")
+static void encAfter(uint16_t lv) {
+  encFight(lv);
+  gHostMillis += BT_END_LOCK_MS;
+  closeBattle();
+}
+
+// a tap on the Backpack slot of item `it` (v2.2: the grid is 4 x 3, the slot comes from BAG_ORDER)
+static void bagTapItem(uint8_t it) {
+  for (int k = 0; k < (int)BAG_SLOTS; k++) {
+    if (BAG_ORDER[k] != it) continue;
+    int x, y;
+    bagSlotXY(k, x, y);
+    bagTap(x + BAG_SLOT_W / 2, y + BAG_SLOT_H / 2);
+    return;
+  }
+}
+
 struct Scene {
   const char *name;
   std::function<void()> setup;
@@ -759,8 +811,8 @@ static const std::vector<Scene> &scenes() {
     { "care-menu-asleep", [] { pokemon(133, 23); pet.sleeping = true; openCarePanel(); } },
     { "bag", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 1, 1, 2, 3, 3 }); openBag(); } },
     // v1.59: the Revive (9th slot, 3x3 grid); a tap on it says what it's for (it isn't used by hand)
-    { "bag-revive-hint", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 1, 1, 2, 3, 3 }); openBag(); bagTap(CX + 86, 94 + 2 * 90 + 40); } },
-    { "bag-revive-hint-es", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 1, 1, 2, 3, 3 }); openBag(); bagTap(CX + 86, 94 + 2 * 90 + 40);
+    { "bag-revive-hint", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 1, 1, 2, 3, 3 }); openBag(); bagTapItem(IT_REVIVE); } },
+    { "bag-revive-hint-es", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 1, 1, 2, 3, 3 }); openBag(); bagTapItem(IT_REVIVE);
                                  setLang(LANG_ES); applyLangFont(); } },
     // v1.54: the cake in the food menu (with how many are left, grey with none), the pink FOOD bar while
     // it lasts, and a tap on it with none
@@ -1215,6 +1267,59 @@ static const std::vector<Scene> &scenes() {
     { "box-store-fx", [] { pokemon(25, 13); boxThree(); openBox(); boxStartMove(2); }, 4 },
     { "box-swap-fx", [] { pokemon(25, 13); boxThree(); openBox(); boxStartMove(4); }, 4 },
     { "box-store-end", [] { pokemon(25, 13); boxThree(); openBox(); boxStartMove(2); }, 8 },
+    // wild encounters (v2.2): the object in the yard on each map (rustling, still, shining), the intro, the
+    // one-fighter picker, the fight, the result, the Poke Ball question, the throw and the end
+    { "enc-yard-meadow", [] { encScene(16, 1); encRustleAt(350); } },
+    { "enc-yard-meadow-still", [] { encScene(16, 1); encRustleAt(1500); } },
+    { "enc-yard-forest", [] { encScene(10, 3); encRustleAt(350); } },
+    { "enc-yard-quarry", [] { encScene(74, 2); encRustleAt(350); } },
+    { "enc-yard-beach", [] { encScene(7, 4); encRustleAt(350); } },
+    { "enc-yard-ruins", [] { encScene(95, 5); encRustleAt(350); } },
+    { "enc-yard-exclusive", [] { encScene(147, 4, 20); encRustleAt(350); } },
+    { "enc-yard-dusk", [] { encScene(16, 1, 12, false, 19); encRustleAt(350); } },
+    { "enc-intro-bands", [] { encScene(16, 1); encTapYard(); }, 2 },
+    { "enc-intro", [] { encScene(16, 1); encTapYard(); }, 14 },
+    { "enc-intro-es", [] { encScene(16, 1); lang(LANG_ES); encTapYard(); }, 14 },
+    { "enc-intro-shiny", [] { encScene(147, 4, 20, true); encTapYard(); }, 14 },
+    { "enc-intro-shiny-es", [] { encScene(147, 4, 20, true); lang(LANG_ES); encTapYard(); }, 14 },
+    { "enc-team", [] { encScene(16, 1); boxThree(); encTapYard(); gHostMillis += 1000; onTap(CX, CY); } },
+    { "enc-team-es", [] { encScene(16, 1); boxThree(); lang(LANG_ES); encTapYard(); gHostMillis += 1000; onTap(CX, CY); } },
+    { "enc-battle-vs", [] { encScene(16, 1); startWild(pet.uid); }, 2 },
+    { "enc-battle-vs-es", [] { encScene(16, 1); lang(LANG_ES); startWild(pet.uid); }, 2 },
+    { "enc-battle-mid", [] {
+       encScene(16, 1);
+       startWild(pet.uid);
+       battleUntil([] { return bt.run.eng.attacks >= 3 && millis() - bt.evAt >= BT_HIT_MS + 150; });
+     } },
+    { "enc-result-win", [] { encScene(16, 1, 6); encFight(60); gHostMillis += BT_END_LOCK_MS; } },
+    { "enc-result-win-es", [] { encScene(16, 1, 6); lang(LANG_ES); encFight(60); gHostMillis += BT_END_LOCK_MS; } },
+    { "enc-result-lose", [] { encScene(149, 1, 70); encFight(2); gHostMillis += BT_END_LOCK_MS; } },
+    { "enc-result-lose-es", [] { encScene(149, 1, 70); lang(LANG_ES); encFight(2); gHostMillis += BT_END_LOCK_MS; } },
+    { "enc-ball", [] { encScene(16, 1, 6); encAfter(60); }, 2 },
+    { "enc-ball-es", [] { encScene(16, 1, 6); lang(LANG_ES); encAfter(60); }, 2 },
+    { "enc-ball-none-es", [] { encScene(16, 1, 6); lang(LANG_ES); encAfter(60); pet.items[IT_BALL] = 0; }, 2 },
+    { "enc-ball-full", [] { encScene(16, 1, 6); encAfter(60); pet.items[IT_EGG] = ITEM_MAX; }, 2 },
+    { "enc-throw-fly", [] { encScene(16, 1, 6); encAfter(60); gHostMillis += 1000; int xT, wT, xN, wN; encBallPills(xT, wT, xN, wN); onTap(xT + wT / 2, ENC_PILL_Y + 14); }, 3 },
+    { "enc-throw-wobble", [] { encScene(16, 1, 6); encAfter(60); gHostMillis += 1000; int xT, wT, xN, wN; encBallPills(xT, wT, xN, wN); onTap(xT + wT / 2, ENC_PILL_Y + 14); }, 11 },
+    { "enc-throw-click", [] { encScene(16, 1, 6); encAfter(60); gHostMillis += 1000; int xT, wT, xN, wN; encBallPills(xT, wT, xN, wN); onTap(xT + wT / 2, ENC_PILL_Y + 14); }, 27 },
+    { "enc-caught", [] { encScene(16, 1, 6); encAfter(60); gHostMillis += 1000; int xT, wT, xN, wN; encBallPills(xT, wT, xN, wN); onTap(xT + wT / 2, ENC_PILL_Y + 14); }, 40 },
+    { "enc-caught-es", [] { encScene(16, 1, 6); lang(LANG_ES); encAfter(60); gHostMillis += 1000; int xT, wT, xN, wN; encBallPills(xT, wT, xN, wN); onTap(xT + wT / 2, ENC_PILL_Y + 14); }, 40 },
+    { "enc-left-es", [] { encScene(16, 1, 6); lang(LANG_ES); encAfter(60); gHostMillis += 1000; int xT, wT, xN, wN; encBallPills(xT, wT, xN, wN); onTap(xN + wN / 2, ENC_PILL_Y + 14); }, 4 },
+    { "enc-fled", [] { encScene(149, 1, 70); encAfter(2); }, 4 },
+    { "enc-fled-es", [] { encScene(149, 1, 70); lang(LANG_ES); encAfter(2); }, 10 },
+    { "enc-yard-won", [] { encScene(16, 1, 6); encAfter(60); closeEncUi(); encRustleAt(350); } },
+    { "enc-bag", [] { pokemon(25, 13); pet.items[IT_BALL] = 3; pet.items[IT_EGG] = 1; pet.items[IT_REVIVE] = 2; pet.items[IT_CAKE] = 4; openBag(); } },
+    { "enc-bag-es", [] { pokemon(25, 13); lang(LANG_ES); pet.items[IT_BALL] = 3; pet.items[IT_EGG] = 1; pet.items[IT_REVIVE] = 2; pet.items[IT_CAKE] = 4; openBag(); } },
+    { "enc-bag-ball-hint-es", [] {
+       pokemon(25, 13);
+       lang(LANG_ES);
+       pet.items[IT_BALL] = 3;
+       openBag();
+       bagTapItem(IT_BALL);
+     } },
+    { "enc-shop", [] { pokemon(25, 13); pet.coins = 500; openBag(); bagTab = 1; } },
+    { "enc-shop-es", [] { pokemon(25, 13); lang(LANG_ES); pet.coins = 500; openBag(); bagTab = 1; } },
+    { "enc-bag-use-ask", [] { pokemon(25, 13); pet.items[IT_CAKE] = 2; openBag(); itemConfirm = IT_CAKE + 1; itemConfirmUntil = millis() + 5000; } },
     // stage select, team picker and the badges page (v1.65)
     { "stages-fresh", [] { pokemon(25, 13); stageSetup(0, 0, false); openStages(); } },
     { "stages-fresh-es", [] { pokemon(25, 13); stageSetup(0, 0, true); openStages(); } },
@@ -1464,7 +1569,8 @@ static const std::vector<Scene> &scenes() {
 }
 
 // the README's contact sheet: a few screens on the square glass
-static const char *const SHEET[] = { "yard-home-two", "travel-back-yard", "travel-trip-late", "travel-back-new", "collection-partial", "shop-rich" };
+static const char *const SHEET[] = { "yard-home-two", "travel-back-yard", "travel-trip-late", "travel-back-new", "collection-partial", "shop-rich",
+                                      "enc-yard-meadow", "enc-intro", "enc-ball", "enc-caught" };
 
 int main(int argc, char **argv) {
   if (argc < 2) {

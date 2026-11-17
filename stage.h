@@ -117,6 +117,7 @@ struct StageRun {
   Fighter team[TEAM_MAX];  // en orden; hp = la vida que le queda (0 = cayo)
   uint8_t teamN = 0;
   StageFoe foes[STAGE_FOES];
+  uint8_t foeN = STAGE_FOES;  // rivales de la fase: 3; un encuentro salvaje (v2.2, beginWild), 1
   Fighter foe;             // el rival en curso, con la vida que le queda
   uint8_t ally = 0;        // indice del aliado en el campo
   uint8_t foeIdx = 0;      // 0, 1 esbirros; 2 el jefe
@@ -147,9 +148,26 @@ struct StageRun {
     eng.beginCarry(team[0], foe, battleRand(rng));
   }
 
+  // un encuentro salvaje (v2.2, encounter.h): un solo rival y, en el equipo, un solo bicho. Mismas reglas
+  // que una fase (vida que no se recupera, muerte subita, medidores); el salvaje toca su medidor aiTaps
+  // veces por ataque. stage queda a 0 (la pantalla no lo ensena)
+  void beginWild(const Fighter &mate, const StageFoe &wild, uint32_t seed) {
+    *this = StageRun{};
+    rng = seed ^ 0x5EA6E5u;
+    if (!rng) rng = 1;
+    teamN = 1;
+    team[0] = mate;
+    team[0].hp = team[0].maxHp;
+    foeN = 1;
+    foes[0] = wild;
+    foe = stageFoeFighter(foes[0]);
+    eng.beginCarry(team[0], foe, battleRand(rng));
+  }
+
   bool over() const { return state == SN_CLEARED || state == SN_LOST; }
   bool koPending() const { return !over() && eng.over(); }
-  bool isBoss() const { return foeIdx == STAGE_FOES - 1; }
+  bool isWild() const { return foeN == 1; }
+  bool isBoss() const { return !isWild() && foeIdx == foeN - 1; }
   uint8_t nextAttacker() const { return eng.nextAttacker(); }
   uint16_t allyHp(uint8_t i) const { return i < teamN ? team[i].hp : 0; }
   const StageFoe &foeInfo() const { return foes[foeIdx]; }
@@ -192,8 +210,8 @@ struct StageRun {
       return SN_NEXT_ALLY;
     }
     foe.hp = 0;
-    if (++foeIdx >= STAGE_FOES) {
-      foeIdx = STAGE_FOES - 1;
+    if (++foeIdx >= foeN) {
+      foeIdx = foeN - 1;
       return state = SN_CLEARED;
     }
     foe = stageFoeFighter(foes[foeIdx]);

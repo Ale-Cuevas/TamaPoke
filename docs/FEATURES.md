@@ -951,8 +951,8 @@ Device with two boards (the 2.16 and the 1.75):
 ## Later, and prior art
 
 Later, once these are in:
-- **Wild encounters**: the README roadmap's battle idea, reusing `battle.h`
-  against a wild pet found on a walk.
+- ~~**Wild encounters**~~: done in v2.2 (`encounter.h`; a wild pet appears in the yard, with more chance
+  after walks and trips).
 - **Side-view attacks**: first make the sprite loader skip unknown action ids
   (`sdmon.cpp` rejects the whole file today), ship that, then repack the SD
   sprites with the extra rows (about 40 % bigger).
