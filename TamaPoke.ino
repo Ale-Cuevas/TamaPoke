@@ -59,7 +59,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "2.5"
+#define FW_VERSION "2.6"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -7975,10 +7975,16 @@ void yardTick(uint32_t now) {
   PetMood m = pet.mood();
   if (pet.sleeping) hold[0] = YH_SLEEP;
   else if (pet.evolving() || fxHatchHidesPet(now) || bathUntil || pet.emote() != EMOTE_NONE ||
-           (m == MOOD_EATING && pmd.has(PMD_EAT)) || (m == MOOD_SAD && pmd.has(PMD_HURT)))
+           (m == MOOD_EATING && pmd.has(PMD_EAT)))
     hold[0] = YH_STAY;
   bool foodWaits = hold[0] != YH_NONE;  // otra cosa lo tiene quieto: la comida espera
-  if (!foodWaits && yardFood.phase != YF_NONE) hold[0] = yardFoodHold(yardFood);
+  // v2.6: triste (una necesidad baja, p. ej. hambre) se queda quieto con su pose de dolor, pero eso no
+  // para la comida: antes la comida esperaba en el suelo para siempre y solo una baya de la mochila lo sacaba
+  if (yardFood.phase != YF_NONE) {
+    if (!foodWaits) hold[0] = yardFoodHold(yardFood);
+  } else if (hold[0] == YH_NONE && m == MOOD_SAD && pmd.has(PMD_HURT)) {
+    hold[0] = YH_STAY;
+  }
   hold[1] = pet.sleeping ? YH_SLEEP : YH_NONE;  // el de la caja se duerme con el de casa
   int8_t tilt = (imuPresent() && !bathUntil && pet.emote() == EMOTE_NONE && yardFood.phase == YF_NONE) ? imuTiltSide() : 0;
   const uint8_t *walk = yardWalkNow();

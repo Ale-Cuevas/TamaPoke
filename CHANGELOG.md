@@ -6,6 +6,15 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [2.6] - 2026-11-17
+
+### Fixed
+
+- **A hungry pet eats the food you give it.** When a need was low (for example FOOD under 25) the pet stood still
+  in its sad pose and the berry or cake dropped from the Care panel stayed on the grass, so only a Golden Berry
+  from the Backpack helped. Now the pet gets up, walks to the food and eats it as usual; it goes back to its sad
+  pose afterwards if a need is still low.
+
 ## [2.5] - 2026-11-17
 
 ### Changed
