@@ -110,6 +110,10 @@ void Pet::dbgEggElapsed(uint32_t min) {
   pendingSave = true;
 }
 
+void Pet::dbgEggSpecies(int16_t dex) {
+  if (isEgg() && !vacant && dex >= 1 && dex <= DEX_COUNT) eggTarget = dex;
+}
+
 void Pet::hatchNow() {
   if (!isEgg() || vacant || starterPick || busyEnding()) return;
   hatch();

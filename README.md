@@ -233,6 +233,10 @@ While **awake**, per minute:
 - **Not from eggs (v2.2):** Omanyte, Kabuto, Aerodactyl, Dratini and Mew only come from
   [wild encounters](#wild-encounters-v22).
 - A daily **streak** and high **bond** push rare/legendary odds higher.
+- **Egg colours (v2.4):** an egg shows the type of the pet inside. One type: the whole egg in
+  its colour (Grass green, Fire orange, Water blue...; Normal cream). Two types: the first in the
+  upper-left, the second in the lower-right, blending on a diagonal (Zapdos: yellow → sky blue).
+  Eggs still in the Backpack keep the classic cream look.
 - A clean **goodbye blesses** the next egg; a **death by neglect curses** it (forces Common).
 - Within a tier it favors species whose **evolution line you haven't finished** (so
   all 151 are completable).
@@ -901,7 +905,7 @@ Backpack to n eggs, for tests) · `REVIVES [n]` (Revives in the Backpack; with n
 form shows the farewell button) · `TAP <x> <y>` (a tap at
 canvas coordinates, through the same path as a finger; prints the battle phase) · `COINS [n]` (coins and
 today's capped earnings; with n, set them) · `SHOP` (prices, counts, maps owned) · `BUY <item>` /
-`BUYMAP <n>` (buy as if from the Shop) · `YARDBG <n>` (show yard map n, 0 = the chosen one) · `EGGT <min>`
+`BUYMAP <n>` (buy as if from the Shop) · `YARDBG <n>` (show yard map n, 0 = the chosen one) · `EGGD <dex>` (the egg at home becomes that species, for its colours) · `EGGT <min>`
 (fast-forward the yard egg) · `ENC [dex]` (a wild encounter appears now; with a dex number, that
 species) · `ENC?` (today's rolls, the base roll's time, the wild pet, the captured eggs) · `ENCEND` (it goes
 away) · `BALLS [n]` (Poké Balls; with n, set them).
