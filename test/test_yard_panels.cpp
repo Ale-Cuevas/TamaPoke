@@ -35,5 +35,6 @@ TEST(yard_panels, sin_panel_no_hay_tarjetas) {
   CHECK_EQ(panelCount(PANEL_NONE), (uint8_t)0);
   CHECK_EQ(panelHit(PANEL_NONE, Y_CX, Y_CY), -1);
   CHECK_EQ(panelCount(PANEL_CARE), (uint8_t)6);
-  CHECK_EQ(panelCount(PANEL_PLAY), (uint8_t)5);
+  CHECK_EQ(panelCount(PANEL_PLAY), (uint8_t)6);
+  CHECK_EQ(panelCount(PANEL_TRAVEL), (uint8_t)0);  // la pantalla de viajes tiene su propia geometria (travel_ui.h)
 }

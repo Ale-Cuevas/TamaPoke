@@ -15,7 +15,7 @@ enum Lang : uint8_t { LANG_ES = 0, LANG_EN, LANG_FR, LANG_DE, LANG_IT, LANG_PT,
 extern Lang gLang;  // idioma activo (definido en i18n.cpp)
 
 // IDs de cadena. El orden debe coincidir con la tabla STRINGS de i18n.cpp.
-enum StrId : uint8_t {
+enum StrId : uint16_t {
   // estado del bicho
   S_EATING, S_LIKES, S_HUNGRY, S_NEEDS_BATH,
   S_EXHAUSTED, S_SAD,
@@ -119,6 +119,9 @@ enum StrId : uint8_t {
   // los viajes del patio (v2.0, Y5): los 25 recuerdos (el primero + su id, 0..24) y las 13 plantillas de sucesos (el primero + la plantilla; travel.h)
   S_SOUV_0, S_SOUV_1, S_SOUV_2, S_SOUV_3, S_SOUV_4, S_SOUV_5, S_SOUV_6, S_SOUV_7, S_SOUV_8, S_SOUV_9, S_SOUV_10, S_SOUV_11, S_SOUV_12, S_SOUV_13, S_SOUV_14, S_SOUV_15, S_SOUV_16, S_SOUV_17, S_SOUV_18, S_SOUV_19, S_SOUV_20, S_SOUV_21, S_SOUV_22, S_SOUV_23, S_SOUV_24,
   S_TRV_EV_0, S_TRV_EV_1, S_TRV_EV_2, S_TRV_EV_3, S_TRV_EV_4, S_TRV_EV_5, S_TRV_EV_6, S_TRV_EV_7, S_TRV_EV_8, S_TRV_EV_9, S_TRV_EV_10, S_TRV_EV_11, S_TRV_EV_12,
+  // los viajes, las pantallas (v2.0, Y5b)
+  S_TRV_TITLE, S_TRV_TRAVELLING, S_TRV_ONWAY, S_TRV_BACK_FMT, S_TRV_AWAY, S_TRV_GO, S_TRV_BAGFULL, S_TRV_NEW,
+  S_TRV_FOUND_FMT, S_COLLECTION, S_TRV_NOPETS, S_TRV_NOCLOCK, S_RAR_0, S_RAR_1, S_RAR_2, S_TRV_AWAY_FMT,
   STR_COUNT
 };
 

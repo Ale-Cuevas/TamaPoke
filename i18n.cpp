@@ -97,6 +97,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Conoci\242 a un %s salvaje", "Durmi\242 la siesta bajo un \240rbol", "Encontr\242 algo brillante", "Chapote\242 en el agua", "Escal\242 una roca grande",
     "Oy\242 un ruido extra\244o", "Persigui\242 una mariposa", "Cav\242 un hoyo peque\244o", "Mir\242 las estrellas", "Comparti\242 bayas con un %s salvaje",
     "Hizo un castillo de arena", "Explor\242 un pasillo oscuro", "Par\242 a merendar",
+    // viajes: pantallas (v2.0, Y5b)
+    "Viaje", "De viaje", "De camino...", "\255%s ha vuelto!", "fuera", "Ir", "Mochila llena", "NUEVO", "Hallado el %s", "Colecci\242n", "Guarda un bicho en la Caja\npara mandarlo de viaje", "Pon la hora para viajar", "Com\243n", "Poco com\243n", "Raro", "%s est\240 de viaje",
   },
   // ---------------- EN ----------------
   {
@@ -188,6 +190,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Met a wild %s", "Took a nap under a tree", "Found something shiny", "Splashed in the water", "Climbed a big rock",
     "Heard a strange noise", "Chased a butterfly", "Dug a small hole", "Watched the stars", "Shared berries with a wild %s",
     "Built a sand castle", "Explored a dark corridor", "Stopped for a snack",
+    // viajes: pantallas (v2.0, Y5b)
+    "Travel", "Travelling", "On the way...", "%s is back!", "away", "Go", "Bag full", "NEW", "Found on %s", "Collection", "Store a pet in the Box\nto send it travelling", "Set the clock to travel", "Common", "Uncommon", "Rare", "%s is away",
   },
   // ---------------- FR ----------------
   {
@@ -279,6 +283,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "A rencontre un %s sauvage", "A fait la sieste sous un arbre", "A trouve quelque chose de brillant", "A patauge dans l'eau", "A escalade un gros rocher",
     "A entendu un bruit etrange", "A couru apres un papillon", "A creuse un petit trou", "A regarde les etoiles", "A partage des baies avec un %s sauvage",
     "A fait un chateau de sable", "A explore un couloir sombre", "S'est arrete pour un gouter",
+    // viajes: pantallas (v2.0, Y5b)
+    "Voyage", "En voyage", "En route...", "%s est de retour !", "absent", "Partir", "Sac plein", "NOUVEAU", "Trouve le %s", "Collection", "Range un bicho dans la Boite\npour l'envoyer en voyage", "Regle l'heure pour voyager", "Commun", "Peu commun", "Rare", "%s est parti",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -375,6 +381,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Traf ein wildes %s", "Machte ein Nickerchen unter einem Baum", "Fand etwas Glitzerndes", "Planschte im Wasser", "Kletterte auf einen Felsen",
     "Hoerte ein seltsames Geraeusch", "Jagte einen Schmetterling", "Grub ein kleines Loch", "Schaute die Sterne an", "Teilte Beeren mit einem wilden %s",
     "Baute eine Sandburg", "Erkundete einen dunklen Gang", "Machte Pause fuer einen Snack",
+    // viajes: pantallas (v2.0, Y5b)
+    "Reise", "Unterwegs", "Auf dem Weg...", "%s ist zurueck!", "weg", "Los", "Beutel voll", "NEU", "Gefunden am %s", "Sammlung", "Lege ein Tier in die Box,\num es auf Reisen zu schicken", "Stelle die Uhr zum Reisen", "Haeufig", "Selten", "Sehr selten", "%s ist unterwegs",
   },
   // ---------------- IT ----------------
   {
@@ -466,6 +474,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Ha incontrato un %s selvatico", "Ha fatto un pisolino sotto un albero", "Ha trovato qualcosa di luccicante", "Ha sguazzato nell'acqua", "Si e arrampicato su una roccia",
     "Ha sentito un rumore strano", "Ha inseguito una farfalla", "Ha scavato una piccola buca", "Ha guardato le stelle", "Ha diviso le bacche con un %s selvatico",
     "Ha costruito un castello di sabbia", "Ha esplorato un corridoio buio", "Si e fermato per uno spuntino",
+    // viajes: pantallas (v2.0, Y5b)
+    "Viaggio", "In viaggio", "In cammino...", "%s e tornato!", "via", "Vai", "Zaino pieno", "NUOVO", "Trovato il %s", "Collezione", "Metti un mostro nel Box\nper mandarlo in viaggio", "Imposta l'ora per viaggiare", "Comune", "Non comune", "Raro", "%s e in viaggio",
   },
   // ---------------- PT ----------------
   {
@@ -557,6 +567,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Encontrou um %s selvagem", "Tirou uma soneca debaixo de uma arvore", "Achou algo brilhante", "Chapinhou na agua", "Subiu numa pedra grande",
     "Ouviu um barulho estranho", "Perseguiu uma borboleta", "Cavou um buraquinho", "Olhou as estrelas", "Dividiu frutinhas com um %s selvagem",
     "Fez um castelo de areia", "Explorou um corredor escuro", "Parou para um lanche",
+    // viajes: pantallas (v2.0, Y5b)
+    "Viagem", "Em viagem", "A caminho...", "%s voltou!", "fora", "Ir", "Mochila cheia", "NOVO", "Achado em %s", "Colecao", "Guarde um bicho na Caixa\npara mandar viajar", "Acerte a hora para viajar", "Comum", "Incomum", "Raro", "%s esta viajando",
   },
   // ---------------- JA ----------------
   {
@@ -670,6 +682,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "やせいの%sにあった", "きのしたでひるね", "きらきらしたものをみつけた", "みずでバシャバシャ", "おおきないわにのぼった",
     "へんなおとがきこえた", "ちょうちょをおいかけた", "ちいさなあなをほった", "ほしをながめた", "やせいの%sときのみをわけた",
     "すなのおしろをつくった", "くらいろうかをたんけん", "おやつをたべた",
+    // viajes: pantallas (v2.0, Y5b)
+    "たび", "たびのさいちゅう", "とちゅう...", "%sがかえってきた！", "るす", "ゴー", "ふくろがいっぱい", "あたらしい", "%sにはっけん", "コレクション", "ボックスにあずけてね\nたびにだせるよ", "とけいをあわせてね", "ふつう", "ちょっとめずらしい", "レア", "%sはたびのなか",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -766,6 +780,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "야생 %s을(를) 만났어요", "나무 아래서 낮잠을 잤어요", "반짝이는 것을 찾았어요", "물에서 첨벙거렸어요", "큰 바위를 올랐어요",
     "이상한 소리를 들었어요", "나비를 쫓았어요", "작은 구멍을 팠어요", "별을 바라봤어요", "야생 %s와(과) 열매를 나눴어요",
     "모래성을 쌓았어요", "어두운 복도를 탐험했어요", "간식을 먹으려 쉬었어요",
+    // viajes: pantallas (v2.0, Y5b)
+    "여행", "여행 중", "가는 중...", "%s 돌아왔어요!", "외출", "출발", "가방이 가득", "새로운", "%s에 발견", "수집", "상자에 넣어 두세요\n여행을 보낼 수 있어요", "시계를 맞춰 주세요", "흔함", "드묾", "레어", "%s 여행 중",
   },
 };
 

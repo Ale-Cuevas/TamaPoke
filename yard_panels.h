@@ -8,7 +8,8 @@
 // entrena (o "Fases") en gris bajo el icono.
 #include "yard_ui.h"
 
-enum : uint8_t { PANEL_NONE = 0, PANEL_CARE, PANEL_PLAY };
+// PANEL_TRAVEL (Y5b): la pantalla de los viajes, un nivel por encima de Jugar (no usa las tarjetas de aqui)
+enum : uint8_t { PANEL_NONE = 0, PANEL_CARE, PANEL_PLAY, PANEL_TRAVEL };
 
 // ---- Cuidar ----
 enum : uint8_t { CP_RED = 0, CP_BLUE, CP_GREEN, CP_CAKE, CP_LIGHT, CP_BATH, CP_COUNT };
@@ -34,7 +35,7 @@ inline void carePanelCard(uint8_t i, int &x, int &y, int &w, int &h) {
 }
 
 // ---- Jugar ----
-enum : uint8_t { PP_BALL = 0, PP_BATTLE, PP_SACK, PP_DASH, PP_ZEN, PP_COUNT };
+enum : uint8_t { PP_BALL = 0, PP_BATTLE, PP_SACK, PP_DASH, PP_ZEN, PP_TRAVEL, PP_COUNT };
 #define PP_W 100  // icono a 3x arriba y la etiqueta debajo, dentro de la tarjeta
 #define PP_H 100
 #define PP_GAP 12
@@ -44,13 +45,9 @@ enum : uint8_t { PP_BALL = 0, PP_BATTLE, PP_SACK, PP_DASH, PP_ZEN, PP_COUNT };
 inline void playPanelCard(uint8_t i, int &x, int &y, int &w, int &h) {
   w = PP_W;
   h = PP_H;
-  if (i < 3) {
-    x = Y_CX - (3 * PP_W + 2 * PP_GAP) / 2 + i * (PP_W + PP_GAP);
-    y = PP_ROW1_Y;
-  } else {
-    x = Y_CX - (2 * PP_W + PP_GAP) / 2 + (i - 3) * (PP_W + PP_GAP);
-    y = PP_ROW2_Y;
-  }
+  // dos filas de tres (la ultima, el viaje, Y5b)
+  x = Y_CX - (3 * PP_W + 2 * PP_GAP) / 2 + (i % 3) * (PP_W + PP_GAP);
+  y = i < 3 ? PP_ROW1_Y : PP_ROW2_Y;
 }
 
 // tarjeta i del panel kind, o false si no existe
