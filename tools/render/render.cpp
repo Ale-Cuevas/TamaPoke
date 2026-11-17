@@ -125,6 +125,17 @@ static uint32_t epochAt(int hour) { return 1781481600UL + (uint32_t)hour * 3600;
 static void resetUi() {
   gHostMillis = 107915;  // the first frame then lands with the clouds clear of the title
   gHostRandom = 12345;
+  // viajes (Y5b): sin viaje ni resultado, sin recuerdos y con la seleccion y los avisos a cero
+  if (pet.travelling()) pet.travelFinishNow();
+  {
+    TravelResult tr;
+    pet.takeTravelResult(&tr);
+  }
+  pet.setSouvenirMask(0);
+  trvSelPet = trvSelTier = souvTip = trvMapPrev = 0;
+  trvSelDest = 1;
+  boxAwayUntil = 0;
+  returnBannerShown = false;
   galleryOpen = cardOpen = bagOpen = kbOpen = clockOpen = gameOpen = sackOpen = zenOpen = dashOpen = false;
   yardDemoOpen = false;  // el patio (v2.0)
   yardDemoPage = 0;
@@ -539,6 +550,59 @@ static void pickerOpen(uint8_t n, uint16_t coins, uint8_t owned = 0) {
 static void es() {
   setLang(LANG_ES);
   applyLangFont();
+}
+
+// travel and the collection (Y5b)
+static void ownMaps(std::initializer_list<uint8_t> maps) {
+  for (uint8_t m : maps) pet.yardOwned |= (uint16_t)(1u << m);
+}
+// `n` pets in the Box (the first six of a fixed list), the given maps owned, the Play panel open and its Travel card tapped
+static void travelSetup(int n, std::initializer_list<uint8_t> maps) {
+  pokemon(25, 13);
+  static const int16_t dex[BOX_SLOTS] = { 7, 133, 6, 143, 1, 4 };
+  static const uint16_t lv[BOX_SLOTS] = { 12, 23, 41, 30, 8, 17 };
+  for (int k = 0; k < n && k < BOX_SLOTS; k++) boxPet((uint8_t)k, dex[k], lv[k], k == 1, k == 2 ? "BLAZE" : "");
+  ownMaps(maps);
+  openPlayPanel();
+  panelTapCard(PP_TRAVEL);
+}
+// a trip already under way: Box slot 1, map `dest`, tier `tier`, `elapsed` minutes in
+static void travelRunning(uint8_t dest, uint8_t tier, uint32_t elapsed) {
+  travelSetup(3, { 2, 3, 4 });
+  pet.startTravel(1, dest, tier);
+  if (elapsed) pet.dbgTravelElapsed(elapsed);
+}
+// a finished trip's result waiting on the yard home (the Box pet is back)
+static void travelBack(uint8_t dest, uint32_t souvMask, bool fullBag) {
+  pokemon(25, 13);
+  boxPet(1, 133, 23, true);
+  ownMaps({ 2, 3, 4 });
+  pet.setSouvenirMask(souvMask);
+  if (fullBag)
+    for (uint8_t id : { 0, 1, 2, 3, 5, 7, 8 }) pet.items[id] = ITEM_MAX;
+  pet.startTravel(1, dest, 2);
+  pet.travelFinishNow();
+}
+// tap the pet back from its trip (in the yard as p[1]): on its body, or on its "!" bubble
+static void tapTraveller(bool bubble) {
+  YardBody b = yardBodyOf(1);
+  int x = (int)yardW.p[1].x, y = (int)yardW.p[1].y - b.h / 2;
+  if (bubble) {
+    x += b.w / 2 + 14;
+    y = (int)yardW.p[1].y - b.h - 12;
+  }
+  onTap(x, y);
+}
+// the collection tab with the given souvenirs owned
+static void collection(uint32_t mask) {
+  pokemon(25, 13);
+  pet.setSouvenirMask(mask);
+  openBag();
+  bagTab = 2;
+}
+static void collectionTip(uint32_t mask, uint8_t id) {
+  collection(mask);
+  onTap(souvCellX(id) + SOUV_CELL_W / 2, souvCellY(id) + SOUV_CELL_H / 2);
 }
 
 struct Scene {
@@ -1054,6 +1118,55 @@ static const std::vector<Scene> &scenes() {
     // the box (v1.37): swipe right from home. Frames run 85 ms: the light flies for 600 ms
     { "box-empty", [] { pokemon(25, 13); openBox(); } },
     { "box", [] { pokemon(25, 13); boxThree(); openBox(); } },
+    // travel and the collection (v2.0, Y5b)
+    { "travel-card", [] { pokemon(25, 13); openPlayPanel(); } },
+    { "travel-card-es", [] { pokemon(25, 13); openPlayPanel(); es(); } },
+    { "travel-setup", [] { travelSetup(3, { 2, 4 }); trvSelPet = 1; trvSelDest = 2; trvSelTier = 1; } },
+    { "travel-setup-es", [] { travelSetup(3, { 2, 4 }); es(); trvSelPet = 2; trvSelDest = 4; trvSelTier = 2; } },
+    { "travel-setup-1map", [] { travelSetup(2, {}); } },
+    { "travel-setup-page2", [] { travelSetup(6, { 2, 3, 4, 5 }); trvSelPet = 4; trvSelDest = 5; } },
+    { "travel-setup-nopets", [] { travelSetup(0, { 2 }); } },
+    { "travel-setup-nopets-es", [] { travelSetup(0, { 2 }); es(); } },
+    { "travel-setup-noclock", [] { travelSetup(3, { 2 }); pet.lastSeenEpoch = 0; } },
+    { "travel-trip-early", [] { travelRunning(2, 1, 6); } },
+    { "travel-trip-early-es", [] { travelRunning(4, 2, 12); es(); } },
+    { "travel-trip-mid", [] { travelRunning(2, 1, 150); } },
+    { "travel-trip-late", [] { travelRunning(4, 2, 470); } },
+    { "travel-trip-late-es", [] { travelRunning(4, 2, 470); es(); } },
+    { "travel-trip-last-es", [] { travelRunning(3, 2, 475); es(); } },
+    { "travel-trip-hour", [] { travelRunning(1, 0, 20); } },
+    { "travel-back-yard", [] { travelBack(2, 0, false); }, 3 },
+    { "travel-back-tapbubble", [] { travelBack(2, 0, false); render(); tapTraveller(true); }, 3 },
+    { "travel-back-new", [] { travelBack(2, 0, false); render(); tapTraveller(false); }, 3 },
+    { "travel-back-new-es", [] { travelBack(4, 0, false); es(); render(); tapTraveller(false); }, 3 },
+    { "travel-back-dup", [] { travelBack(2, 0x1FFFFFF, true); render(); tapTraveller(false); }, 3 },
+    { "travel-back-dup-es", [] { travelBack(3, 0x1FFFFFF, true); es(); render(); tapTraveller(false); }, 3 },
+    { "travel-back-early-tap", [] { travelBack(2, 0, false); render(); tapTraveller(false); render(); onTap(CX, CY); }, 3 },
+    { "travel-back-dismiss", [] {
+       travelBack(2, 0, false); render(); tapTraveller(false); render();
+       returnOpenAt -= 2000; onTap(CX, CY);
+     }, 3 },
+    { "box-travel", [] { pokemon(25, 13); boxThree(); ownMaps({ 2 }); pet.startTravel(1, 2, 1); pet.dbgTravelElapsed(30); openBox(); } },
+    { "box-travel-es", [] { pokemon(25, 13); boxThree(); ownMaps({ 2 }); pet.startTravel(1, 2, 2); pet.dbgTravelElapsed(30); openBox(); es(); } },
+    { "box-travel-tap", [] {
+       pokemon(25, 13); boxThree(); ownMaps({ 2 }); pet.startTravel(1, 2, 1); pet.dbgTravelElapsed(30); openBox();
+       onTap(boxCellX(1) + BOX_CW / 2, boxCellY(1) + BOX_CH / 2);
+     } },
+    { "box-travel-tap-es", [] {
+       pokemon(25, 13); boxThree(); ownMaps({ 2 }); pet.startTravel(1, 2, 1); pet.dbgTravelElapsed(30); openBox(); es();
+       onTap(boxCellX(1) + BOX_CW / 2, boxCellY(1) + BOX_CH / 2);
+     } },
+    { "collection-empty", [] { collection(0); } },
+    { "collection-partial", [] { collection(0x0A5B6D3); } },
+    { "collection-partial-es", [] { collection(0x0A5B6D3); es(); } },
+    { "collection-rare", [] { collection((1u << 4) | (1u << 9) | (1u << 19) | (1u << 0) | (1u << 6) | (1u << 22)); } },
+    { "collection-full", [] { collection(0x1FFFFFF); } },
+    { "collection-tip-owned", [] { collectionTip(0x0A5B6D3, 6); } },
+    { "collection-tip-rare", [] { collectionTip(0x0A5B6D3 | (1u << 14), 14); } },
+    { "collection-tip-unknown", [] { collectionTip(0x0A5B6D3, 2); } },
+    { "collection-tip-es", [] { collection(0x0A5B6D3); es(); onTap(souvCellX(18) + 10, souvCellY(18) + 10); } },
+    { "bag-tabs-es", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 0, 1, 0 }); openBag(); es(); } },
+    { "shop-tabs-es", [] { shopOpen(120); es(); } },
     { "box-full", [] {
        pokemon(25, 13);
        const int16_t dex[BOX_SLOTS] = { 1, 4, 7, 16, 133, 143 };
@@ -1351,7 +1464,7 @@ static const std::vector<Scene> &scenes() {
 }
 
 // the README's contact sheet: a few screens on the square glass
-static const char *const SHEET[] = { "yard-home-two", "yard-home-night", "card-profile", "shop-rich", "picker-notowned", "gallery" };
+static const char *const SHEET[] = { "yard-home-two", "travel-back-yard", "travel-trip-late", "travel-back-new", "collection-partial", "shop-rich" };
 
 int main(int argc, char **argv) {
   if (argc < 2) {

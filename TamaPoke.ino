@@ -51,11 +51,13 @@
 #include "yardbg.h"   // fondos del patio (v2.0): lector de TPY1, mascara de paso y tinte (logica pura)
 #include "yard.h"     // el patio (v2.0, Y2): los bichos que pasean por el mapa (logica pura)
 #include "shop.h"     // la tienda de la mochila y el selector de fondos (v2.0, Y4b): logica pura
+#include "travel_ui.h"      // los viajes y la coleccion (v2.0, Y5b): geometria y logica pura de las pantallas
+#include "souvenir_icons.h"  // los 25 recuerdos y la maleta (generado por tools/souvenirs.py)
 // (eggtimer.h, el huevo del patio de la Y3, llega con pet.h)
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "2.0"
+#define FW_VERSION "2.1"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -158,7 +160,8 @@ bool bagOpen = false;         // mochila (v1.53): su boton en la fila de abajo, 
 uint8_t itemConfirm = 0;      // mochila: objeto a confirmar + 1 (0 = ninguno)
 uint32_t itemConfirmUntil = 0;
 // la tienda de la mochila y el selector de fondos (v2.0, Y4b)
-uint8_t bagTab = 0;           // 0 = Objetos, 1 = Tienda
+uint8_t bagTab = 0;           // 0 = Objetos, 1 = Tienda, 2 = Coleccion (v2.0, Y5b)
+uint8_t souvTip = 0;          // coleccion: recuerdo con la tarjeta abierta + 1 (0 = ninguna)
 uint8_t shopBuyId = 0;        // tienda: objeto a comprar + 1 (0 = ninguno)
 uint32_t shopBuyUntil = 0;
 uint8_t shopToast = 0;        // aviso verde / rojo (SHT_*) y hasta cuando
@@ -188,6 +191,20 @@ struct { int16_t x, y; uint8_t r, ph; } bubbles[14];
 uint8_t panelKind = PANEL_NONE;
 int8_t panelShakeIdx = -1;     // la tarjeta que tiembla al negarse (como las casillas de las fases)
 uint32_t panelShakeUntil = 0;
+// los viajes (v2.0, Y5b): la pantalla PANEL_TRAVEL, un nivel por encima del panel Jugar
+uint8_t trvSelPet = 0;         // bichos que pueden viajar: el elegido (indice en la lista, no hueco)
+uint8_t trvSelDest = 1;        // mapa elegido (1..TRV_DESTS, uno propio)
+uint8_t trvSelTier = 0;        // duracion elegida (0..2)
+uint8_t trvMapPrev = 0;        // el mapa que ensena la ventana (yardEnsureMap lo carga mientras el panel esta abierto); solo RAM
+uint8_t boxAwaySlot = 0;       // la caja: se toco un bicho de viaje (aviso de unos segundos)
+uint32_t boxAwayUntil = 0;
+bool returnBannerShown = false;  // el ultimo frame enseno el aviso de vuelta: un toque lo cierra
+bool returnOpen = false;         // el jugador toco al viajero del patio (el del "!"): el aviso se ve
+uint32_t returnOpenAt = 0;       // cuando se abrio el aviso: los toques de justo despues no lo cierran
+#define RETURN_TAP_LOCK_MS 700
+void openTravel();
+void travelTap(int16_t x, int16_t y);
+void renderTravel();
 void openCarePanel();
 void openPlayPanel();
 void panelTap(int16_t x, int16_t y);
@@ -550,9 +567,10 @@ void loop() {
     pet.flushSave();
   }
 
-  // anota la hora real cada 30 s (se persiste en cada save del juego)
+  // anota la hora real cada 30 s (se persiste en cada save del juego); con la cuenta atras de un viaje a la
+  // vista, cada segundo (Y5b: lo que se ve tiene que bajar de uno en uno)
   static uint32_t lastClock = 0;
-  if (now - lastClock > 30000) {
+  if (now - lastClock > (panelKind == PANEL_TRAVEL && pet.travelling() ? 1000UL : 30000UL)) {
     lastClock = now;
     uint32_t e = rtcEpoch();
     if (e) pet.lastSeenEpoch = e;
@@ -624,7 +642,7 @@ void onShake() {
   if (dimStage > 0) { wakeUI(); return; }
   wakeUI();
   if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen()) return;
-  if (galleryOpen || boxOpen || stagesOpen || teamOpen || cardOpen || bagOpen || kbOpen || clockOpen) return;  // el bicho no esta en pantalla
+  if (galleryOpen || boxOpen || stagesOpen || teamOpen || cardOpen || bagOpen || kbOpen || clockOpen || panelKind) return;  // el bicho no esta en pantalla
   if (pet.sleeping) pet.wakeGrumpy();
   else if (pet.shaken()) yardEggInfo();  // tambien el huevo: se tambalea (el del patio dice lo que le queda)
 }
@@ -1198,6 +1216,42 @@ void handleSerial() {
   } else if (line.startsWith("FACEDOWN")) {  // FACEDOWN: boca abajo; FACEDOWN 0: la levantan
     onFaceDown(!(line.length() > 9 && line.substring(9).toInt() == 0));
     Serial.println("DONE");
+  } else if (line == "TRAVELEND") {  // TRAVELEND: el viaje termina ya (y se cobra)
+    pet.travelFinishNow();
+    travelReport();
+    Serial.println("DONE");
+  } else if (line == "TRAVELT" || line.startsWith("TRAVELT ")) {  // TRAVELT <min>: el viaje salio hace <min> minutos mas
+    if (line.length() > 8) {
+      long m = line.substring(8).toInt();
+      pet.dbgTravelElapsed((uint32_t)(m < 0 ? 0 : m));
+      wakeUI();
+    }
+    travelReport();
+    Serial.println("DONE");
+  } else if (line == "TRAVEL" || line.startsWith("TRAVEL ")) {  // TRAVEL [hueco mapa duracion]: ver / empezar un viaje
+    if (line.length() > 7) {
+      int sl = -1, de = 0, ti = 0;
+      if (sscanf(line.c_str() + 7, "%d %d %d", &sl, &de, &ti) == 3) {
+        bool ok = sl >= 0 && sl < 256 && de >= 0 && de < 256 && ti >= 0 && ti < 256 &&
+                  pet.startTravel((uint8_t)sl, (uint8_t)de, (uint8_t)ti);
+        Serial.printf("travel start %d %d %d -> %s\n", sl, de, ti, ok ? "ok" : "no");
+        wakeUI();
+      } else {
+        Serial.println("travel: TRAVEL <hueco 0-5> <mapa 1-5> <duracion 0-2 (1 h, 3 h, 8 h)>");
+      }
+    }
+    travelReport();
+    Serial.println("DONE");
+  } else if (line == "SOUV" || line.startsWith("SOUV ")) {  // SOUV [mascara]: los recuerdos; con mascara (0x.. o decimal), la pone
+    if (line.length() > 5) {
+      pet.setSouvenirMask((uint32_t)strtoul(line.c_str() + 5, nullptr, 0));
+      wakeUI();
+    }
+    Serial.printf("souvenirs %u/%u mask=0x%X\n", pet.souvenirCount(), SOUV_COUNT, (unsigned)pet.souvenirMask());
+    for (uint8_t i = 0; i < SOUV_COUNT; i++)
+      Serial.printf("  %2u map %u rar %u %s%s\n", i, souvenirDest(i), souvenirRarity(i), T((StrId)(S_SOUV_0 + i)),
+                    pet.hasSouvenir(i) ? "  [have]" : "");
+    Serial.println("DONE");
   } else if (line.startsWith("COINS")) {  // COINS [n]: pone las monedas en n (0..9999); sin n, solo las muestra
     if (line.length() > 6) {
       long n = line.substring(6).toInt();
@@ -1247,6 +1301,10 @@ void handleSerial() {
                   pet.items[IT_REVIVE], pet.lastEnd);
     Serial.printf("coins=%u earnedToday=%u/%u maps owned=0x%X chosen=%u wanted=%u\n", pet.coins,
                   pet.coinsEarnedToday(), ECO_DAILY_CAP, pet.yardOwned, pet.yardChosen, pet.yardMapWanted());
+    Serial.printf("travel %s slot=%d map=%u tier=%u left=%lus souvenirs=%u/%u mask=0x%X pending=%d\n",
+                  pet.travelling() ? "away" : "none", pet.travelling() ? (int)pet.travelSlot() : -1, pet.travelDest(),
+                  pet.travelTier(), (unsigned long)pet.travelSecondsLeft(), pet.souvenirCount(), SOUV_COUNT,
+                  (unsigned)pet.souvenirMask(), pet.travelResultPending() ? 1 : 0);
     Serial.printf("rec ball=%u bag=%u zen=%u.%u dash=%u\n", pet.gameHi, pet.strHi, pet.zenHi / 10, pet.zenHi % 10, pet.dashHi);
     // crecimiento (v1.35, growth.h): de el sale el nivel; la edad va aparte
     Serial.printf("grow=%lu lv=%u into=%u/%u age=%lu\n", (unsigned long)pet.growMin, pet.level(),
@@ -1559,6 +1617,7 @@ void onBack() {
   if (clockOpen) { clockOpen = false; return; }  // sin aplicar la hora, como al deslizar
   if (pet.ceremony) return;                      // durante la despedida no hay vuelta atras
   if (bagOpen && yardMapPreview) { yardMapPreview = 0; return; }  // selector de fondos -> tienda
+  if (bagOpen && souvTip) { souvTip = 0; return; }                 // tarjeta de un recuerdo -> coleccion
   if (bagOpen && shopBuyId) { shopBuyId = 0; return; }             // "comprar?": NO
   if (bagOpen && itemConfirm) { itemConfirm = 0; return; }  // "usar objeto?": NO
   if (bagOpen) { closeBag(); return; }
@@ -1566,6 +1625,7 @@ void onBack() {
   if (gameOpen) { gameOpen = false; return; }    // abandona sin premio, como tocar la cabecera
   if (choiceKind) { choiceKind = 0; return; }    // ni evoluciona ni rechaza: el boton sigue ahi
   if (confirmUntil) { confirmUntil = 0; return; }  // "soltar?": NO
+  if (panelKind == PANEL_TRAVEL) { panelKind = PANEL_PLAY; return; }  // viajes: un nivel atras, al panel Jugar
   if (panelKind) { panelKind = PANEL_NONE; return; }  // panel Cuidar / Jugar: a casa
   if (foundShown) { pet.popFound(); foundShown = false; return; }  // cierra el hallazgo
 }
@@ -1622,6 +1682,15 @@ void onTap(int16_t x, int16_t y) {
   if (pet.ceremony) return;  // durante la despedida no hay botones
   if (pet.isDying()) {       // v1.60: solo cuenta el dialogo del Revivir
     dyingTap(x, y);
+    return;
+  }
+  if (returnBannerShown) {   // el aviso de que el viaje acabo: un toque lo quita (y cobra el "visto")
+    if (millis() - returnOpenAt < RETURN_TAP_LOCK_MS) return;  // el toque que lo abrio (o uno de mas) no lo cierra
+    TravelResult tr;
+    returnOpen = false;
+    pet.takeTravelResult(&tr);
+    returnBannerShown = false;
+    sfxPlay(SFX_TAP);
     return;
   }
   if (cardOpen) {
@@ -2245,6 +2314,7 @@ void printT(const char *s) {
 // Pantallas que solo cambian con un toque (o con un dato que cambia muy de vez en cuando):
 // mientras su "clave" no cambie no se repintan ni se vuelcan por QSPI.
 void mixPanelKey(uint32_t &h);
+void mixTravelKey(uint32_t &h);
 static bool staticScreen() {
   if (pet.awaitingStarter()) return true;
   if (galleryOpen || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen()) return false;  // la galeria gestiona su propio repintado
@@ -2278,7 +2348,10 @@ static uint32_t screenKey() {
       if (pet.boxState(k) == BOX_OK) h = mixKey(h, pet.boxRecord(k).crc);
     }
     for (uint32_t v : { (uint32_t)pet.speciesId, (uint32_t)pet.shiny, pet.uid, (uint32_t)pet.eggHeld(),
-                        (uint32_t)pet.canBoxMove(), (uint32_t)boxAsk, (uint32_t)gLang })
+                        (uint32_t)pet.canBoxMove(), (uint32_t)boxAsk, (uint32_t)gLang,
+                        // Y5b: el viaje (hueco, minutos que faltan: se ven como H:MM) y el aviso de "de viaje"
+                        (uint32_t)pet.travelSlot(), (uint32_t)(pet.travelling() ? (pet.travelSecondsLeft() + 59) / 60 : 0),
+                        (uint32_t)(boxAwayUntil ? 1 + boxAwaySlot : 0) })
       h = mixKey(h, v);
     for (const char *c = pet.nick; *c; c++) h = mixKey(h, (uint8_t)*c);
   } else if (bagOpen) {
@@ -2288,7 +2361,9 @@ static uint32_t screenKey() {
                         // v2.0 (Y4b): pestana, tienda, aviso, selector de fondos y lo que lo cambia
                         (uint32_t)bagTab, (uint32_t)shopBuyId, (uint32_t)shopToast, (uint32_t)yardMapPreview,
                         (uint32_t)pet.coins, (uint32_t)pet.yardOwned, (uint32_t)pet.yardChosen,
-                        (uint32_t)pet.yardMapWanted(), (uint32_t)(yardMapPreview ? sceneHour() : 0) })
+                        (uint32_t)pet.yardMapWanted(), (uint32_t)(yardMapPreview ? sceneHour() : 0),
+                        // Y5b: la coleccion (que se tiene y la tarjeta abierta; la fecha sale de la mascara)
+                        (uint32_t)souvTip, pet.souvenirMask() })
       h = mixKey(h, v);
   } else if (kbOpen) {
     h = mixKey(h, nameLen);
@@ -2324,6 +2399,8 @@ bool render() {
   if (shopBuyId && !timeLeft(shopBuyUntil)) shopBuyId = 0;          // (lo mismo, "comprar?" y el aviso de la tienda)
   if (shopToast && !timeLeft(shopToastUntil)) shopToast = 0;
   if (boxAsk && !timeLeft(boxAskUntil)) boxAsk = 0;                  // (lo mismo, el dialogo de la caja)
+  if (boxAwayUntil && !timeLeft(boxAwayUntil)) boxAwayUntil = 0;     // (y el aviso de "de viaje")
+  returnBannerShown = false;  // lo vuelve a poner render() si el aviso de vuelta sigue en pantalla
   foundShown = false;  // lo vuelve a poner drawWalkNews() si el hallazgo sigue en pantalla
   if (saverOn()) {  // 2 min sin tocar: salvapantallas, encima de cualquier pantalla
     screenKeyValid = false;  // al despertar, la pantalla de debajo se vuelve a pintar entera
@@ -2476,6 +2553,24 @@ bool render() {
   drawFxBanner(millis());  // celebracion en curso (fx.h): subida, medalla, hito o meta
   fxPerfNote(fxUs + (micros() - fxT0));
   drawWalkNews();
+  // el aviso de que un viaje acabo (Y5b): solo en la casa, de uno en uno con las demas celebraciones y noticias
+  // (v2.1: el viajero espera en el patio con un "!" y el aviso sale al tocarlo; si ya no esta en la caja, sale solo)
+  static bool retWas = false, backWas = false;
+  bool backNow = pet.travelResultPending();
+  if (backNow && !backWas && yard) sfxPlay(SFX_LEVEL);  // ha llegado
+  backWas = backNow;
+  if (!backNow) returnOpen = false;
+  bool retNow = yard && !fxBan && !foundShown && !confirmUntil && !choiceKind && !pet.evolving() && fxScreenAwake() &&
+                backNow && (returnOpen || trvBackSlot() < 0);
+  if (retNow) {
+    drawReturnBanner();
+    if (!retWas) {
+      sfxPlay(SFX_LEVELUP);
+      if (!returnOpen) returnOpenAt = millis();
+    }
+  }
+  retWas = retNow;
+  returnBannerShown = retNow;
 
   // dialogo "soltar?" (pulsacion larga sobre el bicho)
   if (confirmUntil) {
@@ -3901,7 +3996,7 @@ void fxCollect(uint32_t now) {
 // algo encima (dialogo, menu, bano, evolucion, despedida, eclosion)
 bool fxScreenBusy() {
   return !fxScreenAwake() || pet.sleeping || pet.busyEnding() || pet.evolving() || choiceKind || confirmUntil ||
-         panelKind || bathUntil || fxo.find(FXO_HATCH) || fxo.waiting(FXO_HATCH) || fxo.find(FXO_BOX) ||
+         panelKind || bathUntil || pet.travelResultPending() || fxo.find(FXO_HATCH) || fxo.waiting(FXO_HATCH) || fxo.find(FXO_BOX) ||
          fxo.waiting(FXO_BOX);
 }
 
@@ -4672,6 +4767,7 @@ static void bagAskPills(int &xUse, int &wUse, int &xNo, int &wNo) {
 void openBag() {
   bagOpen = true;
   bagTab = 0;
+  souvTip = 0;
   itemConfirm = 0;
   shopBuyId = 0;
   shopToast = 0;
@@ -4682,6 +4778,7 @@ void openBag() {
 // cerrar la mochila del todo (el selector de fondos suelta su mapa de prueba: el patio recarga el suyo)
 void closeBag() {
   bagOpen = false;
+  souvTip = 0;
   itemConfirm = 0;
   shopBuyId = 0;
   shopToast = 0;
@@ -4689,8 +4786,6 @@ void closeBag() {
 }
 
 // ---------- pestanas y tienda (v2.0, Y4b) ----------
-#define BAG_TAB_Y 44      // las pastillas Objetos / Tienda (a y 44 el disco deja 229 px de ancho)
-#define BAG_TAB_GAP 10
 #define BAG_COIN_Y 78     // las monedas, centradas bajo las pestanas
 #define SHOP_BG_SLOT 7    // el 8o hueco: la tarjeta "Fondos", de ancho doble
 #define SHOP_PRICE_OFF yRgb(0x5A5E74)  // precio que no se puede pagar
@@ -4698,19 +4793,19 @@ void closeBag() {
 #define PICK_PAGER_Y 322
 #define PICK_PILL_Y 350
 
-static void bagTabPills(int &xI, int &wI, int &xS, int &wS) {
-  wI = yPillWidth(T(S_TAB_ITEMS));
-  wS = yPillWidth(T(S_SHOP));
-  xI = CX - (wI + BAG_TAB_GAP + wS) / 2;
-  xS = xI + wI + BAG_TAB_GAP;
-}
-
+// tres pastillas con icono (Y5b): en espanol "OBJETOS / TIENDA / COLECCION" son 330 px y a y 40 el disco
+// deja 214. Objetos = la baya dorada, Tienda = una moneda, Coleccion = una estrella de mar
+#define SOUV_TAB_ICON 16  // el recuerdo que hace de icono de la pestana (la estrella de mar)
 static void drawBagTabs() {
-  int xI, wI, xS, wS;
-  bagTabPills(xI, wI, xS, wS);
-  yPill(xI, BAG_TAB_Y, T(S_TAB_ITEMS), bagTab == 0 ? Y_BACK : Y_CARD);
-  yPill(xS, BAG_TAB_Y, T(S_SHOP), bagTab == 1 ? Y_BACK : Y_CARD);
-  yCoinBadge(CX, BAG_COIN_Y, pet.coins, false);
+  for (int t = 0; t < BAG_TABS; t++) {
+    int x = bagTabX(t);
+    gfx->fillRoundRect(x, BAG_TAB_TOP, BAG_TAB_W, BAG_TAB_H, BAG_TAB_H / 2, bagTab == t ? Y_BACK : Y_CARD);
+    int ix = x + (BAG_TAB_W - 32) / 2, iy = BAG_TAB_TOP + (BAG_TAB_H - 32) / 2;
+    if (t == 0) drawMap(ITEM_ICON[IT_GOLDEN], 16, ix, iy, 2, false);
+    else if (t == 1) yCoin(x + BAG_TAB_W / 2, BAG_TAB_TOP + BAG_TAB_H / 2, 11);
+    else drawMap(SOUV_ICON[SOUV_TAB_ICON], 16, ix, iy, 2, false);
+  }
+  if (bagTab != 2) yCoinBadge(CX, BAG_COIN_Y, pet.coins, false);
 }
 
 // moneda pequena + precio, centrados como grupo en cx (y = arriba del texto)
@@ -4960,12 +5055,77 @@ void bagSwipe(int dir) {
     }
     return;
   }
-  if (itemConfirm || shopBuyId) return;  // con una pregunta abierta, no
-  uint8_t t = dir > 0 ? 0 : 1;
-  if (t != bagTab) {
-    bagTab = t;
-    shopToast = 0;
+  if (itemConfirm || shopBuyId || souvTip) return;  // con una pregunta o una tarjeta abierta, no
+  int t = (int)bagTab + (dir > 0 ? -1 : 1);  // derecha = la anterior, izquierda = la siguiente
+  if (t < 0 || t >= BAG_TABS) return;
+  bagTab = (uint8_t)t;
+  shopToast = 0;
+}
+
+// ---------- la coleccion (v2.0, Y5b): 3.a pestana de la mochila ----------
+// Una rejilla de 5 x 5: una fila por mapa, de comun a raro de izquierda a derecha. Los que se tienen, en
+// color (el raro, con marco dorado); los que no, en silueta. Tocar uno abre su tarjeta.
+static const char *souvDestName(uint8_t id) { return T((StrId)(S_MAP_1 + souvenirDest(id) - 1)); }
+
+static void souvFrame(int x, int y, int w, int h, uint16_t col) {
+  gfx->drawRoundRect(x, y, w, h, Y_CARD_RAD, col);
+  gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, Y_CARD_RAD - 1, col);
+}
+
+static void renderSouvTip(uint8_t id) {
+  bool have = pet.hasSouvenir(id);
+  uint8_t rar = souvenirRarity(id);
+  yCard(SOUV_TIP_X, SOUV_TIP_Y, SOUV_TIP_W, SOUV_TIP_H, true);
+  if (have && rar == SOUV_RARE) souvFrame(SOUV_TIP_X, SOUV_TIP_Y, SOUV_TIP_W, SOUV_TIP_H, UI_BAR_WARN);
+  int iy = SOUV_TIP_Y + 18;
+  if (have) drawMap(SOUV_ICON[id], 16, CX - 32, iy, 4, false);
+  else drawMapTint(SOUV_ICON[id], 16, CX - 32, iy, 4, Y_PANEL_BG);
+  gfx->setTextColor(Y_TEXT);
+  const char *nm = have ? T((StrId)(S_SOUV_0 + id)) : "???";
+  setSize(2);
+  printTight(nm, CX, SOUV_TIP_Y + 98, SOUV_TIP_W - 24);
+  gfx->setTextColor(Y_TEXT_DIM);
+  printTight(souvDestName(id), CX, SOUV_TIP_Y + 124, SOUV_TIP_W - 24);
+  if (!have) return;
+  gfx->setTextColor(rar == SOUV_RARE ? UI_BAR_WARN : rar == SOUV_UNCOMMON ? Y_BACK : Y_TEXT_DIM);
+  printTight(T((StrId)(S_RAR_0 + rar)), CX, SOUV_TIP_Y + 150, SOUV_TIP_W - 24);
+  uint32_t ep = pet.souvenirFoundEpoch(id);
+  if (ep) {
+    char d[8];
+    char f[40];
+    trvDateStr(d, sizeof(d), ep);
+    snprintf(f, sizeof(f), T(S_TRV_FOUND_FMT), d);
+    gfx->setTextColor(Y_TEXT_DIM);
+    printTight(f, CX, SOUV_TIP_Y + 178, SOUV_TIP_W - 24);
   }
+}
+
+static void renderCollection() {
+  char head[32];
+  snprintf(head, sizeof(head), "%s %u/%u", T(S_COLLECTION), (unsigned)pet.souvenirCount(), (unsigned)SOUV_COUNT);
+  gfx->setTextColor(Y_TEXT);
+  printTight(head, CX, SOUV_TITLE_Y, 330);
+  for (int id = 0; id < SOUV_COUNT; id++) {
+    int x = souvCellX(id), y = souvCellY(id);
+    bool have = pet.hasSouvenir((uint8_t)id), rare = souvenirRarity((uint8_t)id) == SOUV_RARE;
+    int ix = x + (SOUV_CELL_W - 32) / 2, iy = y + (SOUV_CELL_H - 32) / 2;
+    if (have) {
+      yCard(x, y, SOUV_CELL_W, SOUV_CELL_H, false);
+      drawMap(SOUV_ICON[id], 16, ix, iy, 2, false);
+      if (rare) souvFrame(x, y, SOUV_CELL_W, SOUV_CELL_H, UI_BAR_WARN);
+    } else {
+      gfx->drawRoundRect(x, y, SOUV_CELL_W, SOUV_CELL_H, Y_CARD_RAD, Y_CARD);
+      drawMapTint(SOUV_ICON[id], 16, ix, iy, 2, Y_CARD_HI);
+    }
+  }
+  if (souvTip) renderSouvTip(souvTip - 1);
+}
+
+static void collectionTap(int16_t x, int16_t y) {
+  int id = souvAt(x, y);
+  if (id < 0) return;
+  souvTip = (uint8_t)(id + 1);
+  sfxPlay(SFX_TAP);
 }
 
 void renderBag() {
@@ -4977,6 +5137,12 @@ void renderBag() {
   drawBagTabs();
   if (bagTab == 1) {
     renderShop();
+    yBackBtn();
+    gfx->flush();
+    return;
+  }
+  if (bagTab == 2) {
+    renderCollection();
     yBackBtn();
     gfx->flush();
     return;
@@ -5052,6 +5218,11 @@ void bagTap(int16_t x, int16_t y) {
     shopTap(x, y);
     return;
   }
+  if (bagTab == 2 && souvTip) {  // la tarjeta de un recuerdo: cualquier toque la cierra
+    if (yBackHit(x, y)) closeBag();
+    else souvTip = 0;
+    return;
+  }
   if (itemConfirm) {  // solo la pastilla de Usar usa el objeto; cualquier otro toque es NO
     uint8_t it = itemConfirm - 1;
     itemConfirm = 0;
@@ -5074,17 +5245,20 @@ void bagTap(int16_t x, int16_t y) {
     closeBag();
     return;
   }
-  int xI, wI, xS, wS;  // las pestanas
-  bagTabPills(xI, wI, xS, wS);
-  uint8_t tab = yPillHit(x, y, xI, BAG_TAB_Y, wI) ? 1 : yPillHit(x, y, xS, BAG_TAB_Y, wS) ? 2 : 0;
-  if (tab) {
-    if (bagTab != tab - 1) sfxPlay(SFX_TAP);
-    bagTab = tab - 1;
+  int tab = bagTabHit(x, y);  // las pestanas
+  if (tab >= 0) {
+    if (bagTab != tab) sfxPlay(SFX_TAP);
+    bagTab = (uint8_t)tab;
     shopToast = 0;
+    souvTip = 0;
     return;
   }
   if (bagTab == 1) {
     shopTap(x, y);
+    return;
+  }
+  if (bagTab == 2) {
+    collectionTap(x, y);
     return;
   }
   for (int k = 0; k < (int)BAG_SLOTS; k++) {
@@ -5492,10 +5666,11 @@ void drawBoxSlot(uint8_t k, uint8_t st, const PetRecord *r, bool hide, int dx) {
   if (st == BOX_OK && r) {
     uint16_t bg = sel ? Y_CARD_HI : Y_CARD;
     yCard(x, y, w, h, sel);
+    bool away = pet.slotTravelling(k);  // de viaje (Y5b): su miniatura apagada y una maleta en vez de la "z"
     if (!hide) {
       const uint8_t *t = thumbs.get(r->speciesId);
       if (t) {
-        drawThumbFit(t, cx, y + 32, w - 40, 56, false, bg);
+        drawThumbFit(t, cx, y + 32, w - 40, 56, away, bg);
       } else {  // sin thumbs.bin: el numero, como la Pokedex
         char num[6];
         snprintf(num, sizeof(num), "%d", r->speciesId);
@@ -5505,10 +5680,15 @@ void drawBoxSlot(uint8_t k, uint8_t st, const PetRecord *r, bool hide, int dx) {
         printT(num);
       }
     }
-    gfx->setTextColor(BOX_Z_INK);  // "z": duerme
-    setSize(2);
-    setCur(x + w - 18, y + 6);
-    printT("z");
+    if (away) {
+      gfx->fillCircle(x + w - 17, y + 17, 13, Y_BACK);
+      drawMap(SPR_ICON_TRAVEL, 16, x + w - 25, y + 9, 1, false);
+    } else {
+      gfx->setTextColor(BOX_Z_INK);  // "z": duerme
+      setSize(2);
+      setCur(x + w - 18, y + 6);
+      printT("z");
+    }
     if (r->flags & REC_SHINY) {
       gfx->setTextColor(UI_BAR_WARN);
       setCur(x + 7, y + 6);
@@ -5517,8 +5697,13 @@ void drawBoxSlot(uint8_t k, uint8_t st, const PetRecord *r, bool hide, int dx) {
     gfx->setTextColor(Y_TEXT);
     printTight(recName(*r), cx, y + 62, w - 6);
     char lv[16];
-    snprintf(lv, sizeof(lv), T(S_LVL_FMT), (unsigned)levelFor(r->growMin));
-    gfx->setTextColor(Y_TEXT_DIM);
+    if (away) {  // lo que falta (H:MM), o "de viaje" si no hay hora
+      if (eggClockKnown(pet.lastSeenEpoch)) trvHMStr(lv, sizeof(lv), pet.travelSecondsLeft());
+      else snprintf(lv, sizeof(lv), "%s", T(S_TRV_AWAY));
+    } else {
+      snprintf(lv, sizeof(lv), T(S_LVL_FMT), (unsigned)levelFor(r->growMin));
+    }
+    gfx->setTextColor(away ? Y_BACK : Y_TEXT_DIM);
     setSize(2);
     setCur(cx - textW(lv, 2) / 2, y + 80);
     printT(lv);
@@ -5742,6 +5927,18 @@ void renderBox() {
     }
   }
 
+  if (boxAwayUntil && pet.slotTravelling(boxAwaySlot) && !boxAsk) {  // "<Nombre> esta de viaje"
+    char aw[40];
+    snprintf(aw, sizeof(aw), T(S_TRV_AWAY_FMT), recName(pet.boxRecord(boxAwaySlot)));
+    setSize(2);
+    int aw_w = textW(aw, 2) + 32;
+    if (aw_w > 380) aw_w = 380;
+    gfx->fillRoundRect(CX - 200, BOX_NOW_Y - 26, 400, 52, Y_CARD_RAD, Y_PANEL_BG);  // tapa la fila "Ahora"
+    gfx->fillRoundRect(CX - aw_w / 2 + 2, BOX_NOW_Y - 20 + 2, aw_w, 40, Y_CARD_RAD, Y_SHADOW);
+    gfx->fillRoundRect(CX - aw_w / 2, BOX_NOW_Y - 20, aw_w, 40, Y_CARD_RAD, Y_BACK);
+    gfx->setTextColor(Y_TEXT);
+    printTight(aw, CX, BOX_NOW_Y - 7, aw_w - 16);
+  }
   yPager(0, 2, BOX_PAGER_Y);
   yChevrons(false, !boxAsk && !boxMove);  // > las insignias, como deslizar a la derecha
   yBackBtn();
@@ -5793,6 +5990,12 @@ void boxTap(int16_t x, int16_t y) {
   if (boxPage != 0) return;  // las insignias no tienen nada que tocar
   int k = boxSlotAt(x, y);
   if (k < 0) return;
+  if (pet.slotTravelling((uint8_t)k)) {  // de viaje (Y5b): un aviso, no el dialogo de despertar
+    boxAwaySlot = (uint8_t)k;
+    boxAwayUntil = millis() + 2200;
+    sfxPlay(SFX_TAP);
+    return;
+  }
   bool ok = pet.boxState(k) == BOX_EMPTY ? pet.canStore(k) : pet.canWake(k);
   if (!ok) {  // vacio con un huevo activo (nada que guardar), o un hueco danado
     boxDeny(k);
@@ -5877,6 +6080,30 @@ void eggReport() {
 }
 
 // comando BOX: la caja por serie (uid, especie, nivel, CRC) y el huevo de la incubadora
+// TRAVEL (Y5): el viaje de ahora, lo que falta y la coleccion
+void travelReport() {
+  if (pet.travelling()) {
+    Serial.printf("travel away slot=%u map=%u tier=%u start=%lu seed=%08lx left=%lus elapsed=%um\n", pet.travelSlot(),
+                  pet.travelDest(), pet.travelTier(), (unsigned long)pet.travelStartEpoch(), (unsigned long)pet.travelSeed(),
+                  (unsigned long)pet.travelSecondsLeft(), pet.travelMinutesElapsed());
+    for (uint8_t i = 0; i < travelEventCount(pet.travelTier()); i++) {
+      uint16_t off;
+      uint8_t tpl, arg;
+      travelEvent(pet.travelSeed(), pet.travelDest(), pet.travelTier(), i, &off, &tpl, &arg);
+      Serial.printf("  event %u at %02u:%02u tpl=%u arg=%u %s\n", i, off / 60, off % 60, tpl, arg,
+                    off <= pet.travelMinutesElapsed() ? "(seen)" : "");
+    }
+  } else {
+    Serial.println("travel none");
+  }
+  TravelResult r;
+  if (pet.peekTravelResult(&r))
+    Serial.printf("  result: %s map=%u tier=%u coins=%u(dup %u) grow=+%u lv %u->%u item=%d%s souv=%d%s\n", r.nick, r.dest,
+                  r.tier, r.coins, r.dupCoins, r.growMin, r.lvBefore, r.lvAfter, r.item == TRV_NONE ? -1 : r.item,
+                  r.itemLost ? " LOST" : "", r.souvenir == TRV_NONE ? -1 : r.souvenir, r.dup ? " DUP" : "");
+  Serial.printf("  souvenirs %u/%u mask=0x%X\n", pet.souvenirCount(), SOUV_COUNT, (unsigned)pet.souvenirMask());
+}
+
 void boxReport() {
   Serial.printf("active uid=%08lX spec=%d lv=%u egg=%d vacant=%d eggHeld=%d eggT=%d eggShiny=%d box=%u/%u bagEggs=%u\n",
                 (unsigned long)pet.uid, pet.speciesId, pet.isEgg() ? 0 : pet.level(),
@@ -5975,7 +6202,7 @@ static void teamBuildCands() {
   teamCandN = 0;
   if (!pet.isEgg()) teamCand[teamCandN++] = { pet.uid, (int8_t)TEAM_HOME };
   for (uint8_t k = 0; k < BOX_SLOTS; k++)
-    if (pet.boxState(k) == BOX_OK) teamCand[teamCandN++] = { pet.boxRecord(k).uid, (int8_t)k };
+    if (pet.boxState(k) == BOX_OK && !pet.slotTravelling(k)) teamCand[teamCandN++] = { pet.boxRecord(k).uid, (int8_t)k };
 }
 
 static bool teamIsPicked(uint32_t uid) {
@@ -6546,6 +6773,7 @@ static void panelDeny(int8_t idx) {
 // la clave de repintado: todo lo que dibujan los dos paneles
 void mixPanelKey(uint32_t &h) {
   h = mixKey(h, 30u + panelKind);
+  if (panelKind == PANEL_TRAVEL) mixTravelKey(h);
   h = mixKey(h, (uint32_t)(panelPressed() + 1));
   for (uint8_t i = 0; i < panelCount(panelKind); i++) h = mixKey(h, panelItemOn(panelKind, i));
   for (uint32_t v : { (uint32_t)pet.items[IT_CAKE], (uint32_t)pet.sleeping, (uint32_t)pet.berryKnown,
@@ -6620,12 +6848,17 @@ static void renderPlayPanel() {
   panelCardDraw(PP_SACK, SPR_ICON_SACK, T(S_STAT_ATK));
   panelCardDraw(PP_DASH, SPR_ICON_DASH, T(S_STAT_SPE));
   panelCardDraw(PP_ZEN, SPR_ICON_ZEN, T(S_STAT_DEF));
+  panelCardDraw(PP_TRAVEL, SPR_ICON_TRAVEL, T(S_TRV_TITLE));  // Y5b: los viajes
 }
 
 void renderPanel() {
-  yPanelBg();
-  if (panelKind == PANEL_CARE) renderCarePanel();
-  else renderPlayPanel();
+  if (panelKind == PANEL_TRAVEL) {
+    renderTravel();  // pinta su propio fondo (la ventana del mapa)
+  } else {
+    yPanelBg();
+    if (panelKind == PANEL_CARE) renderCarePanel();
+    else renderPlayPanel();
+  }
   yBackBtn();
   gfx->flush();
 }
@@ -6681,6 +6914,10 @@ static void playPanelTap(int i) {
     return;
   }
   sfxPlay(SFX_TAP);
+  if (i == PP_TRAVEL) {  // Y5b: la pantalla de viajes, un nivel por encima (USER vuelve aqui)
+    openTravel();
+    return;
+  }
   panelKind = PANEL_NONE;  // el juego (o las fases) se abre en su lugar; al salir, a casa
   if (i == PP_BALL) startGame();
   else if (i == PP_BATTLE) openStages();  // v1.65: las fases (antes un combate suelto)
@@ -6690,6 +6927,10 @@ static void playPanelTap(int i) {
 }
 
 void panelTap(int16_t x, int16_t y) {
+  if (panelKind == PANEL_TRAVEL) {
+    travelTap(x, y);
+    return;
+  }
   if (yBackHit(x, y)) {  // volver: a casa, como USER
     sfxPlay(SFX_TAP);
     panelKind = PANEL_NONE;
@@ -6699,6 +6940,441 @@ void panelTap(int16_t x, int16_t y) {
   if (i < 0) return;  // fuera de las tarjetas: nada (es una pantalla, no un menu que se cierra)
   if (panelKind == PANEL_CARE) carePanelTap(i);
   else playPanelTap(i);
+}
+
+// =================== viajes (v2.0, Y5b; geometria y logica pura en travel_ui.h) ===================
+// Una pantalla (PANEL_TRAVEL) un nivel por encima del panel Jugar. Sin viaje: ventana del destino (< >),
+// los bichos de la caja que pueden salir, las tres duraciones y el boton Ir. Con un viaje en marcha:
+// cuenta atras, ventana con el bicho y el registro de sucesos. Al volver, el aviso va en la casa
+// (drawReturnBanner). Lo elegido solo vive en RAM; la unica escritura es startTravel / takeTravelResult.
+
+static uint8_t trvOkMask() {  // huecos de la caja con un bicho sano
+  uint8_t m = 0;
+  for (uint8_t k = 0; k < BOX_SLOTS; k++)
+    if (pet.boxState(k) == BOX_OK) m |= (uint8_t)(1u << k);
+  return m;
+}
+
+static uint8_t trvOwnedMask() {  // mapas propios (bit n-1)
+  uint8_t m = 0;
+  for (uint8_t n = 1; n <= TRV_DESTS; n++)
+    if (pet.ownsMap(n)) m |= (uint8_t)(1u << (n - 1));
+  return m;
+}
+
+// deja la seleccion en algo valido (el bicho puede haber vuelto o haberse ido de la caja)
+static uint8_t trvFix(uint8_t *cand) {
+  uint8_t n = trvCandidates(trvOkMask(), cand);
+  if (trvSelPet >= n) trvSelPet = 0;
+  uint8_t own = trvOwnedMask();
+  if (!own) own = 1;  // el prado siempre es del jugador
+  if (!(own & (1u << (trvSelDest - 1)))) trvSelDest = trvStepDest(own, trvSelDest, 1);
+  if (trvSelTier >= TRV_TIERS) trvSelTier = 0;
+  return n;
+}
+
+void openTravel() {
+  panelKind = PANEL_TRAVEL;
+  trvSelPet = 0;
+  trvSelTier = 0;
+  trvSelDest = pet.yardMapWanted();
+  panelShakeIdx = -1;
+  panelShakeUntil = 0;
+}
+
+extern uint16_t *yardBg;  // (se define con el fondo del patio, mas abajo)
+// una ventana con el trozo (x, y, w, h) del fondo ya expandido (yardBg), tomado desde la fila sy y con las
+// esquinas redondas. Sin fondo (sin PSRAM): una tarjeta lisa
+static void yardWindow(int x, int y, int w, int h, int sy, int r) {
+  uint16_t *fb = (uint16_t *)gfx->getFramebuffer();
+  if (!yardBg || !fb || sy < 0 || sy + h > YBG_CANVAS) {
+    gfx->fillRoundRect(x, y, w, h, r, Y_CARD_HI);
+    return;
+  }
+  for (int j = 0; j < h; j++) {
+    int jj = j < h - 1 - j ? j : h - 1 - j;  // distancia al borde de arriba o de abajo
+    int inset = 0;
+    if (jj < r) {
+      float dy = (float)(r - jj) - 0.5f;
+      inset = r - (int)(sqrtf((float)(r * r) - dy * dy) + 0.5f);
+    }
+    memcpy(fb + (size_t)(y + j) * YBG_CANVAS + x + inset, yardBg + (size_t)(sy + j) * YBG_CANVAS + x + inset,
+           (size_t)(w - 2 * inset) * 2);
+  }
+  gfx->drawRoundRect(x - 1, y - 1, w + 2, h + 2, r + 1, Y_CARD_HI);
+  gfx->drawRoundRect(x - 2, y - 2, w + 4, h + 4, r + 2, Y_CARD_HI);
+}
+
+// Texto a tamano 2 partido en lineas: copia en out el trozo mas largo de s que cabe en maxW (hasta una palabra
+// entera si se puede) y devuelve los bytes que consumio, con el espacio de despues. Sin espacios que sirvan,
+// corta por letras (sin partir un caracter UTF-8)
+static int wrapLine(const char *s, int maxW, char *out, int outN) {
+  int len = (int)strlen(s), fit = 0, wordEnd = 0;
+  if (len >= outN) len = outN - 1;
+  for (int i = 1; i <= len; i++) {
+    if (i < len && ((uint8_t)s[i] & 0xC0) == 0x80) continue;  // dentro de un caracter UTF-8
+    memcpy(out, s, i);
+    out[i] = 0;
+    if (textW(out, 2) > maxW) break;
+    fit = i;
+    if (i == len || s[i] == ' ') wordEnd = i;
+  }
+  int cut = wordEnd ? wordEnd : fit;
+  if (!cut) {  // ni la primera letra cabe: se dibuja igual
+    cut = 1;
+    while (cut < len && ((uint8_t)s[cut] & 0xC0) == 0x80) cut++;
+  }
+  memcpy(out, s, cut);
+  out[cut] = 0;
+  while (s[cut] == ' ') cut++;
+  return cut;
+}
+
+static void trvDrawArrow(int cx, int cy, int dir, bool shadow) {
+  if (shadow) yChevron(cx + 2, cy + 2, dir, Y_SHADOW);
+  yChevron(cx, cy, dir, Y_TEXT);
+}
+
+// "Guarda un bicho en la Caja\npara mandarlo de viaje": dos lineas centradas
+static void trvTwoLines(const char *t, int cx, int y, int maxW, uint16_t col) {
+  char a[64];
+  const char *nl = strchr(t, '\n');
+  int la = nl ? (int)(nl - t) : (int)strlen(t);
+  if (la > (int)sizeof(a) - 1) la = (int)sizeof(a) - 1;
+  memcpy(a, t, la);
+  a[la] = 0;
+  gfx->setTextColor(col);
+  printTight(a, cx, y, maxW);
+  if (nl) printTight(nl + 1, cx, y + 22, maxW);
+}
+
+static void renderTravelSetup() {
+  uint8_t cand[8];
+  uint8_t nc = trvFix(cand);
+  uint8_t own = trvOwnedMask() ? trvOwnedMask() : 1;
+  // el fondo: oscuro, con el destino en una ventana
+  trvMapPrev = trvSelDest;
+  yardEnsureBg();
+  yPanelBg();
+  yTitle(T(S_TRV_TITLE), nullptr);
+  yardWindow(TRV_BAN_X, TRV_BAN_Y, TRV_BAN_W, TRV_BAN_H, 190, 12);
+  const char *dn = T((StrId)(S_MAP_1 + trvSelDest - 1));
+  yShadowText(centerX(dn, 2), TRV_BAN_Y + (TRV_BAN_H - 14) / 2, dn, 2, Y_TEXT);
+  if (own & (own - 1)) {  // mas de un mapa propio: flechas
+    trvDrawArrow(TRV_BAN_X + 20, TRV_BAN_Y + TRV_BAN_H / 2, -1, true);
+    trvDrawArrow(TRV_BAN_X + TRV_BAN_W - 20, TRV_BAN_Y + TRV_BAN_H / 2, 1, true);
+  }
+  // los bichos
+  if (!nc) {
+    trvTwoLines(T(S_TRV_NOPETS), CX, TRV_PET_Y + 12, 330, Y_TEXT_DIM);
+  } else {
+    uint8_t pages = trvPetPages(nc), page = trvSelPet / TRV_PET_PAGE;
+    for (uint8_t i = 0; i < TRV_PET_PAGE; i++) {
+      uint8_t idx = page * TRV_PET_PAGE + i;
+      if (idx >= nc) break;
+      const PetRecord &r = pet.boxRecord(cand[idx]);
+      int x = trvPetX(i), y = TRV_PET_Y, cx = x + TRV_PET_W / 2;
+      bool sel = idx == trvSelPet;
+      yCard(x, y, TRV_PET_W, TRV_PET_H, sel);
+      if (sel) souvFrame(x, y, TRV_PET_W, TRV_PET_H, Y_ACCENT_GO);
+      const uint8_t *t = thumbs.get(r.speciesId);
+      if (t) drawThumbFit(t, cx, y + 18, TRV_PET_W - 20, 30, false, sel ? Y_CARD_HI : Y_CARD);
+      gfx->setTextColor(Y_TEXT);
+      printTight(recName(r), cx, y + 34, TRV_PET_W - 6);
+      char lv[16];
+      snprintf(lv, sizeof(lv), T(S_LVL_FMT), (unsigned)levelFor(r.growMin));
+      gfx->setTextColor(Y_TEXT_DIM);
+      printTight(lv, cx, y + 54, TRV_PET_W - 6);
+    }
+    if (pages > 1) {
+      if (page > 0) trvDrawArrow(TRV_PET_ARROW_X, TRV_PET_ARROW_Y, -1, false);
+      if (page + 1 < pages) trvDrawArrow(466 - TRV_PET_ARROW_X, TRV_PET_ARROW_Y, 1, false);
+    }
+  }
+  // las duraciones, con lo que pagan
+  for (uint8_t t = 0; t < TRV_TIERS; t++) {
+    int x = trvTierX(t), y = TRV_TIER_Y;
+    bool sel = t == trvSelTier;
+    yCard(x, y, TRV_TIER_W, TRV_TIER_H, sel);
+    if (sel) souvFrame(x, y, TRV_TIER_W, TRV_TIER_H, Y_ACCENT_GO);
+    char h[8];
+    snprintf(h, sizeof(h), "%u h", (unsigned)trvTierHours(t));
+    gfx->setTextColor(Y_TEXT);
+    setSize(2);
+    setCur(x + (TRV_TIER_W - textW(h, 2)) / 2, y + 10);
+    printT(h);
+    shopPrice(x + TRV_TIER_W / 2, y + 37, TRV_COINS[t], Y_TEXT_DIM);
+  }
+  // Ir
+  bool clock = eggClockKnown(pet.lastSeenEpoch);
+  bool can = nc && pet.canTravel(cand[trvSelPet], trvSelDest, trvSelTier);
+  int gx = trvGoX();
+  gfx->fillRoundRect(gx + 2, TRV_GO_Y + 2, TRV_GO_W, Y_PILL_H, Y_PILL_H / 2, Y_SHADOW);
+  gfx->fillRoundRect(gx, TRV_GO_Y, TRV_GO_W, Y_PILL_H, Y_PILL_H / 2, can ? Y_ACCENT_GO : Y_CARD_HI);
+  gfx->setTextColor(can ? Y_TEXT : SHOP_PRICE_OFF);
+  setSize(2);
+  setCur(gx + (TRV_GO_W - textW(T(S_TRV_GO), 2)) / 2, TRV_GO_Y + (Y_PILL_H - 14) / 2);
+  printT(T(S_TRV_GO));
+  if (nc && !clock) {  // sin hora del RTC no se sabe cuando vuelve
+    gfx->setTextColor(Y_ACCENT_BAD);
+    printTight(T(S_TRV_NOCLOCK), CX, TRV_HINT_Y, 330);
+  }
+}
+
+static void renderTravelTrip() {
+  uint8_t dest = pet.travelDest();
+  trvMapPrev = dest;
+  yardEnsureBg();
+  yPanelBg();
+  yTitle(T(S_TRV_TRAVELLING), nullptr);
+  char c[12];
+  trvClockStr(c, sizeof(c), pet.travelSecondsLeft());
+  gfx->setTextColor(Y_TEXT);
+  setSize(4);
+  setCur(CX - textW(c, 4) / 2, TRV_CLOCK_Y);
+  printT(c);
+  // la ventana del destino con el bicho
+  yardWindow(TRV_WIN_X, TRV_WIN_Y, TRV_WIN_W, TRV_WIN_H, 170, 14);
+  const char *dn = T((StrId)(S_MAP_1 + dest - 1));
+  yShadowText(TRV_WIN_X + 16, TRV_WIN_Y + 10, dn, 2, Y_TEXT);
+  uint8_t sl = pet.travelSlot();
+  if (sl < BOX_SLOTS && pet.boxState(sl) == BOX_OK) {
+    const PetRecord &r = pet.boxRecord(sl);
+    const uint8_t *t = thumbs.get(r.speciesId);
+    if (t) drawThumbFit(t, TRV_WIN_X + TRV_WIN_W / 2, TRV_WIN_Y + 58, 120, 64, false, Y_CARD);
+    yShadowText(TRV_WIN_X + 16, TRV_WIN_Y + TRV_WIN_H - 26, recName(r), 2, Y_TEXT);
+  }
+  drawMap(SPR_ICON_TRAVEL, 16, TRV_WIN_X + TRV_WIN_W - 46, TRV_WIN_Y + TRV_WIN_H - 42, 2, false);
+  // el registro: los sucesos que ya pasaron, "HH:MM texto"
+  uint8_t idx[TRV_EVENTS_MAX];
+  uint8_t n = trvVisibleEvents(pet.travelSeed(), dest, pet.travelTier(), pet.travelMinutesElapsed(), idx);
+  if (!n) {
+    gfx->setTextColor(Y_TEXT_DIM);
+    printTight(T(S_TRV_ONWAY), CX, TRV_LOG_Y + 24, TRV_LOG_W);
+    return;
+  }
+  int y = TRV_LOG_Y;
+  for (uint8_t k = 0; k < n; k++) {
+    uint16_t off;
+    uint8_t tpl, arg;
+    travelEvent(pet.travelSeed(), dest, pet.travelTier(), idx[k], &off, &tpl, &arg);
+    char tm[8];
+    char text[96];
+    trvTimeStr(tm, sizeof(tm), pet.travelStartEpoch() + (uint32_t)off * 60);
+    snprintf(text, sizeof(text), T((StrId)(S_TRV_EV_0 + tpl)), arg ? dexName(arg) : "");
+    setSize(2);
+    gfx->setTextColor(Y_TEXT_DIM);
+    setCur(TRV_LOG_X, y);
+    printT(tm);
+    int tx = TRV_LOG_X + textW(tm, 2) + 10;
+    char l1[96];
+    int used = wrapLine(text, TRV_LOG_X + TRV_LOG_W - tx, l1, sizeof(l1));
+    gfx->setTextColor(Y_TEXT);
+    setCur(tx, y);
+    printT(l1);
+    if (text[used]) {  // la segunda linea; si ni asi cabe, con las letras juntas (nunca pasa de dos)
+      char l2[96];
+      int u2 = wrapLine(text + used, TRV_LOG_W, l2, sizeof(l2));
+      if (text[used + u2]) {
+        printTight(text + used, TRV_LOG_X + TRV_LOG_W / 2, y + TRV_LOG_LINE, TRV_LOG_W);
+      } else {
+        setCur(TRV_LOG_X, y + TRV_LOG_LINE);
+        printT(l2);
+      }
+      y += TRV_LOG_LINE;
+    }
+    y += TRV_LOG_LINE + TRV_LOG_GAP;
+  }
+}
+
+void renderTravel() {
+  if (pet.travelling()) renderTravelTrip();
+  else renderTravelSetup();
+}
+
+void travelTap(int16_t x, int16_t y) {
+  if (yBackHit(x, y)) {  // volver: al panel Jugar, como USER
+    sfxPlay(SFX_TAP);
+    panelKind = PANEL_PLAY;
+    return;
+  }
+  if (pet.travelling()) return;  // el viaje en marcha no se toca (ni se cancela)
+  uint8_t cand[8];
+  uint8_t nc = trvFix(cand);
+  TrvHit h = trvHit(x, y);
+  switch (h.kind) {
+    case TH_DEST_L:
+    case TH_DEST_R: {
+      uint8_t m = trvStepDest(trvOwnedMask() ? trvOwnedMask() : 1, trvSelDest, h.kind == TH_DEST_L ? -1 : 1);
+      if (m != trvSelDest) {
+        trvSelDest = m;
+        sfxPlay(SFX_TAP);
+      }
+      break;
+    }
+    case TH_PET_L:
+    case TH_PET_R: {
+      uint8_t pages = trvPetPages(nc), page = trvSelPet / TRV_PET_PAGE;
+      int np = (int)page + (h.kind == TH_PET_L ? -1 : 1);
+      if (np >= 0 && np < pages && nc) {
+        trvSelPet = (uint8_t)(np * TRV_PET_PAGE);
+        sfxPlay(SFX_TAP);
+      }
+      break;
+    }
+    case TH_PET: {
+      uint8_t idx = (uint8_t)((trvSelPet / TRV_PET_PAGE) * TRV_PET_PAGE + h.i);
+      if (idx < nc) {
+        trvSelPet = idx;
+        sfxPlay(SFX_TAP);
+      }
+      break;
+    }
+    case TH_TIER:
+      trvSelTier = h.i;
+      sfxPlay(SFX_TAP);
+      break;
+    case TH_GO:
+      if (nc && pet.canTravel(cand[trvSelPet], trvSelDest, trvSelTier) &&
+          pet.startTravel(cand[trvSelPet], trvSelDest, trvSelTier)) {
+        sfxPlay(SFX_LEVEL);
+        trvMapPrev = trvSelDest;
+      } else {
+        sfxPlay(SFX_DENY);
+      }
+      break;
+    default:
+      break;
+  }
+}
+
+// lo que dibuja el panel de viajes y cambia: la seleccion, la cuenta atras (cada segundo), la caja y los mapas
+void mixTravelKey(uint32_t &h) {
+  uint8_t cand[8];
+  uint8_t nc = trvFix(cand);
+  for (uint32_t v : { (uint32_t)trvSelPet, (uint32_t)trvSelDest, (uint32_t)trvSelTier, (uint32_t)nc,
+                      (uint32_t)pet.travelling(), (uint32_t)(pet.travelling() ? pet.travelSecondsLeft() : 0),
+                      (uint32_t)pet.travelSlot(), (uint32_t)pet.travelDest(), (uint32_t)trvOwnedMask(),
+                      (uint32_t)eggClockKnown(pet.lastSeenEpoch), (uint32_t)yardMapNow() })
+    h = mixKey(h, v);
+  for (uint8_t i = 0; i < nc; i++) h = mixKey(h, pet.boxRecord(cand[i]).crc);
+}
+
+// el hueco de la caja del que acaba de volver y aun no se vio el aviso (-1: ninguno, o ya no esta en la caja).
+// El resultado no guarda el hueco: se busca por especie, shiny y mote (dos iguales: el primero, da igual)
+int8_t trvBackSlot() {
+  if (!pet.travelResultPending()) return -1;
+  TravelResult r;
+  if (!pet.peekTravelResult(&r)) return -1;
+  for (uint8_t k = 0; k < BOX_SLOTS; k++) {
+    if (pet.boxState(k) != BOX_OK || pet.slotTravelling(k)) continue;
+    const PetRecord &rec = pet.boxRecord(k);
+    if (rec.speciesId == r.speciesId && ((rec.flags & REC_SHINY) != 0) == (r.shiny != 0) &&
+        strncmp(rec.nick, r.nick, sizeof(r.nick) - 1) == 0)
+      return (int8_t)k;
+  }
+  return -1;
+}
+
+// el aviso de vuelta (en la casa): "<Nombre> ha vuelto!", el destino y lo que trajo. Un toque lo quita
+static void drawReturnBanner() {
+  TravelResult r;
+  if (!pet.peekTravelResult(&r)) return;
+  char nick[sizeof(r.nick) + 1];
+  memcpy(nick, r.nick, sizeof(r.nick));
+  nick[sizeof(r.nick)] = 0;
+  const char *name = nick[0] ? nick : dexName(r.speciesId);
+  bool lv = r.lvAfter > r.lvBefore, hasItem = r.item != TRV_NONE, hasSouv = r.souvenir != TRV_NONE && r.souvenir < SOUV_COUNT;
+  const int W = 340, X = CX - W / 2, ROW = 40;
+  int rows = (hasItem ? 1 : 0) + (hasSouv ? 1 : 0);
+  int H = 104 + rows * ROW + 12;
+  int y0 = CX - H / 2 - 10;
+  gfx->fillRoundRect(X + 3, y0 + 4, W, H, 16, Y_SHADOW);
+  gfx->fillRoundRect(X, y0, W, H, 16, UI_BAR_WARN);
+  gfx->drawRoundRect(X, y0, W, H, 16, UI_INK);
+  gfx->setTextColor(UI_INK);
+  char t[48];
+  snprintf(t, sizeof(t), T(S_TRV_BACK_FMT), name);
+  if (textW(t, 3) <= W - 24) {
+    setSize(3);
+    setCur(CX - textW(t, 3) / 2, y0 + 12);
+    printT(t);
+  } else {
+    printTight(t, CX, y0 + 16, W - 24);
+  }
+  // el destino y la duracion
+  char d[40];
+  snprintf(d, sizeof(d), "%s - %u h", T((StrId)(S_MAP_1 + (r.dest >= 1 && r.dest <= TRV_DESTS ? r.dest : 1) - 1)),
+           (unsigned)trvTierHours(r.tier));
+  gfx->setTextColor(BOX_NOTE_INK);
+  printTight(d, CX, y0 + 44, W - 24);
+  // monedas y niveles, en una linea
+  char cs[12];
+  char ls[16];
+  snprintf(cs, sizeof(cs), "+%u", (unsigned)r.coins);
+  ls[0] = 0;
+  if (lv) snprintf(ls, sizeof(ls), T(S_LV_RANGE_FMT), (unsigned)r.lvBefore, (unsigned)r.lvAfter);
+  setSize(2);
+  int wc = 18 + 6 + textW(cs, 2), wl = lv ? 28 + textW(ls, 2) : 0;
+  int gx = CX - (wc + wl) / 2, ry = y0 + 72;
+  yCoin(gx + 9, ry + 7, 9);
+  gfx->setTextColor(UI_INK);
+  setCur(gx + 24, ry);
+  printT(cs);
+  if (lv) {
+    setCur(gx + wc + 28, ry);
+    printT(ls);
+  }
+  int y = y0 + 104;
+  if (hasItem) {
+    const char *in = T((StrId)(S_IT_GOLDEN + r.item));
+    if (r.itemLost) drawMapTint(ITEM_ICON[r.item], 16, X + 18, y + 4, 2, BOX_NOTE_INK);
+    else drawMap(ITEM_ICON[r.item], 16, X + 18, y + 4, 2, false);
+    gfx->setTextColor(r.itemLost ? BOX_NOTE_INK : UI_INK);
+    if (r.itemLost) {
+      setSize(2);
+      setCur(X + 62, y + 2);
+      printT(in);
+      gfx->setTextColor(Y_ACCENT_BAD);
+      setCur(X + 62, y + 20);
+      printT(T(S_TRV_BAGFULL));
+    } else {
+      setSize(2);
+      setCur(X + 62, y + 13);
+      printT(in);
+    }
+    y += ROW;
+  }
+  if (hasSouv) {
+    const char *sn = T((StrId)(S_SOUV_0 + r.souvenir));
+    drawMap(SOUV_ICON[r.souvenir], 16, X + 18, y + 4, 2, false);
+    int tagW = r.dup ? 70 : 62;
+    gfx->setTextColor(UI_INK);
+    int nx = X + 62, nw = W - 62 - 18 - tagW - 8;
+    setSize(2);
+    if (textW(sn, 2) <= nw) {
+      setCur(nx, y + 13);
+      printT(sn);
+    } else {
+      printTight(sn, nx + nw / 2, y + 13, nw);
+    }
+    int tx = X + W - 14 - tagW;
+    if (r.dup) {  // ya lo tenia: se cambio por monedas
+      char ds[8];
+      snprintf(ds, sizeof(ds), "+%u", (unsigned)r.dupCoins);
+      yCoin(tx + 9, y + 20, 9);
+      gfx->setTextColor(UI_INK);
+      setSize(2);
+      setCur(tx + 24, y + 13);
+      printT(ds);
+    } else {
+      gfx->fillRoundRect(tx, y + 8, tagW, 24, 12, UI_BAR_BAD);
+      gfx->setTextColor(UI_WHITE);
+      setSize(2);
+      setCur(tx + (tagW - textW(T(S_TRV_NEW), 2)) / 2, y + 13);
+      printT(T(S_TRV_NEW));
+    }
+  }
 }
 
 // ---- pantalla de muestra del kit (serie YARDUI [pagina]): 0 panel, 1 mundo, 2 fase ----
@@ -6863,7 +7539,8 @@ static bool yardTryMap(uint8_t n) {
 // carga el mapa que toca (el del bioma, o el forzado); se mira cada frame, solo lee al cambiar
 void yardEnsureMap() {
   // el selector de fondos (Y4b) manda sobre lo elegido, solo mientras esta abierto
-  uint8_t want = yardMapForced ? yardMapForced : yardMapPreview ? yardMapPreview : pet.yardMapWanted();
+  uint8_t want = yardMapForced ? yardMapForced : yardMapPreview ? yardMapPreview
+                 : (panelKind == PANEL_TRAVEL && trvMapPrev) ? trvMapPrev : pet.yardMapWanted();  // (Y5b: la ventana de los viajes)
   if (want == yardMapWant && yardMapEpoch == sdEpoch) return;
   yardMapWant = want;
   yardMapEpoch = sdEpoch;
@@ -6969,6 +7646,7 @@ void yardReport() {
 
 // el alto visible del PMD en reposo (de su primera fila con algo a los pies) da la escala del patio:
 // unos 60-100 px, la mitad que en la casa de lado, para que quepan dos bichos
+#define YARD_PET_SCALE10 11  // v2.1: los bichos del patio un 10 % mas grandes (escala en decimas sobre la entera)
 YardBody yardPmdBody(PmdMon &m) {
   YardBody b = { YB_PMD, 2, 40, 60 };
   const PmdAct &a = m.acts[PMD_IDLE];
@@ -6984,8 +7662,8 @@ YardBody yardPmdBody(PmdMon &m) {
   int vh = (a.base ? a.base : a.h) - top, vw = x1 >= x0 ? x1 - x0 + 1 : a.w;
   if (vh < 1) vh = a.h;
   b.s = vh <= 16 ? 3 : (vh * 2 <= 104 ? 2 : 1);  // casi todos a 2; los muy pequenos a 3, los enormes a 1
-  b.h = (int16_t)(vh * b.s);
-  b.w = (int16_t)(vw * b.s);
+  b.h = (int16_t)(vh * b.s * YARD_PET_SCALE10 / 10);
+  b.w = (int16_t)(vw * b.s * YARD_PET_SCALE10 / 10);
   return b;
 }
 
@@ -7058,9 +7736,10 @@ void yardSyncPets() {
     yardLastStep = 0;
   }
   h.walks = pmd.has(PMD_WALKL) || pmd.has(PMD_WALKR);
-  int8_t slot = -1;
+  int8_t slot = trvBackSlot();  // v2.1: el que vuelve de viaje sale al patio a esperar que lo toquen
+  bool back = slot >= 0;
   for (uint8_t k = 0; k < BOX_SLOTS && slot < 0; k++)
-    if (pet.boxState(k) == BOX_OK) slot = (int8_t)k;
+    if (pet.boxState(k) == BOX_OK && !pet.slotTravelling(k)) slot = (int8_t)k;  // el que esta de viaje (Y5) no se ve
   YardPet &b = yardW.p[1];
   if (slot < 0) {
     b.on = false;
@@ -7078,13 +7757,14 @@ void yardSyncPets() {
     yardBoxPmd.unload();
     if (r.speciesId >= 1 && r.speciesId <= DEX_COUNT) yardBoxPmd.load((uint8_t)r.speciesId, sh);
   }
+  if (slot != yardBoxSlot) b.on = false;  // otro bicho: a un sitio nuevo
   yardBoxSlot = slot;
   if (!b.on) {
     b = YardPet{};
     b.on = true;
     yardPlace(yardW, yardWalkNow(), 1);
   }
-  b.walks = yardBoxPmd.has(PMD_WALKL) || yardBoxPmd.has(PMD_WALKR);
+  b.walks = !back && (yardBoxPmd.has(PMD_WALKL) || yardBoxPmd.has(PMD_WALKR));  // el viajero espera quieto
 }
 
 // la mascara de paso de ahora: la del mapa y, con el huevo en el suelo (Y3), su celda bloqueada (el de
@@ -7198,7 +7878,7 @@ void yardDrawPet(int i, uint32_t now) {
       loop = false;
     }
     if (!m.has(act)) act = PMD_IDLE;
-    drawPmdActS(m, act, x, y, now - p.t0, loop || act == PMD_IDLE, false, b.s);
+    drawPmdActF(m, act, x, y, now - p.t0, loop || act == PMD_IDLE, false, b.s * YARD_PET_SCALE10);
   } else if (b.kind == YB_TPK1) {
     int s = b.s, w = mon.w * s;
     uint16_t fm = mon.frameMs ? mon.frameMs : 100;
@@ -7218,7 +7898,13 @@ void yardDrawPet(int i, uint32_t now) {
   } else {  // sin sprite ninguno
     yShadowText(x - 9, y - 40, "?", 4, Y_TEXT);
   }
-  if (i != 0) return;
+  if (i != 0) {
+    if (yardBoxSlot >= 0 && trvBackSlot() == yardBoxSlot) {  // v2.1: de vuelta del viaje: su maleta y un "!"
+      drawMap(SPR_ICON_TRAVEL, 16, x + b.w / 2 - 4, y - 30, 2, false);
+      drawExclaim(x + b.w / 2 + 14, y - b.h - 12 + (int)(3 * sinf(now * 0.012f)));
+    }
+    return;
+  }
   int head = y - b.h;
   if (pet.showHeart()) drawMap(SPR_HEART, 32, x + b.w / 2 - 6, head - 18, 1, false);
   uint8_t e = pet.emote();
@@ -7639,18 +8325,11 @@ static bool yardDockOff(int d) {
   return d == 1 && pet.sleeping && !pet.boxHasPets();
 }
 
-#define YARD_CLOCK_Y 30  // la hora a tamano 5 (40 px de alto); debajo queda sitio para las monedas (Y4)
-#define YARD_COIN_Y 76   // la cartera: debajo de la hora (30 + 40 px)
+#define YARD_COIN_Y 40   // la cartera, justo debajo de la bateria (v2.1: sin hora, chocaba con el aviso de vuelta)
 #define YARD_BAT_Y 12
 void yardDrawHud() {
   drawBatteryHud(Y_CX - BAT_ICON_W / 2, YARD_BAT_Y);
-  uint32_t e = pet.lastSeenEpoch;
-  if (e) {  // sin hora del reloj no se inventa una
-    char t[8];
-    snprintf(t, sizeof(t), "%02u:%02u", (unsigned)((e / 3600) % 24), (unsigned)((e / 60) % 60));
-    yShadowText(centerX(t, 5), YARD_CLOCK_Y, t, 5, Y_TEXT);
-  }
-  yCoinBadge(Y_CX, YARD_COIN_Y, pet.coins, true);  // la cartera (Y4), debajo de la hora
+  yCoinBadge(Y_CX, YARD_COIN_Y, pet.coins, true);  // la cartera (Y4)
   YDockItem dock[Y_DOCK_N] = {
     { SPR_ICON_CARE, Y_DOCK_CARE, yardDockOff(0) },
     { SPR_ICON_PLAY, Y_DOCK_PLAY, yardDockOff(1) },
@@ -7725,11 +8404,20 @@ void yardTap(int16_t x, int16_t y) {
     return;
   }
   int who = yardPetAt(x, y);
+  if (who != 1 && yardBoxSlot >= 0 && yardW.p[1].on && trvBackSlot() == yardBoxSlot) {  // el "!" del viajero tambien vale
+    YardBody bb = yardBodyOf(1);
+    int bx = (int)yardW.p[1].x + bb.w / 2 + 14, by = (int)yardW.p[1].y - bb.h - 12;
+    if (abs(x - bx) < 34 && abs(y - by) < 34) who = 1;
+  }
   if (who == 0) {  // el de casa: su ficha
     Serial.println("PET card");
     sfxPlay(SFX_TAP);
     cardOpen = true;
     cardPage = 0;
+  } else if (who == 1 && yardBoxSlot >= 0 && trvBackSlot() == yardBoxSlot) {  // v2.1: el viajero: lo que trajo
+    Serial.println("PET travel result");
+    returnOpen = true;
+    returnOpenAt = millis();
   } else if (who == 1) {  // el de la caja: la caja (su ficha esta ahi)
     Serial.println("PET box");
     if (boxCanOpen()) {
@@ -7903,6 +8591,8 @@ void closeForDying() {
   choiceKind = 0;
   confirmUntil = 0;
   panelKind = PANEL_NONE;
+  trvMapPrev = 0;
+  boxAwayUntil = 0;
   bathUntil = 0;
   bathPending = false;
 }
@@ -8190,6 +8880,27 @@ void drawPmdActS(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool
             [&](int c0, int len, int k) { gfx->fillRect(x0 + c0 * s, y0 + r * s, len * s, s, sil ? INK_K : m.pal[k]); });
   }
 }
+// lo mismo a una escala en decimas (22 = 2,2x; el patio): cada pixel ocupa de c*s10/10 a (c+1)*s10/10
+void drawPmdActF(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint16_t s10) {
+  if (s10 % 10 == 0) {
+    drawPmdActS(m, actId, cx, groundY, t, loop, sil, (uint8_t)(s10 / 10));
+    return;
+  }
+  const PmdAct &a = m.acts[actId];
+  if (!a.frames) return;
+  uint8_t fi = pmdFrameAt(a, t, loop);
+  const uint8_t *fr = a.data + (uint32_t)fi * a.w * a.h;
+  int x0 = cx - a.w * s10 / 20, y0 = groundY - (a.base ? a.base : a.h) * s10 / 10;
+  for (int r = 0; r < a.h; r++) {
+    const uint8_t *row = fr + r * a.w;
+    int ya = y0 + r * s10 / 10, yh = y0 + (r + 1) * s10 / 10 - ya;
+    if (yh <= 0) continue;
+    forRuns(a.w, [&](int c) { return indexedKey(row[c], sil); }, [&](int c0, int len, int k) {
+      int xa = x0 + c0 * s10 / 10;
+      gfx->fillRect(xa, ya, x0 + (c0 + len) * s10 / 10 - xa, yh, sil ? INK_K : m.pal[k]);
+    });
+  }
+}
 void drawPmdAct(uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint8_t maxS) {
   drawPmdActM(pmd, actId, cx, groundY, t, loop, sil, maxS);
 }
@@ -8393,7 +9104,7 @@ void drawVacantHome() {
     printT(line);
   }
   bool boxed = false;
-  for (uint8_t k = 0; k < BOX_SLOTS; k++) boxed |= pet.boxState(k) == BOX_OK;
+  for (uint8_t k = 0; k < BOX_SLOTS; k++) boxed |= pet.boxState(k) == BOX_OK && !pet.slotTravelling(k);
   if (boxed) {
     gfx->setTextColor(UI_TRACK);
     setCur(centerX(T(S_NOEGG_BOX), 2), 378);
@@ -8594,7 +9305,7 @@ void startStageAuto(uint8_t stage) {
   uint8_t n = 0;
   if (pet.uid && pet.teamCanFight(pet.uid)) ids[n++] = pet.uid;
   for (uint8_t k = 0; k < BOX_SLOTS && n < TEAM_MAX; k++)
-    if (pet.boxState(k) == BOX_OK) ids[n++] = pet.boxRecord(k).uid;
+    if (pet.boxState(k) == BOX_OK && !pet.slotTravelling(k)) ids[n++] = pet.boxRecord(k).uid;
   startStage(stage, ids, n);
 }
 

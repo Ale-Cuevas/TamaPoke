@@ -307,6 +307,9 @@ class TestBuffersDeTexto(unittest.TestCase):
         'S_SWAP_NOTE_FMT': ('nombre_o_apodo',),
         'S_NOW_FMT': ('nombre_o_apodo',),
         'S_GO_FMT': ('nombre_o_apodo',),  # estadios: el relevo de un aliado
+        'S_TRV_BACK_FMT': ('nombre_o_apodo',),  # los viajes (Y5b): el aviso de vuelta, la caja y la coleccion
+        'S_TRV_AWAY_FMT': ('nombre_o_apodo',),
+        'S_TRV_FOUND_FMT': ('fecha',),  # DD/MM
     }
     CIFRAS = {'u': 5, 'd': 5, 'lu': 10}
     ESPEC = re.compile(r'%0?\d*(lu|u|d|s)')
@@ -367,6 +370,8 @@ class TestBuffersDeTexto(unittest.TestCase):
                 total += self.NOMBRE[lang]
             elif arg == 'nombre_o_apodo':
                 total += max(self.NOMBRE[lang], self.APODO)
+            elif arg == 'fecha':
+                total += 5
             elif arg == 'baya':
                 total += max(self.bytes_literal(self.LIT[b][li]) for b in
                              ('S_BERRY_UNK', 'S_BERRY_RED', 'S_BERRY_BLUE', 'S_BERRY_GREEN'))
