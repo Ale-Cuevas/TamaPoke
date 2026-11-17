@@ -199,6 +199,9 @@ uint8_t trvMapPrev = 0;        // el mapa que ensena la ventana (yardEnsureMap l
 uint8_t boxAwaySlot = 0;       // la caja: se toco un bicho de viaje (aviso de unos segundos)
 uint32_t boxAwayUntil = 0;
 bool returnBannerShown = false;  // el ultimo frame enseno el aviso de vuelta: un toque lo cierra
+bool returnOpen = false;         // el jugador toco al viajero del patio (el del "!"): el aviso se ve
+uint32_t returnOpenAt = 0;       // cuando se abrio el aviso: los toques de justo despues no lo cierran
+#define RETURN_TAP_LOCK_MS 700
 void openTravel();
 void travelTap(int16_t x, int16_t y);
 void renderTravel();
@@ -1682,7 +1685,9 @@ void onTap(int16_t x, int16_t y) {
     return;
   }
   if (returnBannerShown) {   // el aviso de que el viaje acabo: un toque lo quita (y cobra el "visto")
+    if (millis() - returnOpenAt < RETURN_TAP_LOCK_MS) return;  // el toque que lo abrio (o uno de mas) no lo cierra
     TravelResult tr;
+    returnOpen = false;
     pet.takeTravelResult(&tr);
     returnBannerShown = false;
     sfxPlay(SFX_TAP);
@@ -2549,12 +2554,20 @@ bool render() {
   fxPerfNote(fxUs + (micros() - fxT0));
   drawWalkNews();
   // el aviso de que un viaje acabo (Y5b): solo en la casa, de uno en uno con las demas celebraciones y noticias
-  static bool retWas = false;
+  // (v2.1: el viajero espera en el patio con un "!" y el aviso sale al tocarlo; si ya no esta en la caja, sale solo)
+  static bool retWas = false, backWas = false;
+  bool backNow = pet.travelResultPending();
+  if (backNow && !backWas && yard) sfxPlay(SFX_LEVEL);  // ha llegado
+  backWas = backNow;
+  if (!backNow) returnOpen = false;
   bool retNow = yard && !fxBan && !foundShown && !confirmUntil && !choiceKind && !pet.evolving() && fxScreenAwake() &&
-                pet.travelResultPending();
+                backNow && (returnOpen || trvBackSlot() < 0);
   if (retNow) {
     drawReturnBanner();
-    if (!retWas) sfxPlay(SFX_LEVELUP);
+    if (!retWas) {
+      sfxPlay(SFX_LEVELUP);
+      if (!returnOpen) returnOpenAt = millis();
+    }
   }
   retWas = retNow;
   returnBannerShown = retNow;
@@ -7247,6 +7260,22 @@ void mixTravelKey(uint32_t &h) {
   for (uint8_t i = 0; i < nc; i++) h = mixKey(h, pet.boxRecord(cand[i]).crc);
 }
 
+// el hueco de la caja del que acaba de volver y aun no se vio el aviso (-1: ninguno, o ya no esta en la caja).
+// El resultado no guarda el hueco: se busca por especie, shiny y mote (dos iguales: el primero, da igual)
+int8_t trvBackSlot() {
+  if (!pet.travelResultPending()) return -1;
+  TravelResult r;
+  if (!pet.peekTravelResult(&r)) return -1;
+  for (uint8_t k = 0; k < BOX_SLOTS; k++) {
+    if (pet.boxState(k) != BOX_OK || pet.slotTravelling(k)) continue;
+    const PetRecord &rec = pet.boxRecord(k);
+    if (rec.speciesId == r.speciesId && ((rec.flags & REC_SHINY) != 0) == (r.shiny != 0) &&
+        strncmp(rec.nick, r.nick, sizeof(r.nick) - 1) == 0)
+      return (int8_t)k;
+  }
+  return -1;
+}
+
 // el aviso de vuelta (en la casa): "<Nombre> ha vuelto!", el destino y lo que trajo. Un toque lo quita
 static void drawReturnBanner() {
   TravelResult r;
@@ -7706,7 +7735,8 @@ void yardSyncPets() {
     yardLastStep = 0;
   }
   h.walks = pmd.has(PMD_WALKL) || pmd.has(PMD_WALKR);
-  int8_t slot = -1;
+  int8_t slot = trvBackSlot();  // v2.1: el que vuelve de viaje sale al patio a esperar que lo toquen
+  bool back = slot >= 0;
   for (uint8_t k = 0; k < BOX_SLOTS && slot < 0; k++)
     if (pet.boxState(k) == BOX_OK && !pet.slotTravelling(k)) slot = (int8_t)k;  // el que esta de viaje (Y5) no se ve
   YardPet &b = yardW.p[1];
@@ -7726,13 +7756,14 @@ void yardSyncPets() {
     yardBoxPmd.unload();
     if (r.speciesId >= 1 && r.speciesId <= DEX_COUNT) yardBoxPmd.load((uint8_t)r.speciesId, sh);
   }
+  if (slot != yardBoxSlot) b.on = false;  // otro bicho: a un sitio nuevo
   yardBoxSlot = slot;
   if (!b.on) {
     b = YardPet{};
     b.on = true;
     yardPlace(yardW, yardWalkNow(), 1);
   }
-  b.walks = yardBoxPmd.has(PMD_WALKL) || yardBoxPmd.has(PMD_WALKR);
+  b.walks = !back && (yardBoxPmd.has(PMD_WALKL) || yardBoxPmd.has(PMD_WALKR));  // el viajero espera quieto
 }
 
 // la mascara de paso de ahora: la del mapa y, con el huevo en el suelo (Y3), su celda bloqueada (el de
@@ -7866,7 +7897,13 @@ void yardDrawPet(int i, uint32_t now) {
   } else {  // sin sprite ninguno
     yShadowText(x - 9, y - 40, "?", 4, Y_TEXT);
   }
-  if (i != 0) return;
+  if (i != 0) {
+    if (yardBoxSlot >= 0 && trvBackSlot() == yardBoxSlot) {  // v2.1: de vuelta del viaje: su maleta y un "!"
+      drawMap(SPR_ICON_TRAVEL, 16, x + b.w / 2 - 4, y - 30, 2, false);
+      drawExclaim(x + b.w / 2 + 14, y - b.h - 12 + (int)(3 * sinf(now * 0.012f)));
+    }
+    return;
+  }
   int head = y - b.h;
   if (pet.showHeart()) drawMap(SPR_HEART, 32, x + b.w / 2 - 6, head - 18, 1, false);
   uint8_t e = pet.emote();
@@ -8373,11 +8410,20 @@ void yardTap(int16_t x, int16_t y) {
     return;
   }
   int who = yardPetAt(x, y);
+  if (who != 1 && yardBoxSlot >= 0 && yardW.p[1].on && trvBackSlot() == yardBoxSlot) {  // el "!" del viajero tambien vale
+    YardBody bb = yardBodyOf(1);
+    int bx = (int)yardW.p[1].x + bb.w / 2 + 14, by = (int)yardW.p[1].y - bb.h - 12;
+    if (abs(x - bx) < 34 && abs(y - by) < 34) who = 1;
+  }
   if (who == 0) {  // el de casa: su ficha
     Serial.println("PET card");
     sfxPlay(SFX_TAP);
     cardOpen = true;
     cardPage = 0;
+  } else if (who == 1 && yardBoxSlot >= 0 && trvBackSlot() == yardBoxSlot) {  // v2.1: el viajero: lo que trajo
+    Serial.println("PET travel result");
+    returnOpen = true;
+    returnOpenAt = millis();
   } else if (who == 1) {  // el de la caja: la caja (su ficha esta ahi)
     Serial.println("PET box");
     if (boxCanOpen()) {

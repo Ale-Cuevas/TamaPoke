@@ -20,6 +20,10 @@ keeps your Pokémon.
 - **Collection.** A third Bag tab (the Bag tabs are now icons: items, shop, collection) with the 25 souvenirs,
   5 per background (the last of each row is rare, with a gold frame). Unfound ones are silhouettes; tap one for
   its name, place, rarity and the day it was found. A souvenir you already have turns into 10 coins.
+- **Travel return in the yard.** The pet back from a trip waits in the yard, standing still, with its suitcase
+  and a "!" bubble; tapping it (or the bubble) opens the banner of what it brought, so a stray touch can't close
+  it unseen. Taps in the first 0.7 s after the banner opens are ignored. If the pet is no longer in the Box, the
+  banner shows on its own as before.
 
 ## [2.0] - 2026-11-16
 

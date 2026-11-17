@@ -583,6 +583,16 @@ static void travelBack(uint8_t dest, uint32_t souvMask, bool fullBag) {
   pet.startTravel(1, dest, 2);
   pet.travelFinishNow();
 }
+// tap the pet back from its trip (in the yard as p[1]): on its body, or on its "!" bubble
+static void tapTraveller(bool bubble) {
+  YardBody b = yardBodyOf(1);
+  int x = (int)yardW.p[1].x, y = (int)yardW.p[1].y - b.h / 2;
+  if (bubble) {
+    x += b.w / 2 + 14;
+    y = (int)yardW.p[1].y - b.h - 12;
+  }
+  onTap(x, y);
+}
 // the collection tab with the given souvenirs owned
 static void collection(uint32_t mask) {
   pokemon(25, 13);
@@ -1125,11 +1135,17 @@ static const std::vector<Scene> &scenes() {
     { "travel-trip-late-es", [] { travelRunning(4, 2, 470); es(); } },
     { "travel-trip-last-es", [] { travelRunning(3, 2, 475); es(); } },
     { "travel-trip-hour", [] { travelRunning(1, 0, 20); } },
-    { "travel-back-new", [] { travelBack(2, 0, false); }, 3 },
-    { "travel-back-new-es", [] { travelBack(4, 0, false); es(); }, 3 },
-    { "travel-back-dup", [] { travelBack(2, 0x1FFFFFF, true); }, 3 },
-    { "travel-back-dup-es", [] { travelBack(3, 0x1FFFFFF, true); es(); }, 3 },
-    { "travel-back-dismiss", [] { travelBack(2, 0, false); render(); onTap(CX, CY); }, 3 },
+    { "travel-back-yard", [] { travelBack(2, 0, false); }, 3 },
+    { "travel-back-tapbubble", [] { travelBack(2, 0, false); render(); tapTraveller(true); }, 3 },
+    { "travel-back-new", [] { travelBack(2, 0, false); render(); tapTraveller(false); }, 3 },
+    { "travel-back-new-es", [] { travelBack(4, 0, false); es(); render(); tapTraveller(false); }, 3 },
+    { "travel-back-dup", [] { travelBack(2, 0x1FFFFFF, true); render(); tapTraveller(false); }, 3 },
+    { "travel-back-dup-es", [] { travelBack(3, 0x1FFFFFF, true); es(); render(); tapTraveller(false); }, 3 },
+    { "travel-back-early-tap", [] { travelBack(2, 0, false); render(); tapTraveller(false); render(); onTap(CX, CY); }, 3 },
+    { "travel-back-dismiss", [] {
+       travelBack(2, 0, false); render(); tapTraveller(false); render();
+       returnOpenAt -= 2000; onTap(CX, CY);
+     }, 3 },
     { "box-travel", [] { pokemon(25, 13); boxThree(); ownMaps({ 2 }); pet.startTravel(1, 2, 1); pet.dbgTravelElapsed(30); openBox(); } },
     { "box-travel-es", [] { pokemon(25, 13); boxThree(); ownMaps({ 2 }); pet.startTravel(1, 2, 2); pet.dbgTravelElapsed(30); openBox(); es(); } },
     { "box-travel-tap", [] {
