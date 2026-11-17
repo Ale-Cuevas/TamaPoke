@@ -1,8 +1,8 @@
 # TamaPoke game logic
 
 > **Written from firmware v2.3, commit `364621f` (main, 2026-11-17); updated for `tuning.h` (branch `feature/tuning`, 2026-11-17)
-> and for v2.4 egg colours (branch `feature/egg-colors`, 2026-11-17) and v2.5 full-screen yard (branch
-> `feature/full-yard`, 2026-11-17).**
+> and for v2.4 egg colours (branch `feature/egg-colors`, 2026-11-17) v2.5 full-screen yard (branch
+> `feature/full-yard`, 2026-11-17) and v2.6 hungry-pet food fix (branch `fix/hungry-food`, 2026-11-17).**
 > If `FW_VERSION` in `TamaPoke.ino` or `git log` is past this, sections may be stale. The rule (CLAUDE.md) is that
 > every commit that changes game logic updates this guide in the same commit, including this line.
 
@@ -68,7 +68,7 @@ To tune the game, change it there (see §17, "Tuning").
 | Items, Backpack, gifts | `IT_*` enum `pet.h:61`, `useItem` `pet.cpp:1306`, `giveGift` `:1182`, `openGift` `:1225` |
 | Steps and walk rewards | `steps.h` (counter), `Pet::addSteps` `pet.cpp:1068`, `goalReward` `:1142` |
 | Travel and souvenirs | `travel.h` (`travelRoll` `:70`), `Pet::startTravel` `pet.cpp:1536`, `travelComplete` `:1570` |
-| Yard movement, food walking | `yard.h` (`yardStep` `:402`, BFS paths, food phases); `renderYardHome` `TamaPoke.ino:8598` |
+| Yard movement, food walking | `yard.h` (`yardStep` `:402`, BFS paths, food phases); `renderYardHome` `TamaPoke.ino:8604` |
 | Yard maps / backgrounds | `yardbg.h` (TPY1), `yardEnsureMap` `TamaPoke.ino:7686`, `tools/pack_yard.py` |
 | A screen's drawing or taps | §3 table; everything UI is in `TamaPoke.ino` |
 | A string / translation | `i18n.h` (`StrId`), `i18n.cpp` (8 rows), `tools/test_i18n_formats.py` |
@@ -295,7 +295,7 @@ press), and an idle ladder: dim at 90 s, saver at 120 s.
 
 | Screen | Flag | Draw | Tap / open |
 |---|---|---|---|
-| Yard (home) | default; `yardHomeNow()` `:7633` | `renderYardHome` `:8598` | `yardTap` `:8612` (dock → egg → wild → poop → gift → pets) |
+| Yard (home) | default; `yardHomeNow()` `:7633` | `renderYardHome` `:8604` | `yardTap` `:8618` (dock → egg → wild → poop → gift → pets) |
 | Starter choice | `pet.awaitingStarter()` | `renderStarterSelect` `:2234` | `onTap` `:1695` → `pet.chooseStarter` |
 | Gallery | `galleryOpen`, `galleryPage`, `galleryDetail` | `renderGallery` `:5535` | `galleryTap` `:5605` |
 | Box / badges | `boxOpen`, `boxPage`, `boxAsk`, `boxMove` | `renderBox` `:5937`, `renderBadges` `:6622` | `boxTap` `:6056`, `boxTick` `:6115` |
@@ -569,11 +569,11 @@ plays for 600 ms, then `boxTick` (`:6115`) calls `pet.store()` or `pet.wake()` w
 
 ## 7. The yard (home screen)
 
-Since v2.0 the home is a top-down 466×466 yard. `renderYardHome` (`TamaPoke.ino:8598`) does update and draw in one
+Since v2.0 the home is a top-down 466×466 yard. `renderYardHome` (`TamaPoke.ino:8604`) does update and draw in one
 call, every frame:
 
-`yardSyncPets` (`:7874`) → `yardTick` (`:7960`) → `yardSyncThings` (`:8238`) → draw things, pets, bath, Box appear,
-bubble, food fx → `yardDrawHud` (`:8583`)
+`yardSyncPets` (`:7874`) → `yardTick` (`:7960`) → `yardSyncThings` (`:8244`) → draw things, pets, bath, Box appear,
+bubble, food fx → `yardDrawHud` (`:8589`)
 
 - **Two walkers.** `YardWorld` (`yard.h`) holds `p[0]`, the home pet, and `p[1]`, the first Box pet that is not
   travelling. A returned traveller replaces `p[1]` and stands still with a suitcase and a "!".
@@ -582,18 +582,21 @@ bubble, food fx → `yardDrawHud` (`:8583`)
   pet walk or slide downhill.
 - **Walk mask.** The map's 15×15 grid of 32 px cells (`yardWalk`, `:7640`) keeps only the largest connected region.
   `yardWalkNow()` (`:7929`) also blocks the egg and the wild-encounter cells.
-- **Food.** A Care card calls `yardDropFood(kind)` (`:8393`). The food goes through `YF_FALL` (650 ms) → `YF_NOTICE`
+- **Food.** A Care card calls `yardDropFood(kind)` (`:8439`). The food goes through `YF_FALL` (650 ms) → `YF_NOTICE`
   "!" (700 ms) → `YF_WALK` (up to 15 s) → `YF_EAT` (900 ms) → `yardFoodEaten` applies the effect. One food item at
   a time; food cards are grey while it is on the floor. If the pet can no longer eat, nothing is spent.
+  The food waits (its phase is frozen) while something else holds the pet still: evolving, hatch, bath, an emote, or
+  the eating pose. Since v2.6 the sad pose (`MOOD_SAD` + `PMD_HURT`, any need below `NEED_LOW`) is **not** one of
+  them: it only applies while no food is on the floor, so a hungry pet still walks to the food and eats it.
 - **Poops, gifts, egg.** Counts are saved in NVS; positions are RAM-only and re-scattered at boot. Up to 3 gift boxes
   are shown out of 8 held.
   - A poop tap calls `pet.cleanPoop`.
-  - A gift tap calls `openGiftTap` (`:9288`).
+  - A gift tap calls `openGiftTap` (`:9294`).
   - An egg tap shows the time left (the starter egg needs 3 taps instead).
-- **Bubbles.** `yardEventMsg` (`:8451`) picks a recent event; otherwise `yardNeedList` (`:8465`) lists needs below
+- **Bubbles.** `yardEventMsg` (`:8457`) picks a recent event; otherwise `yardNeedList` (`:8471`) lists needs below
   25 in rotation. The neglect text replaces all of them.
 - **HUD.** Battery, coins, and the dock: Care (green), Play (amber), Bag (blue) (`yDock` `:6795`; `yardDockOff`
-  `:8536` greys buttons for an egg or sleep).
+  `:8582` greys buttons for an egg or sleep).
 - **Panels** (`yard_panels.h`):
   - Care: 3 berries, cake, light, bath, heart.
   - Play: ball, battle, bag, sled, waterfall, travel. With the home pet asleep or an egg but pets in the Box, Play
