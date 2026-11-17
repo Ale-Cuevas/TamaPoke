@@ -3,7 +3,7 @@
 // emergentes de COMER / JUGAR / CUIDADOS. Aqui solo la geometria y las pruebas de toque (logica
 // pura, comprobada en el test del host); el dibujo y las acciones estan en TamaPoke.ino.
 //
-// Cuidar: fila de comida (baya roja | azul | verde | tarta) y debajo los cuidados (luz | bano).
+// Cuidar: fila de comida (baya roja | azul | verde | tarta) y debajo los cuidados (luz | bano | mimo).
 // Jugar: pelota | fases | saco arriba, carrera | cascada debajo, cada uno con la estadistica que
 // entrena (o "Fases") en gris bajo el icono.
 #include "yard_ui.h"
@@ -12,13 +12,14 @@
 enum : uint8_t { PANEL_NONE = 0, PANEL_CARE, PANEL_PLAY, PANEL_TRAVEL };
 
 // ---- Cuidar ----
-enum : uint8_t { CP_RED = 0, CP_BLUE, CP_GREEN, CP_CAKE, CP_LIGHT, CP_BATH, CP_COUNT };
+enum : uint8_t { CP_RED = 0, CP_BLUE, CP_GREEN, CP_CAKE, CP_LIGHT, CP_BATH, CP_PET, CP_COUNT };
 #define CP_FOOD_W 80   // tarjetas de comida, cuadradas, icono a 3x (48 px)
 #define CP_FOOD_GAP 10
 #define CP_FOOD_Y 128
-#define CP_CARE_W 120  // las dos de cuidados, mas anchas
+#define CP_CARE_W 110  // las tres de cuidados (v2.3: + mimo), mas anchas; la fila mide lo que la de comida
 #define CP_CARE_H 80
-#define CP_CARE_GAP 14
+#define CP_CARE_GAP 10
+#define CP_CARE_N (CP_COUNT - CP_LIGHT)
 #define CP_CARE_Y 252
 
 inline void carePanelCard(uint8_t i, int &x, int &y, int &w, int &h) {
@@ -29,7 +30,7 @@ inline void carePanelCard(uint8_t i, int &x, int &y, int &w, int &h) {
   } else {
     w = CP_CARE_W;
     h = CP_CARE_H;
-    x = Y_CX - (2 * CP_CARE_W + CP_CARE_GAP) / 2 + (i - CP_LIGHT) * (CP_CARE_W + CP_CARE_GAP);
+    x = Y_CX - (CP_CARE_N * CP_CARE_W + (CP_CARE_N - 1) * CP_CARE_GAP) / 2 + (i - CP_LIGHT) * (CP_CARE_W + CP_CARE_GAP);
     y = CP_CARE_Y;
   }
 }

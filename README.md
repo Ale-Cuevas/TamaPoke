@@ -50,6 +50,9 @@ pick one fighter and battle it; win to grow your pet and maybe find an item, the
 catch it as an egg that hatches its first form at Lv 1. Omanyte, Kabuto, Aerodactyl, Dratini and Mew only come
 this way. See [Wild encounters](#wild-encounters-v22).
 
+**v2.3: pet it.** The Care panel has a third card next to the light and the bath: the heart. Tap it and the
+pet gets +5 JOY, shows a heart and does its happy pose, so JOY no longer needs food or items.
+
 **AMOLED-2.16 port (v1.19):** builds (PlatformIO and arduino-cli, pinned
 versions), passes the host test suite, and every screen has been rendered and
 checked on the PC. **Tested on a real 2.16" board on 2026-11-04**: bring-up and
@@ -183,7 +186,8 @@ While **awake**, per minute:
   down: time in it then gives **bonus DEF** (1 pt per 4 s, up to +3, so +11 for a perfect
   session).
 - 🫧 **Bath:** clears poops, HYG → 100. Or tap the poops one by one (v1.58).
-- 👆 **Pet it:** +5 JOY + bond.
+- 💗 **Pet it** (the heart in the Care panel, v2.3): +5 JOY, a heart and its happy pose; bond at most once
+  every 15 min. Free and as often as you like, awake only.
 - 🌙 **Sleep:** rest — ENE **+6/min**, needs drain ~**4× slower** with floors
   (FOOD 30 / JOY 35 / HYG 45). No poops, no slip-ups, and neglect doesn't count while asleep.
 - 🌃 **Night (v1.63, needs the clock):** from **22:00** the pet is sleepy (a thought bubble with "zzz",
@@ -637,8 +641,9 @@ If one bottoms out it counts as a *slip-up*.
 
 **The dock (three round buttons at the bottom, v2.0):**
 - 💗 **Care** → a panel with the 3 berries (each species has a hidden favourite that gives a bonus), the cake
-  (limited: full for 3 h, but it fattens), the light (🌙 sleep / ☀️ wake) and the bath. Food drops into the
-  yard: the pet sees it, walks over and eats it. Asleep, the light still works.
+  (limited: full for 3 h, but it fattens), the light (🌙 sleep / ☀️ wake), the bath and the heart to pet it
+  (+5 JOY, v2.3). Food drops into the yard: the pet sees it, walks over and eats it. Asleep, the light still
+  works.
 - ⚽ **Play** → the games: the pokeball minigame (SPEED), the battle stages, the training bag (STRENGTH), the
   sled run (SPEED) and the waterfall (DEFENSE). Each result pays a few coins.
 - 🎒 **Bag** → two tabs: **ITEMS** (your items and eggs; tap one to use it) and **SHOP** (buy items and
@@ -654,7 +659,7 @@ Shop: berries 30, cake 40, protein / iron / carbos 60, Revive 80, Poké Ball 100
 Backgrounds are yours, not the pet's: you start with the meadow, and a map you buy works for every pet.
 
 **Touch gestures:**
-- Tap the creature = pet it (+happiness, bond).
+- Tap the creature = its stat card (since v2.0; pet it from the heart in the Care panel, v2.3).
 - Swipe left = open the **Pokédex / gallery** · swipe right = open the **Box** (v1.37,
   see [The Box](#the-box-v137)), from the pet or from the egg.
 - Vertical swipe up = open the **stat card** (5 pages: Profile / Battle / Medals /

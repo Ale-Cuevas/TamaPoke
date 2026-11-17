@@ -6,6 +6,16 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [2.3] - 2026-11-17
+
+### Added
+
+- **Pet it from the Care panel.** A third card, a heart, sits next to the light and the bath (the three now
+  line up with the food row). Tap it: back in the yard the pet gets +5 JOY ("JOY +5"), a heart and "It likes
+  it!", its happy pose and the heart sound; bond +1 at most every 15 min, as the old tap on the pet gave
+  before v2.0 turned that tap into the stat card. No limit and no cost; grey (and it shakes) while the pet
+  sleeps or is in the bath.
+
 ## [2.2] - 2026-11-17
 
 ### Added
