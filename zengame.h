@@ -10,8 +10,8 @@
 // hacia abajo. Logica pura, con tests en test/test_zengame.cpp: el sketch solo dibuja y lee el
 // dedo.
 
-#define ZEN_SESSION_MS 45000u     // lo que dura la sesion (sin la intro): 30 s hasta la v1.46, 45 desde la
-                                  // v1.47 (60 s en la v1.45)
+#include "tuning.h"  // lo que dura la sesion (ZEN_SESSION_MS) y lo que da (ZEN_GAIN_MAX, ZEN_WASH...): alli
+
 #define ZEN_DRIFT_FROM_MS 30000u  // desde aqui la franja sube y baja despacio, y su concentracion da DEF de
                                   // bonificacion (v1.47)
 #define ZEN_DRIFT_AMP 22.0f       // cuanto se aleja el centro de la franja del 50 (en % de la barra)
@@ -34,11 +34,6 @@
 #define ZEN_SURGE_KICK_START 21.25f  // %/s que quita un golpe al principio... (era 25)
 #define ZEN_SURGE_KICK_END 34.0f     // ...y al final (era 40)
 #define ZEN_SURGE_WARN_MS 400u    // la cascada se hincha antes de cada golpe
-#define ZEN_TENTHS_PER_POINT 35   // DEF: 1 punto cada 3,5 s dentro de la franja (v1.48: eran 2 s)
-#define ZEN_GAIN_MAX 8            // tope de la parte normal, los primeros 30 s (v1.48: era 15)
-#define ZEN_BONUS_TENTHS_PER_POINT 40  // bonificacion: 1 DEF cada 4 s en la franja mientras se mueve...
-#define ZEN_BONUS_MAX 3           // ...hasta 3 (v1.48: 1,5 s y 10; daba demasiado)
-#define ZEN_WASH 10               // limpieza tras una sesion completa (la cascada lava)
 
 struct ZenState {
   float c = 50, vc = 0;        // concentracion (0-100) y su velocidad (%/s)

@@ -6,64 +6,16 @@
 #include "economy.h" // las monedas del patio (Y4): lo que se gana y lo que cuesta
 #include "eggtimer.h" // el huevo del patio (v2.0, Y3): 2 h de tiempo real, las sacudidas lo adelantan
 #include "travel.h"  // los viajes y la coleccion (v2.0, Y5): lo que trae un viaje
+#include "tuning.h"  // los numeros del equilibrio (necesidades, huevos, premios...): se afinan alli
 
-// 1 tick = 1 minuto de juego. Baja este valor para probar mas rapido
-// (p. ej. 5000UL = las estadisticas caen 12x mas rapido).
-#define PET_TICK_MS 60000UL
 // Los niveles ya no son las horas de edad (v1.35): ver growth.h. Con la curva nueva
 // CHARMANDER llega al nivel 16 a las ~8 h de juego con cuidado perfecto.
 #define EAT_ANIM_MS 2500UL
 #define HEART_MS 1500UL
 #define EVOLVE_ANIM_MS 5200UL              // animacion de evolucion (mas larga = mas epica)
 #define CEREMONY_MS 10000UL                // duracion de la despedida en pantalla
-#define FAREWELL_AGE_MIN (3UL * 24 * 60)   // se despide a los 3 dias de juego (en forma final)
-// abandono (v1.60, sustituye a la escapada): con las cuatro necesidades a cero (despierto y con la
-// placa encendida), el vinculo se apaga del todo en BOND_FADE_MIN minutos (-4, -3, -3...: 10 cada 3).
-// Ya a cero, DEATH_MIN minutos mas y se muere: un dialogo ofrece un Revivir. Un solo cuidado (cualquier
-// necesidad por encima de 0) para la cuenta; el vinculo perdido no vuelve. Desde el nivel
-// DEATH_EGG_LEVEL deja un huevo de su linea con un DEATH_EGG_ODDS %.
-#define BOND_FADE_MIN 30
-#define DEATH_MIN 30
-#define DEATH_EGG_LEVEL 50
-#define DEATH_EGG_ODDS 60
-#define REVIVE_NEEDS 50                    // revivido: comida, felicidad, energia y limpieza a 50
-// v1.64: el Revivir tiene una hora. Si en REVIVE_LIMIT_MIN minutos (reales: tambien apagada) no se usa,
-// se muere: el dialogo dice que murio y solo deja ver el final (con su huevo)
-#define REVIVE_LIMIT_MIN 60
-// la noche (v1.63), con hora (sin reloj no hay nada de esto). Desde SLEEPY_HOUR tiene sueño (globo con
-// "zzz"); a las BED_HOUR se duerme solo y, despertado antes de WAKE_HOUR, vuelve a dormirse a los
-// NIGHT_RESLEEP_MIN minutos despierto. A las WAKE_HOUR se despierta solo y suena, si se durmio de
-// noche (desde EVENING_HOUR: una siesta de tarde no). Acostarlo tu con sueño da BED_BOND de vinculo,
-// una vez por noche y fuera del tope diario. Dormido de noche las necesidades bajan la mitad que en
-// una siesta, con suelos mas altos: amanece con todo a 50 o mas si se acosto bien cuidado.
-#define EVENING_HOUR 20
-#define SLEEPY_HOUR 22
-#define BED_HOUR 23
-#define WAKE_HOUR 8
-#define NIGHT_RESLEEP_MIN 30
-#define BED_BOND 3
-#define NIGHT_FOOD_FLOOR 50   // comida y felicidad: -1 cada 4 min, hasta 50
-#define NIGHT_JOY_FLOOR 50
-#define NIGHT_HYG_FLOOR 55    // limpieza: -1 cada 6 min, hasta 55
-// cacas (v1.58): probabilidad (%) por minuto despierto con la comida por encima de 40. Era 15 (una
-// cada ~7 min); con 5, una cada ~20 min. Cada una se limpia tocandola (POOP_TAP_HYG de limpieza)
-// o todas a la vez con el baño
-#define POOP_ODDS 5
-#define POOP_MAX 3
-#define POOP_TAP_HYG 10
-
-// --- ritmo del peso y del vinculo (v1.22). El peso es grasa de mas: 0 = en forma.
-// Antes se quemaba -1 cada 3 min (20 a la hora): una chuche (+12) desaparecia en
-// 36 min y el peso se quedaba en 0 todo el dia. Ahora una chuche dura ~3 h despierto.
-#define WEIGHT_BURN_AWAKE_MIN 15           // -1 de peso cada 15 min despierto
-#define WEIGHT_BURN_SLEEP_MIN 30           // -1 cada 30 min durmiendo
-#define GAME_WEIGHT_DIV 2                  // minijuego: -puntos/2 de peso
-#define TRAIN_WEIGHT_DIV 10                // saco: -golpes/10 de peso
-// El vinculo maximo (100) debe costar 5-8 dias: 10 al dia por cuidados (tope de
-// addBond) + 4 del primer cuidado del dia = 14, el dia 8 cuidandolo al maximo.
-#define BOND_DAY_CAP 10                    // tope diario de addBond (era 20)
-#define BOND_CARE_DAY 4                    // primer cuidado del dia, fuera del tope
-#define PET_BOND_COOLDOWN_MS (15UL * 60 * 1000)  // mimar da vinculo como mucho cada 15 min
+// El abandono, la muerte y el Revivir (v1.60, v1.64), la noche (v1.63), las cacas, el peso y el vinculo:
+// sus numeros estan en tuning.h.
 
 // milisegundos que faltan hasta `deadline` (0 si ya paso, o si deadline==0:
 // "temporizador inactivo"). Todos los temporizadores del juego (dialogos,
@@ -85,48 +37,7 @@ enum : uint8_t { CER_NONE = 0, CER_FAREWELL, CER_RUNAWAY, CER_RELEASE, CER_DEATH
 
 enum PetMood : uint8_t { MOOD_HAPPY, MOOD_SAD, MOOD_EATING, MOOD_SLEEPING };
 
-// --- pasos (docs/FEATURES.md, Tarea 1). Valores de partida, para afinar jugando.
-// metas diarias de pasos (v1.25): 3000, 6000 y 10000, cada una una vez al dia y en orden.
-// La de 10000 no es para todos los dias: premia un paseo largo.
-#define STEP_GOAL_TIERS 3
-static const uint32_t STEP_GOALS[STEP_GOAL_TIERS] = { 3000, 6000, 10000 };
-// niveles de cada meta (v1.36, docs/GAMEPLAY_TUNING.md #6): pasear acelera la crianza. Hasta 4
-// al dia, con el bicho despierto (como el resto de premios de caminar). La de 10000 daba un
-// Caramelo Raro (+1); ahora da +2 directamente y ya no da caramelo.
-static const uint8_t STEP_GOAL_LEVELS[STEP_GOAL_TIERS] = { 1, 1, 2 };
-#define STEP_GOAL 3000            // la primera meta (la de la racha), = STEP_GOALS[0]
-#define GOAL2_JOY 10              // premio de la meta de 6000...
-#define GOAL2_BOND 2              // ...con vinculo fuera del tope diario
-#define GOAL3_JOY 15              // premio de la de 10000: +2 niveles y medalla MARATON
-#define GOAL3_BOND 3
-#define RARE_CANDY_LEVELS 1       // Caramelo Raro: +1 nivel (addLevels: la barra conserva lo que llevaba)
-#define STEPS_PER_JOY 100         // +1 felicidad cada 100 pasos...
-#define STEP_JOY_DAY_CAP 30       // ...como mucho +30 al dia
-#define STEPS_PER_WEIGHT 1000     // -1 de peso cada 1000 pasos (v1.22: eran 250, 3000 pasos quemaban una chuche)
-#define STEPS_PER_BOND 1000       // +1 de vinculo cada 1000 (con el tope diario de addBond)
-#define GOAL_JOY 10               // premio de la meta
-#define FIND_MIN_STEPS 800        // pasos premiados entre dos hallazgos (al azar entre MIN y MAX)
-#define FIND_MAX_STEPS 1200
-#define FINDS_PER_DAY 5           // tope de hallazgos al azar al dia (los regalos de las metas van aparte)
-// probabilidad de cada objeto (%). v1.54: entra la tarta (le quita 15 a la baya y 5 a las vitaminas).
-// v1.59: entra el Revivir (le quita 5 a la baya)
-#define ODDS_BERRY 35
-#define ODDS_CAKE 20
-#define ODDS_VITAMIN 30
-#define ODDS_CHARM 10
-#define ODDS_REVIVE 5
-static_assert(ODDS_BERRY + ODDS_CAKE + ODDS_VITAMIN + ODDS_CHARM + ODDS_REVIVE == 100, "los hallazgos suman 100");
-#define REVIVE_START 3            // Revivir con los que empieza una partida (y una vez, un guardado de antes de v1.59)
-#define ITEM_MAX 9                // tope de cada objeto en la mochila
-#define GOLDEN_FOOD 50            // baya dorada
-#define GOLDEN_JOY 15
-#define VITAMIN_TRAIN 3           // vitaminas: +3 de entrenamiento
-#define CHARM_SHINY_MULT 3        // amuleto: el siguiente huevo, x3 de probabilidad shiny
-// tarta (v1.54): sustituye a la chuche del menu de comida, pero es limitada (se encuentra caminando o
-// combatiendo). Llena la comida y la deja llena CAKE_SATED_MIN minutos; engorda como la chuche.
-#define CAKE_SATED_MIN 180
-#define CAKE_JOY 12
-#define CAKE_WEIGHT 12
+// --- pasos (docs/FEATURES.md, Tarea 1): metas, hallazgos y sus premios en tuning.h
 #define FOUND_QUEUE (FINDS_PER_DAY + STEP_GOAL_TIERS)  // hallazgos que esperan a que se encienda la pantalla: los de un dia entero (8)
 // huevos (v1.39): ya no son gratis. Solo se encuentran caminando, uno cada EGG_MIN..EGG_MAX pasos
 // sorteados (media 11500): quien camina 5000 pasos al dia encuentra ~3 a la semana (35000 / 11500),
@@ -138,9 +49,8 @@ static_assert(ODDS_BERRY + ODDS_CAKE + ODDS_VITAMIN + ODDS_CHARM + ODDS_REVIVE =
 // Llega envuelto, como una cajita en el suelo de casa, y entra en la mochila al abrirlo (un toque con
 // el bicho despierto, que se alegra). Se guardan en la NVS ("gifts"), hasta GIFT_MAX sin abrir; con
 // la cola llena, lo nuevo va derecho a la mochila con el aviso de siempre (nada se pierde).
-#define GIFT_MAX 8
-#define EGG_MIN_STEPS 8000
-#define EGG_MAX_STEPS 15000
+#define GIFT_MAX 8  // tamano del blob "gifts" en la NVS: no es un numero de equilibrio
+// (los pasos entre dos huevos, EGG_MIN_STEPS..EGG_MAX_STEPS, estan en tuning.h)
 
 // objetos de la mochila (del jugador). El amuleto no se usa a mano: se lleva.
 // IT_RARECANDY, IT_EGG, IT_CAKE e IT_REVIVE van al final: la mochila se guarda por posicion ("bpack") y
@@ -150,53 +60,17 @@ static_assert(ODDS_BERRY + ODDS_CAKE + ODDS_VITAMIN + ODDS_CHARM + ODDS_REVIVE =
 // lanza al ganar a un bicho salvaje (encounter.h).
 enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_RARECANDY, IT_EGG, IT_CAKE, IT_REVIVE, IT_BALL, IT_COUNT };
 
-// --- trucos del IMU (Tarea 2)
-#define GRUMPY_JOY 5                 // despertarlo agitando: -5 felicidad...
-#define GRUMPY_COOLDOWN_MS 60000UL   // ...y otro despertar en 60 s no resta mas
+// --- trucos del IMU (Tarea 2): lo que restan el enfado y el mareo, en tuning.h
 #define EMOTE_MS 3000UL              // enfado, mareo, huevo que se tambalea
-#define DIZZY_SHAKES 3               // 3 sacudidas en 2 minutos...
-#define DIZZY_WINDOW_MS 120000UL
-#define DIZZY_JOY 3                  // ...restan 3 de felicidad...
-#define DIZZY_COOLDOWN_MS 600000UL   // ...como mucho cada 10 minutos
 
 enum : uint8_t { EMOTE_NONE = 0, EMOTE_ANGRY, EMOTE_DIZZY, EMOTE_WOBBLE };
 
-// --- combate (felicidad del final de un estadio)
-#define PRACTICE_JOY 3                 // felicidad del final de un estadio...
-#define PRACTICE_EVERY_MS 3600000UL    // ...como mucho una vez por hora
-// tabla del botin (v1.56; hoy el objeto del jefe de un estadio). Tabla (%): tarta 27, baya dorada 25,
-// vitaminas 21 (7 cada una), Caramelo Raro 7, Poke Ball 8 (v2.2, le quita 8 a la tarta), Revivir 5 (v1.59,
-// le quita 5 a la tarta), amuleto 4 (con uno ya, tarta), huevo 3: el mas raro
-#define BDROP_CAKE 27
-#define BDROP_GOLDEN 25
-#define BDROP_VITAMIN 21
-#define BDROP_RARECANDY 7
-#define BDROP_CHARM 4
-#define BDROP_REVIVE 5
-#define BDROP_EGG 3
-#define BDROP_BALL 8
-static_assert(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDROP_CHARM + BDROP_REVIVE + BDROP_EGG +
-                      BDROP_BALL == 100,
-              "el botin suma 100");
+// --- combate: la felicidad del final de un estadio y el botin del jefe (v1.56), en tuning.h
 
-// --- encuentros salvajes (v2.2, encounter.h). Ganar da al que peleo ENC_WIN_GROW_MIN minutos de crecimiento
-// (la hora de un estadio) y al de casa ENC_WIN_JOY de felicidad, y con un ENC_DROP_PCT % un objeto de su
-// tabla (nunca monedas ni Poke Balls): tarta 30, baya dorada 30, vitaminas 21 (7 cada una), Caramelo Raro 8,
-// Revivir 7, amuleto 4 (con uno ya, tarta). Despues, una Poke Ball lo captura seguro: un huevo de su forma
-// base a la mochila, que nace a nivel 1. Perder: se escapa.
-#define ENC_WIN_GROW_MIN 60
-#define ENC_WIN_JOY 3
-#define ENC_DROP_PCT 50
-#define WDROP_CAKE 30
-#define WDROP_GOLDEN 30
-#define WDROP_VITAMIN 21
-#define WDROP_RARECANDY 8
-#define WDROP_REVIVE 7
-#define WDROP_CHARM 4
-static_assert(WDROP_CAKE + WDROP_GOLDEN + WDROP_VITAMIN + WDROP_RARECANDY + WDROP_REVIVE + WDROP_CHARM == 100,
-              "lo que suelta un salvaje suma 100");
-#define CAP_EGG_MAX 4   // huevos de captura esperando en la mochila (cada uno sabe su especie)
-#define BALL_START 3    // Poke Balls de una partida nueva (y una vez, un guardado de antes de v2.2)
+// --- encuentros salvajes (v2.2, encounter.h). Ganar da al que peleo crecimiento, al de casa felicidad y a
+// veces un objeto (nunca monedas ni Poke Balls): los numeros en tuning.h. Despues, una Poke Ball lo captura
+// seguro: un huevo de su forma base a la mochila, que nace a nivel 1. Perder: se escapa.
+#define CAP_EGG_MAX 4   // huevos de captura esperando en la mochila (tamano del blob "cegg" en la NVS)
 // el estado del encuentro de hoy (flags de "enc")
 enum : uint8_t { ENCF_SHINY = 1, ENCF_EXCL = 2, ENCF_WON = 4 };
 // por que no se puede lanzar la Poke Ball
@@ -215,15 +89,13 @@ struct EncReward {
 // bichos (el de casa y/o los de la caja). stage.h define los mismos valores: de ahi los #ifndef.
 // Vencer al jefe da la medalla del estadio (del jugador, para siempre) y, una vez al dia por estadio,
 // el premio del jefe: a cada bicho del equipo STAGE_GROW_MIN minutos de crecimiento y STAGE_BOND de
-// vinculo (fuera del tope diario), y un objeto de la tabla del botin, envuelto en casa
+// vinculo (fuera del tope diario), y un objeto de la tabla del botin, envuelto en casa (tuning.h)
 #ifndef STAGE_COUNT
 #define STAGE_COUNT 8
 #endif
 #ifndef TEAM_MAX
 #define TEAM_MAX 4
 #endif
-#define STAGE_GROW_MIN 60
-#define STAGE_BOND 5
 #define TEAM_HOME 100  // teamSlotOf: el bicho de casa (0..BOX_SLOTS-1 = su hueco de la caja; -1 = nadie)
 static_assert(STAGE_COUNT <= 8, "las medallas de estadio caben en un byte");
 static_assert(TEAM_HOME >= BOX_SLOTS, "TEAM_HOME no es un hueco de la caja");
@@ -440,7 +312,7 @@ public:
   bool wantEvolveButton() const { return canEvolveNow() && level() > evoDeclinedLv; }
   bool wantFarewellButton() const { return canFarewellNow() && ageMinutes >= farDeclinedAge; }
   void declineEvolve() { evoDeclinedLv = level(); }              // re-ofrece al subir de nivel
-  void declineFarewell() { farDeclinedAge = ageMinutes + 1440; } // re-ofrece dentro de 1 dia
+  void declineFarewell() { farDeclinedAge = ageMinutes + FAREWELL_POSTPONE_MIN; } // re-ofrece dentro de 1 dia
   // primera partida: el jugador elige inicial (Bulbasaur/Charmander/Squirtle)
   bool awaitingStarter() const { return starterPick; }
   void chooseStarter(int16_t dex) { eggTarget = dex; starterPick = false; save(); }

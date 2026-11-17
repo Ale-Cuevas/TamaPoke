@@ -12,6 +12,9 @@
 // recorrida en px (crece hacia abajo, en el sentido de la marcha). El trineo esta en y = dist
 // (su borde de abajo) y en pantalla siempre en (CX, DASH_PET_Y): un objeto en (x, y) se dibuja en
 // (CX + x - px, DASH_PET_Y + y - dist).
+//
+// Las vidas y lo que da la carrera (DASH_LIVES, DASH_PER_POINT, DASH_GAIN_MAX, DASH_WEIGHT_DIV): tuning.h.
+#include "tuning.h"
 
 #define DASH_STEP_MS 10u          // paso fijo de la fisica
 #define DASH_LATE_MAX_MS 250u     // un frame tardio cuenta como mucho esto
@@ -42,10 +45,6 @@
 #define DASH_REACH 0.7f           // el hueco siguiente cae a 0,7 x lo que se puede recorrer de lado
 #define DASH_SPAWN_AHEAD 340.0f   // las filas nacen asi de lejos (por debajo del borde de la pantalla)
 #define DASH_INVULN_MS 1200u      // tras un golpe
-#define DASH_LIVES 3
-#define DASH_PER_POINT 6          // VEL: 1 punto cada 6 filas esquivadas (v1.48: eran 4; 50 filas = 8)...
-#define DASH_GAIN_MAX 18          // ...con el tope del saco
-#define DASH_WEIGHT_DIV 8         // peso: -filas/8
 #define DASH_SLED_W_MIN 70        // ancho dibujado del trineo: sigue al sprite entre estos topes
 #define DASH_SLED_W_MAX 150
 #define DASH_SLED_MARGIN 24

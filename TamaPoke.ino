@@ -2754,7 +2754,7 @@ void stepGame() {
 void startSack() {
   if (pet.isEgg() || pet.sleeping || pet.ceremony) return;
   sackOpen = true;
-  sackUntil = millis() + 10000;
+  sackUntil = millis() + SACK_MS;
   sackOverUntil = 0;
   sackHits = 0;
   sackShake = 0;
@@ -2847,7 +2847,7 @@ void renderSack() {
 
   // barra de tiempo
   uint32_t left = sackUntil - now;
-  int bw = 280, fw = (int)((uint32_t)bw * left / 10000);
+  int bw = 280, fw = (int)((uint32_t)bw * left / SACK_MS);
   gfx->fillRoundRect(CX - bw / 2, 350, bw, 16, 5, UI_TRACK);
   if (fw > 2) gfx->fillRoundRect(CX - bw / 2, 350, fw, 16, 5, UI_BAR_OK);
 
@@ -8429,10 +8429,10 @@ int yardNeedList(const char **out) {
     return n;
   }
   if (pet.sleepy()) out[n++] = T(S_SLEEPY);
-  if (pet.fullness < 25) out[n++] = T(S_HUNGRY);
-  if (pet.hygiene < 25) out[n++] = T(S_NEEDS_BATH);
-  if (pet.energy < 25) out[n++] = T(S_EXHAUSTED);
-  if (pet.joy < 25) out[n++] = T(S_SAD);
+  if (pet.fullness < NEED_LOW) out[n++] = T(S_HUNGRY);
+  if (pet.hygiene < NEED_LOW) out[n++] = T(S_NEEDS_BATH);
+  if (pet.energy < NEED_LOW) out[n++] = T(S_EXHAUSTED);
+  if (pet.joy < NEED_LOW) out[n++] = T(S_SAD);
   return n;
 }
 

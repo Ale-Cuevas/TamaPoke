@@ -251,11 +251,11 @@ void Pet::setBagEggs(uint8_t n) {
 // sorteo shiny del huevo, 1 entre N: 1/48 base, mejor con despedida y con
 // racha/vinculo altos, y x3 con el amuleto; nunca mejor que 1/8
 int Pet::shinyOdds(bool charm) const {
-  int n = (lastEnd == CER_FAREWELL ? 24 : 48) - careBonus();
-  if (n < 8) n = 8;
+  int n = (lastEnd == CER_FAREWELL ? SHINY_ONE_IN_BLESSED : SHINY_ONE_IN) - careBonus();
+  if (n < SHINY_BEST) n = SHINY_BEST;
   if (charm) {
     n /= CHARM_SHINY_MULT;
-    if (n < 8) n = 8;
+    if (n < SHINY_BEST) n = SHINY_BEST;
   }
   return n;
 }
@@ -289,7 +289,7 @@ void Pet::syncClock(uint32_t nowEpoch) {
     save();  // primera vez, sin tiempo que aplicar, aun eligiendo inicial o sin nadie en casa
     return;
   }
-  if (mins > 14UL * 24 * 60) mins = 14UL * 24 * 60;  // tope: 2 semanas
+  if (mins > OFFLINE_MAX_MIN) mins = OFFLINE_MAX_MIN;  // tope: 2 semanas
   if (yardEgg()) eggClockStamp();  // puesto sin hora: cuenta desde la ultima vista
 
   for (uint32_t i = 0; i < mins; i++) {
@@ -297,7 +297,7 @@ void Pet::syncClock(uint32_t nowEpoch) {
     ageMinutes++;
     if (isEgg()) {
       // el del patio (Y3): a su hora real; el inicial o uno del sistema de antes, a los 3 min
-      if (yardEgg() ? eggMinutesLeft(seen + (i + 1) * 60) == 0 : ageMinutes >= 3) hatch();  // eclosiona en tu ausencia
+      if (yardEgg() ? eggMinutesLeft(seen + (i + 1) * 60) == 0 : ageMinutes >= STARTER_EGG_MIN) hatch();  // eclosiona en tu ausencia
       continue;
     }
     growMin++;  // crece igual apagado que en vivo, dormido o despierto
@@ -309,14 +309,14 @@ void Pet::syncClock(uint32_t nowEpoch) {
       sleepMinute(full, h);
       continue;
     }
-    if (!full) fullness = dropTo(fullness, 2, 15);
-    energy = dropTo(energy, 1, 15);
-    hygiene = dropTo(hygiene, 1, 15);
-    joy = dropTo(joy, 1, 15);
+    if (!full) fullness = dropTo(fullness, FOOD_DRAIN, OFFLINE_FLOOR);
+    energy = dropTo(energy, ENE_DRAIN, OFFLINE_FLOOR);
+    hygiene = dropTo(hygiene, HYG_DRAIN, OFFLINE_FLOOR);
+    joy = dropTo(joy, JOY_DRAIN, OFFLINE_FLOOR);
   }
   if (!isEgg()) {
     if (!sleeping) {  // durmiendo no ensucia
-      for (uint32_t n = mins / 240; n && poops < POOP_MAX; n--) addPoop();
+      for (uint32_t n = mins / OFFLINE_POOP_EVERY_MIN; n && poops < POOP_MAX; n--) addPoop();
     }
     // la evolucion NO se aplica offline: queda lista y la dispara el usuario
     // tocando al bicho cuando vuelve (para que vea la transformacion)
@@ -362,7 +362,7 @@ void Pet::tick() {
     if (yardEgg()) {  // el del patio (Y3): a las 2 h reales menos lo que le quitaron las sacudidas
       eggClockStamp();
       if (eggMinutesLeft() == 0) hatch();
-    } else if (ageMinutes >= 3) {
+    } else if (ageMinutes >= STARTER_EGG_MIN) {
       hatch();  // si no lo tocas, eclosiona solo a los 3 min
     }
     return;
@@ -386,18 +386,18 @@ void Pet::tick() {
   // la subida de nivel ya no suena aqui: la detecta la UI (fx.h) por cualquier via (minuto,
   // tiempo apagado, Caramelo Raro, LVL) y la anuncia con su propio sonido
 
-  if (!full) fullness = clamp100(fullness - 2);
-  energy = clamp100(energy - 1);
-  if (fullness > 40 && poops < POOP_MAX && random(100) < POOP_ODDS) addPoop();
+  if (!full) fullness = clamp100(fullness - FOOD_DRAIN);
+  energy = clamp100(energy - ENE_DRAIN);
+  if (fullness > POOP_MIN_FOOD && poops < POOP_MAX && random(100) < POOP_ODDS) addPoop();
 
-  hygiene = clamp100(hygiene - 1 - 4 * poops);
+  hygiene = clamp100(hygiene - HYG_DRAIN - HYG_DRAIN_PER_POOP * poops);
   // el sobrepeso da pereza: la energia cae el doble
-  if (weight > 50) energy = clamp100(energy - 1);
+  if (weight > OVERWEIGHT_AT) energy = clamp100(energy - OVERWEIGHT_ENE_DRAIN);
   if (weight > 0 && ageMinutes % WEIGHT_BURN_AWAKE_MIN == 0) weight--;
 
   // la disciplina forja la defensa: 12 h seguidas bien cuidado = +1 DEF
-  if (lowestStat() >= 40) {
-    if (++goodTicks >= 720) {
+  if (lowestStat() >= GOOD_CARE_MIN_NEED) {
+    if (++goodTicks >= GOOD_CARE_MIN) {
       goodTicks = 0;
       if (trDef < 100) trDef++;
     }
@@ -405,18 +405,18 @@ void Pet::tick() {
     goodTicks = 0;
   }
 
-  int dJoy = -1;
-  if (fullness < 30) dJoy -= 2;
-  if (hygiene < 30) dJoy -= 2;
+  int dJoy = -JOY_DRAIN;
+  if (fullness < JOY_HUNGRY_BELOW) dJoy -= JOY_DRAIN_HUNGRY;
+  if (hygiene < JOY_DIRTY_BELOW) dJoy -= JOY_DRAIN_DIRTY;
   joy = clamp100(joy + dJoy);
 
   // Descuido: dejar una estadistica por los suelos cuenta como error de
   // cuidado (con enfriamiento para no contar el mismo descuido cada minuto)
   if (mistakeCooldown > 0) mistakeCooldown--;
-  if (lowestStat() <= 10 && mistakeCooldown == 0) {
+  if (lowestStat() <= SLIP_AT && mistakeCooldown == 0) {
     careMistakes++;
-    mistakeCooldown = 60;
-    if (bond > 1) bond--;  // el descuido enfria el vinculo, pero sin arrasarlo:
+    mistakeCooldown = SLIP_COOLDOWN_MIN;
+    bond = bond > SLIP_BOND ? bond - SLIP_BOND : (bond > 1 ? 1 : bond);  // el descuido enfria el vinculo, pero sin arrasarlo:
                            // a -3 cada 30 min se perdia mucho mas de lo que se
                            // podia ganar en todo un dia y el vinculo se atascaba
   }
@@ -482,8 +482,8 @@ int16_t Pet::pickEggSpecies() {
   uint8_t tier = R_COMUN;
   if (lastEnd != CER_RUNAWAY && lastEnd != CER_DEATH) {  // tras una escapada o una muerte, solo comunes
     bool blessed = (lastEnd == CER_FAREWELL);
-    int rare = (blessed ? 45 : 27) + careBonus();
-    int leg = (registeredCount() >= 25) ? (blessed ? 10 : 3) + careBonus() / 3 : 0;
+    int rare = (blessed ? EGG_RARE_PCT_BLESSED : EGG_RARE_PCT) + careBonus();
+    int leg = (registeredCount() >= EGG_LEG_MIN_REG) ? (blessed ? EGG_LEG_PCT_BLESSED : EGG_LEG_PCT) + careBonus() / 3 : 0;
     int r = random(100);
     if (r < leg) tier = R_LEGENDARIO;
     else if (r < leg + rare) tier = R_RARO;
@@ -514,8 +514,8 @@ void Pet::registerSpecies(int16_t dex) {
 
 // la racha y el vinculo mejoran el sorteo del huevo (0..~14)
 int Pet::careBonus() const {
-  int s = streak > 30 ? 30 : streak;
-  return s / 3 + bond / 25;
+  int s = streak > CARE_BONUS_STREAK_CAP ? CARE_BONUS_STREAK_CAP : streak;
+  return s / CARE_BONUS_STREAK_DIV + bond / CARE_BONUS_BOND_DIV;
 }
 
 // primer cuidado del dia: avanza la racha y afianza el vinculo. saveNow=false
@@ -663,7 +663,7 @@ bool Pet::revive() {
   neglectMin = deathMin = dyingMin = 0;
   fullness = joy = energy = hygiene = REVIVE_NEEDS;
   if (careMistakes < 255) careMistakes++;
-  mistakeCooldown = 60;
+  mistakeCooldown = SLIP_COOLDOWN_MIN;
   heartUntil = millis() + HEART_MS;
   save();
   return true;
@@ -711,9 +711,9 @@ void Pet::hatch() {
   eggSaved = 0;
   shiny = eggShiny;
   // genes del individuo: 90-110% por stat (cada crianza es unica)
-  geneAtk = 90 + random(21);
-  geneDef = 90 + random(21);
-  geneSpe = 90 + random(21);
+  geneAtk = GENE_MIN + random(GENE_MAX - GENE_MIN + 1);
+  geneDef = GENE_MIN + random(GENE_MAX - GENE_MIN + 1);
+  geneSpe = GENE_MIN + random(GENE_MAX - GENE_MIN + 1);
   trAtk = trDef = trSpe = 0;
   berryKnown = false;
   satedUntil = 0;    // la tarta es del individuo: la edad vuelve a empezar
@@ -739,7 +739,7 @@ bool Pet::canEvolveNow() const {
   if (isEgg() || sleeping || busyEnding()) return false;
   const DexEntry &d = DEX_TBL[speciesId];
   if (d.evolvesTo == 0) return false;
-  return level() >= (uint16_t)d.evolveLevel + careMistakes && lowestStat() >= 40;
+  return level() >= (uint16_t)d.evolveLevel + careMistakes && lowestStat() >= EVOLVE_MIN_NEED;
 }
 
 void Pet::evolve() {
@@ -774,13 +774,13 @@ void Pet::feedBerry(uint8_t color) {
   if (busyEnding()) return;
   if (isEgg() || sleeping) return;
   if (lovesBerry(color)) {
-    fullness = clamp100(fullness + 35);
-    joy = clamp100(joy + 10);
+    fullness = clamp100(fullness + FAV_BERRY_FOOD);
+    joy = clamp100(joy + FAV_BERRY_JOY);
     heartUntil = millis() + HEART_MS;  // "le encanta!"
     berryKnown = true;                 // descubierto: se muestra en la ficha
-    addBond(2);
+    addBond(FAV_BERRY_BOND);
   } else {
-    fullness = clamp100(fullness + 25);
+    fullness = clamp100(fullness + BERRY_FOOD);
   }
   eatUntil = millis() + EAT_ANIM_MS;
   registerCare();
@@ -803,17 +803,18 @@ bool Pet::eatCake() {
 
 void Pet::playResult(uint8_t score) {
   if (busyEnding() || isEgg()) return;
-  uint8_t v = trSpe + score / 5;  // jugar entrena la velocidad
+  uint8_t v = trSpe + score / BALL_SPE_DIV;  // jugar entrena la velocidad
   trSpe = v > 100 ? 100 : v;
-  joy = clamp100(joy + 5 + (score > 15 ? 30 : score * 2));
-  energy = dropTo(energy, 10 + score / 2, 5);
-  if (!sated()) fullness = dropTo(fullness, 5, 5);  // con tarta (v1.54) jugar no da hambre
+  joy = clamp100(joy + BALL_JOY_BASE +
+                 (score > BALL_JOY_BONUS_MAX / BALL_JOY_PER_POINT ? BALL_JOY_BONUS_MAX : score * BALL_JOY_PER_POINT));
+  energy = dropTo(energy, BALL_ENE_BASE + score / BALL_ENE_DIV, GAME_FLOOR);
+  if (!sated()) fullness = dropTo(fullness, GAME_FOOD_COST, GAME_FLOOR);  // con tarta (v1.54) jugar no da hambre
   int burn = (int)weight - score / GAME_WEIGHT_DIV;  // el ejercicio quema peso
   weight = burn > 0 ? burn : 0;
   if (score >= 5) heartUntil = millis() + HEART_MS;
   if (score > gameHi) gameHi = score;  // nuevo record
   lastCoins = addCoins(coinsForGame(ECO_BALL, score), true);
-  addBond(2);
+  addBond(GAME_BOND);
   registerCare();
   save();
 }
@@ -821,22 +822,22 @@ void Pet::playResult(uint8_t score) {
 // saco de entrenamiento: los golpes entrenan la fuerza. Devuelve la subida.
 uint8_t Pet::trainStrength(uint16_t hits) {
   if (busyEnding() || isEgg()) return 0;
-  uint8_t gain = hits / 4;          // ~4 golpes = 1 punto de entrenamiento
-  if (gain > 18) gain = 18;         // tope por sesion: la FUE se forja a fuego lento
+  uint8_t gain = hits / SACK_HITS_PER_POINT;      // ~4 golpes = 1 punto de entrenamiento
+  if (gain > SACK_GAIN_MAX) gain = SACK_GAIN_MAX;  // tope por sesion: la FUE se forja a fuego lento
   uint8_t antes = trAtk;
   uint16_t v = (uint16_t)trAtk + gain;
   trAtk = v > 100 ? 100 : (uint8_t)v;
   gain = trAtk - antes;             // lo que de verdad entro: al topar en 100 la
                                     // pantalla anunciaba +18 aunque cupieran menos
-  energy = dropTo(energy, 12, 5);   // cansa
-  if (!sated()) fullness = dropTo(fullness, 5, 5);  // con tarta (v1.54) jugar no da hambre
+  energy = dropTo(energy, SACK_ENE_COST, GAME_FLOOR);   // cansa
+  if (!sated()) fullness = dropTo(fullness, GAME_FOOD_COST, GAME_FLOOR);  // con tarta (v1.54) jugar no da hambre
   int burn = (int)weight - hits / TRAIN_WEIGHT_DIV;  // tambien quema peso
   weight = burn > 0 ? burn : 0;
-  joy = clamp100(joy + 6);
+  joy = clamp100(joy + SACK_JOY);
   if (hits >= 20) heartUntil = millis() + HEART_MS;
   if (hits > strHi) strHi = hits;   // record de golpes
   lastCoins = addCoins(coinsForGame(ECO_SACK, hits), true);
-  addBond(2);
+  addBond(GAME_BOND);
   registerCare();
   save();
   return gain;
@@ -851,14 +852,14 @@ uint8_t Pet::zenResult(uint16_t focusTenths, uint16_t driftTenths) {
   uint16_t v = (uint16_t)trDef + zenTotalGain(focusTenths, driftTenths);
   trDef = v > 100 ? 100 : (uint8_t)v;
   uint8_t gain = trDef - antes;
-  energy = dropTo(energy, 8, 5);
-  if (!sated()) fullness = dropTo(fullness, 3, 5);
-  joy = clamp100(joy + 6);
+  energy = dropTo(energy, ZEN_ENE_COST, GAME_FLOOR);
+  if (!sated()) fullness = dropTo(fullness, ZEN_FOOD_COST, GAME_FLOOR);
+  joy = clamp100(joy + ZEN_JOY);
   hygiene = clamp100(hygiene + ZEN_WASH);  // la cascada lava (decidido 2026-11-07)
   if (focusTenths >= 200) heartUntil = millis() + HEART_MS;
   if (focusTenths > zenHi) zenHi = focusTenths;
   lastCoins = addCoins(coinsForGame(ECO_ZEN, zenTotalGain(focusTenths, driftTenths)), true);
-  addBond(2);
+  addBond(GAME_BOND);
   registerCare();
   save();
   return gain;
@@ -872,15 +873,15 @@ uint8_t Pet::dashResult(uint16_t dodged) {
   uint16_t v = (uint16_t)trSpe + dashGain(dodged);
   trSpe = v > 100 ? 100 : (uint8_t)v;
   uint8_t gain = trSpe - antes;
-  energy = dropTo(energy, 12, 5);
-  if (!sated()) fullness = dropTo(fullness, 5, 5);  // con tarta (v1.54) jugar no da hambre
+  energy = dropTo(energy, DASH_ENE_COST, GAME_FLOOR);
+  if (!sated()) fullness = dropTo(fullness, GAME_FOOD_COST, GAME_FLOOR);  // con tarta (v1.54) jugar no da hambre
   int burn = (int)weight - dodged / DASH_WEIGHT_DIV;
   weight = burn > 0 ? burn : 0;
-  joy = clamp100(joy + 5 + (dodged > 15 ? 15 : dodged) * 2);
+  joy = clamp100(joy + DASH_JOY_BASE + (dodged > DASH_JOY_ROWS_MAX ? DASH_JOY_ROWS_MAX : dodged) * DASH_JOY_PER_ROW);
   if (dodged >= 10) heartUntil = millis() + HEART_MS;
   if (dodged > dashHi) dashHi = dodged;
   lastCoins = addCoins(coinsForGame(ECO_SLED, dodged), true);
-  addBond(2);
+  addBond(GAME_BOND);
   registerCare();
   save();
   return gain;
@@ -914,20 +915,20 @@ void Pet::toggleLight() {
 // un minuto dormido: la energia vuelve y las necesidades bajan lento y con suelo. De dia (una
 // siesta) ~4x mas lento que despierto; de noche la mitad aun, con suelos mas altos
 void Pet::sleepMinute(bool full, int h) {
-  energy = clamp100(energy + 6);
+  energy = clamp100(energy + SLEEP_ENE_GAIN);
   if (nightHour(h)) {
-    if (ageMinutes % 4 == 0) {
+    if (ageMinutes % NIGHT_FOOD_JOY_EVERY == 0) {
       if (!full) fullness = dropTo(fullness, 1, NIGHT_FOOD_FLOOR);
       joy = dropTo(joy, 1, NIGHT_JOY_FLOOR);
     }
-    if (ageMinutes % 6 == 0) hygiene = dropTo(hygiene, 1, NIGHT_HYG_FLOOR);
+    if (ageMinutes % NIGHT_HYG_EVERY == 0) hygiene = dropTo(hygiene, 1, NIGHT_HYG_FLOOR);
     return;
   }
-  if (ageMinutes % 2 == 0) {
-    if (!full) fullness = dropTo(fullness, 1, 30);
-    joy = dropTo(joy, 1, 35);
+  if (ageMinutes % NAP_FOOD_JOY_EVERY == 0) {
+    if (!full) fullness = dropTo(fullness, 1, NAP_FOOD_FLOOR);
+    joy = dropTo(joy, 1, NAP_JOY_FLOOR);
   }
-  if (ageMinutes % 3 == 0) hygiene = dropTo(hygiene, 1, 45);
+  if (ageMinutes % NAP_HYG_EVERY == 0) hygiene = dropTo(hygiene, 1, NAP_HYG_FLOOR);
 }
 
 // acostarlo a mano (la luz o boca abajo). Desde EVENING_HOUR es dormir de noche: se despertara solo
@@ -1014,7 +1015,7 @@ void Pet::clean() {
   poops = 0;
   poopMask = 0;
   hygiene = 100;
-  addBond(1);
+  addBond(BATH_BOND);
   registerCare();
   save();
 }
@@ -1022,11 +1023,11 @@ void Pet::clean() {
 void Pet::caress() {
   if (busyEnding()) return;
   if (isEgg() || sleeping) return;
-  joy = clamp100(joy + 5);
+  joy = clamp100(joy + CARESS_JOY);
   heartUntil = millis() + HEART_MS;
   // un toque en el bicho es gratis: sin enfriamiento, 10 toques llenaban el tope del dia
   if (!timeLeft(petBondUntil)) {
-    addBond(1);
+    addBond(CARESS_BOND);
     petBondUntil = millis() + PET_BOND_COOLDOWN_MS;
   }
   pendingSave = true;  // la felicidad (v2.3: el mimo del panel Cuidar)
@@ -1036,7 +1037,7 @@ void Pet::caress() {
 void Pet::eggTap() {
   if (!isEgg() || vacant) return;
   if (yardEgg()) return;  // el del patio no se abre a toques (Y3): solo se tambalea (la UI)
-  if (++eggTaps >= 3) hatch();
+  if (++eggTaps >= STARTER_EGG_TAPS) hatch();
   else save();
 }
 
@@ -1903,7 +1904,7 @@ void Pet::sleepDeferred() {
 PetMood Pet::mood() const {
   if (sleeping) return MOOD_SLEEPING;
   if (eating()) return MOOD_EATING;
-  if (lowestStat() < 25) return MOOD_SAD;
+  if (lowestStat() < NEED_LOW) return MOOD_SAD;
   return MOOD_HAPPY;
 }
 

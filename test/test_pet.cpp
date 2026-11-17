@@ -301,18 +301,19 @@ TEST(feed, dormido_o_huevo_no_come) {
 }
 
 // ---------------------------------------------------------------- tick
-TEST(tick, despierto_baja_comida_2_y_energia_1_por_minuto) {
+// el ritmo de cada barra sale de tuning.h (FOOD_DRAIN 2, ENE_DRAIN 1, HYG_DRAIN 1, JOY_DRAIN 1 hoy)
+TEST(tick, despierto_cada_barra_baja_a_su_ritmo) {
   Pet p;
   makePet(p, 4);
   setStats(p, 100, 100, 100, 100);
   p.poops = 0;
-  mockForceRandom(99);  // random(100) < 15 falso: sin cacas
+  mockForceRandom(99);  // random(100) < POOP_ODDS falso: sin cacas
   advance(p, 10);
   mockClearForcedRandom();
-  CHECK_EQ(p.fullness, (uint8_t)80);
-  CHECK_EQ(p.energy, (uint8_t)90);
-  CHECK_EQ(p.hygiene, (uint8_t)90);
-  CHECK_EQ(p.joy, (uint8_t)90);
+  CHECK_EQ(p.fullness, (uint8_t)(100 - 10 * FOOD_DRAIN));
+  CHECK_EQ(p.energy, (uint8_t)(100 - 10 * ENE_DRAIN));
+  CHECK_EQ(p.hygiene, (uint8_t)(100 - 10 * HYG_DRAIN));
+  CHECK_EQ(p.joy, (uint8_t)(100 - 10 * JOY_DRAIN));
   CHECK_EQ(p.ageMinutes, (uint32_t)10);
   CHECK_EQ(p.poops, (uint8_t)0);
 }
@@ -2654,6 +2655,8 @@ TEST(night, por_debajo_del_suelo_no_baja_mas) {
   CHECK_EQ(p.hygiene, (uint8_t)50);
 }
 
+// fija a proposito una promesa del juego (README): acostado bien cuidado, amanece con todo a 50 o mas.
+// Si falla tras tocar tuning.h (FOOD_DRAIN, JOY_DRAIN, los suelos de la noche...), el cambio la rompe.
 TEST(night, apagado_toda_la_noche_duerme_y_amanece) {
   Pet p;
   makePet(p, 4);

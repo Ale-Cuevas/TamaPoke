@@ -10,25 +10,18 @@
 // (pet.h incluye esto); una static_assert en pet.cpp comprueba que coinciden.
 #include <stdint.h>
 #include "eggtimer.h"  // eggClockKnown / EGG_EPOCH_MIN: lo que cuenta como "hora de verdad"
+#include "tuning.h"    // las tablas de cada duracion (monedas, crecimiento, probabilidades): se afinan alli
 
 // ---- los viajes ----
-#define TRV_TIERS 3
+// TRV_MIN, TRV_COINS, TRV_GROW, TRV_ITEM_PCT, TRV_SOUV_PCT y TRV_DUP_COINS: tuning.h
 #define TRV_NONE 0xFF  // "ningun hueco" / "sin objeto" / "sin recuerdo"
-static const uint16_t TRV_MIN[TRV_TIERS] = { 60, 180, 480 };         // duracion (minutos reales)
-static const uint16_t TRV_COINS[TRV_TIERS] = { 15, 40, 90 };         // monedas (fuera del tope diario)
-static const uint16_t TRV_GROW[TRV_TIERS] = { 30, 90, 240 };         // minutos de crecimiento (growth.h)
-static const uint8_t TRV_ITEM_PCT[TRV_TIERS] = { 25, 50, 100 };     // probabilidad de un objeto
-static const uint8_t TRV_SOUV_PCT[TRV_TIERS] = { 40, 75, 100 };      // probabilidad de un recuerdo
 static const uint8_t TRV_EVENTS[TRV_TIERS] = { 1, 2, 3 };            // sucesos del camino
 #define TRV_EVENTS_MAX 3
-#define TRV_DUP_COINS 10  // un recuerdo repetido se cambia por monedas
 
-// objetos que pueden traer y su peso (suman 100): baya dorada, tarta, 3 vitaminas, caramelo raro, revivir y
-// (v2.2) la Poke Ball, que le quita 10 a la baya
-#define TRV_POOL_N 8
+// objetos que pueden traer (su peso, TRV_POOL_W, en tuning.h, en este mismo orden): baya dorada, tarta, 3
+// vitaminas, caramelo raro, revivir y (v2.2) la Poke Ball
 static constexpr uint8_t TRV_POOL_ID[TRV_POOL_N] = { 0 /*GOLDEN*/, 7 /*CAKE*/, 1 /*PROTEIN*/, 2 /*IRON*/, 3 /*CARBOS*/,
                                                  5 /*RARECANDY*/, 8 /*REVIVE*/, 9 /*BALL*/ };
-static const uint8_t TRV_POOL_W[TRV_POOL_N] = { 30, 15, 10, 10, 10, 10, 5, 10 };
 
 // ---- recuerdos: 5 mapas x 5. id = (mapa - 1) * 5 + i, i = 0..4 ----
 #define TRV_DESTS 5  // = YARD_MAPS (economy.h); pet.cpp lo comprueba
@@ -40,8 +33,7 @@ inline uint8_t souvenirRarity(uint8_t id) {  // 0-1 comun, 2-3 poco comun, 4 rar
   return i <= 1 ? SOUV_COMMON : (i <= 3 ? SOUV_UNCOMMON : SOUV_RARE);
 }
 inline uint8_t souvenirDest(uint8_t id) { return id / SOUV_PER_DEST + 1; }  // mapa 1..5
-// peso (%) de comun / poco comun / raro por duracion: 1 h sin raros; 3 h pocos; 8 h muchos
-static const uint8_t TRV_RARITY_W[TRV_TIERS][3] = { { 70, 30, 0 }, { 60, 32, 8 }, { 40, 35, 25 } };
+// el peso de comun / poco comun / raro por duracion (TRV_RARITY_W) esta en tuning.h
 
 // ---- el azar: una semilla -> una secuencia (splitmix32) ----
 inline uint32_t trvNext(uint32_t *s) {
