@@ -6,6 +6,21 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [Unreleased]
+
+### Added
+
+- **Travel (phase Y5).** A new card in the Play panel sends a Box pet on a trip to one of your backgrounds for
+  1 h, 3 h or 8 h (one trip at a time, real time, also with the board off; needs the clock set). The trip view
+  shows a countdown, the destination with the pet in it, and a log of 1-3 things that happened. While away the
+  pet can't be woken, join a battle team or wander in the yard; the Box shows a suitcase and the time left. Back
+  home, a banner shows what it brought: coins (15 / 40 / 90), growth for the traveller (30 / 90 / 240 game
+  minutes), sometimes an item, and often a souvenir. New save keys `trv`, `trvR`, `souv`, `souvD`. Serial
+  `TRAVEL`, `TRAVEL <slot> <map> <0-2>`, `TRAVELT <min>`, `TRAVELEND`, `SOUV [mask]`.
+- **Collection.** A third Bag tab (the Bag tabs are now icons: items, shop, collection) with the 25 souvenirs,
+  5 per background (the last of each row is rare, with a gold frame). Unfound ones are silhouettes; tap one for
+  its name, place, rarity and the day it was found. A souvenir you already have turns into 10 coins.
+
 ## [2.0] - 2026-11-16
 
 **The yard.** A new look and home (design: `docs/yard-prototype/DESIGN_YARD_UI.md`): the pet lives in a top-down
