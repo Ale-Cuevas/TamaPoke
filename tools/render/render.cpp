@@ -411,6 +411,7 @@ static void eggNow() {
   resetUi();
   if (pet.awaitingStarter()) pet.chooseStarter(4);
   pet.speciesId = -1;
+  pet.dbgEggSpecies(4);  // v2.4: the egg shows its species' colours; always Charmander unless a scene says so
   pet.lastSeenEpoch = epochAt(10);
 }
 
@@ -725,6 +726,10 @@ static const std::vector<Scene> &scenes() {
     { "yard-feed-busy", [] { feedTap(CP_RED); gHostMillis += 85; render(); openCarePanel(); } },
     { "yard-feed-busy-es", [] { feedTap(CP_RED, LANG_ES); gHostMillis += 85; render(); openCarePanel(); } },
     { "yard-egg", [] { yardEggScene(40, 0); }, 40 },
+    // v2.4: the egg in its type's colours. Tangela, grass only: all green; Zapdos, electric/flying:
+    // yellow top-left, sky blue bottom-right, blended along a ( / ) diagonal
+    { "yard-egg-grass", [] { yardEggScene(40, 0); pet.dbgEggSpecies(114); }, 40 },
+    { "yard-egg-zapdos", [] { yardEggScene(40, 0); pet.dbgEggSpecies(145); }, 40 },
     { "yard-egg-night", [] { yardEggScene(150, 30); pet.lastSeenEpoch = epochAt(22); }, 20 },
     { "yard-egg-shake", [] { yardEggScene(40, 0); render(); pet.shaken(); yardEggInfo(); }, 3 },
     { "yard-egg-tap", [] { yardEggScene(160, 0); render(); onTap(yardEggX, yardEggY - YARD_EGG_MID); }, 3 },

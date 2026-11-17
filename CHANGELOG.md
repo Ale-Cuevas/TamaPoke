@@ -6,6 +6,19 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [2.4] - 2026-11-17
+
+### Added
+
+- **Eggs show the type of the pet inside.** A one-type egg is all in that type's colour (Grass green, Fire
+  orange, Water blue, Electric yellow, Flying sky blue...; Normal keeps the old cream). A two-type egg has the
+  first type in the upper-left and the second in the lower-right, blending along a diagonal ( / ) through the
+  middle: Zapdos (Electric/Flying) is yellow at the top-left and sky blue at the bottom-right. The spots are a
+  pale tint of the colour under them. This covers the yard egg, the hatch, the egg left by a death, the
+  screensaver, the Box's "now at home" egg and the captured egg. Eggs in the Backpack keep the classic look:
+  their pet isn't decided until they come home (captured ones excepted).
+- Serial `EGGD <dex>`: the egg at home becomes that species, to check its colours.
+
 ## [2.3] - 2026-11-17
 
 ### Added

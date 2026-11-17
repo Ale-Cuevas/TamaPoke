@@ -298,6 +298,8 @@ public:
   void hatchNow();                   // serie HATCH: el huevo de casa eclosiona ya (tambien el del patio)
   void dbgEggSaved(uint8_t m) { eggSaved = m > EGG_SHAKE_CAP ? EGG_SHAKE_CAP : m; }  // renderizador
   void dbgClearAnims() { eatUntil = heartUntil = evolveUntil = 0; emoteKind = EMOTE_NONE; }  // renderizador
+  // serie EGGD <dex> y renderizador (v2.4): el huevo de casa lleva a dex (para ver su color); no guarda
+  void dbgEggSpecies(int16_t dex);
   void dbgEggClear() { eggPlaced = 0; eggSaved = 0; eggTaps = 0; }  // renderizador: cada escena, sin huevo del patio ni grietas
   bool eating() const { return timeLeft(eatUntil) > 0; }
   bool showHeart() const { return timeLeft(heartUntil) > 0; }

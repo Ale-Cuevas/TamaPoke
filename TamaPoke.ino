@@ -33,6 +33,7 @@
 #include "i18n.h"
 #include "audio.h"
 #include "blit.h"
+#include "eggcolor.h" // huevos con el color del tipo del bicho que llevan (v2.4, logica pura)
 #include "power.h"
 #include "volume.h" // volumen del altavoz: 4 niveles con el apagado (logica pura)
 #include "button.h"
@@ -58,7 +59,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "2.3"
+#define FW_VERSION "2.4"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -835,6 +836,11 @@ void handleSerial() {
     Serial.printf("egg yard=%d placed=%lu left=%u saved=%u cracks=%u\n", pet.yardEgg() ? 1 : 0,
                   (unsigned long)pet.eggPlacedEpoch(), pet.yardEgg() ? pet.eggMinutesLeft() : 0, pet.eggSavedMinutes(),
                   pet.eggCracks());
+    Serial.println("DONE");
+  } else if (line.startsWith("EGGD ")) {  // EGGD <dex> (v2.4): el huevo de casa pasa a llevar a dex, con su color
+    pet.dbgEggSpecies((int16_t)line.substring(5).toInt());
+    wakeUI();
+    Serial.printf("egg dex=%d\n", pet.eggSpecies());
     Serial.println("DONE");
   } else if (line.startsWith("SPEC ")) {
     int n = line.substring(5).toInt();
@@ -4336,10 +4342,23 @@ void hatchAt(int cx, int cy, int s) {
   gHatchS = s;
 }
 
-// el huevo con el centro del sprite en (cx, cy), a escala s y con sus grietas
-void drawEggAt(int cx, int cy, int s, uint8_t cracks) {
+// el huevo con el centro del sprite en (cx, cy), a escala s y con sus grietas. v2.4: pintado con el color
+// del tipo del bicho dex que lleva (eggcolor.h); dex 0 = el huevo clasico
+void drawEggAt(int cx, int cy, int s, uint8_t cracks, int16_t dex) {
   int x = cx - 16 * s, y = cy - 16 * s;
-  drawMap(SPR_EGG, SPRITE_H, x, y, s, false);
+  uint8_t t1, t2;
+  if (!eggTypesOf(dex, t1, t2)) {
+    drawMap(SPR_EGG, SPRITE_H, x, y, s, false);
+  } else {
+    for (int r = 0; r < SPRITE_H; r++) {
+      const char *row = SPR_EGG[r];
+      forRuns(SPRITE_H, [&](int c) {
+        if (row[c] == '.') return -1;
+        uint16_t col;
+        return (int)(eggCellColor(row[c], t1, t2, c, r, col) ? col : spriteColor(row[c]));
+      }, [&](int c0, int len, int k) { gfx->fillRect(x + c0 * s, y + r * s, len * s, s, (uint16_t)k); });
+    }
+  }
   if (cracks >= 1)
     for (auto &c : CRACK1) gfx->fillRect(x + c[0] * s, y + c[1] * s, s, s, INK_K);
   if (cracks >= 2)
@@ -4357,7 +4376,7 @@ bool drawHatchFx(uint32_t now) {
   const int S = gHatchS, HX = gHatchX, HY = gHatchY;
   if (t < 0.55f) {
     float k = t / 0.55f;
-    drawEggAt(HX + (int)(k * 2 * S * sinf(now * 0.06f)), HY, S, 2);
+    drawEggAt(HX + (int)(k * 2 * S * sinf(now * 0.06f)), HY, S, 2, pet.speciesId);
     return true;
   }
   if (soundFor != h->start) {
@@ -5810,7 +5829,7 @@ void drawBoxNow(const PetRecord *r, bool hide, bool held, bool vacant) {
     } else if (vacant) {
       drawMapTint(SPR_EGG, SPRITE_H, boxNowCx - 16, BOX_NOW_Y - 16, 1, Y_TEXT_DIM);
     } else {
-      drawMap(SPR_EGG, SPRITE_H, boxNowCx - 16, BOX_NOW_Y - 16, 1, false);
+      drawEggAt(boxNowCx, BOX_NOW_Y, 1, 0, pet.eggSpecies());
     }
   }
   gfx->setTextColor(Y_TEXT);
@@ -8084,7 +8103,7 @@ void yardDrawEgg(uint32_t now) {
   uint32_t te = now - yardEggTapAt;
   if (yardEggTapAt && te < 600) dx += (int)(6.0f * (1.0f - te / 600.0f) * sinf(te * 0.05f));
   yardShadow(yardEggX, yardEggY, 54);
-  drawEggAt(yardEggX + dx, yardEggY - YARD_EGG_MID, YARD_EGG_S, pet.eggCracks());
+  drawEggAt(yardEggX + dx, yardEggY - YARD_EGG_MID, YARD_EGG_S, pet.eggCracks(), pet.eggSpecies());
   if (pet.eggRarity() >= R_RARO && (now / 400) % 3 != 0) {  // raro o legendario: brilla
     int k = (int)((now / 1200) % 2);
     drawMap(SPR_STAR, 16, yardEggX + 22 + dx - k * 50, yardEggY - 80 + k * 26, 1, false);
@@ -8687,7 +8706,7 @@ void drawCeremony() {
     bool gone = t > 0.85f || (t > 0.6f && (now / 160) % 2 == 0);
     if (!gone) drawPmdAct(act, x, y, now, true, sil, 5);
     if (pet.deathEggSpecies() && t > 0.7f) {
-      drawMap(SPR_EGG, SPRITE_H, CX - 48, PET_GROUND - 96, 3, false);
+      drawEggAt(CX, PET_GROUND - 48, 3, 0, pet.deathEggSpecies());
       gfx->setTextColor(UI_WHITE);
       setSize(2);
       setCur(centerX(T(S_DIED_EGG), 2), 360);
@@ -9823,7 +9842,7 @@ void renderScreensaver() {
   if (pet.awaitingStarter() || pet.isVacant()) {
     // nada que mostrar (aun): solo la hora
   } else if (pet.isEgg()) {
-    drawMap(SPR_EGG, SPRITE_H, x - 32, ground - 64, 2, false);
+    drawEggAt(x, ground - 32, 2, 0, pet.eggSpecies());
   } else if (pmd.loaded) {
     uint8_t act = pet.sleeping && pmd.has(PMD_SLEEP) ? PMD_SLEEP : PMD_IDLE;
     drawPmdAct(act, x, ground, now, true, false, 2);
@@ -10513,7 +10532,7 @@ void renderEncounter(uint32_t now) {
     if (encDoneKind == ENCD_CAUGHT) {
       snprintf(line, sizeof(line), T(S_CAPTURED_FMT), dexName(encShowDex));
       int bob = (int)(3 * sinf(now * 0.006f));
-      drawEggAt(CX, CY + 6 + bob, 2, 0);
+      drawEggAt(CX, CY + 6 + bob, 2, 0, DEX_TBL[encShowDex].base);  // el huevo de captura: su forma base
       drawMap(SPR_ICON_PLAY, 16, CX + 26, CY + 30, 2, false);
       encShinySparks(now);
       gfx->setTextColor(Y_TEXT_DIM);
