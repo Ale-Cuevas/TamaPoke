@@ -58,7 +58,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "2.2"
+#define FW_VERSION "2.3"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -6851,6 +6851,7 @@ static bool panelItemOn(uint8_t kind, uint8_t i) {
     if (i == CP_CAKE) return awake && pet.items[IT_CAKE];
     if (i == CP_LIGHT) return true;
     if (i == CP_BATH) return awake && !bathUntil;  // dormido no se bana, y el bano no se repite a medias
+    if (i == CP_PET) return awake && !bathUntil;   // v2.3: el mimo, despierto y no en mitad del bano
     return awake;
   }
   if (i == PP_BATTLE) return stagesCanOpen();
@@ -6940,6 +6941,7 @@ static void renderCarePanel() {
   // dormido: el sol lo despierta, y el bano espera
   panelCardDraw(CP_LIGHT, pet.sleeping ? SPR_ICON_SUN : SPR_ICON_LIGHT, nullptr);
   panelCardDraw(CP_BATH, SPR_ICON_CLEAN, nullptr);
+  panelCardDraw(CP_PET, SPR_ICON_PET, nullptr);
   // tocar la tarta sin ninguna: donde se encuentra (en casa lo decia la cabecera)
   if (timeLeft(cakeHintUntil)) {
     gfx->setTextColor(Y_TEXT);
@@ -6982,6 +6984,14 @@ static void carePanelTap(int i) {
   } else if (i == CP_BATH) {
     sfxPlay(SFX_TAP);
     startBath();
+  } else if (i == CP_PET) {
+    // v2.3: el mimo (el toque al bicho de antes del patio, que ahora abre su ficha): +5 de felicidad,
+    // corazon, sonido y la pose de alegria, de vuelta en casa para verlo
+    FxNeedSnap ns = fxSnap();
+    pet.caress();
+    fxNeeds(ns);  // "+5" de felicidad
+    sfxPlay(SFX_HEART);
+    fxPose(pmd.has(PMD_POSE) ? PMD_POSE : PMD_HOP, millis(), 1200);
   } else {
     // Y3: la comida cae al patio y el bicho va a por ella; Pet la aplica al comersela (yardFoodEaten).
     // La tarta se mira ya (canUseItem) pero no se gasta hasta entonces

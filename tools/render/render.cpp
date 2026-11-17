@@ -156,6 +156,9 @@ static void resetUi() {
   if (yardMapForced) yardForceMap(0);
   // fase Y3: sin comida en el suelo ni huevo en el patio
   yardFood = YardFood{};
+  bathUntil = 0;  // un bano a medias (care-tap-bath) se acababa en la escena siguiente con su "+N" de limpieza
+  bathPending = false;
+  fxo = FxOverlays{};  // ni "+N" ni otros efectos de la escena anterior
   yardHeartPopAt = 0;
   yardEggX = -1;
   yardEggTapAt = 0;
@@ -849,6 +852,10 @@ static const std::vector<Scene> &scenes() {
     { "care-tap-light", [] { pokemon(133, 21); openCarePanel(); panelTapCard(CP_LIGHT); }, 2 },
     { "care-tap-wake", [] { pokemon(133, 23); pet.sleeping = true; openCarePanel(); panelTapCard(CP_LIGHT); }, 2 },
     { "care-tap-bath", [] { pokemon(133, 12); pet.dbgSetPoops(1); openCarePanel(); panelTapCard(CP_BATH); }, 4 },
+    // v2.3: the pet card (third care card): heart, happy pose and "+5" joy; asleep it is greyed out and shakes
+    { "care-tap-pet", [] { pokemon(133, 12); pet.joy = 40; openCarePanel(); panelTapCard(CP_PET); }, 3 },
+    { "care-tap-pet-es", [] { pokemon(25, 13); yardForceMap(1); pet.joy = 40; setLang(LANG_ES); applyLangFont(); openCarePanel(); panelTapCard(CP_PET); }, 3 },
+    { "care-pet-asleep-deny", [] { pokemon(133, 23); pet.sleeping = true; openCarePanel(); panelTapCard(CP_PET); } },
     { "play-tap-ball", [] { pokemon(133, 12); openPlayPanel(); panelTapCard(PP_BALL); }, 2 },
     { "play-tap-stages", [] { pokemon(133, 12); openPlayPanel(); panelTapCard(PP_BATTLE); } },
     { "play-tap-sack", [] { pokemon(133, 12); openPlayPanel(); panelTapCard(PP_SACK); }, 2 },

@@ -1029,6 +1029,7 @@ void Pet::caress() {
     addBond(1);
     petBondUntil = millis() + PET_BOND_COOLDOWN_MS;
   }
+  pendingSave = true;  // la felicidad (v2.3: el mimo del panel Cuidar)
   registerCare();
 }
 

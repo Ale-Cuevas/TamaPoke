@@ -839,6 +839,25 @@ static const char* const SPR_ICON_REVIVE[16] = {  // 16x16
   "....kk..........",
 };
 
+static const char* const SPR_ICON_PET[16] = {  // 16x16: corazon, el mimo del panel Cuidar (v2.3)
+  "................",
+  "................",
+  "................",
+  "...kkk....kkk...",
+  "..krrrk..krrrk..",
+  ".krwwrrkkrrrrRk.",
+  ".krwrrrrrrrrrRk.",
+  ".krrrrrrrrrrrRk.",
+  ".krrrrrrrrrrrRk.",
+  "..krrrrrrrrrRk..",
+  "...krrrrrrrRk...",
+  "....krrrrrRk....",
+  ".....krrrRk.....",
+  "......krRk......",
+  ".......kk.......",
+  "................",
+};
+
 static const char* const SPR_BADGE_GRASS[16] = {  // 16x16
   "................",
   "..........kkkk..",
