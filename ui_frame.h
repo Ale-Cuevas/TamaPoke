@@ -10,7 +10,8 @@
 // was designed for: every coordinate in TamaPoke.ino lives in that space, with
 // the centre at (233, 233). The canvas is blitted onto the 480x480 panel near
 // its centre, and a round mask blacks out what the round glass used to hide,
-// so the device shows the same round screen framed by black.
+// so the device shows the same round screen framed by black (except the yard
+// since v2.5, whose map reaches the panel's edges: see TP_FULL_YARD).
 //
 //   panel 480 x 480
 //   +-----------------------------------------+
@@ -48,6 +49,17 @@ static_assert(UI_ORIGIN + UI_SIZE <= BOARD_LCD_WIDTH && UI_ORIGIN + UI_SIZE <= B
 // canvas, corners included. Override with -D TP_ROUND_FRAME=0.
 #ifndef TP_ROUND_FRAME
 #define TP_ROUND_FRAME 1
+#endif
+
+// v2.5: the yard (and the map picker) fill the whole square panel. The game
+// still draws in the 466 canvas and is still cut at the round frame, but the
+// corners of the canvas and the panel border around it show the yard map
+// instead of black (RoundCanvas::showUnder). On a round 466 panel (the 1.75")
+// there is no border and the glass hides the corners, so it changes nothing
+// there; it is on by default only when the panel is bigger than the canvas.
+// Override with -D TP_FULL_YARD=0.
+#ifndef TP_FULL_YARD
+#define TP_FULL_YARD (BOARD_LCD_WIDTH > UI_SIZE || BOARD_LCD_HEIGHT > UI_SIZE)
 #endif
 
 // Touch arrives in panel pixels; the game works in canvas pixels. Points in

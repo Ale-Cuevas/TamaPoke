@@ -13,6 +13,10 @@
 // visible; masking them keeps the original round look, and on an AMOLED the
 // black pixels are simply off (no light, no burn-in, no power).
 //
+// v2.5: apply() can take an "under" image instead of black (the yard map): the
+// corners show it and the edge blends into it, so the round UI sits on a
+// full-screen background. Whatever was drawn is still cut at the same circle.
+//
 // No hardware here: test/test_roundmask.cpp checks it on the PC.
 
 // Darkens an RGB565 colour by a coverage of a/255 (0 = black, 255 = unchanged).
@@ -21,6 +25,16 @@ inline uint16_t scale565(uint16_t c, uint8_t a) {
   uint32_t g = ((c >> 5) & 0x3F) * a / 255;
   uint32_t b = (c & 0x1F) * a / 255;
   return (uint16_t)((r << 11) | (g << 5) | b);
+}
+
+// Mixes two RGB565 colours channel by channel: a/255 of `top` over `under`
+// (255 = top, 0 = under). With a black `under` it is scale565(top, a).
+inline uint16_t blend565(uint16_t top, uint16_t under, uint8_t a) {
+  uint32_t b = 255u - a;
+  uint32_t r = (((top >> 11) & 0x1F) * a + ((under >> 11) & 0x1F) * b) / 255;
+  uint32_t g = (((top >> 5) & 0x3F) * a + ((under >> 5) & 0x3F) * b) / 255;
+  uint32_t bl = ((top & 0x1F) * a + (under & 0x1F) * b) / 255;
+  return (uint16_t)((r << 11) | (g << 5) | bl);
 }
 
 // Fraction (0..1) of pixel (x, y) inside the disc of radius r centred at
@@ -73,16 +87,32 @@ class RoundMask {
   }
 
   // Blacks out the corners of an n x n frame and softens the circle's edge.
-  void apply(uint16_t *fb) const {
+  // With `under` (an n x n image whose rows are `underStride` pixels apart)
+  // the corners are copied from it and the edge blends into it instead.
+  void apply(uint16_t *fb, const uint16_t *under = nullptr, int underStride = 0) const {
     if (!fb || !edge_) return;
     for (int y = 0; y < n_; y++) {
       uint16_t *row = fb + (uint32_t)y * n_;
-      if (rowL_[y] > 0) memset(row, 0, sizeof(uint16_t) * rowL_[y]);
-      if (rowR_[y] < n_) memset(row + rowR_[y], 0, sizeof(uint16_t) * (n_ - rowR_[y]));
+      const uint16_t *src = under ? under + (uint32_t)y * underStride : nullptr;
+      int l = rowL_[y], r = rowR_[y];
+      if (l > 0) {
+        if (src) memcpy(row, src, sizeof(uint16_t) * l);
+        else memset(row, 0, sizeof(uint16_t) * l);
+      }
+      if (r < n_) {
+        if (src) memcpy(row + r, src + r, sizeof(uint16_t) * (n_ - r));
+        else memset(row + r, 0, sizeof(uint16_t) * (n_ - r));
+      }
     }
     for (uint32_t i = 0; i < edgeCount_; i++) {
       uint32_t idx = edge_[i] >> 8;
-      fb[idx] = scale565(fb[idx], (uint8_t)(edge_[i] & 0xFF));
+      uint8_t a = (uint8_t)(edge_[i] & 0xFF);
+      if (under) {
+        uint32_t y = idx / (uint32_t)n_, x = idx % (uint32_t)n_;
+        fb[idx] = blend565(fb[idx], under[y * underStride + x], a);
+      } else {
+        fb[idx] = scale565(fb[idx], a);
+      }
     }
   }
 

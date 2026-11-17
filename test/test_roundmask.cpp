@@ -119,3 +119,57 @@ TEST(roundmask, el_tactil_pasa_del_panel_al_lienzo) {
   CHECK_EQ(panelToUi(0), -UI_ORIGIN);                      // borde negro: fuera de todo boton
   CHECK_EQ(panelToUi(BOARD_LCD_WIDTH - 1), 479 - UI_ORIGIN);
 }
+
+// v2.5: con un fondo "debajo" (el mapa del patio) las esquinas lo muestran y el borde se funde con el,
+// pero lo dibujado sigue cortado en el mismo circulo
+static uint16_t debajo(int x, int y) { return (uint16_t)(x * 31 + y * 977); }
+static const int PASO = UI_SIZE + 14;  // como el mapa de 480: filas mas largas que el lienzo
+
+TEST(roundmask, con_fondo_debajo_las_esquinas_son_el_fondo) {
+  static RoundMask mask;
+  if (!mask.ready()) mask.build(UI_SIZE, UI_FRAME_CENTER, UI_FRAME_CENTER, UI_FRAME_RADIUS);
+  std::vector<uint16_t> under((size_t)PASO * UI_SIZE);
+  for (int y = 0; y < UI_SIZE; y++)
+    for (int x = 0; x < PASO; x++) under[(size_t)y * PASO + x] = debajo(x, y);
+  std::vector<uint16_t> fb((size_t)UI_SIZE * UI_SIZE, BLANCO);
+  mask.apply(fb.data(), under.data(), PASO);
+  int fueraMal = 0, dentroTocado = 0;
+  for (int y = 0; y < UI_SIZE; y++)
+    for (int x = 0; x < UI_SIZE; x++) {
+      float d = distCentro(x, y);
+      if (d >= UI_FRAME_RADIUS + 0.5f && px(fb, x, y) != debajo(x, y)) fueraMal++;
+      if (d <= UI_FRAME_RADIUS - 0.5f && px(fb, x, y) != BLANCO) dentroTocado++;
+    }
+  CHECK_EQ(fueraMal, 0);
+  CHECK_EQ(dentroTocado, 0);
+}
+
+// si lo dibujado es el mismo fondo (el suelo del patio llega al borde), no se nota el circulo
+TEST(roundmask, sin_costura_si_el_lienzo_es_el_fondo) {
+  RoundMask m;
+  CHECK(m.build(UI_SIZE, UI_FRAME_CENTER, UI_FRAME_CENTER, UI_FRAME_RADIUS));
+  std::vector<uint16_t> under((size_t)PASO * UI_SIZE), fb((size_t)UI_SIZE * UI_SIZE);
+  for (int y = 0; y < UI_SIZE; y++)
+    for (int x = 0; x < PASO; x++) under[(size_t)y * PASO + x] = debajo(x, y);
+  for (int y = 0; y < UI_SIZE; y++)
+    for (int x = 0; x < UI_SIZE; x++) fb[(size_t)y * UI_SIZE + x] = debajo(x, y);
+  m.apply(fb.data(), under.data(), PASO);
+  int distintos = 0;
+  for (int y = 0; y < UI_SIZE; y++)
+    for (int x = 0; x < UI_SIZE; x++)
+      if (px(fb, x, y) != debajo(x, y)) distintos++;
+  CHECK_EQ(distintos, 0);
+}
+
+// un fondo negro da lo mismo que el marco de siempre
+TEST(roundmask, fondo_negro_igual_que_sin_fondo) {
+  RoundMask m;
+  CHECK(m.build(UI_SIZE, UI_FRAME_CENTER, UI_FRAME_CENTER, UI_FRAME_RADIUS));
+  std::vector<uint16_t> negro((size_t)UI_SIZE * UI_SIZE, 0), a((size_t)UI_SIZE * UI_SIZE, 0xF81F), b = a;
+  m.apply(a.data());
+  m.apply(b.data(), negro.data(), UI_SIZE);
+  CHECK(a == b);
+  for (int c = 0; c < 256; c += 17) CHECK_EQ(blend565(0xFFFF, 0, (uint8_t)c), scale565(0xFFFF, (uint8_t)c));
+  CHECK_EQ(blend565(0x1234, 0xABCD, 255), 0x1234);
+  CHECK_EQ(blend565(0x1234, 0xABCD, 0), 0xABCD);
+}

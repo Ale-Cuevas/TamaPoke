@@ -3,8 +3,10 @@
 //
 // tools/pack_yard.py compone cada mapa (15x15 baldosas de 16 px = 240x240) y lo
 // guarda indexado: paleta RGB565 + mascara de paso + un byte por pixel. Aqui se
-// valida el fichero ya leido en memoria y se expande al lienzo de 466x466: cada
-// pixel de la fuente es un bloque de 2x2 (480x480) y se recorta 7 px por cada lado.
+// valida el fichero ya leido en memoria y se expande a 480x480 (cada pixel de la
+// fuente es un bloque de 2x2). El lienzo de 466x466 es la ventana que empieza en
+// (7, 7); v2.5: en la 2.16 el resto (las esquinas y el borde del panel) se ve en
+// el patio, fuera del circulo de siempre (round_display.h).
 //
 //   "TPY1" | u8 version=1 | u8 w=240 | u8 h=240 | u8 palCount (0 = 256)
 //   | u16 pal[palCount] RGB565 little-endian | u8 walk[29] | u8 px[w*h]
@@ -22,8 +24,9 @@
 #define YBG_GRID 15         // celdas por lado
 #define YBG_TILE 16         // px de la fuente por celda
 #define YBG_WALK_BYTES 29   // (15*15 + 7) / 8
+#define YBG_FULL 480        // lado del mapa expandido (YBG_SRC a escala 2)
 #define YBG_CANVAS 466      // lado del lienzo
-#define YBG_CROP 7          // (480 - 466) / 2
+#define YBG_CROP 7          // (480 - 466) / 2: el lienzo empieza en (7, 7) del mapa expandido
 #define YBG_CELL 32         // px del lienzo por celda (16 a escala 2)
 #define YBG_HEADER 8
 #define YBG_FILE_MAX (YBG_HEADER + 2 * 256 + YBG_WALK_BYTES + YBG_SRC * YBG_SRC)
@@ -61,22 +64,25 @@ inline YbgErr yardBgParse(const uint8_t *d, size_t n, YardBgView *v) {
   return YBG_OK;
 }
 
-// Expande al lienzo (YBG_CANVAS x YBG_CANVAS, RGB565 nativo) con la paleta dada
-// (la del fichero o una tintada). El pixel (x, y) del lienzo es el (x+7)/2, (y+7)/2 de la fuente.
-inline void yardBgExpand(const uint8_t *px, const uint16_t *pal, uint16_t *dst) {
-  for (int y = 0; y < YBG_CANVAS; y++) {
-    const uint8_t *row = px + ((y + YBG_CROP) >> 1) * YBG_SRC;
-    uint16_t *out = dst + y * YBG_CANVAS;
-    // x = 0 cae en la segunda mitad del pixel 3 de la fuente (7 / 2); de ahi en adelante, de 2 en 2
-    int x = 0, sx = YBG_CROP >> 1;
-    out[x++] = pal[row[sx++]];
-    while (x + 1 < YBG_CANVAS) {
-      uint16_t c = pal[row[sx++]];
-      out[x++] = c;
-      out[x++] = c;
+// Expande el mapa entero (YBG_FULL x YBG_FULL, RGB565 nativo) con la paleta dada
+// (la del fichero o una tintada): cada pixel de la fuente es un bloque de 2x2.
+// El pixel (x, y) del lienzo es el (x + YBG_CROP, y + YBG_CROP) de aqui.
+inline void yardBgExpandFull(const uint8_t *px, const uint16_t *pal, uint16_t *dst) {
+  for (int sy = 0; sy < YBG_SRC; sy++) {
+    const uint8_t *row = px + sy * YBG_SRC;
+    uint16_t *out = dst + (size_t)(2 * sy) * YBG_FULL;
+    for (int sx = 0; sx < YBG_SRC; sx++) {
+      uint16_t c = pal[row[sx]];
+      out[2 * sx] = c;
+      out[2 * sx + 1] = c;
     }
-    if (x < YBG_CANVAS) out[x] = pal[row[sx]];
+    memcpy(out + YBG_FULL, out, sizeof(uint16_t) * YBG_FULL);
   }
+}
+
+// la fila y del lienzo dentro del mapa expandido (YBG_CANVAS pixeles seguidos)
+inline const uint16_t *yardBgCanvasRow(const uint16_t *full, int y) {
+  return full + (size_t)(y + YBG_CROP) * YBG_FULL + YBG_CROP;
 }
 
 // ---------- mascara de paso ----------
