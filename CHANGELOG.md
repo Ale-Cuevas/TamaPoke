@@ -25,6 +25,13 @@ keeps your Pokémon.
   it unseen. Taps in the first 0.7 s after the banner opens are ignored. If the pet is no longer in the Box, the
   banner shows on its own as before.
 
+### Changed
+
+- **Yard HUD without the clock.** The big clock on the yard clashed with the return banner; it is gone and
+  the coin count moved up, just below the battery (the time is still in Settings).
+- **Bigger yard pets.** Pets in the yard are drawn 10 % larger (2.2x instead of 2x, with a fractional-scale
+  sprite draw).
+
 ## [2.0] - 2026-11-16
 
 **The yard.** A new look and home (design: `docs/yard-prototype/DESIGN_YARD_UI.md`): the pet lives in a top-down

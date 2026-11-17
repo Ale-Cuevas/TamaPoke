@@ -7646,6 +7646,7 @@ void yardReport() {
 
 // el alto visible del PMD en reposo (de su primera fila con algo a los pies) da la escala del patio:
 // unos 60-100 px, la mitad que en la casa de lado, para que quepan dos bichos
+#define YARD_PET_SCALE10 11  // v2.1: los bichos del patio un 10 % mas grandes (escala en decimas sobre la entera)
 YardBody yardPmdBody(PmdMon &m) {
   YardBody b = { YB_PMD, 2, 40, 60 };
   const PmdAct &a = m.acts[PMD_IDLE];
@@ -7661,8 +7662,8 @@ YardBody yardPmdBody(PmdMon &m) {
   int vh = (a.base ? a.base : a.h) - top, vw = x1 >= x0 ? x1 - x0 + 1 : a.w;
   if (vh < 1) vh = a.h;
   b.s = vh <= 16 ? 3 : (vh * 2 <= 104 ? 2 : 1);  // casi todos a 2; los muy pequenos a 3, los enormes a 1
-  b.h = (int16_t)(vh * b.s);
-  b.w = (int16_t)(vw * b.s);
+  b.h = (int16_t)(vh * b.s * YARD_PET_SCALE10 / 10);
+  b.w = (int16_t)(vw * b.s * YARD_PET_SCALE10 / 10);
   return b;
 }
 
@@ -7877,7 +7878,7 @@ void yardDrawPet(int i, uint32_t now) {
       loop = false;
     }
     if (!m.has(act)) act = PMD_IDLE;
-    drawPmdActS(m, act, x, y, now - p.t0, loop || act == PMD_IDLE, false, b.s);
+    drawPmdActF(m, act, x, y, now - p.t0, loop || act == PMD_IDLE, false, b.s * YARD_PET_SCALE10);
   } else if (b.kind == YB_TPK1) {
     int s = b.s, w = mon.w * s;
     uint16_t fm = mon.frameMs ? mon.frameMs : 100;
@@ -8324,18 +8325,11 @@ static bool yardDockOff(int d) {
   return d == 1 && pet.sleeping && !pet.boxHasPets();
 }
 
-#define YARD_CLOCK_Y 30  // la hora a tamano 5 (40 px de alto); debajo queda sitio para las monedas (Y4)
-#define YARD_COIN_Y 76   // la cartera: debajo de la hora (30 + 40 px)
+#define YARD_COIN_Y 40   // la cartera, justo debajo de la bateria (v2.1: sin hora, chocaba con el aviso de vuelta)
 #define YARD_BAT_Y 12
 void yardDrawHud() {
   drawBatteryHud(Y_CX - BAT_ICON_W / 2, YARD_BAT_Y);
-  uint32_t e = pet.lastSeenEpoch;
-  if (e) {  // sin hora del reloj no se inventa una
-    char t[8];
-    snprintf(t, sizeof(t), "%02u:%02u", (unsigned)((e / 3600) % 24), (unsigned)((e / 60) % 60));
-    yShadowText(centerX(t, 5), YARD_CLOCK_Y, t, 5, Y_TEXT);
-  }
-  yCoinBadge(Y_CX, YARD_COIN_Y, pet.coins, true);  // la cartera (Y4), debajo de la hora
+  yCoinBadge(Y_CX, YARD_COIN_Y, pet.coins, true);  // la cartera (Y4)
   YDockItem dock[Y_DOCK_N] = {
     { SPR_ICON_CARE, Y_DOCK_CARE, yardDockOff(0) },
     { SPR_ICON_PLAY, Y_DOCK_PLAY, yardDockOff(1) },
@@ -8884,6 +8878,27 @@ void drawPmdActS(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool
     const uint8_t *row = fr + r * a.w;
     forRuns(a.w, [&](int c) { return indexedKey(row[c], sil); },
             [&](int c0, int len, int k) { gfx->fillRect(x0 + c0 * s, y0 + r * s, len * s, s, sil ? INK_K : m.pal[k]); });
+  }
+}
+// lo mismo a una escala en decimas (22 = 2,2x; el patio): cada pixel ocupa de c*s10/10 a (c+1)*s10/10
+void drawPmdActF(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint16_t s10) {
+  if (s10 % 10 == 0) {
+    drawPmdActS(m, actId, cx, groundY, t, loop, sil, (uint8_t)(s10 / 10));
+    return;
+  }
+  const PmdAct &a = m.acts[actId];
+  if (!a.frames) return;
+  uint8_t fi = pmdFrameAt(a, t, loop);
+  const uint8_t *fr = a.data + (uint32_t)fi * a.w * a.h;
+  int x0 = cx - a.w * s10 / 20, y0 = groundY - (a.base ? a.base : a.h) * s10 / 10;
+  for (int r = 0; r < a.h; r++) {
+    const uint8_t *row = fr + r * a.w;
+    int ya = y0 + r * s10 / 10, yh = y0 + (r + 1) * s10 / 10 - ya;
+    if (yh <= 0) continue;
+    forRuns(a.w, [&](int c) { return indexedKey(row[c], sil); }, [&](int c0, int len, int k) {
+      int xa = x0 + c0 * s10 / 10;
+      gfx->fillRect(xa, ya, x0 + (c0 + len) * s10 / 10 - xa, yh, sil ? INK_K : m.pal[k]);
+    });
   }
 }
 void drawPmdAct(uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint8_t maxS) {
