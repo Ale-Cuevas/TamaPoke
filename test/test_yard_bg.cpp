@@ -65,41 +65,49 @@ TEST(yard_bg, rechaza_ficheros_malos) {
   CHECK_EQ(yardBgParse(idx.data(), idx.size(), &view), YBG_INDEX);
 }
 
-// v3.5: el mapa a escala 2,4 (antes 2): el pixel X del mapa entero sale del 20 + X * 5 / 12 de la fuente
-// (se ve el centro de 200x200). Fija la promesa de diseno de la escala (la misma que los bichos del patio)
-TEST(yard_bg, expande_a_480_a_escala_2_4) {
-  CHECK_EQ(YBG_ZOOM10, 24);
+// v3.6: el mapa entero a escala 4,4 (el mundo, 1056x1056): el pixel X del mundo sale del X * 10 / 44 de la
+// fuente. Fija la promesa de diseno de la escala (la misma que los bichos del patio)
+TEST(yard_bg, expande_el_mundo_a_escala_4_4) {
+  CHECK_EQ(YBG_ZOOM10, 44);
+  CHECK_EQ(YBG_WORLD, 1056);
   CHECK_EQ(YBG_ZOOM10, 2 * YARD_PET_SCALE10);  // los bichos a escala entera 2 quedan igual que el mapa
   auto d = tpy1(63);
   CHECK_EQ(yardBgParse(d.data(), d.size(), &view), YBG_OK);
-  std::vector<uint16_t> full(YBG_FULL * YBG_FULL + 1, 0xBEEF);
-  yardBgExpandFull(view.px, view.pal, full.data());
-  CHECK_EQ(full.back(), (uint16_t)0xBEEF);  // no escribe fuera
+  std::vector<uint16_t> world(YBG_WORLD * YBG_WORLD + 1, 0xBEEF);
+  yardBgExpandWorld(view.px, view.pal, world.data());
+  CHECK_EQ(world.back(), (uint16_t)0xBEEF);  // no escribe fuera
   int malos = 0;
-  for (int y = 0; y < YBG_FULL; y++)
-    for (int x = 0; x < YBG_FULL; x++)
-      if (full[y * YBG_FULL + x] != view.pal[view.px[(20 + y * 5 / 12) * YBG_SRC + 20 + x * 5 / 12]]) malos++;
+  for (int y = 0; y < YBG_WORLD; y++)
+    for (int x = 0; x < YBG_WORLD; x++)
+      if (world[y * YBG_WORLD + x] != view.pal[view.px[(y * 10 / 44) * YBG_SRC + x * 10 / 44]]) malos++;
   CHECK_EQ(malos, 0);
 }
 
-// el lienzo es la ventana (7, 7) del mapa entero: el pixel (x, y) del lienzo sale del 20 + (x+7)*5/12 de la fuente
-TEST(yard_bg, el_lienzo_es_la_ventana_con_recorte_de_7) {
+// el lienzo es la ventana del mundo en la camara (camX, camY): su pixel (x, y) es el (camX + x, camY + y) del mundo;
+// la camara se acota para que el panel de 480 (el lienzo y 7 px a cada lado) quede dentro
+TEST(yard_bg, el_lienzo_es_la_ventana_de_la_camara) {
   auto d = tpy1(63);
   CHECK_EQ(yardBgParse(d.data(), d.size(), &view), YBG_OK);
-  std::vector<uint16_t> full(YBG_FULL * YBG_FULL);
-  yardBgExpandFull(view.px, view.pal, full.data());
+  std::vector<uint16_t> world(YBG_WORLD * YBG_WORLD);
+  yardBgExpandWorld(view.px, view.pal, world.data());
   CHECK_EQ(YBG_CANVAS + 2 * YBG_CROP, YBG_FULL);
-  int malos = 0;
-  for (int y = 0; y < YBG_CANVAS; y++) {
-    const uint16_t *row = yardBgCanvasRow(full.data(), y);
-    for (int x = 0; x < YBG_CANVAS; x++) {
-      int sx = 20 + (x + YBG_CROP) * 5 / 12, sy = 20 + (y + YBG_CROP) * 5 / 12;
-      if (row[x] != view.pal[view.px[sy * YBG_SRC + sx]]) malos++;
+  CHECK_EQ(yardCamClamp(-50), YBG_CROP);
+  CHECK_EQ(yardCamClamp(5000), YBG_WORLD - YBG_FULL + YBG_CROP);
+  CHECK_EQ(yardCamClamp(300), 300);
+  for (int cam : { YBG_CAM_MIN, 295, YBG_CAM_MAX }) {
+    int malos = 0;
+    for (int y = 0; y < YBG_CANVAS; y += 7) {
+      const uint16_t *row = yardBgCanvasRow(world.data(), y, cam, cam);
+      for (int x = 0; x < YBG_CANVAS; x++)
+        if (row[x] != world[(size_t)(y + cam) * YBG_WORLD + x + cam]) malos++;
     }
+    CHECK_EQ(malos, 0);
+    // el panel empieza 7 px antes y cabe entero en el mundo
+    const uint16_t *o = yardBgPanelOrigin(world.data(), cam, cam);
+    CHECK(o >= world.data());
+    CHECK(o + (size_t)(YBG_FULL - 1) * YBG_WORLD + YBG_FULL - 1 < world.data() + world.size());
+    CHECK_EQ(o[(size_t)YBG_CROP * YBG_WORLD + YBG_CROP], yardBgCanvasRow(world.data(), 0, cam, cam)[0]);
   }
-  CHECK_EQ(malos, 0);
-  // el pixel de la fuente (120,120) cubre el centro del lienzo (233,233)
-  CHECK_EQ(yardBgCanvasRow(full.data(), 233)[233], view.pal[view.px[120 * YBG_SRC + 120]]);
 }
 
 TEST(yard_bg, la_mascara_de_paso) {
@@ -115,18 +123,16 @@ TEST(yard_bg, la_mascara_de_paso) {
   CHECK(yardCellBlocked(view.walk, -1, 3));  // fuera de la rejilla: no se pisa
   CHECK(yardCellBlocked(view.walk, 3, 15));
   // del lienzo a la celda: el centro (233) cae en la 7, y el centro de la 7 vuelve a ser 233
-  CHECK_EQ(yardCellOf(233), 7);
-  CHECK_EQ(yardCellCenter(7), 233);
-  // v3.5: celdas de 38,4 px; la 0 y la 14 quedan fuera del lienzo
-  CHECK_EQ(yardCellOf(0), 1);
-  CHECK_EQ(yardCellOf(21), 1);
-  CHECK_EQ(yardCellOf(22), 2);
-  CHECK_EQ(yardCellEdge(2), 21);
-  CHECK_EQ(yardCellOf(465), 13);
-  CHECK(yardCellCenter(0) < 0);
-  CHECK(yardCellCenter(14) > 465);
-  for (int c = 1; c < 14; c++) CHECK_EQ(yardCellOf(yardCellCenter(c)), c);
-  CHECK(yardPointBlocked(view.walk, 233, 233));
+  // v3.6: celdas de 70,4 px del mundo; la 7 en el centro (528)
+  CHECK_EQ(yardCellOf(0), 0);
+  CHECK_EQ(yardCellOf(70), 0);
+  CHECK_EQ(yardCellOf(71), 1);
+  CHECK_EQ(yardCellEdge(1), 70);
+  CHECK_EQ(yardCellCenter(7), 528);
+  CHECK_EQ(yardCellOf(528), 7);
+  CHECK_EQ(yardCellOf(YBG_WORLD - 1), 14);
+  for (int c = 0; c < 15; c++) CHECK_EQ(yardCellOf(yardCellCenter(c)), c);
+  CHECK(yardPointBlocked(view.walk, 528, 528));
   CHECK(!yardPointBlocked(view.walk, yardCellCenter(9), yardCellCenter(1)));
 }
 

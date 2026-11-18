@@ -24,23 +24,27 @@ static bool gestureNod(uint8_t, uint8_t *act, uint32_t *ms) {
   return true;
 }
 
+// v3.6: el mundo es el mapa entero (la camara lo recorre): solo se bloquea el anillo del borde
 TEST(yard, mascara_de_respaldo_como_pack_yard) {
   uint8_t walk[YBG_WALK_BYTES];
   yardFallbackWalk(walk);
-  // el centro se pisa; las esquinas (fuera del circulo), el reloj y el dock no
-  CHECK(!yardCellBlocked(walk, 7, 7));
-  CHECK(yardCellBlocked(walk, 0, 0));
-  CHECK(yardCellBlocked(walk, 14, 14));
-  CHECK(yardCellBlocked(walk, 7, 3));   // bajo el reloj (y 79)
-  CHECK(yardCellBlocked(walk, 7, 11));  // bajo el dock (y 386)
-  CHECK(!yardCellBlocked(walk, 7, 4));
-  // los centros de las celdas libres caen dentro del circulo util
+  for (int c = 0; c < YARD_CELLS; c++) {
+    int cx = yardCellCX(c), cy = yardCellCY(c);
+    bool ring = cx == 0 || cy == 0 || cx == YBG_GRID - 1 || cy == YBG_GRID - 1;
+    CHECK_EQ(yardFree(walk, c), !ring);
+  }
+  CHECK_EQ(yardFreeCount(walk), 13 * 13);
+  // con la camara en un extremo, el centro de las celdas libres de ese lado cae dentro del circulo util
+  int camLo = YBG_CAM_MIN, camHi = YBG_CAM_MAX;
   for (int c = 0; c < YARD_CELLS; c++) {
     if (!yardFree(walk, c)) continue;
-    int dx = yardCellCenter(yardCellCX(c)) - 233, dy = yardCellCenter(yardCellCY(c)) - 233;
-    CHECK(dx * dx + dy * dy <= 221 * 221);
+    for (int cam : { camLo, camHi }) {
+      int sx = yardCellCenter(yardCellCX(c)) - cam, sy = yardCellCenter(yardCellCY(c)) - cam;
+      if (sx < 0 || sy < 0 || sx > 465 || sy > 465) continue;  // ese lado no se ve con esa camara
+      bool corner = (yardCellCX(c) == 1 || yardCellCX(c) == 13) && (yardCellCY(c) == 1 || yardCellCY(c) == 13);
+      if (corner) CHECK((sx - 233) * (sx - 233) + (sy - 233) * (sy - 233) <= 221 * 221);
+    }
   }
-  CHECK(yardFreeCount(walk) > 75);  // v3.5: celdas de 38 px (mapa a 2,4), antes > 100 con las de 32
 }
 
 TEST(yard, camino_rodea_lo_bloqueado) {
@@ -393,18 +397,19 @@ TEST(yard, comida_delante_sobre_suelo_que_se_pisa) {
 TEST(yard, celda_a_la_izquierda_para_apartarse) {
   uint8_t walk[YBG_WALK_BYTES];
   testWalk(walk);
+  const int M = yardCellCenter(6) + 10;  // (v3.6: en el mundo; antes 220 px del lienzo)
   float px = (float)yardCellCenter(11), py = (float)yardCellCenter(9);
-  int c = yardCellLeftOf(walk, px, py, 220);
+  int c = yardCellLeftOf(walk, px, py, M);
   CHECK(c >= 0);
   CHECK(yardFree(walk, c));
-  CHECK(yardCellCenter(yardCellCX(c)) <= 220);
-  // la mas cercana: ninguna otra alcanzable a la izquierda de 220 esta mas cerca
+  CHECK(yardCellCenter(yardCellCX(c)) <= M);
+  // la mas cercana: ninguna otra alcanzable a la izquierda de M esta mas cerca
   float d = yardDist((float)yardCellCenter(yardCellCX(c)), (float)yardCellCenter(yardCellCY(c)), px, py);
   for (int k = 0; k < YARD_CELLS; k++)
-    if (yardFree(walk, k) && yardCellCenter(yardCellCX(k)) <= 220)
+    if (yardFree(walk, k) && yardCellCenter(yardCellCX(k)) <= M)
       CHECK(yardDist((float)yardCellCenter(yardCellCX(k)), (float)yardCellCenter(yardCellCY(k)), px, py) >= d - 0.01f);
   // ya a la izquierda: su propia celda
-  CHECK_EQ(yardCellLeftOf(walk, (float)yardCellCenter(4), (float)yardCellCenter(10), 220), yardCellIdx(4, 10));
+  CHECK_EQ(yardCellLeftOf(walk, (float)yardCellCenter(4), (float)yardCellCenter(10), M), yardCellIdx(4, 10));
   // un muro de arriba abajo: la otra mitad no se alcanza
   uint8_t wall[YBG_WALK_BYTES];
   yardFallbackWalk(wall);
@@ -443,7 +448,7 @@ TEST(yard, paseos_al_azar_lejos_del_menu) {
 TEST(yard, apartarse_del_menu_gana_a_la_pose_triste) {
   uint8_t walk[YBG_WALK_BYTES];
   yardFallbackWalk(walk);
-  const int colX = 256, bw = 40;
+  const int colX = yardCellCenter(7) + 50, bw = 40;  // (v3.6: en el mundo)
   YardWorld w;
   w.n = 1;
   w.avoidX = colX - 32;
@@ -472,7 +477,7 @@ TEST(yard, apartarse_del_menu_gana_a_la_pose_triste) {
 TEST(yard, apartarse_del_menu_se_reintenta) {
   uint8_t walk[YBG_WALK_BYTES];
   yardFallbackWalk(walk);
-  const int colX = 256, bw = 40;
+  const int colX = yardCellCenter(7) + 50, bw = 40;  // (v3.6: en el mundo)
   YardWorld w;
   w.n = 1;
   w.p[0].on = true;
@@ -497,7 +502,7 @@ TEST(yard, apartarse_del_menu_se_reintenta) {
 TEST(yard, comida_elegida_al_apartarse_se_sirve_al_llegar) {
   uint8_t walk[YBG_WALK_BYTES];
   yardFallbackWalk(walk);
-  const int colX = 256, bw = 40;
+  const int colX = yardCellCenter(7) + 50, bw = 40;  // (v3.6: en el mundo)
   YardWorld w;
   w.n = 1;
   w.p[0].on = true;
@@ -542,18 +547,19 @@ TEST(yard, comida_elegida_al_apartarse_se_sirve_al_llegar) {
 TEST(yard, inclinar_no_lleva_debajo_del_menu) {
   uint8_t walk[YBG_WALK_BYTES];
   yardFallbackWalk(walk);
+  const int M = yardCellCenter(7) + 10;  // la columna del menu (v3.6: en el mundo)
   int from = yardCellIdx(4, 7);
   int free = yardTiltTargetSide(walk, from, 1);
-  CHECK(yardCellCenter(yardCellCX(free)) > 300);  // sin menu: hasta el borde derecho
-  int to = yardTiltTargetSide(walk, from, 1, 224);
+  CHECK(yardCellCenter(yardCellCX(free)) > yardCellCenter(9));  // sin menu: hasta el borde derecho
+  int to = yardTiltTargetSide(walk, from, 1, M);
   CHECK(to >= 0);
-  CHECK(yardCellCenter(yardCellCX(to)) <= 224);
+  CHECK(yardCellCenter(yardCellCX(to)) <= M);
   CHECK(yardCellCX(to) > yardCellCX(from));  // pero hacia la derecha, lo que se pueda
-  CHECK_EQ(yardTiltTargetSide(walk, from, -1, 224), yardTiltTargetSide(walk, from, -1));  // a la izquierda, igual
+  CHECK_EQ(yardTiltTargetSide(walk, from, -1, M), yardTiltTargetSide(walk, from, -1));  // a la izquierda, igual
   // yardStep usa avoidX: un bicho inclinado a la derecha se para antes de la columna
   YardWorld w;
   w.n = 1;
-  w.avoidX = 224;
+  w.avoidX = M;
   w.p[0].on = true;
   w.p[0].x = (float)yardCellCenter(4);
   w.p[0].y = (float)yardCellCenter(7);
@@ -562,5 +568,5 @@ TEST(yard, inclinar_no_lleva_debajo_del_menu) {
     now += 85;
     yardStep(w, walk, now, 85, nullptr, 1);
   }
-  CHECK(w.p[0].x <= 224 + 1);
+  CHECK(w.p[0].x <= M + 1);
 }
