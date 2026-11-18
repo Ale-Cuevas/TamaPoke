@@ -59,7 +59,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "3.7"
+#define FW_VERSION "3.8"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -4788,6 +4788,11 @@ static void cardRow(int ty, int h) { yCard(CARD_ROW_X, ty + 7 - h / 2, CARD_ROW_
 
 // una barra de necesidad en la tarjeta del perfil: etiqueta, pista oscura y relleno
 // verde / ambar / rojo (rosa con la tarta)
+// el color de una barra de necesidad: saciado, bien (>= 50), aviso (>= 25) o mal (ficha y menu del bicho)
+static uint16_t needBarColor(uint8_t val, bool sated) {
+  return sated ? UI_BAR_SATED : (val >= 50) ? UI_BAR_OK : (val >= 25) ? UI_BAR_WARN : UI_BAR_BAD;
+}
+
 static void cardNeedBar(int x, int y, StrId label, uint8_t val, bool sated) {
   gfx->setTextColor(Y_TEXT);
   setSize(2);
@@ -4795,7 +4800,7 @@ static void cardNeedBar(int x, int y, StrId label, uint8_t val, bool sated) {
   printT(T(label));
   int gap = barLabelGap();
   int bx = x + gap + 4, bw = 144 - gap - 4;
-  uint16_t fill = sated ? UI_BAR_SATED : (val >= 50) ? UI_BAR_OK : (val >= 25) ? UI_BAR_WARN : UI_BAR_BAD;
+  uint16_t fill = needBarColor(val, sated);
   gfx->fillRoundRect(bx, y + 1, bw, 12, 4, Y_CARD_HI);
   int fw = (bw - 4) * val / 100;
   if (fw > 0) gfx->fillRoundRect(bx + 2, y + 3, fw, 8, 3, fill);
@@ -7754,14 +7759,26 @@ static void pmLabel(const char *t, int x, int y, int maxW) {
     printTight(t, x + maxW / 2, y, maxW);
   }
 }
-// el nombre del bicho encima de la columna, alineado con su borde derecho
-static void pmName(uint8_t s, int colX, int top) {
+// el nombre del bicho encima de la columna (n filas), alineado con su borde derecho, y debajo (v3.8) sus 3
+// necesidades en barritas: COM, FEL, ENE, con los colores de la ficha
+static void pmName(uint8_t s, uint8_t n) {
   const PetLife &l = pet.home(s);
   const char *nm = l.nick[0] ? l.nick : dexName(l.speciesId);
+  int colX = petMenuX(n), ny = petMenuNameY(n);
   setSize(2);
-  int w = textW(nm, 2), x = colX + PM_W - w;
+  int w = textW(nm, 2), x = petMenuHeadRight(n, ny, PM_NAME_H) - w;
   if (x < colX) x = colX;
-  yShadowText(x, top - 22, nm, 2, Y_TEXT);
+  yShadowText(x, ny, nm, 2, Y_TEXT);
+  int by = petMenuNeedsY(n);
+  int right = petMenuHeadRight(n, by, PM_NEED_H);
+  int bw = right - colX;
+  const uint8_t vals[3] = {l.fullness, l.joy, l.energy};
+  for (uint8_t i = 0; i < 3; i++) {
+    int y = by + i * (PM_NEED_BAR_H + PM_NEED_GAP);
+    gfx->fillRoundRect(colX, y, bw, PM_NEED_BAR_H, 2, Y_CARD_HI);
+    int fw = bw * vals[i] / 100;
+    if (fw > 0) gfx->fillRoundRect(colX, y, fw, PM_NEED_BAR_H, 2, needBarColor(vals[i], i == 0 && l.sated()));
+  }
 }
 
 static void drawFoodList(uint8_t s) {
@@ -7772,7 +7789,7 @@ static void drawFoodList(uint8_t s) {
   bool more = pages > 1;
   int x, y, w, h;
   petMenuRow(0, n, x, y, w, h);
-  pmName(s, x, y);
+  pmName(s, n);
   int pr = pmPressedRow(n);
   for (uint8_t i = 0; i + 1 < n; i++) {
     uint8_t f = foods[petFoodPage * FOOD_PER_PAGE + i];
@@ -7836,7 +7853,7 @@ void drawPetMenu(uint32_t now) {
   uint8_t items[PM_MAX], n = petMenuItems(s, items);
   int x, y, w, h;
   petMenuRow(0, n, x, y, w, h);
-  pmName(s, x, y);
+  pmName(s, n);
   int pr = pmPressedRow(n);
   const PetLife &l = pet.home(s);
   for (uint8_t i = 0; i < n; i++) {

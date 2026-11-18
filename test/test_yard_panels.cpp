@@ -82,6 +82,25 @@ TEST(yard_panels, menu_del_bicho_filas_tocables_y_dentro) {
   }
 }
 
+// v3.8: el nombre y las 3 barritas de necesidades, entre la cartera del HUD y la primera fila, dentro del circulo
+// util y sin pisarse, hasta 5 filas (lo que usa la interfaz)
+TEST(yard_panels, menu_del_bicho_cabecera_con_necesidades) {
+  for (uint8_t n = 1; n <= 5; n++) {
+    int x, y, w, h;
+    CHECK(petMenuRow(0, n, x, y, w, h));
+    int ny = petMenuNameY(n), by = petMenuNeedsY(n);
+    CHECK(ny >= 58);                          // debajo de la cartera
+    CHECK(ny + PM_NAME_H <= by);              // el nombre encima de las barritas
+    CHECK(by + PM_NEED_H <= y);               // las barritas encima de la columna
+    int br = petMenuHeadRight(n, by, PM_NEED_H);
+    CHECK(br <= x + PM_W);
+    CHECK(br - x >= 100);                     // barritas legibles
+    CHECK(rectInside(x, by, br - x, PM_NEED_H));
+    int nr = petMenuHeadRight(n, ny, PM_NAME_H);
+    CHECK(rectInside(nr - 40, ny, 40, PM_NAME_H));
+  }
+}
+
 TEST(yard_panels, menu_del_bicho_a_la_derecha_y_centrado) {
   // hasta 5 filas (lo que usa la interfaz) la columna queda centrada en Y_CY, con el hueco de siempre, y en la
   // mitad derecha de la pantalla
