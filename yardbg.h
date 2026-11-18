@@ -3,10 +3,11 @@
 //
 // tools/pack_yard.py compone cada mapa (15x15 baldosas de 16 px = 240x240) y lo
 // guarda indexado: paleta RGB565 + mascara de paso + un byte por pixel. Aqui se
-// valida el fichero ya leido en memoria y se expande a 480x480 (cada pixel de la
-// fuente es un bloque de 2x2). El lienzo de 466x466 es la ventana que empieza en
-// (7, 7); v2.5: en la 2.16 el resto (las esquinas y el borde del panel) se ve en
-// el patio, fuera del circulo de siempre (round_display.h).
+// valida el fichero ya leido en memoria y se expande a 480x480. v3.5: a escala 2,4
+// (antes 2): se ve el centro de 200x200 de la fuente (YBG_OFF = 20 px por lado
+// fuera), a la misma escala que los bichos (YARD_PET_SCALE10). El lienzo de 466x466
+// es la ventana que empieza en (7, 7); v2.5: en la 2.16 el resto (las esquinas y el
+// borde del panel) se ve en el patio, fuera del circulo de siempre (round_display.h).
 //
 //   "TPY1" | u8 version=1 | u8 w=240 | u8 h=240 | u8 palCount (0 = 256)
 //   | u16 pal[palCount] RGB565 little-endian | u8 walk[29] | u8 px[w*h]
@@ -24,10 +25,13 @@
 #define YBG_GRID 15         // celdas por lado
 #define YBG_TILE 16         // px de la fuente por celda
 #define YBG_WALK_BYTES 29   // (15*15 + 7) / 8
-#define YBG_FULL 480        // lado del mapa expandido (YBG_SRC a escala 2)
+#define YBG_FULL 480        // lado del mapa expandido
+#define YBG_ZOOM10 24       // v3.5: escala del mapa en decimas (antes 20)
+#define YBG_VIEW (YBG_FULL * 10 / YBG_ZOOM10)  // 200: px de la fuente que caben en YBG_FULL
+#define YBG_OFF ((YBG_SRC - YBG_VIEW) / 2)     // 20: px de la fuente que quedan fuera por cada lado
 #define YBG_CANVAS 466      // lado del lienzo
 #define YBG_CROP 7          // (480 - 466) / 2: el lienzo empieza en (7, 7) del mapa expandido
-#define YBG_CELL 32         // px del lienzo por celda (16 a escala 2)
+#define YBG_CELL (YBG_TILE * YBG_ZOOM10 / 10)  // 38: px del lienzo por celda, redondeado (es 38,4)
 #define YBG_HEADER 8
 #define YBG_FILE_MAX (YBG_HEADER + 2 * 256 + YBG_WALK_BYTES + YBG_SRC * YBG_SRC)
 
@@ -64,19 +68,24 @@ inline YbgErr yardBgParse(const uint8_t *d, size_t n, YardBgView *v) {
   return YBG_OK;
 }
 
+// el pixel de la fuente bajo el pixel X (0..YBG_FULL-1) del mapa expandido (vecino mas cercano)
+inline int yardBgSrcOf(int X) { return YBG_OFF + X * 10 / YBG_ZOOM10; }
+
 // Expande el mapa entero (YBG_FULL x YBG_FULL, RGB565 nativo) con la paleta dada
-// (la del fichero o una tintada): cada pixel de la fuente es un bloque de 2x2.
+// (la del fichero o una tintada), a escala YBG_ZOOM10/10 desde (YBG_OFF, YBG_OFF) de la fuente.
 // El pixel (x, y) del lienzo es el (x + YBG_CROP, y + YBG_CROP) de aqui.
 inline void yardBgExpandFull(const uint8_t *px, const uint16_t *pal, uint16_t *dst) {
-  for (int sy = 0; sy < YBG_SRC; sy++) {
-    const uint8_t *row = px + sy * YBG_SRC;
-    uint16_t *out = dst + (size_t)(2 * sy) * YBG_FULL;
-    for (int sx = 0; sx < YBG_SRC; sx++) {
-      uint16_t c = pal[row[sx]];
-      out[2 * sx] = c;
-      out[2 * sx + 1] = c;
+  int prev = -1;
+  for (int Y = 0; Y < YBG_FULL; Y++) {
+    uint16_t *out = dst + (size_t)Y * YBG_FULL;
+    int sy = yardBgSrcOf(Y);
+    if (sy == prev) {  // la misma fila de la fuente: se copia la de arriba
+      memcpy(out, out - YBG_FULL, sizeof(uint16_t) * YBG_FULL);
+      continue;
     }
-    memcpy(out + YBG_FULL, out, sizeof(uint16_t) * YBG_FULL);
+    prev = sy;
+    const uint8_t *row = px + sy * YBG_SRC;
+    for (int X = 0; X < YBG_FULL; X++) out[X] = pal[row[yardBgSrcOf(X)]];
   }
 }
 
@@ -92,10 +101,16 @@ inline bool yardCellBlocked(const uint8_t *walk, int cx, int cy) {
   int k = cy * YBG_GRID + cx;
   return (walk[k >> 3] >> (k & 7)) & 1;
 }
-// celda bajo un punto del lienzo
-inline int yardCellOf(int canvas) { return (canvas + YBG_CROP) / YBG_CELL; }
-// centro de una celda en el lienzo
-inline int yardCellCenter(int cell) { return cell * YBG_CELL + YBG_CELL / 2 - YBG_CROP; }
+// celda bajo un punto del lienzo (canvas >= -YBG_CROP; en fuente: YBG_OFF + (canvas + YBG_CROP) / zoom)
+inline int yardCellOf(int canvas) {
+  return (YBG_OFF * YBG_ZOOM10 + (canvas + YBG_CROP) * 10) / (YBG_TILE * YBG_ZOOM10);
+}
+// borde izquierdo (o de arriba) de una celda en el lienzo; puede caer fuera (las de los extremos)
+inline int yardCellEdge(int cell) { return (cell * YBG_TILE - YBG_OFF) * YBG_ZOOM10 / 10 - YBG_CROP; }
+// centro de una celda en el lienzo (la 7 queda en 233, el centro)
+inline int yardCellCenter(int cell) {
+  return (cell * YBG_TILE + YBG_TILE / 2 - YBG_OFF) * YBG_ZOOM10 / 10 - YBG_CROP;
+}
 inline bool yardPointBlocked(const uint8_t *walk, int x, int y) {
   if (x < 0 || y < 0) return true;
   return yardCellBlocked(walk, yardCellOf(x), yardCellOf(y));

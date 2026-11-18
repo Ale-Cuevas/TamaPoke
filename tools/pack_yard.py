@@ -4,7 +4,7 @@
 Lee tools/yard/maps/NN-nombre.txt y su leyenda (tools/yard/legends/), compone una imagen de
 240x240 con baldosas de 16 px y escribe en tools/yard/out/:
   NN-nombre.bin           fichero TPY1 (paleta + mascara de paso + pixeles indexados)
-  NN-nombre_preview.png   466x466 redondo (x2, recorte de 7, mascara, HUD de muestra)
+  NN-nombre_preview.png   466x466 redondo (x2,4 del centro, recorte de 7, mascara, HUD de muestra)
   NN-nombre_debug.png     lo mismo con la rejilla, las celdas bloqueadas y las zonas del HUD
 
 Ambiente opcional en la cabecera del mapa: "hue: A-B T", "tint: RRGGBB N" (mezcla N %) y "mist: N [RRGGBB]".
@@ -32,7 +32,22 @@ from pathlib import Path
 
 TILE, GRID = 16, 15
 SRC = TILE * GRID            # 240
-CANVAS, CROP = 466, 7        # 240*2 = 480, dibujado en (-7,-7)
+CANVAS, CROP = 466, 7        # el mapa expandido mide 480, dibujado en (-7,-7)
+FULL = 480
+ZOOM = 2.4                   # v3.5: = YBG_ZOOM10 / 10 de yardbg.h (antes 2)
+VIEW = int(FULL / ZOOM)      # 200 px de la fuente a la vista
+OFF = (SRC - VIEW) // 2      # 20 px de la fuente fuera por cada lado (= YBG_OFF)
+
+
+def src_to_canvas(v):
+    """px de la fuente -> px del lienzo, como yardCellCenter/yardCellEdge de yardbg.h (trunca hacia 0)."""
+    return int((v - OFF) * 24 / 10) - CROP
+
+
+def cell_box(x, y):
+    """Rectangulo (x0, y0, x1, y1) de la celda en el lienzo."""
+    return (src_to_canvas(x * TILE), src_to_canvas(y * TILE),
+            src_to_canvas((x + 1) * TILE) - 1, src_to_canvas((y + 1) * TILE) - 1)
 WALK_BYTES = (GRID * GRID + 7) // 8  # 29
 FRAME_INSET = 12             # nada se pisa a menos de 12 px del borde redondo
 # zonas del HUD en coordenadas del lienzo (x0, y0, x1, y1): hora + monedas, y el dock
@@ -314,7 +329,7 @@ def atmosphere(img, meta, map_path, seed):
 
 def outside_or_hud(cx, cy):
     """True si el centro de la celda (en px de la fuente) cae fuera del circulo o en una zona del HUD."""
-    px, py = cx * 2 - CROP, cy * 2 - CROP
+    px, py = src_to_canvas(cx), src_to_canvas(cy)
     if (px - CANVAS / 2) ** 2 + (py - CANVAS / 2) ** 2 > (CANVAS / 2 - FRAME_INSET) ** 2:
         return True
     for x0, y0, x1, y1 in (CLOCK_ZONE, DOCK_ZONE):
@@ -367,7 +382,15 @@ def decode_tpy1(data):
 
 def to_canvas(img):
     from PIL import Image
-    big = img.resize((SRC * 2, SRC * 2), Image.NEAREST)
+    # vecino mas cercano como yardBgExpandFull: el pixel X sale del OFF + X * 10 // 24 de la fuente
+    src = img.convert('RGB')
+    big = Image.new('RGB', (FULL, FULL))
+    idx = [OFF + X * 10 // 24 for X in range(FULL)]
+    sp, bp = src.load(), big.load()
+    for Y in range(FULL):
+        sy = idx[Y]
+        for X in range(FULL):
+            bp[X, Y] = sp[idx[X], sy]
     return big.crop((CROP, CROP, CROP + CANVAS, CROP + CANVAS))
 
 
@@ -417,16 +440,15 @@ def debug_image(canvas, blocked):
     for y in range(GRID):
         for x in range(GRID):
             if blocked[y][x]:
-                x0, y0 = x * 32 - CROP, y * 32 - CROP
-                d.rectangle((x0, y0, x0 + 31, y0 + 31), fill=(255, 0, 0, 70))
+                d.rectangle(cell_box(x, y), fill=(255, 0, 0, 70))
             elif outside_or_hud(x * TILE + TILE // 2, y * TILE + TILE // 2):
-                x0, y0 = x * 32 - CROP, y * 32 - CROP
-                d.rectangle((x0, y0, x0 + 31, y0 + 31), fill=(0, 0, 255, 40))
+                d.rectangle(cell_box(x, y), fill=(0, 0, 255, 40))
     for z in (CLOCK_ZONE, DOCK_ZONE):
         d.rectangle(z, outline=(255, 255, 0, 255), width=2)
     for i in range(GRID + 1):
-        d.line((i * 32 - CROP, 0, i * 32 - CROP, CANVAS), fill=(0, 0, 0, 50))
-        d.line((0, i * 32 - CROP, CANVAS, i * 32 - CROP), fill=(0, 0, 0, 50))
+        e = src_to_canvas(i * TILE)
+        d.line((e, 0, e, CANVAS), fill=(0, 0, 0, 50))
+        d.line((0, e, CANVAS, e), fill=(0, 0, 0, 50))
     dbg.alpha_composite(ov)
     return round_mask(dbg.convert('RGB'))
 
@@ -442,7 +464,7 @@ def scale_sprites(yard_dir, tilesets, legend_name):
     for name, xy in (('spr_deco_sheep_01_strip4.png', (200, 230)), ('spr_deco_chicken_01_strip4.png', (270, 270))):
         if (d / name).exists():
             spr = Image.open(d / name).convert('RGBA').crop((0, 0, 32, 32))
-            out.append((spr.resize((64, 64), Image.NEAREST), xy))
+            out.append((spr.resize((77, 77), Image.NEAREST), xy))
     return out
 
 

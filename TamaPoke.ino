@@ -59,7 +59,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "3.4"
+#define FW_VERSION "3.5"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -7568,7 +7568,7 @@ void renderPetPick() {
     const uint8_t *t = l.hatched() ? thumbs.get(l.speciesId) : nullptr;
     if (l.hatched() && homeMon[s].loaded) {
       YardBody b = yardPmdBody(homeMon[s]);
-      int h10 = b.h * 10 / 11;  // su alto a la escala entera b.s (b.h lleva el 10 % de mas del patio)
+      int h10 = b.h * 10 / YARD_PET_SCALE10;  // su alto a la escala entera b.s (b.h lleva el extra del patio)
       int s10 = h10 > 0 ? b.s * 10 * 84 / h10 / 10 * 10 : 20;  // la escala entera que lo deja en <= 84 px
       if (s10 < 10) s10 = 10;
       if (s10 > 40) s10 = 40;
@@ -8619,6 +8619,7 @@ static bool yardTryMap(uint8_t n) {
   if (yardFile) free(yardFile);
   yardFile = d;
   memcpy(yardWalk, yardView.walk, YBG_WALK_BYTES);
+  yardMaskFrame(yardWalk);  // v3.5: el circulo y el HUD con la escala de ahora del mapa
   yardKeepLargestRegion(yardWalk);
   yardMapLoaded = n;
   return true;
@@ -8677,7 +8678,8 @@ void yardPaintFallback(uint16_t *b, uint8_t biome, YardTint t) {
   uint16_t dk = yardTint565(lerp565(soil, ink, 6, 16), t), lt = yardTint565(lerp565(soil, 0xFFFF, 6, 16), t);
   for (int cy = 0; cy < YBG_GRID; cy++)
     for (int cx = 0; cx < YBG_GRID; cx++)
-      yBufRect(b, cx * YBG_CELL - YBG_CROP, cy * YBG_CELL - YBG_CROP, YBG_CELL, YBG_CELL, (cx + cy) & 1 ? alt : base);
+      yBufRect(b, yardCellEdge(cx), yardCellEdge(cy), yardCellEdge(cx + 1) - yardCellEdge(cx),
+               yardCellEdge(cy + 1) - yardCellEdge(cy), (cx + cy) & 1 ? alt : base);
   uint32_t seed = 0x7a4d11u;
   auto rnd = [&](int n) { seed = seed * 1664525u + 1013904223u; return (int)((seed >> 16) % (uint32_t)n); };
   for (int k = 0; k < 34; k++) {
@@ -8745,7 +8747,6 @@ void yardReport() {
 
 // el alto visible del PMD en reposo (de su primera fila con algo a los pies) da la escala del patio:
 // unos 60-100 px, la mitad que en la casa de lado, para que quepan dos bichos
-#define YARD_PET_SCALE10 11  // v2.1: los bichos del patio un 10 % mas grandes (escala en decimas sobre la entera)
 YardBody yardPmdBody(PmdMon &m) {
   YardBody b = { YB_PMD, 2, 40, 60 };
   const PmdAct &a = m.acts[PMD_IDLE];

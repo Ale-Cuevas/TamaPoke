@@ -27,6 +27,9 @@
 #define YARD_PATH_MAX 64
 #define YARD_THING_GAP 36      // px entre dos cosas del suelo (cacas de 32 px)
 #define YARD_CELLS (YBG_GRID * YBG_GRID)
+// escala de los bichos en decimas sobre su escala entera (v2.1: 11; v3.5: 12, asi casi todos, a escala
+// entera 2, quedan a 2,4 como el mapa, YBG_ZOOM10)
+#define YARD_PET_SCALE10 12
 
 // modo de un bicho
 enum : uint8_t { YM_IDLE = 0, YM_WALK, YM_GESTURE, YM_SLEEP, YM_STAY };
@@ -85,10 +88,10 @@ inline bool yardSpotOk(const uint8_t *walk, float x, float y) {
   return x >= 0 && y >= 0 && !yardPointBlocked(walk, (int)x, (int)y);
 }
 
-// mascara de respaldo (sin mapa): todo se pisa salvo fuera del circulo y bajo el HUD, con las
-// mismas reglas que tools/pack_yard.py (outside_or_hud: el centro de cada celda)
-inline void yardFallbackWalk(uint8_t *walk) {
-  memset(walk, 0, YBG_WALK_BYTES);
+// bloquea las celdas fuera del circulo y bajo el HUD, con las mismas reglas que tools/pack_yard.py
+// (outside_or_hud: el centro de cada celda). v3.5: tambien sobre la mascara de un mapa, por si el .bin
+// se hizo con otra escala del mapa (YBG_ZOOM10)
+inline void yardMaskFrame(uint8_t *walk) {
   for (int cy = 0; cy < YBG_GRID; cy++)
     for (int cx = 0; cx < YBG_GRID; cx++) {
       int px = yardCellCenter(cx), py = yardCellCenter(cy);
@@ -101,6 +104,12 @@ inline void yardFallbackWalk(uint8_t *walk) {
         walk[k >> 3] |= (uint8_t)(1 << (k & 7));
       }
     }
+}
+
+// mascara de respaldo (sin mapa): todo se pisa salvo fuera del circulo y bajo el HUD
+inline void yardFallbackWalk(uint8_t *walk) {
+  memset(walk, 0, YBG_WALK_BYTES);
+  yardMaskFrame(walk);
 }
 
 inline int yardFreeCount(const uint8_t *walk) {
