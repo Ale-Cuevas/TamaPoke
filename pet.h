@@ -209,7 +209,7 @@ public:
   bool nightHold = false;
   // alguno se desperto solo por la mañana con la placa encendida: la UI lo lee una vez y suena (SFX_MORNING)
   bool morningWake = false;
-  void clean();
+  void clearPoops();  // v3.1: sin cacas (cascada entera)
   bool cleanPoop(uint8_t slot);  // tocar una caca: false si no hay o no se puede (ceremonia, huevo)
   void caress();  // tocar al bicho
   void eggTap();  // tocar el huevo: 3 toques y eclosiona

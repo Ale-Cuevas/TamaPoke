@@ -58,8 +58,8 @@ pick one fighter and battle it; win to grow your pet and maybe find an item, the
 catch it as an egg that hatches its first form at Lv 1. Omanyte, Kabuto, Aerodactyl, Dratini and Mew only come
 this way. See [Wild encounters](#wild-encounters-v22).
 
-**v2.3: pet it.** The Care panel has a third card next to the light and the bath: the heart. Tap it and the
-pet gets +5 JOY, shows a heart and does its happy pose, so JOY no longer needs food or items.
+**v2.3: pet it.** The Care panel has a card next to the light: the heart. Tap it and the
+pet gets +20 JOY (+5 before v3.1), shows a heart and does its happy pose, so JOY no longer needs food or items.
 
 **AMOLED-2.16 port (v1.19):** builds (PlatformIO and arduino-cli, pinned
 versions), passes the host test suite, and every screen has been rendered and
@@ -95,7 +95,7 @@ leaves an egg in the Backpack, and with no egg and nobody in the Box a gift egg 
 **v1.43: the waterfall.** A new game in PLAY trains DEFENSE: the pet meditates under a
 waterfall, you hold the screen to raise its focus and let go to lower it, and keep the gauge in
 the green band for 45 s while the band slowly narrows (and from 30 s drifts up and down for bonus DEF) and surges of water push it down. A full session
-also washes the pet.
+also clears all of that pet's poops (since v3.1; it used to wash the pet).
 
 **v1.44: the sled run.** Another new game in PLAY trains SPEED: the pet rides a sled down a
 slope and you tilt the board to dodge rocks, logs and bushes that come faster and faster. A short
@@ -117,7 +117,7 @@ The game itself runs on the 1.75" hardware upstream. Implemented: the 151 +
 shinies animated from microSD, full life cycle (egg by rarity → evolution → farewell/release/death, each gated
 behind a decision dialog), bred-Pokédex with gallery, a 6-slot box to hibernate pets, 8 battle stages with
 a team of up to 4 and badges (long fights end in sudden death: no defense and 10 % recoil from the 21st attack), battle stats (genes + training), retention hooks (streak / bond / medals / name), biome + real-time
-backgrounds, ball minigame, training bag, animated bath, RTC with offline
+backgrounds, ball minigame, training bag, RTC with offline
 progression, battery (AXP2101) and PWR button, AMOLED burn-in protection (pixel orbit + screensaver),
 **sound (ES8311)**, **8 UI languages (English default)**, **starter choice on
 first run**, and a one-click **web installer**.
@@ -153,19 +153,22 @@ defined in [`tuning.h`](tuning.h): change it there to tune the game.
   sparkles and a "LEVEL UP!" pill ("Lv.12 > Lv.18" after time away), then the ATK/DEF/SPD
   it gained.
 
-### The four stats (0–100)
-Needs: **FOOD**, **JOY**, **ENE** (energy), **HYG** (hygiene). Start 80 / 80 / 80 / 100.
+### The three stats (0–100)
+Needs: **FOOD**, **JOY**, **ENE** (energy). Start 80 / 80 / 80. (Hygiene and the bath were removed in v3.1: poops
+now weigh on JOY instead.)
 While **awake**, per minute:
 
 | Stat | Drain/min | Notes |
 |---|---|---|
 | FOOD | −2 | |
 | ENE | −1 | −1 extra if overweight (weight > 50 → sluggish) |
-| HYG | −1 | **−4 more per poop** on screen (max 3 poops) |
-| JOY | −1 | **−2 extra** if FOOD < 30, **−2 extra** if HYG < 30 |
+| JOY | −1 | **−2 extra** if FOOD < 30; plus the stale-poop drain below |
 
 - ~**5 %/min** chance to poop (only if FOOD > 40; about one every 20 min, it was 15 % before v1.58).
-  Poops tank hygiene fast. **Tap a poop** to clean just that one (+10 HYG), awake or asleep.
+  **Tap a poop** to clear it, awake or asleep (it counts as the day's care, no bond). A poop that has been on
+  the ground **more than 5 minutes** is *stale*: while the pet is awake, every 3 minutes it costs JOY — 1 with
+  one stale poop, 2 with two, 4 with three. Fresh poops cost nothing, and nothing drains asleep. A full
+  waterfall session clears all of that pet's poops.
 - **Care slip-up** = letting any stat hit **≤ 10** (then it takes 60 awake minutes before another one can count).
   Each slip-up **delays evolution by 1 level** and cools the bond.
 
@@ -191,19 +194,18 @@ While **awake**, per minute:
   dodged, so ~8 for 50 rows; cap +18/run), burns a little weight. Needs the IMU.
 - 🌊 **Waterfall** (fifth slot, v1.43): hold the screen to raise the focus gauge, let go to lower
   it; keep it in the green band for 45 s. Trains **DEFENSE** (1 pt per 3.5 s in the band, cap
-  +8) and washes the pet (+10 HYG); no weight burn. From 30 s the band drifts slowly up and
+  +8) and clears that pet's poops; no weight burn. From 30 s the band drifts slowly up and
   down: time in it then gives **bonus DEF** (1 pt per 4 s, up to +3, so +11 for a perfect
   session).
-- 🫧 **Bath:** clears poops, HYG → 100. Or tap the poops one by one (v1.58).
-- 💗 **Pet it** (the heart in the Care panel, v2.3): +5 JOY, a heart and its happy pose; bond at most once
+- 💗 **Pet it** (the heart in the Care panel, v2.3): +20 JOY (v3.1), a heart and its happy pose; bond at most once
   every 15 min. Free and as often as you like, awake only.
 - 🌙 **Sleep:** rest — ENE **+6/min**, needs drain ~**4× slower** with floors
-  (FOOD 30 / JOY 35 / HYG 45). No poops, no slip-ups, and neglect doesn't count while asleep.
+  (FOOD 30 / JOY 35). No poops, no slip-ups, and neglect doesn't count while asleep.
 - 🌃 **Night (v1.63, needs the clock):** from **22:00** the pet is sleepy (a thought bubble with "zzz",
   "Getting sleepy..."). Putting it to bed while it's sleepy gives **+3 bond**, once a night. At **23:00** it
   goes to bed by itself (no bond); woken before 08:00, it falls asleep again after 30 minutes awake. Asleep
-  between 22:00 and 08:00 the needs drain half as fast as in a nap, with higher floors (FOOD 50 / JOY 50 /
-  HYG 55): a pet put to bed well cared for wakes up with every bar at 50 or more. At **08:00** it wakes up by
+  between 22:00 and 08:00 the needs drain half as fast as in a nap, with higher floors (FOOD 50 /
+  JOY 50): a pet put to bed well cared for wakes up with every bar at 50 or more. At **08:00** it wakes up by
   itself with a short tune (also with the screen dark). A nap in the afternoon isn't woken, unless it lasts
   into the night. All of this also happens with the board off.
 - **Feedback (v1.30):**
@@ -264,7 +266,7 @@ While **awake**, per minute:
 - 💛 **Farewell** — when it's a **final form** that has lived **3 days**. A button
   appears; triggering it **blesses your next egg**. You can **postpone** ("stay
   together", re-offered in a day). The good ending.
-- 💔 **Death by neglect** (v1.60, it replaced the run-away) — with **all four needs at 0**
+- 💔 **Death by neglect** (v1.60, it replaced the run-away) — with **all three needs at 0**
   (awake, board on), the status says "It feels abandoned..." and the **bond drains** from full to 0
   in **30 minutes**. With the bond at 0 ("It's very weak!"), **30 more minutes** and the pet is
   dying. Any need above 0 stops the count, but the lost bond stays lost. Asleep or with the board
@@ -649,21 +651,21 @@ On first run you **choose a starter** (Bulbasaur / Charmander / Squirtle). After
 that you start with an **egg**. Tap it 3 times or wait and it hatches. From then
 on, care for your companion:
 
-**Four stats** that decay: **FOOD**, **JOY**, **ENE** (energy), **HYG** (hygiene).
+**Three stats** that decay: **FOOD**, **JOY**, **ENE** (energy).
 If one bottoms out it counts as a *slip-up*.
 
 **The dock (three round buttons at the bottom, v2.0):**
 - 💗 **Care** → a panel with the 3 berries (each species has a hidden favourite that gives a bonus), the cake
-  (limited: full for 3 h, but it fattens), the light (🌙 sleep / ☀️ wake), the bath and the heart to pet it
-  (+5 JOY, v2.3). Food drops into the yard: the pet sees it, walks over and eats it. Asleep, the light still
+  (limited: full for 3 h, but it fattens), the light (🌙 sleep / ☀️ wake) and the heart to pet it
+  (+20 JOY). Food drops into the yard: the pet sees it, walks over and eats it. Asleep, the light still
   works.
 - ⚽ **Play** → the games: the pokeball minigame (SPEED), the battle stages, the training bag (STRENGTH), the
   sled run (SPEED) and the waterfall (DEFENSE). Each result pays a few coins.
 - 🎒 **Bag** → two tabs: **ITEMS** (your items and eggs; tap one to use it) and **SHOP** (buy items and
   backgrounds with coins).
 
-**In the yard:** tap a pet for its stat card (the first page shows the four needs; Care and Play then look
-after that pet), tap a poop to clean it (+10 HYG), tap a gift to open it. An egg placed from the Bag sits in the
+**In the yard:** tap a pet for its stat card (the first page shows the three needs; Care and Play then look
+after that pet), tap a poop to clear it, tap a gift to open it. An egg placed from the Bag sits in the
 yard: tap it to see the time left, shake the board to speed it up.
 
 **Coins (v2.0):** each minigame pays 3–8 by result, a stage's first clear 50 and a repeat clear 10 (once per
@@ -887,7 +889,7 @@ What the firmware does to save power (the policy is in `power.h`, covered by `te
 ## Serial console (115200, debug)
 
 `STATS` (full state) · `SPEC <dex>` (change species) · `LVL <n>` · `HATCH` ·
-`SHINY` · `NICK <x>` · `BYE` (farewell) · `ABANDON` (all four needs to 0: the bond starts
+`SHINY` · `NICK <x>` · `BYE` (farewell) · `ABANDON` (all three needs to 0: the bond starts
 fading) · `NEGLECT <min>` (fast-forward the neglect count, 0–60: up to 30 the bond as if fading that long,
 above it bond 0 and the rest toward death) · `DIE` (dying now: the Revive dialog) · `DYING <min>` (minutes
 already spent dying, 60 = too late for a Revive) · `NIGHT` (the night routine's state) · `WIPE` (factory reset → new game) · `BEEP` (audio test) ·

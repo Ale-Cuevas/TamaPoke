@@ -374,6 +374,7 @@ void Pet::syncHome(uint32_t seen, uint32_t mins) {
   if (mins > OFFLINE_MAX_MIN) mins = OFFLINE_MAX_MIN;  // tope: 2 semanas
   if (yardEgg()) eggClockStamp();  // puesto sin hora: cuenta desde la ultima vista
 
+  uint32_t offlineAwake = 0;  // minutos despierto de este repaso (una caca cada OFFLINE_POOP_EVERY_MIN)
   for (uint32_t i = 0; i < mins; i++) {
     bool full = sated();  // la tarta (v1.54) tambien cuenta apagado
     ageMinutes++;
@@ -393,13 +394,15 @@ void Pet::syncHome(uint32_t seen, uint32_t mins) {
     }
     if (!full) fullness = dropTo(fullness, FOOD_DRAIN, OFFLINE_FLOOR);
     energy = dropTo(energy, ENE_DRAIN, OFFLINE_FLOOR);
-    hygiene = dropTo(hygiene, HYG_DRAIN, OFFLINE_FLOOR);
     joy = dropTo(joy, JOY_DRAIN, OFFLINE_FLOOR);
+    // v3.1: las cacas se hacen dentro del repaso (para que tengan su edad) y las viejas quitan felicidad
+    // (con el mismo suelo). Durmiendo no ensucia ni pesa: el sueno ya hizo continue
+    offlineAwake++;
+    if (offlineAwake % OFFLINE_POOP_EVERY_MIN == 0 && poops < POOP_MAX) addPoop();
+    uint8_t stale = stalePoops();
+    if (stale && ageMinutes % POOP_JOY_EVERY == 0) joy = dropTo(joy, POOP_JOY_DRAIN[stale], OFFLINE_FLOOR);
   }
   if (!isEgg()) {
-    if (!sleeping) {  // durmiendo no ensucia
-      for (uint32_t n = mins / OFFLINE_POOP_EVERY_MIN; n && poops < POOP_MAX; n--) addPoop();
-    }
     // la evolucion NO se aplica offline: queda lista y la dispara el usuario
     // tocando al bicho cuando vuelve (para que vea la transformacion)
   }
@@ -487,7 +490,6 @@ bool Pet::tickHome() {
   energy = clamp100(energy - ENE_DRAIN);
   if (fullness > POOP_MIN_FOOD && poops < POOP_MAX && random(100) < POOP_ODDS) addPoop();
 
-  hygiene = clamp100(hygiene - HYG_DRAIN - HYG_DRAIN_PER_POOP * poops);
   // el sobrepeso da pereza: la energia cae el doble
   if (weight > OVERWEIGHT_AT) energy = clamp100(energy - OVERWEIGHT_ENE_DRAIN);
   if (weight > 0 && ageMinutes % WEIGHT_BURN_AWAKE_MIN == 0) weight--;
@@ -504,7 +506,9 @@ bool Pet::tickHome() {
 
   int dJoy = -JOY_DRAIN;
   if (fullness < JOY_HUNGRY_BELOW) dJoy -= JOY_DRAIN_HUNGRY;
-  if (hygiene < JOY_DIRTY_BELOW) dJoy -= JOY_DRAIN_DIRTY;
+  // v3.1: las cacas viejas (mas de POOP_STALE_MIN min en el suelo) quitan felicidad; mas cacas, mas rapido
+  uint8_t stale = stalePoops();
+  if (stale && ageMinutes % POOP_JOY_EVERY == 0) dJoy -= POOP_JOY_DRAIN[stale];
   joy = clamp100(joy + dJoy);
 
   // Descuido: dejar una estadistica por los suelos cuenta como error de
@@ -522,7 +526,7 @@ bool Pet::tickHome() {
 
   // abandono (v1.60): con TODO a cero el vinculo se apaga (10 cada 3 min: de 100 a 0 en 30) y, ya a
   // cero, en DEATH_MIN minutos mas se muere. Un solo cuidado para la cuenta; lo perdido no vuelve
-  if (fullness == 0 && joy == 0 && energy == 0 && hygiene == 0) {
+  if (fullness == 0 && joy == 0 && energy == 0) {
     if (bond > 0) {
       uint8_t d = (neglectMin % 3 == 0) ? 4 : 3;
       bond = bond > d ? bond - d : 0;
@@ -767,7 +771,7 @@ bool Pet::revive() {
   dying = false;
   deathEgg = 0;
   neglectMin = deathMin = dyingMin = 0;
-  fullness = joy = energy = hygiene = REVIVE_NEEDS;
+  fullness = joy = energy = REVIVE_NEEDS;
   if (careMistakes < 255) careMistakes++;
   mistakeCooldown = SLIP_COOLDOWN_MIN;
   heartUntil = millis() + HEART_MS;
@@ -786,7 +790,7 @@ void Pet::letGo() {
 
 void Pet::dbgNeglect(uint16_t m) {
   if (isEgg() || busyEnding()) return;
-  fullness = joy = energy = hygiene = 0;
+  fullness = joy = energy = 0;
   if (m <= BOND_FADE_MIN) {
     neglectMin = m;
     deathMin = 0;
@@ -962,7 +966,7 @@ uint8_t Pet::zenResult(uint16_t focusTenths, uint16_t driftTenths) {
   energy = dropTo(energy, ZEN_ENE_COST, GAME_FLOOR);
   if (!sated()) fullness = dropTo(fullness, ZEN_FOOD_COST, GAME_FLOOR);
   joy = clamp100(joy + ZEN_JOY);
-  hygiene = clamp100(hygiene + ZEN_WASH);  // la cascada lava (decidido 2026-11-07)
+  clearPoops();  // v3.1: la cascada lava: sin cacas (ya no hay limpieza que subir)
   if (focusTenths >= 200) heartUntil = millis() + HEART_MS;
   if (focusTenths > zenHi) zenHi = focusTenths;
   lastCoins = addCoins(coinsForGame(ECO_ZEN, zenTotalGain(focusTenths, driftTenths)), true);
@@ -1028,14 +1032,12 @@ void Pet::sleepMinute(bool full, int h) {
       if (!full) fullness = dropTo(fullness, 1, NIGHT_FOOD_FLOOR);
       joy = dropTo(joy, 1, NIGHT_JOY_FLOOR);
     }
-    if (ageMinutes % NIGHT_HYG_EVERY == 0) hygiene = dropTo(hygiene, 1, NIGHT_HYG_FLOOR);
     return;
   }
   if (ageMinutes % NAP_FOOD_JOY_EVERY == 0) {
     if (!full) fullness = dropTo(fullness, 1, NAP_FOOD_FLOOR);
     joy = dropTo(joy, 1, NAP_JOY_FLOOR);
   }
-  if (ageMinutes % NAP_HYG_EVERY == 0) hygiene = dropTo(hygiene, 1, NAP_HYG_FLOOR);
 }
 
 // acostarlo a mano (la luz o boca abajo). Desde EVENING_HOUR es dormir de noche: se despertara solo
@@ -1094,32 +1096,28 @@ void Pet::addPoop() {
   uint8_t i = 0;
   while (m & (1 << i)) i++;  // el primer hueco libre
   poopMask = m | (1 << i);
-  poopAt[i] = ageMinutes;  // v3.0: su edad (la usara la v3.1)
+  poopAt[i] = ageMinutes;  // v3.1: su edad: de ella sale lo vieja que es (stalePoops)
   poops++;
 }
 
-// v1.58: una caca, de una en una. Cuenta como cuidado del dia (racha), pero sin vinculo (el baño da
-// el suyo); no escribe en flash a cada toque
+// v1.58: una caca, de una en una. Cuenta como cuidado del dia (racha), pero sin vinculo; no escribe en flash a cada toque
 bool Pet::cleanPoop(uint8_t slot) {
   if (busyEnding() || isEgg() || slot >= POOP_MAX) return false;
   uint8_t m = poopSlots();
   if (!(m & (1 << slot))) return false;
   poopMask = m & ~(1 << slot);
   poops--;
-  hygiene = clamp100(hygiene + POOP_TAP_HYG);
+  poopAt[slot] = ageMinutes;
   registerCare(false);
   pendingSave = true;
   return true;
 }
 
-void Pet::clean() {
-  if (busyEnding()) return;
+// v3.1: sin cacas (la cascada entera): cuenta, mascara y marcas de edad
+void Pet::clearPoops() {
   poops = 0;
   poopMask = 0;
-  hygiene = 100;
-  addBond(BATH_BOND);
-  registerCare();
-  save();
+  for (uint8_t i = 0; i < POOP_MAX; i++) poopAt[i] = ageMinutes;
 }
 
 void Pet::caress() {
@@ -2077,8 +2075,13 @@ void Pet::save() {
   prefs.putUChar("full", h.fullness);
   prefs.putUChar("joy", h.joy);
   prefs.putUChar("ene", h.energy);
-  prefs.putUChar("hyg", h.hygiene);
+  prefs.putUChar("hyg", 100);  // v3.1: la limpieza ya no existe; la clave se queda por compatibilidad
   prefs.putUChar("poop", h.poops);
+  {  // v3.1: la edad de cada caca (seguidas desde el primer hueco: al cargar se ocupan los primeros)
+    uint32_t st[POOP_MAX];
+    h.poopStamps(st);
+    prefs.putBytes("poopA", st, sizeof(st));
+  }
   prefs.putUChar("wgt", h.weight);
   prefs.putUInt("cake", h.satedUntil);
   prefs.putUChar("gatk", h.geneAtk);
@@ -2217,7 +2220,7 @@ void Pet::load() {
   h.fullness = prefs.getUChar("full", 80);
   h.joy = prefs.getUChar("joy", 80);
   h.energy = prefs.getUChar("ene", 80);
-  h.hygiene = prefs.getUChar("hyg", 100);
+  h.hygiene = 100;  // v3.1: ya no se usa (la clave "hyg" se ignora)
   h.poops = prefs.getUChar("poop", 0);
   h.weight = prefs.getUChar("wgt", 0);
   h.satedUntil = prefs.getUInt("cake", 0);
@@ -2238,6 +2241,13 @@ void Pet::load() {
   starterPick = prefs.getBool("stpk", false);
   prefs.getBytes("dexsh", dexShinyReg, sizeof(dexShinyReg));
   h.ageMinutes = prefs.getUInt("age", 0);
+  // v3.1: la edad de las cacas. Sin la clave (un guardado anterior) o mal: recien hechas
+  h.poopMask = (1 << (h.poops > POOP_MAX ? POOP_MAX : h.poops)) - 1;
+  {
+    uint32_t st[POOP_MAX];
+    bool ok = prefs.getBytes("poopA", st, sizeof(st)) == sizeof(st);
+    for (uint8_t i = 0; i < POOP_MAX; i++) h.poopAt[i] = (ok && st[i] <= h.ageMinutes) ? st[i] : h.ageMinutes;
+  }
   if (prefs.isKey("dexn")) {
     h.speciesId = prefs.getShort("dexn", -1);
     h.eggTarget = prefs.getShort("eggT2", 4);
@@ -2557,7 +2567,7 @@ PetRecord PetLife::record(uint32_t epoch) const {
   r.fullness = fullness;
   r.joy = joy;
   r.energy = energy;
-  r.hygiene = hygiene;
+  r.hygiene = 100;  // v3.1: sin uso (formato del registro)
   r.poops = poops;
   r.weight = weight;
   r.geneAtk = geneAtk;
@@ -2596,7 +2606,7 @@ void PetLife::loadRecord(const PetRecord &r) {
   fullness = r.fullness;
   joy = r.joy;
   energy = r.energy;
-  hygiene = r.hygiene;
+  hygiene = 100;
   poops = r.poops > 3 ? 3 : r.poops;
   poopMask = (1 << poops) - 1;  // sus cacas, en los primeros huecos
   for (uint8_t i = 0; i < POOP_MAX; i++) poopAt[i] = r.ageMinutes;  // recien hechas (no lleva su edad)

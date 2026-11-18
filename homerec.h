@@ -70,7 +70,11 @@ inline HomeRec homeRecOf(const PetLife &l, uint32_t epoch) {
   h.deathEgg = l.deathEgg;
   h.bedNight = l.bedNight;
   h.careDay = l.careDay;
-  memcpy(h.poopAt, l.poopAt, sizeof(h.poopAt));
+  {  // v3.1: seguidas desde el primer hueco (al cargar se ocupan los primeros). Via un array suelto: HomeRec es packed
+    uint32_t st[POOP_MAX];
+    l.poopStamps(st);
+    memcpy(h.poopAt, st, sizeof(st));
+  }
   homeRecSeal(h);
   return h;
 }
@@ -105,5 +109,6 @@ inline void homeRecApply(const HomeRec &h, PetLife &l) {
   l.nightSleep = l.sleeping && (h.flags & HRF_NIGHT);
   l.bedNight = h.bedNight;
   l.careDay = h.careDay;
-  memcpy(l.poopAt, h.poopAt, sizeof(l.poopAt));
+  for (uint8_t i = 0; i < POOP_MAX; i++)  // v3.1: una marca de despues de la edad no vale: recien hecha
+    l.poopAt[i] = h.poopAt[i] <= l.ageMinutes ? h.poopAt[i] : l.ageMinutes;
 }

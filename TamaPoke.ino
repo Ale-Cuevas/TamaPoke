@@ -59,7 +59,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "3.0"
+#define FW_VERSION "3.1"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -212,10 +212,6 @@ bool yardDemoOpen = false;    // el patio (v2.0, Y0): muestra del kit de interfa
 uint8_t yardDemoPage = 0;     // 0 panel (tienda), 1 mundo (casa), 2 fase
 int clockH = 12, clockM = 0;  // hora en edicion
 
-// escena de bano: espuma sobre el bicho y limpieza al reventar
-uint32_t bathUntil = 0;
-bool bathPending = false;
-struct { int16_t x, y; uint8_t r, ph; } bubbles[14];
 // paneles Cuidar y Jugar (v2.0, fase Y2; yard_panels.h): sustituyen a los menus emergentes de
 // COMER / JUGAR / CUIDADOS. Son pantallas: no se cierran solos; se sale con volver o con USER
 uint8_t panelKind = PANEL_NONE;
@@ -386,11 +382,11 @@ FxQueue fxq;
 FxOverlays fxo;
 // v3.0: uno por hueco de casa (los efectos salen sobre su bicho: FxEvent/FxOverlay llevan el hueco)
 FxWatch fxLevelW[HOME_SLOTS], fxBondW[HOME_SLOTS], fxMistakeW[HOME_SLOTS], fxTrainW[HOME_SLOTS][3];
-// avisos sonoros (v1.50): una caca nueva y una necesidad que se vacia (comida, higiene, felicidad,
+// avisos sonoros (v1.50): una caca nueva y una necesidad que se vacia (comida, felicidad,
 // energia, en el orden de fxNeedW). Suenan tambien con la pantalla atenuada, en el salvapantallas o
 // apagada: son para enterarse sin mirar
 FxWatch fxPoopW[HOME_SLOTS];
-FxZeroWatch fxNeedW[HOME_SLOTS][4];
+FxZeroWatch fxNeedW[HOME_SLOTS][3];
 FxGate fxBondGate[HOME_SLOTS];
 bool fxWasEgg[HOME_SLOTS] = { false, false };  // para ver la eclosion
 const FxEvent *fxBan = nullptr;   // celebracion en pantalla este frame (la fija fxFrame)
@@ -1082,16 +1078,16 @@ void handleSerial() {
     if (!pet.isEgg()) pet.dbgAddPoop();
     Serial.printf("poops=%u sleep=%d\n", pet.poops, pet.sleeping ? 1 : 0);
     Serial.println("DONE");
-  } else if (line.startsWith("NEED ")) {  // NEED <i> <v>: i = 0 comida, 1 higiene, 2 felicidad, 3 energia
+  } else if (line.startsWith("NEED ")) {  // NEED <i> <v>: i = 0 comida, 2 felicidad, 3 energia (el 1, la higiene, ya no existe)
     int sp = line.indexOf(' ', 5);
     int i = line.substring(5, sp < 0 ? line.length() : sp).toInt();
     int v = sp < 0 ? 0 : line.substring(sp + 1).toInt();  // sin valor: 0 (suena SFX_ALERT, v1.50)
     if (v < 0) v = 0;
     if (v > 100) v = 100;
-    uint8_t *need[4] = { &pet.fullness, &pet.hygiene, &pet.joy, &pet.energy };
-    if (i >= 0 && i < 4 && !pet.isEgg()) *need[i] = (uint8_t)v;
-    Serial.printf("com=%u lim=%u fel=%u ene=%u sleep=%d\n", pet.fullness, pet.hygiene, pet.joy, pet.energy,
-                  pet.sleeping ? 1 : 0);
+    uint8_t *need[4] = { &pet.fullness, nullptr, &pet.joy, &pet.energy };  // v3.1: el 1 (higiene) se quito
+    if (i == 1) Serial.println("hygiene removed in v3.1 (NEED: 0 food, 2 joy, 3 energy)");
+    else if (i >= 0 && i < 4 && !pet.isEgg()) *need[i] = (uint8_t)v;
+    Serial.printf("com=%u fel=%u ene=%u sleep=%d\n", pet.fullness, pet.joy, pet.energy, pet.sleeping ? 1 : 0);
     Serial.println("DONE");
   } else if (line.startsWith("VOL")) {  // VOL: nivel de volumen; VOL <n>: lo fija (como la pildora)
     if (line.length() > 4) {
@@ -1426,16 +1422,16 @@ void handleSerial() {
     // v3.0: los dos huecos de casa en una linea cada uno; lo de debajo es el del foco
     for (uint8_t hs = 0; hs < HOME_SLOTS; hs++) {
       const PetLife &l = pet.home(hs);
-      Serial.printf("home%u%s %s spec=%d nv=%u com=%u fel=%u ene=%u lim=%u poop=%u bond=%u sleep=%d dying=%d cer=%u uid=%08lX egg=%d eggH=%d grow=%lu\n",
+      Serial.printf("home%u%s %s spec=%d nv=%u com=%u fel=%u ene=%u poop=%u bond=%u sleep=%d dying=%d cer=%u uid=%08lX egg=%d eggH=%d grow=%lu\n",
                     hs, hs == pet.focusSlot ? "*" : " ", l.isVacant() ? "vacant" : (l.isEgg() ? "egg" : "pet"), l.speciesId,
-                    l.isEgg() ? 0 : l.level(), l.fullness, l.joy, l.energy, l.hygiene, l.poops, l.bond, l.sleeping ? 1 : 0,
+                    l.isEgg() ? 0 : l.level(), l.fullness, l.joy, l.energy, l.poops, l.bond, l.sleeping ? 1 : 0,
                     l.isDying() ? 1 : 0, l.ceremony, (unsigned long)l.uid, l.eggSpecies(), l.eggHeld() ? 1 : 0,
                     (unsigned long)l.growMin);
     }
     Serial.printf("focus=%u focusErrors=%u\n", pet.focusSlot, pet.focusErrors);
-    Serial.printf("spec=%d nv=%u com=%u fel=%u ene=%u lim=%u desc=%u sd=%d mon=%d bat=%d usb=%d rtc=%u\n",
+    Serial.printf("spec=%d nv=%u com=%u fel=%u ene=%u desc=%u sd=%d mon=%d bat=%d usb=%d rtc=%u\n",
                   pet.speciesId, pet.level(), pet.fullness, pet.joy, pet.energy,
-                  pet.hygiene, pet.careMistakes, sdReady, mon.loaded,
+                  pet.careMistakes, sdReady, mon.loaded,
                   batPercent(), usbPresent(), rtcEpoch());
     Serial.printf("peso=%u fue=%u def=%u vel=%u genes=%u/%u/%u tr=%u/%u/%u baya=%d\n",
                   pet.weight, pet.atkStat(), pet.defStat(), pet.speStat(),
@@ -2539,7 +2535,7 @@ static uint32_t screenKey() {
                         (uint32_t)pet.bestStreak, (uint32_t)pet.bond, (uint32_t)pet.medals, (uint32_t)pet.weight,
                         (uint32_t)pet.trAtk, (uint32_t)pet.trDef, (uint32_t)pet.trSpe, (uint32_t)pet.geneAtk,
                         (uint32_t)pet.geneDef, (uint32_t)pet.geneSpe, (uint32_t)pet.careMistakes,
-                        (uint32_t)pet.fullness, (uint32_t)pet.joy, (uint32_t)pet.energy, (uint32_t)pet.hygiene,
+                        (uint32_t)pet.fullness, (uint32_t)pet.joy, (uint32_t)pet.energy,
                         (uint32_t)pet.berryKnown, (uint32_t)pet.strHi, (uint32_t)gLang })
       h = mixKey(h, v);
     // pagina de paseo: sin estos campos no se repintaria al llegar pasos
@@ -4142,10 +4138,10 @@ void fxCollect(uint32_t now) {
       // avisos sonoros (v1.50), sin mirar `awake`: tambien a oscuras. Dormido no suena nada (y ni
       // ensucia ni se vacia: las necesidades tienen suelo), pero los vigilantes siguen al dia
       bool poop = fxPoopW[s].rose(l.poops);
-      const uint8_t need[4] = { l.fullness, l.hygiene, l.joy, l.energy };
+      const uint8_t need[3] = { l.fullness, l.joy, l.energy };
       bool empty = false;
-      for (uint8_t i = 0; i < 4; i++)
-        if (fxNeedW[s][i].hitZero(need[i])) empty = true;  // sin cortar: los cuatro se apuntan
+      for (uint8_t i = 0; i < 3; i++)
+        if (fxNeedW[s][i].hitZero(need[i])) empty = true;  // sin cortar: los tres se apuntan
       if (!l.sleeping) {
         poopSfx |= poop;
         emptySfx |= empty;
@@ -4168,10 +4164,10 @@ void fxCollect(uint32_t now) {
 }
 
 // la pantalla principal no puede empezar una celebracion: nadie la ve, el bicho duerme o hay
-// algo encima (dialogo, menu, bano, evolucion, despedida, eclosion)
+// algo encima (dialogo, menu, evolucion, despedida, eclosion)
 bool fxScreenBusy() {
   return !fxScreenAwake() || pet.homeAsleep() || pet.busyEnding() || pet.evolving() || choiceKind || confirmUntil ||
-         panelKind || bathUntil || pet.travelResultPending() || fxo.find(FXO_HATCH) || fxo.waiting(FXO_HATCH) || fxo.find(FXO_BOX) ||
+         panelKind || pet.travelResultPending() || fxo.find(FXO_HATCH) || fxo.waiting(FXO_HATCH) || fxo.find(FXO_BOX) ||
          fxo.waiting(FXO_BOX);
 }
 
@@ -4438,11 +4434,11 @@ void drawFxBanner(uint32_t now) {
 }
 
 // necesidades antes y despues de una accion: los cambios de FX_STAT_MIN o mas sacan su "+N"
-FxNeedSnap fxSnap() { return FxNeedSnap{ { pet.fullness, pet.joy, pet.energy, pet.hygiene } }; }
+FxNeedSnap fxSnap() { return FxNeedSnap{ { pet.fullness, pet.joy, pet.energy } }; }
 void fxNeeds(const FxNeedSnap &before) {
-  const uint8_t v[4] = { pet.fullness, pet.joy, pet.energy, pet.hygiene };
+  const uint8_t v[3] = { pet.fullness, pet.joy, pet.energy };
   uint32_t now = millis();
-  for (uint8_t i = 0; i < 4; i++) {
+  for (uint8_t i = 0; i < 3; i++) {
     int d = (int)v[i] - (int)before.v[i];
     if (d >= FX_STAT_MIN || d <= -FX_STAT_MIN) fxo.push(FXO_STAT, i, (int16_t)d, now, pet.focusSlot);
   }
@@ -4557,7 +4553,7 @@ void drawFxOverlays(uint32_t now) {
     uint8_t ps = x.slot & 1;  // v3.0: sobre el bicho de su hueco
     int head = fxHeadYOf(ps);
     float t = FxOverlays::t(x, now);
-    if (x.kind == FXO_STAT) {  // "LIM +10" sube sobre el bicho, una fila por necesidad
+    if (x.kind == FXO_STAT) {  // "FEL +20" sube sobre el bicho, una fila por necesidad
       if (yardW.p[ps].on) yardStatPill(ps, x.a, x.v, t);
       continue;
     } else if (x.kind == FXO_BOND) {  // corazon pequeno con "+N", a la izquierda del bicho
@@ -4593,7 +4589,7 @@ void drawFxOverlays(uint32_t now) {
 // (FR-1.5). El banner de la meta va en la cola de celebraciones (fx.h) desde la v1.30.
 void drawWalkNews() {
   bool busy = screenOff || dimStage != DIM_AWAKE || choiceKind || confirmUntil || panelKind ||
-              pet.evolving() || bathUntil || fxq.busy() || pet.isDying();
+              pet.evolving() || fxq.busy() || pet.isDying();
   static bool wasShown = false;
   if (busy || !pet.hasFound()) { wasShown = false; return; }
   bool full = false, gift = false;
@@ -4657,13 +4653,12 @@ static void cardNeedBar(int x, int y, StrId label, uint8_t val, bool sated) {
   if (fw > 0) gfx->fillRoundRect(bx + 2, y + 3, fw, 8, 3, fill);
 }
 
-// tarjeta con las 4 necesidades en 2x2 (COM FEL / ENE LIM), arriba en y0
+// tarjeta con las 3 necesidades (v3.1: sin limpieza): COM y FEL arriba, ENE abajo, arriba en y0
 static void cardNeeds(int y0) {
   yCard(CARD_ROW_X, y0, CARD_ROW_W, 60, false);
   cardNeedBar(84, y0 + 10, S_BAR_FOOD, pet.fullness, pet.sated());
   cardNeedBar(240, y0 + 10, S_BAR_JOY, pet.joy, false);
   cardNeedBar(84, y0 + 36, S_BAR_ENE, pet.energy, false);
-  cardNeedBar(240, y0 + 36, S_BAR_HYG, pet.hygiene, false);
 }
 
 // pagina 0: perfil (retrato, identidad, necesidades, racha, vinculo, baya)
@@ -4830,7 +4825,7 @@ void renderCardProgress() {
   } else {
     int needed = d.evolveLevel + pet.careMistakes;
     if (pet.level() >= needed) {
-      if (pet.lowestStat() >= 40) { evo = T(S_EVO_READY); evoCol = Y_ACCENT_GO; }
+      if (pet.lowestStat() >= EVOLVE_MIN_NEED) { evo = T(S_EVO_READY); evoCol = Y_ACCENT_GO; }
       else { evo = T(S_EVO_BLOCKED); evoCol = Y_ACCENT_BAD; }
     } else {
       snprintf(evoBuf, sizeof(evoBuf), T(S_EVO_IN_FMT), needed - pet.level());
@@ -5798,9 +5793,9 @@ int boxSlotAt(int16_t x, int16_t y) {
 const char *recName(const PetRecord &r) { return r.nick[0] ? r.nick : dexName(r.speciesId); }
 const char *petName() { return pet.nick[0] ? pet.nick : dexName(pet.speciesId); }
 
-// la caja se abre desde la casa sin nada encima: ni dialogo, ni menu, ni bano, ni evolucion
+// la caja se abre desde la casa sin nada encima: ni dialogo, ni menu, ni evolucion
 bool boxCanOpen() {
-  return !pet.busyEnding() && !confirmUntil && !choiceKind && !panelKind && !bathUntil && !pet.evolving();
+  return !pet.busyEnding() && !confirmUntil && !choiceKind && !panelKind && !pet.evolving();
 }
 
 void openBox() {
@@ -6458,7 +6453,7 @@ void boxFill() {
     r.fullness = (uint8_t)(40 + random(61));
     r.joy = (uint8_t)(40 + random(61));
     r.energy = (uint8_t)(40 + random(61));
-    r.hygiene = (uint8_t)(40 + random(61));
+    r.hygiene = 100;
     r.geneAtk = (uint8_t)(90 + random(21));
     r.geneDef = (uint8_t)(90 + random(21));
     r.geneSpe = (uint8_t)(90 + random(21));
@@ -7069,7 +7064,7 @@ void yHpBar(int x, int y, int w, int cur, int max, uint16_t col) {
 // panel no se cierra solo a los 6 s, y una tarjeta que no se puede usar tiembla en el panel (que
 // sigue abierto) en vez de cerrarlo y hacer temblar el boton de casa.
 
-// Cuidar: la comida (que en la fase Y3 pasara a soltarse en el patio) y luz / bano
+// Cuidar: la comida (que en la fase Y3 pasara a soltarse en el patio) y luz / mimo
 void openCarePanel() {
   // v3.0 (provisional): el del foco; si es un huevo o un hueco vacio y el otro es un bicho, el otro
   if (!pet.hatched() && pet.other.hatched()) uiFocus(pet.focusSlot ^ 1);
@@ -7105,8 +7100,7 @@ static bool panelItemOn(uint8_t kind, uint8_t i) {
     if ((i <= CP_CAKE) && yardFood.phase != YF_NONE) return false;
     if (i == CP_CAKE) return awake && pet.items[IT_CAKE];
     if (i == CP_LIGHT) return true;
-    if (i == CP_BATH) return awake && !bathUntil;  // dormido no se bana, y el bano no se repite a medias
-    if (i == CP_PET) return awake && !bathUntil;   // v2.3: el mimo, despierto y no en mitad del bano
+    if (i == CP_PET) return awake;  // v2.3: el mimo, despierto
     return awake;
   }
   if (i == PP_BATTLE) return stagesCanOpen();
@@ -7193,9 +7187,8 @@ static void renderCarePanel() {
     setCur(bx - textW(cn, 2) / 2 + 1, by - 7);
     printT(cn);
   }
-  // dormido: el sol lo despierta, y el bano espera
+  // dormido: el sol lo despierta
   panelCardDraw(CP_LIGHT, pet.sleeping ? SPR_ICON_SUN : SPR_ICON_LIGHT, nullptr);
-  panelCardDraw(CP_BATH, SPR_ICON_CLEAN, nullptr);
   panelCardDraw(CP_PET, SPR_ICON_PET, nullptr);
   // tocar la tarta sin ninguna: donde se encuentra (en casa lo decia la cabecera)
   if (timeLeft(cakeHintUntil)) {
@@ -7228,7 +7221,7 @@ void renderPanel() {
 }
 
 static void carePanelTap(int i) {
-  if (!panelItemOn(PANEL_CARE, i)) {  // dormido: ni comida ni bano; la tarta sin ninguna dice donde hay
+  if (!panelItemOn(PANEL_CARE, i)) {  // dormido: ni comida ni mimo; la tarta sin ninguna dice donde hay
     if (i == CP_CAKE && !pet.items[IT_CAKE]) cakeHintUntil = millis() + 2500;
     panelDeny(i);
     return;
@@ -7236,15 +7229,12 @@ static void carePanelTap(int i) {
   if (i == CP_LIGHT) {
     sfxPlay(SFX_TAP);
     pet.toggleLight();
-  } else if (i == CP_BATH) {
-    sfxPlay(SFX_TAP);
-    startBath();
   } else if (i == CP_PET) {
-    // v2.3: el mimo (el toque al bicho de antes del patio, que ahora abre su ficha): +5 de felicidad,
+    // v2.3: el mimo (el toque al bicho de antes del patio, que ahora abre su ficha): +20 de felicidad,
     // corazon, sonido y la pose de alegria, de vuelta en casa para verlo
     FxNeedSnap ns = fxSnap();
     pet.caress();
-    fxNeeds(ns);  // "+5" de felicidad
+    fxNeeds(ns);  // "+20" de felicidad
     sfxPlay(SFX_HEART);
     fxPose(pmd.has(PMD_POSE) ? PMD_POSE : PMD_HOP, millis(), 1200);
   } else {
@@ -8211,10 +8201,9 @@ void yardFoodEaten(uint8_t kind, int owner) {
 // lo que tiene quieto al bicho del hueco s (YH_*), sin contar la comida
 uint8_t yardHoldOf(uint8_t s, uint32_t now) {
   const PetLife &l = pet.home(s);
-  bool focus = s == pet.focusSlot;
   PetMood m = l.mood();
   if (l.sleeping) return YH_SLEEP;
-  if (l.evolving() || fxHatchHidesPetSlot(s, now) || (focus && bathUntil) || l.emote() != EMOTE_NONE ||
+  if (l.evolving() || fxHatchHidesPetSlot(s, now) || l.emote() != EMOTE_NONE ||
       (m == MOOD_EATING && homeMon[s].has(PMD_EAT)))
     return YH_STAY;
   return YH_NONE;
@@ -8253,7 +8242,7 @@ void yardTick(uint32_t now) {
     }
   }
   hold[YARD_TRV] = YH_NONE;  // el viajero espera quieto (no pasea)
-  bool still = bathUntil || pet.home(0).emote() != EMOTE_NONE || pet.home(1).emote() != EMOTE_NONE;
+  bool still = pet.home(0).emote() != EMOTE_NONE || pet.home(1).emote() != EMOTE_NONE;
   int8_t tilt = (imuPresent() && !still && yardFood.phase == YF_NONE) ? imuTiltSide() : 0;
   const uint8_t *walk = yardWalkNow();
   yardStep(yardW, walk, now, dt, hold, tilt);
@@ -8764,13 +8753,12 @@ int yardDropFood(uint8_t kind) {
 
 // ---- el globo sobre cada bicho ----
 // lo que pasa ahora mismo (uno solo, por orden de importancia), o nullptr. Los avisos de la UI (sin tarta,
-// le gusta, el bano, revivido) son del foco
+// le gusta, revivido) son del foco
 const char *yardEventMsg(uint8_t s) {
   const PetLife &l = pet.home(s);
   bool focus = s == pet.focusSlot;
   if (focus && timeLeft(cakeHintUntil)) return T(S_NO_CAKE);
   if (focus && timeLeft(tastesMsgUntil) && !l.sleeping) return T(S_TASTES);
-  if (focus && bathUntil) return "Splish splash!";
   if (l.emote() == EMOTE_ANGRY) return T(S_GRUMPY);
   if (l.emote() == EMOTE_DIZZY) return T(S_DIZZY);
   if (l.sleeping) return "Zzz...";
@@ -8790,7 +8778,6 @@ int yardNeedList(uint8_t s, const char **out) {
   }
   if (pet.sleepyOf(l)) out[n++] = T(S_SLEEPY);
   if (l.fullness < NEED_LOW) out[n++] = T(S_HUNGRY);
-  if (l.hygiene < NEED_LOW) out[n++] = T(S_NEEDS_BATH);
   if (l.energy < NEED_LOW) out[n++] = T(S_EXHAUSTED);
   if (l.joy < NEED_LOW) out[n++] = T(S_SAD);
   return n;
@@ -8865,7 +8852,9 @@ void yardDrawBubble(uint32_t now) {
 // "LIM +10": lo que cambio una necesidad, subiendo sobre el bicho (el patio no tiene barras)
 void yardStatPill(uint8_t slot, uint8_t a, int16_t v, float t) {
   char s[24];
-  snprintf(s, sizeof(s), v > 0 ? "%s +%d" : "%s %d", T((StrId)(S_BAR_FOOD + (a & 3))), v);
+  // v3.1: la barra a (0 comida, 1 felicidad, 2 energia) -> su etiqueta, con mapa explicito
+  static const StrId BAR_STR[3] = { S_BAR_FOOD, S_BAR_JOY, S_BAR_ENE };
+  snprintf(s, sizeof(s), v > 0 ? "%s +%d" : "%s %d", T(BAR_STR[a % 3]), v);
   setSize(2);
   int w = textW(s, 2) + 16;
   int cx = petFootXOf(slot), y = yardPetHeadY(slot & 1) - 70 - (a & 1) * 28 - (int)(t * 26);
@@ -8942,7 +8931,6 @@ void renderYardHome(uint32_t now) {
   yardSyncThings();
   yardDrawThings(now);
   yardDrawPets(now);
-  drawBath();               // la espuma, sobre el bicho
   drawBoxAppear(now);       // recien guardado o despertado: sale de una luz
   yardDrawBubble(now);
   yardDrawFoodFx(now);     // Y3: el "!" al ver la comida y el corazon al acabarsela
@@ -9215,8 +9203,6 @@ void closeForDying() {
   panelKind = PANEL_NONE;
   trvMapPrev = 0;
   boxAwayUntil = 0;
-  bathUntil = 0;
-  bathPending = false;
 }
 
 // dialogo: con Revivir, SI (revive) / NO (se va); sin ninguno, un solo boton (se va). El Revivir tiene
@@ -9398,59 +9384,6 @@ void drawPet() {
 
   if (pet.showHeart()) drawMap(SPR_HEART, 32, x + 20 * s, y - 2 * s, 2, false);
   drawEmote(x + 16 * s, y + 2 * s);
-}
-
-// ---------- escena de bano ----------
-
-void startBath() {
-  if (pet.isEgg() || pet.sleeping || pet.ceremony || bathUntil) return;
-  bathUntil = millis() + 3000;
-  bathPending = true;
-  int cx = petFootX(), foot = petFootY(), body = petBodyH();
-  bool small = body < 120;  // el bicho del patio, mas pequeno: espuma mas junta y mas fina
-  for (auto &b : bubbles) {
-    b.x = cx - (small ? 44 : 70) + random(small ? 88 : 140);
-    b.y = foot - random(small ? body + 10 : 150);
-    b.r = small ? 6 + random(11) : 8 + random(16);
-    b.ph = random(64);
-  }
-}
-
-void drawBath() {
-  uint32_t now = millis();
-  if (!timeLeft(bathUntil)) {
-    bathUntil = 0;
-    if (bathPending) {
-      bathPending = false;
-      FxNeedSnap ns = fxSnap();
-      pet.clean();
-      fxNeeds(ns);  // "+60" de higiene
-      // pose de alegria al quedar limpio
-      if (pmd.has(PMD_POSE)) fxPose(PMD_POSE, now, pmdActTotalMs(pmd.acts[PMD_POSE]) * 2);
-    }
-    return;
-  }
-  uint32_t left = bathUntil - now;
-  if (left > 800) {
-    // espuma: pompas meciendose y subiendo poco a poco
-    float t = now / 220.0f;
-    for (auto &b : bubbles) {
-      int bx = b.x + (int)(sinf(t + b.ph) * 6);
-      int by = b.y - (int)((3000 - left) / 90);
-      gfx->fillCircle(bx, by, b.r, UI_WHITE);
-      gfx->drawCircle(bx, by, b.r, 0x7E3D);
-      gfx->fillCircle(bx - b.r / 3, by - b.r / 3, b.r / 4, UI_BG_DAY);
-    }
-  } else {
-    // las pompas revientan: destellos
-    for (int i = 0; i < 8; i++) {
-      auto &b = bubbles[i];
-      int sx = b.x + (i % 3) * 6 - 6, sy = b.y - 18;
-      uint16_t col = (i % 2) ? UI_BAR_WARN : UI_WHITE;
-      gfx->fillRect(sx - 6, sy - 1, 13, 3, col);
-      gfx->fillRect(sx - 1, sy - 6, 3, 13, col);
-    }
-  }
 }
 
 // ---------- mascota PMD: comportamiento ----------
@@ -9686,7 +9619,7 @@ void drawPoops() {
 // para que en los idiomas latinos no cambie nada.
 // Requiere el tamano de texto 2 ya puesto, porque textW() lo necesita.
 static int barLabelGap() {
-  const StrId ids[] = { S_BAR_FOOD, S_BAR_JOY, S_BAR_ENE, S_BAR_HYG };
+  const StrId ids[] = { S_BAR_FOOD, S_BAR_JOY, S_BAR_ENE };
   int ancho = 0;
   for (StrId id : ids) {
     int w = textW(T(id), 2);

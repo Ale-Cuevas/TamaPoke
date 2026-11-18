@@ -46,7 +46,7 @@ static uint32_t boxed(Pet &p, uint8_t k, int16_t dex, uint32_t grow, uint8_t bon
   r.growMin = grow;
   r.ageMinutes = grow + 10;
   r.bond = bond;
-  r.fullness = r.joy = r.energy = r.hygiene = 80;
+  r.fullness = r.joy = r.energy = 80;
   r.geneAtk = r.geneDef = r.geneSpe = 100;
   CHECK(p.boxPut(k, r));
   CHECK_EQ(p.boxState(k), (uint8_t)BOX_OK);
@@ -498,7 +498,7 @@ TEST(stage, el_de_casa_sube_de_nivel_gana_la_medalla_y_puede_evolucionar) {
   CHECK(p.totalMedals > tm);  // (y la de EN FORMA, que llega en el 5)
   // del 15 al 16 de golpe: listo para evolucionar
   p.setLevel(15);
-  p.fullness = p.joy = p.energy = p.hygiene = 80;
+  p.fullness = p.joy = p.energy = 80;
   CHECK(!p.canEvolveNow());
   p.stageDone(1, true, t, 1);
   CHECK_EQ(p.level(), (uint16_t)16);
@@ -554,7 +554,7 @@ TEST(stage, uno_de_la_caja_dormido_evoluciona_cuando_se_despierta) {
   r.speciesId = 7;  // Squirtle: en el 16
   r.growMin = levelStart(15);
   r.flags = REC_SLEEP;
-  r.fullness = r.joy = r.energy = r.hygiene = 80;
+  r.fullness = r.joy = r.energy = 80;
   r.geneAtk = r.geneDef = r.geneSpe = 100;
   CHECK(p.boxPut(0, r));
   uint32_t t[1] = { p.boxRecord(0).uid };

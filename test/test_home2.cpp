@@ -50,7 +50,6 @@ static void hDress(PetLife &l, uint8_t seed) {
   l.fullness = 50 + seed;
   l.joy = 60 + seed;
   l.energy = 40 + seed;
-  l.hygiene = 70 + seed;
   l.weight = 10 + seed;
   l.trAtk = 5 + seed;
   l.trDef = 6 + seed;
@@ -289,11 +288,108 @@ TEST(home2, el_tiempo_apagado_pasa_a_los_dos) {
   CHECK_EQ(r.home(1).growMin, g1 + 60);
 }
 
+// ---------------------------------------------------------------- cacas (v3.1)
+TEST(home2, la_cascada_entera_quita_solo_las_cacas_del_que_juega) {
+  for (uint8_t f = 0; f < 2; f++) {
+    Pet p;
+    twoPets(p);
+    p.slotRef(0).dbgSetPoops(2);
+    p.slotRef(1).dbgSetPoops(3);
+    p.focus(f);
+    p.zenResult(300);
+    CHECK_EQ(p.home(f).poops, (uint8_t)0);
+    CHECK_EQ(p.home(f).poopSlots(), (uint8_t)0);
+    CHECK_EQ(p.home(1 - f).poops, (uint8_t)(f ? 2 : 3));  // el otro las conserva
+    CHECK_EQ(p.home(1 - f).poopSlots(), (uint8_t)(f ? 0b11 : 0b111));
+  }
+}
+
+TEST(home2, las_edades_de_las_cacas_sobreviven_a_guardar_y_cargar) {
+  Pet p;
+  twoPets(p);
+  for (uint8_t s = 0; s < 2; s++) {
+    PetLife &l = p.slotRef(s);
+    l.ageMinutes = 1000 + s * 100;
+    l.dbgSetPoops(2);
+    l.poopAt[0] = l.ageMinutes - 50 - s;  // vieja
+    l.poopAt[1] = l.ageMinutes - 2 - s;   // reciente
+  }
+  p.rename("H");  // guarda todo
+  Pet q;
+  q.begin();
+  for (uint8_t s = 0; s < 2; s++) {
+    const PetLife &l = q.home(s), &o = p.home(s);
+    CHECK_EQ(l.poops, (uint8_t)2);
+    uint32_t a[POOP_MAX], b[POOP_MAX];
+    l.poopStamps(a);
+    o.poopStamps(b);
+    CHECK_EQ(a[0], b[0]);
+    CHECK_EQ(a[1], b[1]);
+    CHECK_EQ(l.stalePoops(), (uint8_t)1);  // la de hace 50 min si; la de hace 2, no
+  }
+}
+
+TEST(home2, una_caca_suelta_se_guarda_en_su_orden_sin_huecos) {
+  Pet p;
+  twoPets(p);
+  PetLife &l = p.slotRef(1);
+  l.ageMinutes = 1000;
+  l.dbgSetPoops(3);
+  l.poopAt[0] = 900;
+  l.poopAt[1] = 950;
+  l.poopAt[2] = 990;
+  p.focus(1);
+  CHECK(p.cleanPoop(1));  // se quita la del medio: quedan las de 900 y 990
+  p.focus(0);
+  p.rename("H");
+  Pet q;
+  q.begin();
+  uint32_t st[POOP_MAX];
+  q.home(1).poopStamps(st);
+  CHECK_EQ(q.home(1).poops, (uint8_t)2);
+  CHECK_EQ(st[0], (uint32_t)900);
+  CHECK_EQ(st[1], (uint32_t)990);
+  CHECK_EQ(q.home(1).stalePoops(), (uint8_t)2);  // una de 100 min y otra de 10: las dos son viejas
+}
+
+TEST(home2, un_guardado_sin_poopA_da_cacas_recien_hechas) {
+  Pet p;
+  twoPets(p);
+  PetLife &l = p.slotRef(0);
+  l.ageMinutes = 1000;
+  l.dbgSetPoops(2);
+  l.poopAt[0] = l.poopAt[1] = 100;
+  p.rename("H");
+  {
+    Preferences raw;  // como lo dejaba la v3.0: sin "poopA"
+    raw.begin("tamapoke");
+    raw.remove("poopA");
+  }
+  Pet q;
+  q.begin();
+  CHECK_EQ(q.home(0).poops, (uint8_t)2);
+  CHECK_EQ(q.home(0).stalePoops(), (uint8_t)0);
+}
+
+TEST(home2, el_que_despierta_de_la_caja_trae_las_cacas_recien_hechas) {
+  Pet p;
+  twoPets(p);
+  PetLife &l = p.slotRef(1);
+  l.ageMinutes = 1000;
+  l.dbgSetPoops(2);
+  l.poopAt[0] = l.poopAt[1] = 10;  // viejisimas
+  CHECK_EQ(l.stalePoops(), (uint8_t)2);
+  CHECK(p.store(0, 1));
+  CHECK(p.wake(0, 1));
+  CHECK_EQ(p.home(1).poops, (uint8_t)2);
+  CHECK_EQ(p.home(1).stalePoops(), (uint8_t)0);  // la caja no lleva la edad de las cacas
+}
+
 // ---------------------------------------------------------------- finales por hueco
 TEST(home2, se_muere_el_del_hueco_2_y_el_otro_sigue) {
   Pet p;
   twoPets(p);
-  p.slotRef(0).fullness = p.slotRef(0).joy = p.slotRef(0).energy = p.slotRef(0).hygiene = 90;
+  p.slotRef(0).fullness = p.slotRef(0).joy = p.slotRef(0).energy = 90;
   p.slotRef(1).bond = 0;
   p.slotRef(1).dbgAbandon();
   hAdvance(p, DEATH_MIN + 1);

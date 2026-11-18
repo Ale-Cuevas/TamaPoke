@@ -10,7 +10,7 @@
 // hacia abajo. Logica pura, con tests en test/test_zengame.cpp: el sketch solo dibuja y lee el
 // dedo.
 
-#include "tuning.h"  // lo que dura la sesion (ZEN_SESSION_MS) y lo que da (ZEN_GAIN_MAX, ZEN_WASH...): alli
+#include "tuning.h"  // lo que dura la sesion (ZEN_SESSION_MS) y lo que da (ZEN_GAIN_MAX...): alli. Una sesion completa limpia las cacas del que juega (v3.1)
 
 #define ZEN_DRIFT_FROM_MS 30000u  // desde aqui la franja sube y baja despacio, y su concentracion da DEF de
                                   // bonificacion (v1.47)

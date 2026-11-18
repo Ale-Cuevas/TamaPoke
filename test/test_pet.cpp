@@ -30,8 +30,8 @@ static void makePet(Pet &p, int16_t dex) {
 // el reloj de las pruebas: el dia 1000 a las hh:mm (hora local, como el RTC)
 static uint32_t at(int hh, int mm, uint32_t day = 1000) { return day * 86400u + hh * 3600u + mm * 60u; }
 
-static void setStats(Pet &p, uint8_t f, uint8_t j, uint8_t e, uint8_t h) {
-  p.fullness = f; p.joy = j; p.energy = e; p.hygiene = h;
+static void setStats(Pet &p, uint8_t f, uint8_t j, uint8_t e) {
+  p.fullness = f; p.joy = j; p.energy = e;
 }
 
 // ---------------------------------------------------------------- huevo
@@ -176,7 +176,7 @@ TEST(cake, la_comida_no_baja_durante_tres_horas) {
   p.items[IT_CAKE] = 1;
   CHECK(p.eatCake());
   for (uint32_t m = 0; m < CAKE_SATED_MIN; m++) {
-    p.joy = p.energy = p.hygiene = 100;  // que nada mas cambie: solo mira la comida
+    p.joy = p.energy = 100;  // que nada mas cambie: solo mira la comida
     advance(p, 1);
     if (p.fullness != 100) break;
   }
@@ -301,38 +301,107 @@ TEST(feed, dormido_o_huevo_no_come) {
 }
 
 // ---------------------------------------------------------------- tick
-// el ritmo de cada barra sale de tuning.h (FOOD_DRAIN 2, ENE_DRAIN 1, HYG_DRAIN 1, JOY_DRAIN 1 hoy)
+// el ritmo de cada barra sale de tuning.h (FOOD_DRAIN 2, ENE_DRAIN 1, JOY_DRAIN 1 hoy)
 TEST(tick, despierto_cada_barra_baja_a_su_ritmo) {
   Pet p;
   makePet(p, 4);
-  setStats(p, 100, 100, 100, 100);
+  setStats(p, 100, 100, 100);
   p.poops = 0;
   mockForceRandom(99);  // random(100) < POOP_ODDS falso: sin cacas
   advance(p, 10);
   mockClearForcedRandom();
   CHECK_EQ(p.fullness, (uint8_t)(100 - 10 * FOOD_DRAIN));
   CHECK_EQ(p.energy, (uint8_t)(100 - 10 * ENE_DRAIN));
-  CHECK_EQ(p.hygiene, (uint8_t)(100 - 10 * HYG_DRAIN));
   CHECK_EQ(p.joy, (uint8_t)(100 - 10 * JOY_DRAIN));
   CHECK_EQ(p.ageMinutes, (uint32_t)10);
   CHECK_EQ(p.poops, (uint8_t)0);
 }
 
+// v3.1: las cacas viejas (mas de POOP_STALE_MIN min en el suelo) quitan felicidad, solo despierto. Todo sale de
+// tuning.h: POOP_STALE_MIN, POOP_JOY_EVERY y POOP_JOY_DRAIN[n]
+TEST(poop, una_caca_recien_hecha_no_quita_felicidad) {
+  Pet p;
+  makePet(p, 4);
+  setStats(p, 100, 100, 100);
+  mockForceRandom(99);  // sin cacas nuevas
+  p.dbgSetPoops(3);
+  advance(p, POOP_STALE_MIN);  // la mas vieja tiene justo POOP_STALE_MIN: aun no es vieja
+  mockClearForcedRandom();
+  CHECK_EQ(p.stalePoops(), (uint8_t)0);
+  CHECK_EQ(p.joy, (uint8_t)(100 - POOP_STALE_MIN * JOY_DRAIN));
+}
+
+TEST(poop, las_viejas_quitan_felicidad_segun_la_tabla) {
+  for (uint8_t n = 0; n <= POOP_MAX; n++) {
+    Pet p;
+    makePet(p, 4);
+    setStats(p, 100, 100, 100);
+    mockForceRandom(99);
+    p.dbgSetPoops(n);
+    p.ageMinutes += 100;  // todas con 100 min en el suelo
+    CHECK_EQ(p.stalePoops(), n);
+    const uint32_t span = POOP_JOY_EVERY * 4;  // 4 toques del drenaje, sea cual sea la fase
+    advance(p, span);
+    mockClearForcedRandom();
+    CHECK_EQ(p.joy, (uint8_t)(100 - span * JOY_DRAIN - 4 * POOP_JOY_DRAIN[n]));
+  }
+}
+
+TEST(poop, tocar_una_vieja_baja_el_ritmo_y_dormido_no_quita) {
+  Pet p;
+  makePet(p, 4);
+  p.dbgSetPoops(3);
+  p.ageMinutes += 100;
+  CHECK_EQ(p.stalePoops(), (uint8_t)3);
+  CHECK(p.cleanPoop(1));
+  CHECK_EQ(p.stalePoops(), (uint8_t)2);
+  // dormido: lo mismo que sin cacas (solo cuenta el suelo del sueno). Cada una con su Pet y su reloj
+  uint8_t joyAfter[2];
+  for (uint8_t withPoops = 0; withPoops < 2; withPoops++) {
+    Pet q;
+    makePet(q, 4);
+    setStats(q, 100, 100, 100);
+    if (withPoops) q.dbgSetPoops(3);
+    q.ageMinutes += 100;
+    q.toggleLight();
+    mockForceRandom(99);
+    advance(q, 60);
+    mockClearForcedRandom();
+    joyAfter[withPoops] = q.joy;
+  }
+  CHECK_EQ(joyAfter[1], joyAfter[0]);
+  CHECK_MSG(joyAfter[0] < 100, "dormido la felicidad baja un poco por el sueno (control)");
+}
+
+TEST(poop, las_cacas_nuevas_llevan_su_edad) {
+  Pet p;
+  makePet(p, 4);
+  p.ageMinutes = 500;
+  p.dbgAddPoop();
+  CHECK_EQ(p.poopAt[0], (uint32_t)500);
+  p.ageMinutes = 520;
+  p.dbgAddPoop();
+  CHECK_EQ(p.poopAt[1], (uint32_t)520);
+  CHECK_EQ(p.stalePoops(), (uint8_t)1);  // la primera (20 min) si; la segunda no
+  p.ageMinutes = 530;
+  CHECK(p.cleanPoop(0));
+  CHECK_EQ(p.stalePoops(), (uint8_t)1);  // la otra, con 10 min
+}
+
 TEST(tick, las_barras_nunca_bajan_de_cero) {
   Pet p;
   makePet(p, 4);
-  setStats(p, 5, 3, 2, 1);
+  setStats(p, 5, 3, 2);
   advance(p, 30);
   CHECK_EQ(p.fullness, (uint8_t)0);
   CHECK_EQ(p.joy, (uint8_t)0);
   CHECK_EQ(p.energy, (uint8_t)0);
-  CHECK_EQ(p.hygiene, (uint8_t)0);
 }
 
 TEST(tick, dormir_recupera_energia_con_suelos) {
   Pet p;
   makePet(p, 4);
-  setStats(p, 100, 100, 10, 100);
+  setStats(p, 100, 100, 10);
   p.toggleLight();
   advance(p, 20);
   CHECK_MSG(p.energy == 100, "durmiendo la energia sube 6/min hasta 100");
@@ -340,7 +409,6 @@ TEST(tick, dormir_recupera_energia_con_suelos) {
   advance(p, 2000);  // dormir muchisimo: los suelos protegen
   CHECK_MSG(p.fullness >= 30, "suelo de comida durmiendo = 30");
   CHECK_MSG(p.joy >= 35, "suelo de felicidad durmiendo = 35");
-  CHECK_MSG(p.hygiene >= 45, "suelo de higiene durmiendo = 45");
   CHECK_EQ(p.careMistakes, (uint8_t)0);
 }
 
@@ -355,7 +423,7 @@ TEST(tick, sobrepeso_se_quema_solo) {
 TEST(tick, descuido_cuenta_una_vez_por_hora) {
   Pet p;
   makePet(p, 4);
-  setStats(p, 5, 0, 0, 0);
+  setStats(p, 5, 0, 0);
   p.satedUntil = 100000;  // la comida no baja: sin las cuatro a cero no hay abandono (v1.60)
   advance(p, 1);
   CHECK_EQ(p.careMistakes, (uint8_t)1);
@@ -371,7 +439,7 @@ TEST(tick, descuido_enfria_el_vinculo_sin_arrasarlo) {
   Pet p;
   makePet(p, 4);
   p.bond = 50;
-  setStats(p, 5, 0, 0, 0);
+  setStats(p, 5, 0, 0);
   p.satedUntil = 100000;  // como arriba: un descuido, no el abandono (que si lo apaga, v1.60)
   advance(p, 1);
   CHECK_EQ(p.bond, (uint8_t)49);
@@ -385,7 +453,7 @@ TEST(tick, buen_cuidado_12h_forja_defensa) {
   makePet(p, 4);
   CHECK_EQ(p.trDef, (uint8_t)0);
   for (int h = 0; h < 720; h++) {  // mantener todo >= 40 durante 12 h
-    setStats(p, 100, 100, 100, 100);
+    setStats(p, 100, 100, 100);
     advance(p, 1);
   }
   CHECK_EQ(p.trDef, (uint8_t)1);
@@ -492,7 +560,7 @@ TEST(evolve, si_cambia_la_baya_favorita_se_olvida) {
   p.feedBerry(1);
   CHECK(p.berryKnown);
   p.setLevel(21);
-  setStats(p, 80, 80, 80, 80);
+  setStats(p, 80, 80, 80);
   p.evolve();
   CHECK_EQ(p.speciesId, (int16_t)5);
   CHECK(!p.berryKnown);
@@ -509,7 +577,7 @@ TEST(evolve, si_no_cambia_se_recuerda) {
     p.feedBerry(DEX_EEVEE % 3);
     CHECK(p.berryKnown);
     p.setLevel(41);
-    setStats(p, 80, 80, 80, 80);
+    setStats(p, 80, 80, 80);
     p.evolve();
     if (p.speciesId % 3 == DEX_EEVEE % 3) {
       tried = true;
@@ -623,17 +691,18 @@ TEST(train, el_saco_cansa_y_quema_peso) {
   CHECK_EQ(p.energy, (uint8_t)3);
 }
 
-TEST(train, cascada_da_def_lava_y_guarda_record) {
+TEST(train, cascada_da_def_quita_las_cacas_y_guarda_record) {
   Pet p;
   makePet(p, 4);
   p.trDef = 10;
-  p.hygiene = 50;
+  p.dbgSetPoops(2);
   p.energy = 80;
   p.fullness = 80;
   p.weight = 40;
   CHECK_EQ(p.zenResult(150), (uint8_t)4);  // 15 s en la franja: 1 punto cada 3,5 s
   CHECK_EQ(p.trDef, (uint8_t)14);
-  CHECK_EQ(p.hygiene, (uint8_t)(50 + ZEN_WASH));
+  CHECK_EQ(p.poops, (uint8_t)0);  // v3.1: la sesion entera lava (sin cacas)
+  CHECK_EQ(p.poopSlots(), (uint8_t)0);
   CHECK_EQ(p.energy, (uint8_t)72);
   CHECK_EQ(p.fullness, (uint8_t)77);
   CHECK_EQ(p.weight, (uint8_t)40);  // sentado no quema peso
@@ -657,10 +726,8 @@ TEST(train, la_cascada_anuncia_lo_que_de_verdad_sube_y_topa) {
   Pet p;
   makePet(p, 4);
   p.trDef = 97;
-  p.hygiene = 95;
   CHECK_EQ(p.zenResult(300), (uint8_t)3);
   CHECK_EQ(p.trDef, (uint8_t)100);
-  CHECK_EQ(p.hygiene, (uint8_t)100);
   CHECK_EQ(p.zenResult(300), (uint8_t)0);
 }
 
@@ -744,7 +811,7 @@ TEST(play, minijuego_entrena_velocidad_y_guarda_record) {
 TEST(play, jugar_sube_felicidad_y_cansa) {
   Pet p;
   makePet(p, 4);
-  setStats(p, 50, 50, 50, 50);
+  setStats(p, 50, 50, 50);
   p.play();
   CHECK_EQ(p.joy, (uint8_t)75);
   CHECK_EQ(p.energy, (uint8_t)40);
@@ -752,28 +819,16 @@ TEST(play, jugar_sube_felicidad_y_cansa) {
   CHECK(p.showHeart());
 }
 
-TEST(care, limpiar_quita_cacas_y_deja_higiene_a_tope) {
-  Pet p;
-  makePet(p, 4);
-  p.poops = 3;
-  p.hygiene = 10;
-  p.clean();
-  CHECK_EQ(p.poops, (uint8_t)0);
-  CHECK_EQ(p.hygiene, (uint8_t)100);
-}
-
 // v1.58: una caca se limpia tocandola; solo esa (las demas siguen en su sitio)
 TEST(care, tocar_una_caca_quita_solo_esa) {
   Pet p;
   makePet(p, 4);
   p.dbgSetPoops(3);
-  p.hygiene = 40;
   uint8_t bond = p.bond;
   CHECK(p.cleanPoop(1));
   CHECK_EQ(p.poops, (uint8_t)2);
   CHECK_EQ(p.poopSlots(), (uint8_t)0b101);
-  CHECK_EQ(p.hygiene, (uint8_t)(40 + POOP_TAP_HYG));
-  CHECK_EQ(p.bond, bond);  // el vinculo lo da el baño, no cada caca
+  CHECK_EQ(p.bond, bond);  // tocar una caca no da vinculo (si cuenta como cuidado del dia)
   CHECK(!p.cleanPoop(1));  // ya no esta
   CHECK(p.cleanPoop(0));
   CHECK(p.cleanPoop(2));
@@ -815,11 +870,11 @@ TEST(tick, caca_cada_veinte_minutos_de_media) {
   Pet p;
   makePet(p, 4);
   mockForceRandom(POOP_ODDS);  // justo por encima: nunca
-  setStats(p, 100, 100, 100, 100);
+  setStats(p, 100, 100, 100);
   advance(p, 5);
   CHECK_EQ(p.poops, (uint8_t)0);
   mockForceRandom(POOP_ODDS - 1);  // justo por debajo: cada minuto
-  setStats(p, 100, 100, 100, 100);
+  setStats(p, 100, 100, 100);
   advance(p, 1);
   CHECK_EQ(p.poops, (uint8_t)1);
   mockClearForcedRandom();
@@ -830,7 +885,7 @@ TEST(care, mimar_sube_felicidad_y_vinculo) {
   makePet(p, 4);
   p.joy = 50;
   p.caress();
-  CHECK_EQ(p.joy, (uint8_t)55);
+  CHECK_EQ(p.joy, (uint8_t)(50 + CARESS_JOY));  // v3.1: +20 (antes +5)
   CHECK_EQ(p.bond, (uint8_t)1);
   CHECK(p.showHeart());
 }
@@ -845,7 +900,7 @@ TEST(care, el_vinculo_tiene_tope_diario) {
 TEST(mood, refleja_el_estado) {
   Pet p;
   makePet(p, 4);
-  setStats(p, 80, 80, 80, 80);
+  setStats(p, 80, 80, 80);
   CHECK_EQ((int)p.mood(), (int)MOOD_HAPPY);
   p.joy = 20;
   CHECK_EQ((int)p.mood(), (int)MOOD_SAD);
@@ -1105,7 +1160,7 @@ TEST(death, todo_a_cero_apaga_el_vinculo_en_media_hora) {
   Pet p;
   makePet(p, 4);
   p.bond = 100;
-  setStats(p, 0, 0, 0, 0);
+  setStats(p, 0, 0, 0);
   advance(p, BOND_FADE_MIN - 1);
   CHECK(p.bond > 0);
   CHECK(p.bond <= 5);
@@ -1118,7 +1173,7 @@ TEST(death, un_cuidado_para_la_cuenta_y_lo_perdido_no_vuelve) {
   Pet p;
   makePet(p, 4);
   p.bond = 100;
-  setStats(p, 0, 0, 0, 0);
+  setStats(p, 0, 0, 0);
   advance(p, 10);
   CHECK_EQ(p.neglectMinutes(), (uint8_t)10);
   uint8_t b = p.bond;
@@ -1134,7 +1189,7 @@ TEST(death, sin_vinculo_media_hora_mas_y_se_muere) {
   Pet p;
   makePet(p, 4);
   p.bond = 0;
-  setStats(p, 0, 0, 0, 0);
+  setStats(p, 0, 0, 0);
   advance(p, DEATH_MIN - 1);
   CHECK(!p.isDying());
   CHECK_EQ(p.deathMinutes(), (uint8_t)(DEATH_MIN - 1));
@@ -1147,7 +1202,7 @@ TEST(death, de_vinculo_lleno_a_muerto_en_una_hora) {
   Pet p;
   makePet(p, 4);
   p.bond = 100;
-  setStats(p, 0, 0, 0, 0);
+  setStats(p, 0, 0, 0);
   advance(p, BOND_FADE_MIN + DEATH_MIN - 1);
   CHECK(!p.isDying());
   advance(p, 1);
@@ -1158,7 +1213,7 @@ TEST(death, un_cuidado_en_la_ultima_media_hora_tambien_la_salva) {
   Pet p;
   makePet(p, 4);
   p.bond = 0;
-  setStats(p, 0, 0, 0, 0);
+  setStats(p, 0, 0, 0);
   advance(p, DEATH_MIN - 2);
   p.feedBerry(0);  // +25 de comida (un mimo no basta: +5 de felicidad se va en el mismo minuto)
   advance(p, 5);
@@ -1170,13 +1225,13 @@ TEST(death, dormido_o_apagado_no_cuenta) {
   Pet p;
   makePet(p, 4);
   p.bond = 50;
-  setStats(p, 0, 0, 0, 0);
+  setStats(p, 0, 0, 0);
   p.toggleLight();  // dormido: sube la energia, no hay abandono
   advance(p, 90);
   CHECK_EQ(p.bond, (uint8_t)50);
   CHECK(!p.isDying());
   p.toggleLight();
-  setStats(p, 0, 0, 0, 0);
+  setStats(p, 0, 0, 0);
   p.setClock(1000u * 86400);
   p.syncClock(1000u * 86400 + 600 * 60);  // 10 h apagado con todo a cero
   CHECK_EQ(p.bond, (uint8_t)50);
@@ -1188,7 +1243,7 @@ TEST(death, la_cuenta_sobrevive_a_un_reinicio) {
   Pet p;
   makePet(p, 4);
   p.bond = 100;
-  setStats(p, 0, 0, 0, 0);
+  setStats(p, 0, 0, 0);
   advance(p, 10);
   p.flushSave();
   Pet b;
@@ -1207,7 +1262,7 @@ TEST(death, la_cuenta_sobrevive_a_un_reinicio) {
 TEST(death, muriendose_el_tiempo_se_para_y_nada_funciona) {
   Pet p;
   makePet(p, 4);
-  setStats(p, 0, 0, 0, 0);
+  setStats(p, 0, 0, 0);
   p.dbgSetPoops(1);
   p.startDying();
   CHECK(p.isDying());
@@ -1218,7 +1273,6 @@ TEST(death, muriendose_el_tiempo_se_para_y_nada_funciona) {
   p.play();
   p.caress();
   p.toggleLight();
-  p.clean();
   CHECK(!p.cleanPoop(0));
   CHECK_EQ(p.fullness, (uint8_t)0);
   CHECK_EQ(p.joy, (uint8_t)0);
@@ -1239,7 +1293,7 @@ TEST(death, revivir_gasta_uno_y_devuelve_la_mitad) {
   Pet p;
   makePet(p, 4);
   p.bond = 0;
-  setStats(p, 0, 0, 0, 0);
+  setStats(p, 0, 0, 0);
   uint8_t mist = p.careMistakes;
   p.startDying();
   CHECK(p.revive());
@@ -1248,7 +1302,6 @@ TEST(death, revivir_gasta_uno_y_devuelve_la_mitad) {
   CHECK_EQ(p.fullness, (uint8_t)REVIVE_NEEDS);
   CHECK_EQ(p.joy, (uint8_t)REVIVE_NEEDS);
   CHECK_EQ(p.energy, (uint8_t)REVIVE_NEEDS);
-  CHECK_EQ(p.hygiene, (uint8_t)REVIVE_NEEDS);
   CHECK_EQ(p.bond, (uint8_t)0);
   CHECK_EQ(p.careMistakes, (uint8_t)(mist + 1));
   CHECK(!p.revive());  // ya no se esta muriendo
@@ -1500,14 +1553,13 @@ TEST(death, el_comando_neglect_adelanta_la_cuenta) {
 TEST(ceremony, durante_la_ceremonia_no_se_puede_interactuar) {
   Pet p;
   makePet(p, 4);
-  setStats(p, 50, 50, 50, 50);
+  setStats(p, 50, 50, 50);
   p.poops = 2;
   p.release();
   p.feedBerry(0);
   p.items[IT_CAKE] = 1;
   CHECK(!p.eatCake());
   p.play();
-  p.clean();
   p.caress();
   p.toggleLight();
   CHECK_EQ(p.fullness, (uint8_t)50);
@@ -1542,16 +1594,47 @@ TEST(ceremony, un_huevo_no_se_despide_ni_se_suelta) {
 TEST(offline, aplica_el_tiempo_apagado_con_suelo_de_15) {
   Pet p;
   makePet(p, 4);
-  setStats(p, 80, 80, 80, 100);
-  p.setClock(1000u * 86400);
-  p.syncClock(1000u * 86400 + 600 * 60);  // 600 minutos apagado
+  setStats(p, 80, 80, 80);
+  p.setClock(at(9, 0));  // de dia: despierto todo el rato (la noche lo acostaria)
+  p.syncClock(at(9, 0) + 600 * 60);  // 600 minutos apagado
   CHECK_EQ(p.ageMinutes, (uint32_t)600);
   CHECK_MSG(p.fullness == 15, "suelo de comida offline = 15");
   CHECK_MSG(p.energy == 15, "suelo de energia offline = 15");
   CHECK_MSG(p.joy == 15, "suelo de felicidad offline = 15");
-  CHECK_MSG(p.hygiene == 15, "suelo de higiene offline = 15");
   CHECK_MSG(p.careMistakes == 0, "en ausencia no se acumulan descuidos");
   CHECK_EQ(p.poops, (uint8_t)2);  // una caca cada 4 h
+}
+
+// v3.1: las cacas de la ausencia se hacen dentro del repaso, con su edad (no todas "ahora")
+TEST(offline, las_cacas_de_la_ausencia_tienen_su_edad) {
+  Pet p;
+  makePet(p, 4);
+  setStats(p, 100, 100, 100);
+  uint32_t age0 = p.ageMinutes;
+  uint32_t mins = 2 * OFFLINE_POOP_EVERY_MIN + 2;  // la segunda caca, 2 min antes de volver
+  p.setClock(at(9, 0));
+  p.syncClock(at(9, 0) + mins * 60);
+  CHECK_EQ(p.poops, (uint8_t)2);
+  uint32_t st[POOP_MAX];
+  p.poopStamps(st);
+  CHECK_EQ(st[0], age0 + OFFLINE_POOP_EVERY_MIN);
+  CHECK_EQ(st[1], age0 + 2 * OFFLINE_POOP_EVERY_MIN);
+  CHECK_EQ(p.ageMinutes, age0 + mins);
+  CHECK_EQ(p.stalePoops(), (uint8_t)1);  // la primera es vieja; la segunda lleva 2 min
+  CHECK_MSG(p.joy >= OFFLINE_FLOOR, "las viejas bajan la felicidad con el suelo de la ausencia");
+}
+
+TEST(offline, las_cacas_viejas_bajan_la_felicidad_hasta_el_suelo) {
+  Pet p;
+  makePet(p, 4);
+  setStats(p, 100, 100, 100);
+  p.dbgSetPoops(3);
+  p.ageMinutes += 100;
+  p.setClock(at(9, 0));
+  p.syncClock(at(9, 0) + 60 * 60);  // 1 h apagado
+  // sin cacas viejas bajaria 60 * JOY_DRAIN; con las 3 viejas, mas
+  CHECK_MSG(p.joy < 100 - 60 * JOY_DRAIN, "las tres viejas drenan ademas del ritmo normal");
+  CHECK_MSG(p.joy >= OFFLINE_FLOOR, "sin bajar del suelo");
 }
 
 TEST(offline, tope_de_dos_semanas) {
@@ -1565,7 +1648,7 @@ TEST(offline, tope_de_dos_semanas) {
 TEST(offline, menos_de_dos_minutos_no_hace_nada) {
   Pet p;
   makePet(p, 4);
-  setStats(p, 80, 80, 80, 100);
+  setStats(p, 80, 80, 80);
   p.setClock(1000u * 86400);
   p.syncClock(1000u * 86400 + 90);
   CHECK_EQ(p.ageMinutes, (uint32_t)0);
@@ -1586,7 +1669,7 @@ TEST(offline, el_huevo_eclosiona_en_tu_ausencia) {
 TEST(offline, durmiendo_se_descansa_tambien_apagado) {
   Pet p;
   makePet(p, 4);
-  setStats(p, 90, 90, 20, 90);
+  setStats(p, 90, 90, 20);
   p.toggleLight();
   p.setClock(1000u * 86400);
   p.syncClock(1000u * 86400 + 120 * 60);
@@ -1598,7 +1681,7 @@ TEST(offline, durmiendo_se_descansa_tambien_apagado) {
 TEST(offline, sin_reloj_no_se_aplica_nada) {
   Pet p;
   makePet(p, 4);
-  setStats(p, 80, 80, 80, 100);
+  setStats(p, 80, 80, 80);
   p.syncClock(0);
   CHECK_EQ(p.ageMinutes, (uint32_t)0);
   CHECK_EQ(p.fullness, (uint8_t)80);
@@ -1681,7 +1764,7 @@ static uint32_t savedStepsToday() {
 TEST(steps, felicidad_peso_y_vinculo_por_pasos_con_restos) {
   Pet p;
   makeWalker(p);
-  setStats(p, 80, 50, 80, 100);
+  setStats(p, 80, 50, 80);
   p.weight = 20;
   mockForceRandom(400);  // primer hallazgo a 1200 pasos: lejos
   p.addSteps(99, DIA);
@@ -1704,7 +1787,7 @@ TEST(steps, felicidad_peso_y_vinculo_por_pasos_con_restos) {
 TEST(steps, la_felicidad_por_pasos_tiene_tope_diario) {
   Pet p;
   makeWalker(p);
-  setStats(p, 80, 10, 80, 100);
+  setStats(p, 80, 10, 80);
   mockForceRandom(400);
   for (int i = 0; i < 40; i++) p.addSteps(100, DIA);  // 4000 pasos: 40 puntos, tope 30
   CHECK_EQ(p.stepJoyToday, (uint8_t)STEP_JOY_DAY_CAP);
@@ -1724,7 +1807,7 @@ TEST(steps, huevo_o_dormido_cuentan_pasos_sin_premio) {
 
   Pet p;
   makeWalker(p);
-  setStats(p, 80, 50, 80, 100);
+  setStats(p, 80, 50, 80);
   p.toggleLight();  // a dormir
   p.addSteps(2000, DIA);
   CHECK_EQ(p.joy, (uint8_t)50);
@@ -1736,7 +1819,7 @@ TEST(steps, huevo_o_dormido_cuentan_pasos_sin_premio) {
 TEST(steps, a_medianoche_hoy_vuelve_a_cero_y_el_total_no) {
   Pet p;
   makeWalker(p);
-  setStats(p, 80, 10, 80, 100);
+  setStats(p, 80, 10, 80);
   mockForceRandom(0);
   for (int i = 0; i < 40; i++) p.addSteps(100, DIA);  // agota felicidad y hallazgos
   CHECK_EQ(p.stepJoyToday, (uint8_t)STEP_JOY_DAY_CAP);
@@ -1757,7 +1840,7 @@ TEST(steps, a_medianoche_hoy_vuelve_a_cero_y_el_total_no) {
 TEST(steps, la_meta_salta_una_vez_al_dia_con_regalo_y_racha) {
   Pet p;
   makeWalker(p);
-  setStats(p, 80, 40, 80, 100);
+  setStats(p, 80, 40, 80);
   mockForceRandom(400);  // hallazgos cada 1200 pasos
   p.addSteps(2999, DIA);
   CHECK(!p.goalDoneOn(DIA));
@@ -1900,7 +1983,7 @@ TEST(steps, addSteps_nunca_escribe_en_flash) {
 TEST(items, baya_dorada_y_vitaminas) {
   Pet p;
   makeWalker(p);
-  setStats(p, 30, 40, 80, 100);
+  setStats(p, 30, 40, 80);
   p.items[IT_GOLDEN] = 1;
   p.items[IT_PROTEIN] = 1;
   p.items[IT_IRON] = 1;
@@ -2017,7 +2100,7 @@ TEST(steps, mochila_y_pasos_sobreviven_a_un_reinicio_y_a_un_huevo_nuevo) {
 TEST(steps, los_restos_sobreviven_a_un_reinicio) {
   Pet a;
   makeWalker(a);
-  setStats(a, 80, 50, 80, 100);
+  setStats(a, 80, 50, 80);
   mockForceRandom(400);
   a.addSteps(1234, DIA);  // 12 puntos de felicidad y 34 pasos de resto
   CHECK_EQ(a.joy, (uint8_t)62);
@@ -2120,7 +2203,7 @@ TEST(care, mimar_da_vinculo_con_enfriamiento) {
   mockAdvanceMillis(1000);
   for (int i = 0; i < 10; i++) p.caress();
   CHECK_EQ(p.bond, (uint8_t)1);  // diez toques seguidos: uno solo cuenta
-  CHECK_EQ(p.joy, (uint8_t)70);  // la felicidad si sube con cada toque
+  CHECK_EQ(p.joy, (uint8_t)(20 + 10 * CARESS_JOY > 100 ? 100 : 20 + 10 * CARESS_JOY));  // la felicidad si sube con cada toque (tope 100)
   mockAdvanceMillis(PET_BOND_COOLDOWN_MS - 1);
   p.caress();
   CHECK_EQ(p.bond, (uint8_t)1);
@@ -2133,8 +2216,10 @@ TEST(care, mimar_da_vinculo_con_enfriamiento) {
 TEST(care, el_tope_de_vinculo_no_se_pasa) {
   Pet p;
   makePet(p, 4);
-  p.clean();
-  for (int i = 1; i < BOND_DAY_CAP - 1; i++) p.clean();  // +1 cada bano: tope - 1
+  for (int i = 0; i < BOND_DAY_CAP - 1; i++) {  // +1 cada mimo (pasado su enfriamiento): tope - 1
+    mockAdvanceMillis(PET_BOND_COOLDOWN_MS + 1);
+    p.caress();
+  }
   CHECK_EQ(p.bond, (uint8_t)(BOND_DAY_CAP - 1));
   p.play();  // +2
   CHECK_EQ(p.bond, (uint8_t)BOND_DAY_CAP);
@@ -2160,7 +2245,7 @@ TEST(care, el_vinculo_maximo_cuesta_mas_de_cinco_dias) {
 TEST(steps, las_tres_metas_saltan_una_vez_al_dia_y_en_orden) {
   Pet p;
   makeWalker(p);
-  setStats(p, 80, 20, 80, 100);
+  setStats(p, 80, 20, 80);
   mockForceRandom(400);  // hallazgos al azar cada 1200 pasos
   uint8_t lv = 0;
   CHECK_EQ(p.level(), (uint16_t)1);
@@ -2261,7 +2346,7 @@ TEST(steps, el_vinculo_de_las_metas_va_fuera_del_tope_diario) {
 TEST(steps, dormido_las_metas_marcan_el_dia_sin_premio) {
   Pet p;
   makeWalker(p);
-  setStats(p, 80, 50, 80, 100);
+  setStats(p, 80, 50, 80);
   p.toggleLight();  // a dormir
   uint16_t lvBefore = p.level();
   uint8_t lv = 9;
@@ -2279,7 +2364,7 @@ TEST(steps, dormido_las_metas_marcan_el_dia_sin_premio) {
 TEST(items, el_caramelo_raro_sube_un_nivel_y_abre_la_evolucion) {
   Pet p;
   makePet(p, 4);  // Charmander: evoluciona a Charmeleon a nivel 16
-  setStats(p, 80, 80, 80, 80);
+  setStats(p, 80, 80, 80);
   p.growMin = levelStart(15) + 40;  // nivel 15 (57 min), a dos tercios del 16
   uint32_t age = p.ageMinutes;
   CHECK_EQ(p.level(), (uint16_t)15);
@@ -2342,7 +2427,7 @@ TEST(save, metas_y_caramelo_sobreviven_y_un_guardado_de_la_v124_migra) {
 TEST(imu, agitarlo_dormido_lo_despierta_de_mal_humor) {
   Pet p;
   makeWalker(p);
-  setStats(p, 80, 50, 80, 100);
+  setStats(p, 80, 50, 80);
   p.toggleLight();
   uint16_t streak = p.streak;
   p.wakeGrumpy();
@@ -2367,7 +2452,7 @@ TEST(imu, agitarlo_dormido_lo_despierta_de_mal_humor) {
 TEST(imu, tres_sacudidas_en_dos_minutos_marean_y_restan) {
   Pet p;
   makeWalker(p);
-  setStats(p, 80, 50, 80, 100);
+  setStats(p, 80, 50, 80);
   p.shaken();
   CHECK_EQ(p.emote(), (uint8_t)EMOTE_DIZZY);
   mockAdvanceMillis(30000);
@@ -2386,7 +2471,7 @@ TEST(imu, tres_sacudidas_en_dos_minutos_marean_y_restan) {
 TEST(imu, sacudidas_espaciadas_no_restan) {
   Pet p;
   makeWalker(p);
-  setStats(p, 80, 50, 80, 100);
+  setStats(p, 80, 50, 80);
   for (int i = 0; i < 6; i++) { p.shaken(); mockAdvanceMillis(70000); }
   CHECK_EQ(p.joy, (uint8_t)50);
 }
@@ -2420,7 +2505,7 @@ TEST(imu, boca_abajo_lo_duerme_sin_guardar_al_momento) {
 TEST(imu, nada_de_esto_en_una_ceremonia) {
   Pet p;
   makeWalker(p);
-  setStats(p, 80, 50, 80, 100);
+  setStats(p, 80, 50, 80);
   p.release();
   p.shaken();
   p.sleepDeferred();
@@ -2460,7 +2545,7 @@ TEST(night, tiene_sueno_desde_las_22) {
 TEST(night, a_las_23_se_duerme_solo_sin_vinculo) {
   Pet p;
   makePet(p, 4);
-  setStats(p, 100, 100, 100, 100);
+  setStats(p, 100, 100, 100);
   p.bond = 20;
   p.lastSeenEpoch = at(22, 57);
   liveMinutes(p, 2);  // 22:59
@@ -2475,7 +2560,7 @@ TEST(night, a_las_23_se_duerme_solo_sin_vinculo) {
 TEST(night, con_un_juego_abierto_espera_a_que_acabe) {
   Pet p;
   makePet(p, 4);
-  setStats(p, 100, 100, 100, 100);
+  setStats(p, 100, 100, 100);
   p.lastSeenEpoch = at(22, 58);
   liveMinutes(p, 1);
   p.nightHold = true;
@@ -2489,7 +2574,7 @@ TEST(night, con_un_juego_abierto_espera_a_que_acabe) {
 TEST(night, despertado_de_noche_se_vuelve_a_dormir_a_la_media_hora) {
   Pet p;
   makePet(p, 4);
-  setStats(p, 100, 100, 100, 100);
+  setStats(p, 100, 100, 100);
   p.lastSeenEpoch = at(1, 0);
   p.toggleLight();
   CHECK(p.sleeping);
@@ -2509,13 +2594,13 @@ TEST(night, despertado_de_noche_se_vuelve_a_dormir_a_la_media_hora) {
 TEST(night, de_dia_despierto_no_se_duerme) {
   Pet p;
   makePet(p, 4);
-  setStats(p, 100, 100, 100, 100);
+  setStats(p, 100, 100, 100);
   p.lastSeenEpoch = at(8, 0);
   liveMinutes(p, 13 * 60);  // hasta las 21:00
   CHECK(!p.sleeping);
   Pet q;
   makePet(q, 4);
-  setStats(q, 100, 100, 100, 100);
+  setStats(q, 100, 100, 100);
   liveMinutes(q, 600);  // sin reloj (lastSeenEpoch 0 hasta que el loop lo pone): nada
   CHECK(!q.sleeping);
 }
@@ -2615,7 +2700,7 @@ TEST(night, una_siesta_que_llega_a_la_noche_amanece_a_las_8) {
 TEST(night, dormido_de_noche_amanece_con_todo_a_50_o_mas) {
   Pet p;
   makePet(p, 4);
-  setStats(p, 100, 100, 20, 100);
+  setStats(p, 100, 100, 20);
   p.lastSeenEpoch = at(22, 59);
   liveMinutes(p, 1);  // 23:00, se duerme solo
   CHECK(p.sleeping);
@@ -2623,20 +2708,19 @@ TEST(night, dormido_de_noche_amanece_con_todo_a_50_o_mas) {
   CHECK(p.sleeping);
   CHECK(p.fullness >= NIGHT_FOOD_FLOOR);
   CHECK(p.joy >= NIGHT_JOY_FLOOR);
-  CHECK(p.hygiene >= NIGHT_HYG_FLOOR);
   CHECK_EQ(p.energy, (uint8_t)100);
   CHECK_EQ(p.poops, (uint8_t)0);
   // y a la mitad de una siesta: en 2 h de noche la comida baja 30; en una siesta de dia, 60
   Pet q;
   makePet(q, 4);
-  setStats(q, 100, 100, 100, 100);
+  setStats(q, 100, 100, 100);
   q.lastSeenEpoch = at(23, 0);
   q.toggleLight();
   liveMinutes(q, 2 * 60);
   CHECK_EQ(q.fullness, (uint8_t)70);
   Pet n;
   makePet(n, 4);
-  setStats(n, 100, 100, 100, 100);
+  setStats(n, 100, 100, 100);
   n.lastSeenEpoch = at(13, 0);
   n.toggleLight();
   liveMinutes(n, 2 * 60);
@@ -2646,13 +2730,12 @@ TEST(night, dormido_de_noche_amanece_con_todo_a_50_o_mas) {
 TEST(night, por_debajo_del_suelo_no_baja_mas) {
   Pet p;
   makePet(p, 4);
-  setStats(p, 40, 30, 100, 50);
+  setStats(p, 40, 30, 100);
   p.lastSeenEpoch = at(23, 0);
   p.toggleLight();
   liveMinutes(p, 6 * 60);
   CHECK_EQ(p.fullness, (uint8_t)40);
   CHECK_EQ(p.joy, (uint8_t)30);
-  CHECK_EQ(p.hygiene, (uint8_t)50);
 }
 
 // fija a proposito una promesa del juego (README): acostado bien cuidado, amanece con todo a 50 o mas.
@@ -2660,7 +2743,7 @@ TEST(night, por_debajo_del_suelo_no_baja_mas) {
 TEST(night, apagado_toda_la_noche_duerme_y_amanece) {
   Pet p;
   makePet(p, 4);
-  setStats(p, 100, 100, 50, 100);
+  setStats(p, 100, 100, 50);
   p.setClock(at(22, 50));
   p.syncClock(at(8, 5, 1001));  // apagada de 22:50 a 08:05
   CHECK_MSG(!p.sleeping, "a las 8 se desperto");
@@ -2728,7 +2811,7 @@ static uint8_t stageJoy(Pet &p) { return p.stageDone(0, false, nullptr, 0).joy; 
 TEST(battle, el_estadio_da_felicidad_una_vez_por_hora) {
   Pet p;
   makePet(p, 25);
-  setStats(p, 80, 50, 80, 100);
+  setStats(p, 80, 50, 80);
   CHECK(p.practiceRewardReady());
   CHECK_EQ(stageJoy(p), (uint8_t)PRACTICE_JOY);
   CHECK_EQ(p.joy, (uint8_t)(50 + PRACTICE_JOY));
@@ -2748,7 +2831,7 @@ TEST(battle, el_estadio_da_felicidad_una_vez_por_hora) {
 TEST(battle, el_estadio_no_toca_energia_ni_comida) {
   Pet p;
   makePet(p, 25);
-  setStats(p, 60, 50, 40, 100);
+  setStats(p, 60, 50, 40);
   stageJoy(p);
   CHECK_EQ(p.fullness, (uint8_t)60);
   CHECK_EQ(p.energy, (uint8_t)40);

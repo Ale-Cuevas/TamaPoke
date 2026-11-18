@@ -53,7 +53,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // huevos al acabar una crianza (v1.40/v1.41)
     "Abrir un huevo (%u)", "Llegar\240 un huevo nuevo", "Tus huevos esperan!", "REGALO!",
     // la cascada (v1.43)
-    "Manten la barra en el verde!", "MANTEN PULSADO", "FOCO %u.%us", "RECORD %u.%us", "DEFENSA +%u", "Limpito!",
+    "Manten la barra en el verde!", "MANTEN PULSADO", "FOCO %u.%us", "RECORD %u.%us", "DEFENSA +%u", "Sin cacas!",
     // la carrera en trineo (v1.44)
     "Sujetala como vas a jugar", "Quieta un momento...", "INCLINA PARA GIRAR", "ESQUIVADOS: %u", "VELOCIDAD +%u",
     // v1.47: bonificacion de la cascada, entrenamiento al tope
@@ -150,7 +150,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // huevos al acabar una crianza (v1.40/v1.41)
     "Hatch an egg (%u)", "A new egg will come", "Your eggs are waiting!", "GIFT!",
     // la cascada (v1.43)
-    "Keep the bar in the green!", "HOLD TO FOCUS", "FOCUS %u.%us", "BEST %u.%us", "DEF +%u", "Squeaky clean!",
+    "Keep the bar in the green!", "HOLD TO FOCUS", "FOCUS %u.%us", "BEST %u.%us", "DEF +%u", "No more poop!",
     // la carrera en trineo (v1.44)
     "Hold it the way you'll play", "Hold still...", "TILT TO STEER", "DODGED: %u", "SPD +%u",
     // v1.47: bonificacion de la cascada, entrenamiento al tope
@@ -247,7 +247,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // huevos al acabar una crianza (v1.40/v1.41)
     "Faire \202clore (%u)", "Un oeuf va arriver", "Tes oeufs attendent!", "CADEAU!",
     // la cascada (v1.43)
-    "Garde la barre dans le vert!", "MAINTIENS APPUYE", "FOCUS %u.%us", "RECORD %u.%us", "DEFENSE +%u", "Tout propre!",
+    "Garde la barre dans le vert!", "MAINTIENS APPUYE", "FOCUS %u.%us", "RECORD %u.%us", "DEFENSE +%u", "Plus de crottes!",
     // la carrera en trineo (v1.44)
     "Tiens-la comme pour jouer", "Ne bouge plus...", "PENCHE POUR TOURNER", "ESQUIVES: %u", "VITESSE +%u",
     // v1.47: bonificacion de la cascada, entrenamiento al tope
@@ -349,7 +349,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // huevos al acabar una crianza (v1.40/v1.41)
     "Ei ausbr\201ten (%u)", "Ein neues Ei kommt", "Deine Eier warten!", "GESCHENK!",
     // la cascada (v1.43)
-    "Halte den Balken im Gr\201nen!", "GEDR\232CKT HALTEN", "FOKUS %u.%us", "REKORD %u.%us", "VERT +%u", "Blitzsauber!",
+    "Halte den Balken im Gr\201nen!", "GEDR\232CKT HALTEN", "FOKUS %u.%us", "REKORD %u.%us", "VERT +%u", "Kein Kot mehr!",
     // la carrera en trineo (v1.44)
     "Halte es wie beim Spielen", "Still halten...", "NEIGEN ZUM LENKEN", "AUSGEWICHEN: %u", "INIT +%u",
     // v1.47: bonificacion de la cascada, entrenamiento al tope
@@ -446,7 +446,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // huevos al acabar una crianza (v1.40/v1.41)
     "Schiudi uovo (%u)", "Arriva un uovo nuovo", "Le uova ti aspettano!", "REGALO!",
     // la cascada (v1.43)
-    "Tieni la barra nel verde!", "TIENI PREMUTO", "FOCUS %u.%us", "RECORD %u.%us", "DIFESA +%u", "Pulitissimo!",
+    "Tieni la barra nel verde!", "TIENI PREMUTO", "FOCUS %u.%us", "RECORD %u.%us", "DIFESA +%u", "Niente cacca!",
     // la carrera en trineo (v1.44)
     "Tienila come per giocare", "Fermo un attimo...", "INCLINA PER STERZARE", "SCHIVATI: %u", "VELOCITA +%u",
     // v1.47: bonificacion de la cascada, entrenamiento al tope
@@ -543,7 +543,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // huevos al acabar una crianza (v1.40/v1.41)
     "Chocar um ovo (%u)", "Vem um ovo novo", "Seus ovos esperam!", "PRESENTE!",
     // la cascada (v1.43)
-    "Mantenha a barra no verde!", "SEGURE O TOQUE", "FOCO %u.%us", "RECORDE %u.%us", "DEFESA +%u", "Limpinho!",
+    "Mantenha a barra no verde!", "SEGURE O TOQUE", "FOCO %u.%us", "RECORDE %u.%us", "DEFESA +%u", "Sem coco!",
     // la carrera en trineo (v1.44)
     "Segure como vai jogar", "Parado um pouco...", "INCLINE PARA VIRAR", "DESVIOS: %u", "VELOCIDADE +%u",
     // v1.47: bonificacion de la cascada, entrenamiento al tope
@@ -662,7 +662,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // huevos al acabar una crianza (v1.40/v1.41)
     "たまごを かえす (%u)", "あたらしい たまごが くるよ", "たまごが まってるよ！", "プレゼント！",
     // la cascada (v1.43)
-    "ゲージを みどりに たもとう！", "ながおしで しゅうちゅう", "しゅうちゅう %u.%uびょう", "きろく %u.%uびょう", "ぼうぎょ +%u", "ぴかぴか！",
+    "ゲージを みどりに たもとう！", "ながおしで しゅうちゅう", "しゅうちゅう %u.%uびょう", "きろく %u.%uびょう", "ぼうぎょ +%u", "うんちなし！",
     // la carrera en trineo (v1.44)
     "あそぶ ときの もちかたで", "うごかさないで...", "かたむけて よけよう", "よけた: %u", "すばやさ +%u",
     // v1.47: bonificacion de la cascada, entrenamiento al tope
@@ -764,7 +764,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // huevos al acabar una crianza (v1.40/v1.41)
     "알 부화하기 (%u)", "새 알이 와요", "알이 기다려요!", "선물!",
     // la cascada (v1.43)
-    "게이지를 초록색에 유지!", "길게 눌러 집중", "집중 %u.%u초", "최고 %u.%u초", "방어 +%u", "깨끗해졌다!",
+    "게이지를 초록색에 유지!", "길게 눌러 집중", "집중 %u.%u초", "최고 %u.%u초", "방어 +%u", "똥 없음!",
     // la carrera en trineo (v1.44)
     "플레이할 때처럼 잡아요", "잠깐 가만히...", "기울여서 피하기", "피한 수: %u", "속도 +%u",
     // v1.47: bonificacion de la cascada, entrenamiento al tope

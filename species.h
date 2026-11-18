@@ -458,25 +458,6 @@ static const char* const SPR_ICON_LIGHT[16] = {  // 16x16
   "................",
 };
 
-static const char* const SPR_ICON_CLEAN[16] = {  // 16x16
-  "................",
-  "................",
-  "................",
-  "...kk......kkk..",
-  "...kk.....kwbbk.",
-  "...kk.....kbbbk.",
-  "......kkk..kkk..",
-  "....kkbbbkk.....",
-  "...kbwbbbbbk....",
-  "...kbbwbbbBk....",
-  "...kbbbbbbbk....",
-  "...kbbbbbbBk....",
-  "...kbbbbbbBk....",
-  "....kkBBBkk.....",
-  "......kkk.......",
-  "................",
-};
-
 static const char* const SPR_ICON_BERRY_B[16] = {  // 16x16
   "................",
   "................",

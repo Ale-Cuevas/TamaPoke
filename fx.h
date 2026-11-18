@@ -127,7 +127,7 @@ struct FxQueue {
 
 // ---- efectos pequenos
 enum : uint8_t {
-  FXO_STAT = 0,  // "+N"/"-N" sobre una barra (a = barra 0..3, v = cambio)
+  FXO_STAT = 0,  // "+N"/"-N" sobre una barra (a = barra 0..2 (comida, felicidad, energia), v = cambio)
   FXO_BOND,      // corazon con "+N" de vinculo (v = subida)
   FXO_TRAIN,     // "ATK +3" y un ataque (a = 0 ATK, 1 DEF, 2 SPE; v = subida)
   FXO_DENY,      // el boton tocado tiembla (a = boton)
@@ -344,9 +344,9 @@ inline uint32_t fxHash(uint32_t x) {
   return x;
 }
 
-// necesidades antes de una accion (comer, banarse, el minijuego...): la diferencia de despues
+// necesidades antes de una accion (comer, el minijuego...): la diferencia de despues
 // saca los "+N" de las barras. Va aqui y no en el sketch: el conversor .ino de PlatformIO pone
 // los prototipos antes de las variables globales, y un tipo del sketch no existiria aun.
 struct FxNeedSnap {
-  uint8_t v[4];
+  uint8_t v[3];  // comida, felicidad, energia (v3.1: sin limpieza)
 };
