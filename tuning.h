@@ -257,8 +257,8 @@ static const uint8_t STEP_GOAL_LEVELS[STEP_GOAL_TIERS] = { 1, 1, 2 };  // nivele
 #define ZEN_JOY 6
 // trineo (VEL)
 #define DASH_LIVES 3               // golpes que acaban la carrera
-#define DASH_PER_POINT 6           // 1 punto cada 6 filas esquivadas (50 filas = 8)...
-#define DASH_GAIN_MAX 18           // ...con el tope del saco
+#define DASH_PER_POINT 4           // 1 punto cada 6 filas esquivadas (50 filas = 8)...
+#define DASH_GAIN_MAX 20           // ...con el tope del saco
 #define DASH_WEIGHT_DIV 8          // peso: -filas/8
 #define DASH_ENE_COST 12
 #define DASH_JOY_BASE 5            // felicidad = BASE + min(filas, ROWS_MAX) * PER_ROW
@@ -303,7 +303,7 @@ static_assert(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDRO
 // --------------------------------------------------------------------------------------------
 // Encuentros salvajes (encounter.h, pet.cpp encCheck / encounterDone). Probabilidades en tantos por mil.
 // --------------------------------------------------------------------------------------------
-#define ENC_BASE_PERMIL 100       // la tirada base del dia: 10 %
+#define ENC_BASE_PERMIL 300       // la tirada base del dia: 10 %
 #define ENC_WALK_STEPS 6000       // pasos del dia para la tirada de pasear...
 #define ENC_WALK_PERMIL 167       // ...que deja el dia en el 25 %
 #define ENC_TRAVEL_PERMIL_H 30    // cada viaje: 3 % por hora
