@@ -47,16 +47,14 @@ class RoundCanvas : public Arduino_Canvas {
   // keeps in its own RAM, is only sent again when the key or the canvas
   // position changes. Only that one flush: a screen that doesn't call it
   // again gets the black frame back.
-  // v3.6: stride = the row length of `full` when it is a window of a bigger image (the yard world); 0 = side
-  void showUnder(const uint16_t *full, int16_t side, int16_t crop, uint32_t key, int16_t stride = 0) {
+  void showUnder(const uint16_t *full, int16_t side, int16_t crop, uint32_t key) {
 #if TP_FULL_YARD
     under_ = full;
     underSide_ = side;
     underCrop_ = crop;
     underKey_ = key;
-    underStride_ = stride ? stride : side;
 #else
-    (void)full; (void)side; (void)crop; (void)key; (void)stride;
+    (void)full; (void)side; (void)crop; (void)key;
 #endif
   }
 
@@ -76,7 +74,7 @@ class RoundCanvas : public Arduino_Canvas {
 #endif
 #if TP_ROUND_FRAME
     // about 93 KB of corners zeroed (or copied from the map) + 1.4 K edge pixels
-    if (u) mask_.apply(getFramebuffer(), u + (uint32_t)underCrop_ * underStride_ + underCrop_, underStride_);
+    if (u) mask_.apply(getFramebuffer(), u + (uint32_t)underCrop_ * underSide_ + underCrop_, underSide_);
     else mask_.apply(getFramebuffer());
 #endif
     uint32_t want = u ? underKey_ : BORDER_BLACK;
@@ -130,7 +128,7 @@ class RoundCanvas : public Arduino_Canvas {
         int16_t n = (y + h - y0) < rows ? (y + h - y0) : rows;
         for (int16_t j = 0; j < n; j++) {
           int my = clampTo(y0 + j + offY, side);
-          const uint16_t *src = full + (uint32_t)my * underStride_;
+          const uint16_t *src = full + (uint32_t)my * side;
           uint16_t *dst = scratch_ + (uint32_t)j * w;
           for (int16_t i = 0; i < w; i++) dst[i] = src[clampTo(x + i + offX, side)];
         }
@@ -153,10 +151,10 @@ class RoundCanvas : public Arduino_Canvas {
   uint16_t *scratch_ = nullptr;
 #if TP_FULL_YARD
   const uint16_t *under_ = nullptr;
-  int16_t underSide_ = 0, underCrop_ = 0, underStride_ = 0;
+  int16_t underSide_ = 0, underCrop_ = 0;
   uint32_t underKey_ = 0;
 #else
-  static constexpr int16_t underSide_ = 0, underCrop_ = 0, underStride_ = 0;
+  static constexpr int16_t underSide_ = 0, underCrop_ = 0;
   static constexpr uint32_t underKey_ = 0;
 #endif
 };

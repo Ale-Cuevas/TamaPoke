@@ -6,6 +6,14 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.7] - 2026-11-18
+
+### Changed
+
+- **Back to the 3.5 yard.** The 4.4x zoom of 3.6 was too big: pets and the map go back to 2.4x, the whole yard
+  fits on the screen again, and the scrolling camera and the off-screen arrows are gone. Same game as 3.5.
+  Re-send the maps (`tools/send_sd.py --yard`) so their stored walk masks match again.
+
 ## [3.6] - 2026-11-18
 
 ### Changed

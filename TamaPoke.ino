@@ -59,7 +59,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "3.6"
+#define FW_VERSION "3.7"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -92,12 +92,6 @@ bool monBwShiny = false;
 #define PET_GROUND 304  // linea de suelo de la mascota (las pantallas de la despedida y el Revivir)
 // el patio (v2.0, Y2): el bicho de casa (p[0]) y el primero de la caja (p[1], hibernando: solo pasea)
 YardWorld yardW;
-// v3.6: la camara del patio: el pixel del mundo (yard.h, yardbg.h) que cae en el (0, 0) del lienzo. Sigue al
-// bicho del foco (yardCamUpdate); todo el patio vive en coordenadas del mundo y se dibuja restandola
-int yardCamX = YBG_WORLD / 2 - YBG_CANVAS / 2, yardCamY = YBG_WORLD / 2 - YBG_CANVAS / 2;
-float yardCamFX = -1, yardCamFY = -1;  // la de verdad, suave (-1: aun ninguna, se coloca de golpe)
-#define yScrX(wx) ((int)(wx) - yardCamX)  // del mundo al lienzo (macros: el .ino no admite funciones tan arriba)
-#define yScrY(wy) ((int)(wy) - yardCamY)
 PmdMon yardBoxPmd;              // sprite del de la caja (si no hay, su miniatura)
 int8_t yardBoxSlot = -1;        // hueco de la caja que se ve en el patio (-1 = nadie)
 int16_t yardBoxDex = -2;
@@ -114,7 +108,7 @@ int16_t yardEggX[HOME_SLOTS] = { -1, -1 }, yardEggY[HOME_SLOTS] = { 0, 0 };  // 
 uint32_t yardEggTapAt[HOME_SLOTS] = { 0, 0 };      // tocado: se tambalea y dice lo que falta
 uint32_t yardEggInfoUntil[HOME_SLOTS] = { 0, 0 };  // el globo del huevo (tras un toque o una sacudida que conto)
 uint8_t yardHeartSlot = 0;                         // el que se comio la comida (su corazon)
-#define YARD_EGG_S (3 * YARD_KI)      // el huevo del patio, a escala 3 con el mapa a 2 (v3.6: 6)
+#define YARD_EGG_S 3                  // el huevo del patio, a escala 3 (~51x69 px de tinta)
 #define YARD_EGG_MID (13 * YARD_EGG_S)  // de sus pies al centro del sprite
 int yardFeedFront(uint8_t s, uint8_t kind);  // (en la seccion del patio) 1 come, 0 ya tiene una, -1 sin patio
 const uint8_t *yardWalkNow();         // la mascara de paso con el huevo (seccion del patio)
@@ -264,7 +258,6 @@ void closePetMenu();
 void panelTap(int16_t x, int16_t y);
 void renderPanel();
 void yardShowFull();
-void yardCamUpdate(uint32_t now);
 extern bool gYardFull;  // (con el fondo del patio, mas abajo)
 
 // minijuego "toques": mantener la pokeball en el aire
@@ -2800,7 +2793,6 @@ bool render() {
   // que un flush DMA solapado nunca capture negro a medias (anti-parpadeo)
   uint32_t sceneT0 = micros();
   if (yard) {
-    yardCamUpdate(millis());  // v3.6: la camara de este frame (fondo y bichos con la misma)
     yardDrawBg();  // el mapa ya expandido (en PSRAM), copiado al lienzo
     yardShowFull();  // v2.5: y alrededor del circulo, hasta el borde del panel
   } else {
@@ -4404,11 +4396,11 @@ bool petInYard() {
 
 // los pies del bicho de casa en pantalla: en el patio, donde pasea; si no, el centro
 int petFootXOf(uint8_t s) {
-  if (yardW.p[s & 1].on) return yScrX(yardW.p[s & 1].x);  // v3.6: del mundo al lienzo
+  if (yardW.p[s & 1].on) return (int)yardW.p[s & 1].x;
   return CX;
 }
 int petFootYOf(uint8_t s) {
-  if (yardW.p[s & 1].on) return yScrY(yardW.p[s & 1].y);
+  if (yardW.p[s & 1].on) return (int)yardW.p[s & 1].y;
   return PET_GROUND;
 }
 int petFootX() { return petFootXOf(pet.focusSlot); }
@@ -6661,8 +6653,8 @@ void drawBoxAppear(uint32_t now) {
   int cx = l.isEgg() ? CX : petFootXOf(s);
   int cy = (l.isEgg() || (!homeMon[s].loaded && petFootYOf(s) == PET_GROUND)) ? PET_CY : petFootYOf(s) - petBodyHOf(s) / 2;
   if (l.isEgg() && yardHomeNow() && yardEggX[s] >= 0) {  // el huevo del patio (Y3): donde esta
-    cx = yScrX(yardEggX[s]);
-    cy = yScrY(yardEggY[s]) - YARD_EGG_MID;
+    cx = yardEggX[s];
+    cy = yardEggY[s] - YARD_EGG_MID;
   }
   float k = 1.0f - t;
   int r = (int)(118 * k * k);
@@ -6701,11 +6693,10 @@ void encReport() {
   Serial.printf("enc: day=%lu base=%02u:%02u rolled base=%d walk=%d spawned=%d steps=%lu/%u\n", (unsigned long)d,
                 bm / 60, bm % 60, (m & ENC_ROLL_BASE) ? 1 : 0, (m & ENC_ROLL_WALK) ? 1 : 0, (m & ENC_ROLL_SPAWNED) ? 1 : 0,
                 (unsigned long)pet.stepsOn(d), (unsigned)ENC_WALK_STEPS);
-  Serial.printf("enc: active=%d won=%d dex=#%d %s nv.%u shiny=%d excl=%d left=%u min obj=%d at %d,%d screen %d,%d ui=%u\n",
+  Serial.printf("enc: active=%d won=%d dex=#%d %s nv.%u shiny=%d excl=%d left=%u min obj=%d at %d,%d ui=%u\n",
                 pet.encActive() ? 1 : 0, pet.encWonPending() ? 1 : 0, pet.encDex(),
                 pet.encShown() ? dexName(pet.encDex()) : "-", pet.encLevel(), pet.encShiny() ? 1 : 0,
-                pet.encExclusive() ? 1 : 0, pet.encMinutesLeft(), encMapObject(yardMapNow()), yardEncX, yardEncY,
-                yScrX(yardEncX), yScrY(yardEncY), encUi);  // v3.6: en el mundo, y en el lienzo (para TAP)
+                pet.encExclusive() ? 1 : 0, pet.encMinutesLeft(), encMapObject(yardMapNow()), yardEncX, yardEncY, encUi);
   Serial.printf("enc: balls=%u capEggs=%u", pet.items[IT_BALL], pet.captureEggs());
   for (uint8_t i = 0; i < pet.captureEggs(); i++) Serial.printf(" #%d", pet.captureEggSpecies(i));
   Serial.printf(" homeEggCaptured=%d\n", pet.eggIsCaptured() ? 1 : 0);
@@ -8093,7 +8084,7 @@ static void yardWindow(int x, int y, int w, int h, int sy, int r) {
       float dy = (float)(r - jj) - 0.5f;
       inset = r - (int)(sqrtf((float)(r * r) - dy * dy) + 0.5f);
     }
-    memcpy(fb + (size_t)(y + j) * YBG_CANVAS + x + inset, yardBgCanvasRow(yardBg, sy + j, yardCamX, yardCamY) + x + inset,
+    memcpy(fb + (size_t)(y + j) * YBG_CANVAS + x + inset, yardBgCanvasRow(yardBg, sy + j) + x + inset,
            (size_t)(w - 2 * inset) * 2);
   }
   gfx->drawRoundRect(x - 1, y - 1, w + 2, h + 2, r + 1, Y_CARD_HI);
@@ -8600,7 +8591,7 @@ static_assert(YBG_CANVAS == UI_SIZE, "el lienzo es la ventana (YBG_CROP, YBG_CRO
 
 uint8_t *yardFile = nullptr;       // el .bin entero en PSRAM (yardView.px apunta dentro)
 YardBgView yardView;
-uint16_t *yardBg = nullptr;        // el mundo (v3.6: 1056x1056 RGB565 ya tintado, en PSRAM, 2,2 MB); el lienzo es su ventana en la camara
+uint16_t *yardBg = nullptr;        // 480x480 RGB565 ya tintado, en PSRAM (460 KB); el lienzo es la ventana (7, 7)
 bool gYardFull = true;             // v2.5: el mapa tambien fuera del circulo (YARDFULL 0 lo apaga)
 uint8_t yardWalk[YBG_WALK_BYTES];  // la mascara de paso (solo la zona conectada mas grande)
 uint8_t yardMapForced = 0;         // YARDBG <n>; 0 = el elegido
@@ -8667,14 +8658,16 @@ void yardEnsureMap() {
   Serial.printf("yard map fallback (%s)\n", yardWhy);
 }
 
-// un rectangulo en el mundo (YBG_WORLD x YBG_WORLD, como todo el patio desde la v3.6)
+// un rectangulo en el mapa entero (480x480), en coordenadas del lienzo (como todo el patio)
 static void yBufRect(uint16_t *b, int x, int y, int w, int h, uint16_t c) {
+  x += YBG_CROP;
+  y += YBG_CROP;
   if (x < 0) { w += x; x = 0; }
   if (y < 0) { h += y; y = 0; }
-  if (x + w > YBG_WORLD) w = YBG_WORLD - x;
-  if (y + h > YBG_WORLD) h = YBG_WORLD - y;
+  if (x + w > YBG_FULL) w = YBG_FULL - x;
+  if (y + h > YBG_FULL) h = YBG_FULL - y;
   for (int j = 0; j < h; j++)
-    for (int i = 0; i < w; i++) b[(size_t)(y + j) * YBG_WORLD + x + i] = c;
+    for (int i = 0; i < w; i++) b[(y + j) * YBG_FULL + x + i] = c;
 }
 
 // sin mapa: suelo liso del color del bioma, en cuadros de una celda apenas distintos, y unas matas
@@ -8689,18 +8682,20 @@ void yardPaintFallback(uint16_t *b, uint8_t biome, YardTint t) {
                yardCellEdge(cy + 1) - yardCellEdge(cy), (cx + cy) & 1 ? alt : base);
   uint32_t seed = 0x7a4d11u;
   auto rnd = [&](int n) { seed = seed * 1664525u + 1013904223u; return (int)((seed >> 16) % (uint32_t)n); };
-  const int K = YARD_KI;  // v3.6: a la escala del mundo
-  for (int k = 0; k < 90; k++) {
-    int x = 40 + rnd(YBG_WORLD - 80), y = 40 + rnd(YBG_WORLD - 80);
+  for (int k = 0; k < 34; k++) {
+    int x = 30 + rnd(406), y = 30 + rnd(406);
+    int dx = x - 233, dy = y - 233;
+    if (dx * dx + dy * dy > 205 * 205) continue;
+    if ((x >= 130 && x <= 336 && y <= 116) || (x >= 140 && x <= 326 && y >= 370)) continue;  // bajo el HUD, liso
     if (k % 4 == 3) {  // una piedrecita
-      yBufRect(b, x, y, 6 * K, 4 * K, lt);
-      yBufRect(b, x + 2 * K, y + 4 * K, 6 * K, 2 * K, dk);
+      yBufRect(b, x, y, 6, 4, lt);
+      yBufRect(b, x + 2, y + 4, 6, 2, dk);
       continue;
     }
-    yBufRect(b, x, y - 10 * K, 2 * K, 10 * K, dk);  // una mata: tres briznas
-    yBufRect(b, x - 4 * K, y - 6 * K, 2 * K, 6 * K, dk);
-    yBufRect(b, x + 4 * K, y - 7 * K, 2 * K, 7 * K, dk);
-    yBufRect(b, x - 2 * K, y - 12 * K, 2 * K, 2 * K, lt);
+    yBufRect(b, x, y - 10, 2, 10, dk);  // una mata: tres briznas
+    yBufRect(b, x - 4, y - 6, 2, 6, dk);
+    yBufRect(b, x + 4, y - 7, 2, 7, dk);
+    yBufRect(b, x - 2, y - 12, 2, 2, lt);
   }
 }
 
@@ -8711,13 +8706,13 @@ void yardEnsureBg() {
   uint8_t biome = homeBiome();
   int32_t key = (int32_t)tint | (yardMapLoaded << 2) | (biome << 10);
   if (key == yardBgKey) return;
-  if (!yardBg) yardBg = (uint16_t *)ps_malloc((size_t)YBG_WORLD * YBG_WORLD * 2);
+  if (!yardBg) yardBg = (uint16_t *)ps_malloc((size_t)YBG_FULL * YBG_FULL * 2);
   if (!yardBg) return;  // sin PSRAM: yardDrawBg pinta el suelo liso cada frame
   yardBgKey = key;
   if (yardFile) {
     static uint16_t pal[256];
     yardTintPalette(yardView.pal, pal, yardView.palCount, tint);
-    yardBgExpandWorld(yardView.px, pal, yardBg);
+    yardBgExpandFull(yardView.px, pal, yardBg);
   } else {
     yardPaintFallback(yardBg, biome, tint);
   }
@@ -8727,17 +8722,14 @@ void yardDrawBg() {
   yardEnsureBg();
   if (yardBg) {
     uint16_t *fb = gfx->getFramebuffer();
-    for (int y = 0; y < YBG_CANVAS; y++)
-      memcpy(fb + (size_t)y * YBG_CANVAS, yardBgCanvasRow(yardBg, y, yardCamX, yardCamY), YBG_CANVAS * 2);
+    for (int y = 0; y < YBG_CANVAS; y++) memcpy(fb + (size_t)y * YBG_CANVAS, yardBgCanvasRow(yardBg, y), YBG_CANVAS * 2);
   } else gfx->fillScreen(yardTint565(BIOME_SOIL[homeBiome() % BIOME_COUNT], yardTintAt((uint8_t)sceneHour(), pet.sleeping)));
 }
 
 // v2.5: este frame, el mapa tambien en las esquinas y el borde del panel (fuera del circulo, que
 // sigue cortando todo lo dibujado). Se pide en cada frame del patio; las demas pantallas, en negro.
 void yardShowFull() {
-  if (gYardFull && yardBg)  // v3.6: la ventana del panel en la camara (la clave cambia con ella: se repinta el borde)
-    roundCanvas->showUnder(yardBgPanelOrigin(yardBg, yardCamX, yardCamY), YBG_FULL, YBG_CROP,
-                           (uint32_t)yardBgKey ^ ((uint32_t)yardCamX << 12) ^ ((uint32_t)yardCamY << 22), YBG_WORLD);
+  if (gYardFull && yardBg) roundCanvas->showUnder(yardBg, YBG_FULL, YBG_CROP, (uint32_t)yardBgKey);
 }
 
 void yardForceMap(uint8_t n) {
@@ -8747,9 +8739,8 @@ void yardForceMap(uint8_t n) {
 }
 
 void yardReport() {
-  Serial.printf("yardbg want=%u loaded=%u%s%s forced=%u free=%d pets=%u cam=%d,%d\n", yardMapWant, yardMapLoaded,
-                yardWhy[0] ? " why=" : "", yardWhy, yardMapForced, yardFreeCount(yardWalk), yardPetsShown(), yardCamX,
-                yardCamY);
+  Serial.printf("yardbg want=%u loaded=%u%s%s forced=%u free=%d pets=%u\n", yardMapWant, yardMapLoaded,
+                yardWhy[0] ? " why=" : "", yardWhy, yardMapForced, yardFreeCount(yardWalk), yardPetsShown());
 }
 
 // ---- los bichos ----
@@ -8808,7 +8799,7 @@ YardBody yardBodyOf(int i) {
   return b;
 }
 
-int yardPetHeadY(int i) { return yScrY(yardW.p[i].y) - yardBodyOf(i).h; }  // en el lienzo
+int yardPetHeadY(int i) { return (int)yardW.p[i].y - yardBodyOf(i).h; }
 
 uint8_t yardPetsShown() {
   uint8_t n = 0;
@@ -8847,7 +8838,7 @@ void yardSyncPets() {
       h.on = true;
       // recien nacido, donde estaba su huevo; si no, abajo del centro (el segundo, a un lado)
       int c = yardEggX[s] >= 0 ? yardNearestFreeCell(yardWalk, yardEggX[s], yardEggY[s])
-                               : yardNearestFreeCell(yardWalk, YBG_WORLD / 2 + (s ? 90 * YARD_KI : 0), YBG_WORLD / 2 + 70 * YARD_KI);
+                               : yardNearestFreeCell(yardWalk, CX + (s ? 90 : 0), PET_GROUND);
       if (c >= 0 && yardSpotAway(yardW, s, (float)yardCellCenter(yardCellCX(c)), (float)yardCellCenter(yardCellCY(c)))) {
         h.x = (float)yardCellCenter(yardCellCX(c));
         h.y = (float)yardCellCenter(yardCellCY(c));
@@ -8956,7 +8947,7 @@ void yardTick(uint32_t now) {
     foodOn[s] = f.phase != YF_NONE;
   }
   const uint8_t *walk = yardWalkNow();
-  int colX = petMenuX(5) + yardCamX;  // v3.3: la columna mas a la izquierda que puede ocupar el menu del bicho (v3.6: en el mundo)
+  int colX = petMenuX(5);  // v3.3: la columna mas a la izquierda que puede ocupar el menu del bicho
   // v3.3: con el menu de un bicho abierto, ni los paseos al azar ni la inclinacion llevan a nadie debajo de el
   yardW.avoidX = petMenuOpen ? (int16_t)(colX - 32) : (int16_t)32767;
   uint8_t hold[YARD_PETS_MAX] = { YH_NONE, YH_NONE, YH_NONE };
@@ -9029,8 +9020,7 @@ void yardDrawPet(int i, uint32_t now) {
   YardBody b = yardBodyOf(i);
   bool home = i < HOME_SLOTS;
   const PetLife *l = home ? &pet.home((uint8_t)i) : nullptr;
-  int x = yScrX(p.x) + (home ? dizzyWobbleOf(*l, now) : 0), y = yScrY(p.y);
-  if (x < -b.w || x > YBG_CANVAS + b.w || y < 0 || y > YBG_CANVAS + b.h) return;  // v3.6: fuera de la camara
+  int x = (int)p.x + (home ? dizzyWobbleOf(*l, now) : 0), y = (int)p.y;
   yardShadow(x, y, b.w);
   if (home && petMenuOpen == i + 1) {  // v3.3: el que tiene el menu abierto, con un anillo a sus pies
     int rx = b.w / 2 + 6, ry;
@@ -9099,13 +9089,12 @@ void yardDrawFood(uint8_t slot, uint32_t now) {
   if (f.phase == YF_NONE) return;
   uint32_t el = now - f.t0;
   if (f.phase != YF_EAT) return;  // (la que espera a que se aparte aun no esta en el suelo)
-  int s = 2 * YARD_KI;
+  int s = 2;
   float t = (float)el / YARD_FOOD_EAT_MS;
   if (t > 0.75f) return;  // ya se la comio
-  if (t > 0.4f) s = YARD_KI;  // a bocados: mas pequena
-  int fx = yScrX(f.x), fy = yScrY(f.y);
-  yardShadow(fx, fy, 26 * YARD_KI);
-  drawMap(FOOD_ICON[f.kind < FOOD_COUNT ? f.kind : 0], 16, fx - 8 * s, fy - 15 * s, s, false);
+  if (t > 0.4f) s = 1;     // a bocados: mas pequena
+  yardShadow(f.x, f.y, 26);
+  drawMap(FOOD_ICON[f.kind < FOOD_COUNT ? f.kind : 0], 16, f.x - 8 * s, f.y - 15 * s, s, false);
 }
 
 // lo de encima del bicho por la comida: el corazon que sale al acabarsela (sobre el que se la comio)
@@ -9116,7 +9105,7 @@ void yardDrawFoodFx(uint32_t now) {
     YardPet &p = yardW.p[hs];
     int head = yardPetHeadY(hs), w = yardBodyOf(hs).w;
     int y = head + 4 - (int)(pop * 30 / 1000);  // al lado de la cabeza (encima va el globo "Nam nam!")
-    drawMap(SPR_HEART, 32, yScrX(p.x) + w / 2 + 2, y, 1, false);
+    drawMap(SPR_HEART, 32, (int)p.x + w / 2 + 2, y, 1, false);
   }
 }
 
@@ -9129,12 +9118,11 @@ void yardDrawEgg(uint8_t s, uint32_t now) {
   if (l.emote() == EMOTE_WOBBLE) dx = (int)(10.0f * (1.0f - l.emoteT()) * sinf(now * 0.035f));
   uint32_t te = now - yardEggTapAt[s];
   if (yardEggTapAt[s] && te < 600) dx += (int)(6.0f * (1.0f - te / 600.0f) * sinf(te * 0.05f));
-  int ex = yScrX(yardEggX[s]), ey = yScrY(yardEggY[s]);
-  yardShadow(ex, ey, 54 * YARD_KI);
-  drawEggAt(ex + dx, ey - YARD_EGG_MID, YARD_EGG_S, pet.eggCracksOf(l), l.eggSpecies());
+  yardShadow(yardEggX[s], yardEggY[s], 54);
+  drawEggAt(yardEggX[s] + dx, yardEggY[s] - YARD_EGG_MID, YARD_EGG_S, pet.eggCracksOf(l), l.eggSpecies());
   if (l.eggRarity() >= R_RARO && (now / 400) % 3 != 0) {  // raro o legendario: brilla
     int k = (int)((now / 1200) % 2);
-    drawMap(SPR_STAR, 16, ex + (22 + dx - k * 50) * YARD_KI, ey + (-80 + k * 26) * YARD_KI, YARD_KI, false);
+    drawMap(SPR_STAR, 16, yardEggX[s] + 22 + dx - k * 50, yardEggY[s] - 80 + k * 26, 1, false);
   }
 }
 
@@ -9143,11 +9131,9 @@ void yardDrawEgg(uint8_t s, uint32_t now) {
 void yardDrawEggBubble(uint8_t s, uint32_t now) {
   const PetLife &l = pet.home(s);
   if (!l.isEgg() || l.isVacant() || yardEggX[s] < 0 || fxHatchHidesPetSlot(s, now)) return;
-  int tip = yScrY(yardEggY[s]) - YARD_EGG_MID * 2 - 8;
-  int ex = yScrX(yardEggX[s]);
-  if (ex < 0 || ex > YBG_CANVAS || tip < 0 || tip > YBG_CANVAS) return;  // v3.6: fuera de la camara
+  int tip = yardEggY[s] - YARD_EGG_MID * 2 - 8;
   if (!pet.yardEggOf(l)) {
-    yardBubbleAt(ex, tip, eggMsg());
+    yardBubbleAt(yardEggX[s], tip, eggMsg());
     return;
   }
   if (!timeLeft(yardEggInfoUntil[s])) return;
@@ -9159,7 +9145,7 @@ void yardDrawEggBubble(uint8_t s, uint32_t now) {
   if (l.eggIsCaptured()) opts[n++] = T(S_EGG_CAPTURED);  // v2.2: el de una captura (ya se sabe que es)
   else if (l.eggRarity() >= R_RARO) opts[n++] = T(l.eggRarity() == R_LEGENDARIO ? S_EGG_LEGEND : S_EGG_RARE);
   uint32_t since = 2600 - timeLeft(yardEggInfoUntil[s]);
-  yardBubbleAt(ex, tip, opts[yardCycleIndex(n, since, 900)]);
+  yardBubbleAt(yardEggX[s], tip, opts[yardCycleIndex(n, since, 900)]);
 }
 
 // lo del suelo que se ordena con los bichos (el huevo y la comida de cada hueco): su y, o INT32_MAX si no hay
@@ -9183,8 +9169,8 @@ void yardDrawPets(uint32_t now) {
   bool hatching[HOME_SLOTS];
   for (uint8_t s = 0; s < HOME_SLOTS; s++) {
     // el huevo se rompe donde estaba (Y3); sin sitio, donde su bicho
-    if (yardEggX[s] >= 0) hatchAtSlot(s, yScrX(yardEggX[s]), yScrY(yardEggY[s]) - YARD_EGG_MID, YARD_EGG_S);
-    else if (yardW.p[s].on) hatchAtSlot(s, yScrX(yardW.p[s].x), yScrY(yardW.p[s].y) - YARD_EGG_MID, YARD_EGG_S);
+    if (yardEggX[s] >= 0) hatchAtSlot(s, yardEggX[s], yardEggY[s] - YARD_EGG_MID, YARD_EGG_S);
+    else if (yardW.p[s].on) hatchAtSlot(s, (int)yardW.p[s].x, (int)yardW.p[s].y - YARD_EGG_MID, YARD_EGG_S);
     else hatchAtSlot(s, CX, PET_CY, 5);
     hatching[s] = drawHatchFxSlot(s, now);  // el huevo aun se rompe: su bicho no se ve
   }
@@ -9217,8 +9203,6 @@ void yardDrawPets(uint32_t now) {
 
 // bicho bajo el dedo (el de encima primero): 0 / 1 los de casa, YARD_TRV el viajero, -1 ninguno
 int yardPetAt(int16_t x, int16_t y) {
-  x += yardCamX;  // v3.6: del lienzo al mundo
-  y += yardCamY;
   uint8_t order[YARD_PETS_MAX];
   int n = yardDrawOrder(yardW, order);
   for (int k = n - 1; k >= 0; k--) {
@@ -9291,14 +9275,13 @@ void yardSyncThings() {
     const PetLife &l = pet.home(s);
     if (l.isEgg() && !l.isVacant()) {
       if (yardEggX[s] < 0 || !yardSpotOk(yardWalk, yardEggX[s], yardEggY[s] - YBG_CELL / 2)) {
-        const int wc = YBG_WORLD / 2, wy = wc + 17 * YARD_KI;  // v3.6: en el mundo (antes CX y 250 del lienzo)
-        int c = yardNearestFreeCell(yardWalk, wc + (s ? 110 : 0) * YARD_KI, wy);
+        int c = yardNearestFreeCell(yardWalk, CX + (s ? 110 : 0), 250);
         int o = s ^ 1;  // que no caiga en la celda del otro huevo
-        if (c >= 0 && yardEggX[o] >= 0 && yardCellAt(yardEggX[o], yardEggY[o] - 10 * YARD_KI) == c)
-          c = yardNearestFreeCell(yardWalk, wc + (s ? 170 : -60) * YARD_KI, wy);
+        if (c >= 0 && yardEggX[o] >= 0 && yardCellAt(yardEggX[o], yardEggY[o] - 10) == c)
+          c = yardNearestFreeCell(yardWalk, CX + (s ? 170 : -60), 250);
         if (c >= 0) {
           yardEggX[s] = (int16_t)yardCellCenter(yardCellCX(c));
-          yardEggY[s] = (int16_t)(yardCellCenter(yardCellCY(c)) + 10 * YARD_KI);
+          yardEggY[s] = (int16_t)(yardCellCenter(yardCellCY(c)) + 10);
         }
       }
     } else if (!fxo.find(FXO_HATCH, -1, s) && yardEggX[s] >= 0) {
@@ -9341,13 +9324,11 @@ void yardSyncThings() {
         ox[n] = yardEggX[s];
         oy[n++] = yardEggY[s];
       }
-    // es ancho (64 px a escala 2): que tampoco pise agua ni rocas a los lados ni detras (si no hay sitio asi, donde sea)
+    // es ancho (64 px): que tampoco pise agua ni rocas a los lados ni detras (si no hay sitio asi, donde sea)
     for (int tries = 0; tries < 16; tries++) {
       if (!yardFreeSpot(yardW, yardWalk, yardW.rng, ox, oy, n, &x, &y)) break;
-      const int K = YARD_KI;
-      bool roomy = yardSpotOk(yardWalk, x - 30 * K, y - 4 * K) && yardSpotOk(yardWalk, x + 30 * K, y - 4 * K) &&
-                   yardSpotOk(yardWalk, x, y - 44 * K) && yardSpotOk(yardWalk, x - 24 * K, y - 40 * K) &&
-                   yardSpotOk(yardWalk, x + 24 * K, y - 40 * K);
+      bool roomy = yardSpotOk(yardWalk, x - 30, y - 4) && yardSpotOk(yardWalk, x + 30, y - 4) &&
+                   yardSpotOk(yardWalk, x, y - 44) && yardSpotOk(yardWalk, x - 24, y - 40) && yardSpotOk(yardWalk, x + 24, y - 40);
       if (roomy || yardEncX < 0) {
         yardEncX = (int16_t)x;
         yardEncY = (int16_t)y;
@@ -9386,52 +9367,45 @@ void yardDrawEnc(uint32_t now) {
     dx = (int)lroundf(5.0f * k * sinf(ph * 0.07f));
     dy = ((ph / 70) % 2) ? -2 : 0;
   }
-  const int K = YARD_KI;  // v3.6: todo a la escala del mundo (antes, a 2)
-  int x = yScrX(yardEncX), y = yScrY(yardEncY);
-  dx *= K;
-  dy *= K;
-  yardShadow(x, y, 64 * K);
-  drawMap(spr, 32, x - 32 * K + dx, y - 62 * K + dy, 2 * K, false);
+  int x = yardEncX, y = yardEncY;
+  yardShadow(x, y, 64);
+  drawMap(spr, 32, x - 32 + dx, y - 62 + dy, 2, false);
   if (rustle && ph > 60) {  // ( (   ) ): las rayas, la de fuera un poco despues
-    encArc(x - 44 * K, y - 40 * K, 14 * K, 200, ENC_MARK_COL);
-    encArc(x + 44 * K, y - 40 * K, 14 * K, -20, ENC_MARK_COL);
+    encArc(x - 44, y - 40, 14, 200, ENC_MARK_COL);
+    encArc(x + 44, y - 40, 14, -20, ENC_MARK_COL);
     if (ph > 220) {
-      encArc(x - 56 * K, y - 50 * K, 20 * K, 205, ENC_MARK_COL);
-      encArc(x + 56 * K, y - 50 * K, 20 * K, -25, ENC_MARK_COL);
+      encArc(x - 56, y - 50, 20, 205, ENC_MARK_COL);
+      encArc(x + 56, y - 50, 20, -25, ENC_MARK_COL);
     }
   }
   if (pet.encExclusive()) {  // brilla: cuatro destellos dorados y blancos que giran alrededor y laten
     for (int k = 0; k < 4; k++) {
       float a = now * 0.0022f + k * 1.571f;
-      int sx = x + (int)(42 * K * cosf(a)), sy = y - 34 * K + (int)(30 * K * sinf(a));
+      int sx = x + (int)(42 * cosf(a)), sy = y - 34 + (int)(30 * sinf(a));
       int sz = 4 + (int)((now / 100 + k * 3) % 5);
       uint16_t col = (k & 1) ? UI_BAR_WARN : UI_WHITE;
       gfx->fillRect(sx - sz, sy - 1, 2 * sz + 1, 3, col);
       gfx->fillRect(sx - 1, sy - sz, 3, 2 * sz + 1, col);
       gfx->fillRect(sx - 1, sy - 1, 3, 3, UI_WHITE);
     }
-    if ((now / 300) % 4 == 0) drawMap(SPR_STAR, 16, x - 8 * K, y - 92 * K, K, false);  // y una estrella encima, a ratos
+    if ((now / 300) % 4 == 0) drawMap(SPR_STAR, 16, x - 8, y - 92, 1, false);  // y una estrella encima, a ratos
   }
-  if (pet.encWonPending()) drawExclaim(x + 30 * K, y - 78 * K + (int)(3 * sinf(now * 0.012f)));  // vencido: falta la Poke Ball
+  if (pet.encWonPending()) drawExclaim(x + 30, y - 78 + (int)(3 * sinf(now * 0.012f)));  // vencido: falta la Poke Ball
 }
 
-bool yardEncAt(int16_t x, int16_t y) {  // (x, y) en el lienzo
-  const int K = YARD_KI;
-  int wx = x + yardCamX, wy = y + yardCamY;
-  return yardEncX >= 0 && abs(wx - yardEncX) < 46 * K && wy > yardEncY - 80 * K && wy < yardEncY + 16 * K;
+bool yardEncAt(int16_t x, int16_t y) {
+  return yardEncX >= 0 && abs(x - yardEncX) < 46 && y > yardEncY - 80 && y < yardEncY + 16;
 }
 
 void yardDrawThings(uint32_t now) {
-  // SPR_POOP (32x32) a escala 2 * YARD_KI (la de la casa de lado con el mapa a 2): los pies del monton en y
-  const int K = YARD_KI;
+  // SPR_POOP (32x32) a escala 2, como en la casa de lado: la tinta ~32x40 con los pies del monton en y
   for (int s = 0; s < HOME_SLOTS; s++)
     for (int i = 0; i < POOP_MAX; i++)
-      if (yardPoopHave[s] & (1 << i))
-        drawMap(SPR_POOP, 32, yScrX(yardPoopX[s][i]) - 34 * K, yScrY(yardPoopY[s][i]) - 58 * K, 2 * K, false);
+      if (yardPoopHave[s] & (1 << i)) drawMap(SPR_POOP, 32, yardPoopX[s][i] - 34, yardPoopY[s][i] - 58, 2, false);
   uint32_t left = timeLeft(poopPuffUntil);
   if (left && poopPuffSlot >= 0) {  // la que se acaba de limpiar: destellos donde estaba
-    int cx = yScrX(yardPoopX[poopPuffHome & 1][poopPuffSlot]), cy = yScrY(yardPoopY[poopPuffHome & 1][poopPuffSlot]) - 20 * K;
-    int r = (4 + (int)((POOP_PUFF_MS - left) / 30)) * K;
+    int cx = yardPoopX[poopPuffHome & 1][poopPuffSlot], cy = yardPoopY[poopPuffHome & 1][poopPuffSlot] - 20;
+    int r = 4 + (int)((POOP_PUFF_MS - left) / 30);
     for (int k = 0; k < 4; k++) {
       int sx = cx + ((k & 1) ? r : -r), sy = cy + ((k & 2) ? r : -r);
       uint16_t col = (k % 2) ? UI_BAR_WARN : UI_WHITE;
@@ -9440,50 +9414,42 @@ void yardDrawThings(uint32_t now) {
     }
   }
   for (int i = 0; i < yardGiftN; i++) {
-    int bob = (int)lroundf(2.0f * K * sinf(now * 0.004f + i * 2.1f));
-    int gx = yScrX(yardGiftX[i]), gy = yScrY(yardGiftY[i]);
-    yardShadow(gx, gy, 30 * K);
-    drawMap(SPR_GIFT, 16, gx - 16 * K, gy - 30 * K + bob, 2 * K, false);
+    int bob = (int)lroundf(2.0f * sinf(now * 0.004f + i * 2.1f));
+    yardShadow(yardGiftX[i], yardGiftY[i], 30);
+    drawMap(SPR_GIFT, 16, yardGiftX[i] - 16, yardGiftY[i] - 30 + bob, 2, false);
   }
   if (pet.giftCount() > YARD_GIFTS_SHOWN && yardGiftN) {
     char t[6];
     snprintf(t, sizeof(t), "+%u", (unsigned)(pet.giftCount() - YARD_GIFTS_SHOWN));
     int k = yardGiftN - 1;
-    yShadowText(yScrX(yardGiftX[k]) + 18 * K, yScrY(yardGiftY[k]) - 30 * K, t, 2, Y_TEXT);
+    yShadowText(yardGiftX[k] + 18, yardGiftY[k] - 30, t, 2, Y_TEXT);
   }
 }
 
-#define YARD_THING_HIT_R (28 * YARD_KI)
-// v3.6: los toques llegan en el lienzo; las cosas estan en el mundo
+#define YARD_THING_HIT_R 28
 // la caca bajo el dedo: hueco de casa * POOP_MAX + su sitio, o -1
 int yardPoopAt(int16_t x, int16_t y) {
-  x += yardCamX;
-  y += yardCamY;
   for (int s = 0; s < HOME_SLOTS; s++)
     for (int i = 0; i < POOP_MAX; i++) {
       if (!(yardPoopHave[s] & (1 << i))) continue;
-      int dx = x - yardPoopX[s][i], dy = y - (yardPoopY[s][i] - 20 * YARD_KI);
+      int dx = x - yardPoopX[s][i], dy = y - (yardPoopY[s][i] - 20);
       if (dx * dx + dy * dy <= YARD_THING_HIT_R * YARD_THING_HIT_R) return s * POOP_MAX + i;
     }
   return -1;
 }
 // el huevo bajo el dedo: su hueco de casa, o -1
 int yardEggAt(int16_t x, int16_t y) {
-  x += yardCamX;
-  y += yardCamY;
   for (int s = 0; s < HOME_SLOTS; s++) {
     const PetLife &l = pet.home(s);
     if (!l.isEgg() || l.isVacant() || yardEggX[s] < 0) continue;
     int dx = x - yardEggX[s], dy = y - (yardEggY[s] - YARD_EGG_MID);
-    if (dx * dx + dy * dy <= 46 * 46 * YARD_KI * YARD_KI) return s;
+    if (dx * dx + dy * dy <= 46 * 46) return s;
   }
   return -1;
 }
 int yardGiftAt(int16_t x, int16_t y) {
-  x += yardCamX;
-  y += yardCamY;
   for (int i = 0; i < yardGiftN; i++) {
-    int dx = x - yardGiftX[i], dy = y - (yardGiftY[i] - 14 * YARD_KI);
+    int dx = x - yardGiftX[i], dy = y - (yardGiftY[i] - 14);
     if (dx * dx + dy * dy <= YARD_THING_HIT_R * YARD_THING_HIT_R) return i;
   }
   return -1;
@@ -9605,9 +9571,7 @@ void yardDrawBubble(uint32_t now) {
       continue;
     }
     if (!txt[s] || (turn >= 0 && turn != s)) continue;
-    int bx = yScrX(yardW.p[s].x), by = yardPetHeadY(s) - 4;
-    if (bx < 0 || bx > YBG_CANVAS || by > YBG_CANVAS) continue;  // v3.6: fuera de la camara
-    yardBubbleAt(bx, by, txt[s]);
+    yardBubbleAt((int)yardW.p[s].x, yardPetHeadY(s) - 4, txt[s]);
   }
 }
 
@@ -9688,176 +9652,6 @@ void yardDrawHud() {
 }
 
 // ---- un frame de la casa (el fondo ya esta copiado) ----
-// ---- v3.6: lo que queda fuera de la camara ----
-// Cada cosa fuera del circulo (el otro bicho, un huevo, cacas, regalos, el encuentro) sale como una flecha en el
-// borde con su icono: el bicho, su globo si tiene algo que decir, la caca, el regalo o las rayas rojas del
-// encuentro. Tocar la del otro bicho le pasa el foco (la camara lo sigue); las demas llevan la camara alli un rato
-enum : uint8_t { YMK_PET = 0, YMK_TALK, YMK_EGG, YMK_POOP, YMK_GIFT, YMK_ENC };
-#define YARD_MARKS_MAX 12
-#define YARD_MARK_R 186       // radio del centro de la marca (el circulo util llega a ~221)
-#define YARD_MARK_DISC 22     // radio del disco con el icono
-#define YARD_MARK_OFF_R 205   // una cosa cuyo punto cae a mas de esto del centro del lienzo esta "fuera"
-#define YARD_LOOK_MS 5000     // la camara se queda mirando lo de la marca tocada
-struct YardMark {
-  uint8_t kind, slot;
-  int16_t x, y;    // la marca, en el lienzo
-  int16_t wx, wy;  // la cosa, en el mundo
-};
-YardMark yardMarks[YARD_MARKS_MAX];
-uint8_t yardMarkN = 0;
-float yardLookX = 0, yardLookY = 0;
-uint32_t yardLookUntil = 0;
-
-// la cosa en (wx, wy) del mundo (su punto visible: el cuerpo, no los pies) esta fuera: su marca, si no hay
-// otra ya muy cerca del mismo tipo
-static void yardMarkAdd(uint8_t kind, uint8_t slot, int wx, int wy) {
-  int dx = yScrX(wx) - Y_CX, dy = yScrY(wy) - Y_CY;
-  float d = sqrtf((float)(dx * dx + dy * dy));
-  if (d <= YARD_MARK_OFF_R || yardMarkN >= YARD_MARKS_MAX) return;
-  // en el borde, hacia la cosa; si cae sobre la hora o el dock, se corre por el borde al lado mas cercano
-  float a0 = atan2f((float)dy, (float)dx);
-  int mx = 0, my = 0;
-  for (int k = 0; k <= 60; k++) {
-    float t = a0 + (k & 1 ? 1 : -1) * ((k + 1) / 2) * 0.035f;  // 0, -2, +2, -4, +4... grados
-    if (k == 0) t = a0;
-    mx = Y_CX + (int)(cosf(t) * YARD_MARK_R);
-    my = Y_CY + (int)(sinf(t) * YARD_MARK_R);
-    const int g = YARD_MARK_DISC + 6;
-    bool clock = mx > 140 - g && mx < 326 + g && my < 112 + g;
-    bool dock = mx > 130 - g && mx < 336 + g && my > 376 - g;
-    if (!clock && !dock) break;
-  }
-  for (int i = 0; i < yardMarkN; i++) {
-    const YardMark &o = yardMarks[i];
-    bool same = o.kind == kind || ((o.kind == YMK_PET || o.kind == YMK_TALK) && (kind == YMK_PET || kind == YMK_TALK));
-    if (abs(o.x - mx) < 2 * YARD_MARK_DISC && abs(o.y - my) < 2 * YARD_MARK_DISC && (same || kind > o.kind)) return;
-  }
-  yardMarks[yardMarkN++] = YardMark{ kind, slot, (int16_t)mx, (int16_t)my, (int16_t)wx, (int16_t)wy };
-}
-
-static void yardMarkIcon(int i, uint32_t now) {
-  const YardMark &m = yardMarks[i];
-  int x = m.x, y = m.y;
-  switch (m.kind) {
-    case YMK_TALK: {  // un globo con "..."
-      gfx->fillRoundRect(x - 14, y - 11, 28, 18, 6, Y_TEXT);
-      gfx->fillTriangle(x - 6, y + 6, x + 2, y + 6, x - 7, y + 13, Y_TEXT);
-      for (int k = -1; k <= 1; k++) gfx->fillCircle(x + k * 7, y - 2, 2, UI_INK);
-      break;
-    }
-    case YMK_PET: {
-      const PetLife &l = pet.home(m.slot & 1);
-      const uint8_t *t = thumbs.get(l.speciesId);
-      if (t) drawThumbFit(t, x, y, 34, 34, false, 0);
-      else gfx->fillCircle(x, y, 6, Y_TEXT);
-      break;
-    }
-    case YMK_EGG: drawEggAt(x, y, 1, 0, pet.home(m.slot & 1).eggSpecies()); break;
-    case YMK_POOP: drawMap(SPR_POOP, 32, x - 17, y - 22, 1, false); break;
-    case YMK_GIFT: drawMap(SPR_GIFT, 16, x - 16, y - 18, 2, false); break;
-    default: {  // el encuentro: sus rayas rojas ( ), que laten
-      int r = 8 + (int)((now / 200) % 2) * 2;
-      encArc(x - 6, y, r, 200, ENC_MARK_COL);
-      encArc(x + 6, y, r, -20, ENC_MARK_COL);
-      break;
-    }
-  }
-}
-
-// junta las marcas de este frame y las dibuja (despues de las cosas y los bichos, antes del HUD)
-void yardDrawMarks(uint32_t now) {
-  yardMarkN = 0;
-  const int K = YARD_KI;
-  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
-    const PetLife &l = pet.home(s);
-    if (yardW.p[s].on && !l.isEgg()) {
-      int hy = (int)yardW.p[s].y - yardBodyOf(s).h / 2;
-      yardMarkAdd(yardBubbleText(s, now) ? YMK_TALK : YMK_PET, s, (int)yardW.p[s].x, hy);
-    } else if (l.isEgg() && !l.isVacant() && yardEggX[s] >= 0) {
-      yardMarkAdd(YMK_EGG, s, yardEggX[s], yardEggY[s] - YARD_EGG_MID);
-    }
-  }
-  if (yardEncX >= 0) yardMarkAdd(YMK_ENC, 0, yardEncX, yardEncY - 30 * K);
-  for (int i = 0; i < yardGiftN; i++) yardMarkAdd(YMK_GIFT, (uint8_t)i, yardGiftX[i], yardGiftY[i] - 14 * K);
-  for (int s = 0; s < HOME_SLOTS; s++)
-    for (int i = 0; i < POOP_MAX; i++)
-      if (yardPoopHave[s] & (1 << i)) yardMarkAdd(YMK_POOP, (uint8_t)s, yardPoopX[s][i], yardPoopY[s][i] - 20 * K);
-  for (int i = 0; i < yardMarkN; i++) {
-    const YardMark &m = yardMarks[i];
-    float dx = yScrX(m.wx) - m.x, dy = yScrY(m.wy) - m.y, d = sqrtf(dx * dx + dy * dy);
-    if (d < 1) d = 1;
-    float ux = dx / d, uy = dy / d;
-    // la punta de la flecha, hacia la cosa
-    int tx = m.x + (int)(ux * (YARD_MARK_DISC + 12)), ty = m.y + (int)(uy * (YARD_MARK_DISC + 12));
-    int bx = m.x + (int)(ux * (YARD_MARK_DISC - 2)), by = m.y + (int)(uy * (YARD_MARK_DISC - 2));
-    int px = (int)(-uy * 10), py = (int)(ux * 10);
-    gfx->fillTriangle(tx + 2, ty + 2, bx + px + 2, by + py + 2, bx - px + 2, by - py + 2, Y_SHADOW);
-    gfx->fillTriangle(tx, ty, bx + px, by + py, bx - px, by - py, Y_TEXT);
-    gfx->fillCircle(m.x + 2, m.y + 2, YARD_MARK_DISC, Y_SHADOW);
-    gfx->fillCircle(m.x, m.y, YARD_MARK_DISC, Y_CARD_HI);
-    gfx->drawCircle(m.x, m.y, YARD_MARK_DISC, Y_TEXT);
-    yardMarkIcon(i, now);
-  }
-}
-
-// un toque sobre una marca: true si la habia
-bool yardMarkTap(int16_t x, int16_t y) {
-  for (int i = yardMarkN - 1; i >= 0; i--) {
-    const YardMark &m = yardMarks[i];
-    int dx = x - m.x, dy = y - m.y, r = YARD_MARK_DISC + 10;
-    if (dx * dx + dy * dy > r * r) continue;
-    Serial.printf("MARK tap kind=%u slot=%u at %d,%d\n", m.kind, m.slot, m.wx, m.wy);
-    sfxPlay(SFX_TAP);
-    if ((m.kind == YMK_PET || m.kind == YMK_TALK || m.kind == YMK_EGG) && uiFocus(m.slot & 1)) {
-      yardLookUntil = 0;  // la camara sigue al nuevo foco
-    } else {
-      yardLookX = m.wx;
-      yardLookY = m.wy;
-      yardLookUntil = millis() + YARD_LOOK_MS;
-    }
-    return true;
-  }
-  return false;
-}
-
-// v3.6: la camara sigue al bicho del foco (sin el, a su huevo o al otro), con sus pies algo por debajo del centro;
-// acotada al mundo y quieta mientras hay un menu de bicho abierto (sus filas y el apartarse van en el lienzo)
-#define YARD_CAM_FOOT_Y 300  // fila del lienzo donde quedan los pies del que sigue
-#define YARD_CAM_EASE_MS 350 // cuanto tarda en recorrer ~2/3 de lo que le falta
-void yardCamUpdate(uint32_t now) {
-  static uint32_t last = 0;
-  uint32_t dt = last ? now - last : 0;
-  last = now;
-  float tx = YBG_WORLD / 2, ty = YBG_WORLD / 2;
-  bool have = false;  // hay a quien seguir (si no, la camara no se coloca aun: el primer frame no tiene bichos)
-  uint8_t f = pet.focusSlot & 1;
-  if (timeLeft(yardLookUntil)) {  // una marca tocada: mira alli un rato
-    tx = yardLookX;
-    ty = yardLookY + YBG_CANVAS / 2 - YARD_CAM_FOOT_Y;  // (la cosa en el centro, no a la altura de los pies)
-    have = true;
-  } else for (uint8_t s : { f, (uint8_t)(f ^ 1) }) {
-    if (yardW.p[s].on) { tx = yardW.p[s].x; ty = yardW.p[s].y; have = true; break; }
-    if (yardEggX[s] >= 0 && pet.home(s).isEgg() && !pet.home(s).isVacant()) {
-      tx = yardEggX[s];
-      ty = yardEggY[s];
-      have = true;
-      break;
-    }
-  }
-  float cx = (float)yardCamClamp((int)tx - YBG_CANVAS / 2), cy = (float)yardCamClamp((int)ty - YARD_CAM_FOOT_Y);
-  if (!have && yardCamFX < 0) return;  // aun nadie: se coloca al primero
-  if (yardCamFX < 0 || dt > 2000) {  // la primera vez, o al volver de otra pantalla: de golpe
-    yardCamFX = cx;
-    yardCamFY = cy;
-  } else if (!petMenuOpen) {
-    float k = dt >= YARD_CAM_EASE_MS ? 1.0f : (float)dt / YARD_CAM_EASE_MS;
-    yardCamFX += (cx - yardCamFX) * k;
-    yardCamFY += (cy - yardCamFY) * k;
-  }
-  yardCamX = yardCamClamp((int)lroundf(yardCamFX));
-  yardCamY = yardCamClamp((int)lroundf(yardCamFY));
-}
-
 void renderYardHome(uint32_t now) {
   yardSyncPets();
   yardTick(now);
@@ -9867,7 +9661,6 @@ void renderYardHome(uint32_t now) {
   drawBoxAppear(now);       // recien guardado o despertado: sale de una luz
   yardDrawBubble(now);
   yardDrawFoodFx(now);     // Y3: el corazon al acabarse la comida
-  yardDrawMarks(now);      // v3.6: lo que queda fuera de la camara
   yardDrawHud();
 }
 
@@ -9894,7 +9687,6 @@ void yardTap(int16_t x, int16_t y) {
     else openShop();
     return;
   }
-  if (yardMarkTap(x, y)) return;  // v3.6: una flecha de algo fuera de la camara
   int es = yardEggAt(x, y);
   if (es >= 0) {  // Y3: el huevo se tambalea; el del patio dice lo que falta, el inicial se abre a toques
     yardEggTapAt[es] = millis();
@@ -9947,7 +9739,7 @@ void yardTap(int16_t x, int16_t y) {
   int who = yardPetAt(x, y);
   if (who != YARD_TRV && yardBoxSlot >= 0 && yardW.p[YARD_TRV].on && trvBackSlot() == yardBoxSlot) {  // el "!" del viajero tambien vale
     YardBody bb = yardBodyOf(YARD_TRV);
-    int bx = yScrX(yardW.p[YARD_TRV].x) + bb.w / 2 + 14, by = yScrY(yardW.p[YARD_TRV].y) - bb.h - 12;
+    int bx = (int)yardW.p[YARD_TRV].x + bb.w / 2 + 14, by = (int)yardW.p[YARD_TRV].y - bb.h - 12;
     if (abs(x - bx) < 34 && abs(y - by) < 34) who = YARD_TRV;
   }
   if (who >= 0 && who < HOME_SLOTS) {  // v3.3: uno de casa: pasa a tener el foco y se abre su menu
