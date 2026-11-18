@@ -31,6 +31,12 @@ these are the pixels the panel receives.</sub>
 
 ## Status
 
+**v3.0: two pets at home.** Home now has two places, and both pets live at the same time: each gets hungry,
+tired and bored, poops, sleeps, grows and can die on its own. Fill the second place by waking a pet from the Box
+or hatching an egg from the Backpack (after updating it starts empty). Tap a pet to see its card; Care and Play
+then look after that pet. Walking gives its JOY, bond and levels to both awake pets. Box pets no longer walk in
+the yard. Going back to v2.x loses the pet in the second place.
+
 **v2.0: the yard.** The home is now a top-down pixel-art yard where the pet (and the first pet of the Box)
 wanders, eats food dropped on the grass, leaves poops and finds gifts where it stands, and says how it feels
 in speech bubbles. A thin HUD floats on top: the battery, your **coins** and a 3-button dock
@@ -656,8 +662,8 @@ If one bottoms out it counts as a *slip-up*.
 - 🎒 **Bag** → two tabs: **ITEMS** (your items and eggs; tap one to use it) and **SHOP** (buy items and
   backgrounds with coins).
 
-**In the yard:** tap the pet for its stat card (the first page shows the four needs), tap the Box pet to
-open the Box, tap a poop to clean it (+10 HYG), tap a gift to open it. An egg placed from the Bag sits in the
+**In the yard:** tap a pet for its stat card (the first page shows the four needs; Care and Play then look
+after that pet), tap a poop to clean it (+10 HYG), tap a gift to open it. An egg placed from the Bag sits in the
 yard: tap it to see the time left, shake the board to speed it up.
 
 **Coins (v2.0):** each minigame pays 3–8 by result, a stage's first clear 50 and a repeat clear 10 (once per

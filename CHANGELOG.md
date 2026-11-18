@@ -6,6 +6,27 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.0] - 2026-11-17
+
+### Added
+
+- **Two pets live at home at once.** Home now has two places. Both pets get hungry, tired and bored, poop,
+  sleep, grow, slip up and can die, each on its own. After updating, your pet stays in the first place and the
+  second one is empty: fill it by waking a pet from the Box (it goes to the empty place, or asks which pet to swap
+  with) or by hatching an egg from the Backpack. Each place can also hold its own egg, hatching on its own timer.
+- Tap a pet to see its card; the Care and Play panels then look after that pet. Long-press the pet you want to
+  release. Both pets can join a stage team. Walking gives its JOY, bond and goal levels to both awake pets; finds,
+  eggs and coins come once. The first care of the day gives bond to each pet; the daily streak counts once.
+- Serial: `FOCUS n` (which home pet the other commands act on), `STORE k [s]`, `WAKE k [s]` (Box moves for home
+  place `s`); `STATS`, `BOX` and `EGGS` show both places.
+
+### Changed
+
+- Box pets no longer walk in the yard; only the two home pets do (and a pet back from a trip, with its suitcase).
+
+**Going back to v2.x loses the pet in the second place** (older firmware doesn't know about it). Store it in the
+Box first if you plan to downgrade.
+
 ## [2.6] - 2026-11-17
 
 ### Fixed

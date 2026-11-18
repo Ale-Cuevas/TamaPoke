@@ -176,13 +176,14 @@ TEST(dashgame, un_frame_tardio_cuenta_como_mucho_250ms) {
   CHECK_EQ(d.t, DASH_LATE_MAX_MS);
 }
 
+// el mecanismo: 1 punto cada DASH_PER_POINT filas, con el tope DASH_GAIN_MAX (los numeros, de tuning.h)
 TEST(dashgame, ganancia_de_vel_1_cada_6_tope_18) {
   CHECK_EQ(dashGain(0), 0);
-  CHECK_EQ(dashGain(5), 0);
-  CHECK_EQ(dashGain(6), 1);
-  CHECK_EQ(dashGain(50), 8);  // "una carrera larga" (v1.48)
-  CHECK_EQ(dashGain(108), 18);
-  CHECK_EQ(dashGain(500), 18);
+  CHECK_EQ(dashGain(DASH_PER_POINT - 1), 0);
+  CHECK_EQ(dashGain(DASH_PER_POINT), 1);
+  CHECK_EQ(dashGain(50), 50 / DASH_PER_POINT < DASH_GAIN_MAX ? 50 / DASH_PER_POINT : DASH_GAIN_MAX);
+  CHECK_EQ(dashGain(DASH_PER_POINT * DASH_GAIN_MAX), DASH_GAIN_MAX);
+  CHECK_EQ(dashGain(500), DASH_GAIN_MAX);
 }
 
 TEST(dashgame, el_trineo_sigue_al_sprite_entre_topes) {

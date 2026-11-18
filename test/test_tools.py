@@ -338,7 +338,7 @@ class TestBuffersDeTexto(unittest.TestCase):
         filas = fmt.extract_table(leer('i18n.cpp'), 'STRINGS', len(cls.LANGS))
         cls.LIT = {sid: [fila[k] for fila in filas] for k, sid in enumerate(ids)}
         cls.ino = leer('TamaPoke.ino').splitlines()
-        cls.APODO = int(re.search(r'char\s+nick\[(\d+)\]', leer('pet.h')).group(1)) - 1
+        cls.APODO = int(re.search(r'char\s+nick\[(\d+)\]', leer('petlife.h')).group(1)) - 1  # v3.0: el apodo esta en PetLife
         base = max(len(row[2].encode()) for row in DEX)
         cls.NOMBRE = {}
         for lang in cls.LANGS:

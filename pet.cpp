@@ -5,9 +5,66 @@
 #include "dashgame.h"
 #include "encounter.h"  // encuentros salvajes (v2.2): tiradas del dia, nivel y especie (logica pura)
 
+// ---------- los dos huecos de casa (v3.0) ----------
+
+void Pet::focus(uint8_t s) {
+  s &= 1;
+  if (s == focusSlot) return;
+  PetLife tmp = *this;  // (la parte PetLife: el bicho del foco)
+  static_cast<PetLife &>(*this) = other;
+  other = tmp;
+  focusSlot = s;
+}
+
+Pet::FocusGuard::FocusGuard(Pet &pp, uint8_t s) : p(pp), prev(pp.focusSlot), moved(false), ok(true) {
+  s &= 1;
+  if (s != p.focusSlot) {
+    if (p.focusDepth) {
+      // reentrada: la de fuera tiene el foco puesto en otro hueco. No se mueve (sus referencias quedarian
+      // cambiadas) y quien lo pidio se salta lo suyo (ok = false: nunca sobre el bicho equivocado). En el PC
+      // (pruebas) es un error: se para, salvo que la prueba lo busque (focusStrict = false)
+      ok = false;
+      p.focusErrors++;
+      Serial.printf("FOCUS: reentrada (%u -> %u) ignorada\n", p.focusSlot, s);
+#ifndef ARDUINO
+      if (p.focusStrict) abort();
+#endif
+    } else {
+      p.focus(s);
+      moved = true;
+    }
+  }
+  p.focusDepth++;
+}
+
+Pet::FocusGuard::~FocusGuard() {
+  p.focusDepth--;
+  if (moved) p.focus(prev);
+}
+
+int8_t Pet::slotOfUid(uint32_t id) const {
+  if (!id) return -1;
+  for (uint8_t s = 0; s < HOME_SLOTS; s++)
+    if (home(s).hatched() && home(s).uid == id) return (int8_t)s;
+  return -1;
+}
+
+bool Pet::homeAsleep() const {
+  bool any = false;
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    const PetLife &l = home(s);
+    if (l.isVacant()) continue;
+    if (l.isEgg() || !l.sleeping) return false;
+    any = true;
+  }
+  return any;
+}
+
 void Pet::begin() {
+  if (focusSlot) focus(0);  // (un begin() con el foco movido: el guardado es por huecos)
   prefs.begin("tamapoke", false);
   if (!prefs.getBool("init", false)) {
+    other = vacantPetLife();  // v3.0: el segundo hueco de una partida nueva empieza vacio
     // partida nueva (o tras WIPE): su crecimiento ya es de la curva v2. "gcv" va antes
     // que "init", asi nunca se migra un contador que ya es de la curva nueva
     prefs.putUChar("gcv", GROW_CURVE_VER);
@@ -27,6 +84,7 @@ void Pet::begin() {
     travelCancel();
   // guardado anterior a la caja: el bicho de ahora recibe su identidad (FR-BOX.11)
   if (dying && (isEgg() || vacant)) dying = false;  // v1.60: solo se muere un bicho nacido
+  if (other.dying && other.isEgg()) other.dying = false;
   if (!isEgg() && !uid) {
     uid = newUid();
     prefs.putUInt("uid", uid);
@@ -123,7 +181,9 @@ void Pet::hatchNow() {
 // incubadora; si no, sale uno de la mochila (y se sortea ahora, con el amuleto si lo hay); si
 // tampoco, la casa se queda vacia.
 void Pet::freeHome() {
-  unwrapGifts();  // v1.55: sin bicho no hay quien los abra, y un huevo envuelto cuenta para la casa
+  // v1.55: sin bicho no hay quien los abra, y un huevo envuelto cuenta para la casa. v3.0: solo si en el
+  // otro hueco tampoco queda nadie (si no, los abre el)
+  if (!other.hatched()) unwrapGifts();
   if (eggHeldFlag) {
     newEgg();
   } else if (items[IT_EGG]) {
@@ -185,8 +245,11 @@ void Pet::capPush(int16_t dex, bool sh, bool front) {
 //   sin huevo y sin nadie a quien despertar.
 void Pet::endLife(uint8_t cer) {
   int16_t heir = (cer == CER_DEATH) ? deathEgg : 0;  // antes de que resetHome lo borre
+  uint8_t eggsBefore = items[IT_EGG];  // v3.0: si un huevo pasa a la mochila, se escribe antes que el hueco
   if (cer == CER_DEATH) lastEnd = CER_DEATH;  // aqui y no al elegir: un corte a mitad vuelve al dialogo
-  unwrapGifts();  // v1.55: sin bicho no hay quien los abra (un huevo envuelto evita el de regalo)
+  // v1.55: sin bicho no hay quien los abra (un huevo envuelto evita el de regalo). v3.0: solo si en casa
+  // no queda otro bicho nacido (si queda, los abre el)
+  if (!other.hatched()) unwrapGifts();
   if (cer == CER_FAREWELL) giveFound(IT_EGG, true);
   if (heir > 0) {
     // muerte con huevo (v1.60): el suyo va derecho a casa. El que esperaba en la incubadora, a la
@@ -200,11 +263,13 @@ void Pet::endLife(uint8_t cer) {
         queueFound(IT_EGG, true, false);
       }
     }
+    if (items[IT_EGG] != eggsBefore) saveBag();  // (el de la despedida no: aqui es una muerte)
     newEgg(true, heir);
     return;
   }
   if (eggHeldFlag) {
     if (items[IT_EGG] >= ITEM_MAX) {
+      if (items[IT_EGG] != eggsBefore) saveBag();  // (el de la despedida)
       newEgg();
       return;
     }
@@ -212,7 +277,12 @@ void Pet::endLife(uint8_t cer) {
     if (eggCap) capPush(eggTarget, eggShiny, true);  // v2.2: sigue siendo el de la captura
     eggHeldFlag = false;
   }
-  if (!items[IT_EGG] && !boxHasPets()) giveFound(IT_EGG, true);
+  // v3.0: el de regalo, solo si el otro hueco tambien esta vacio, no hay huevos tuyos (mochila,
+  // incubadoras, envueltos) y la caja esta vacia
+  if (other.isVacant() && !eggsOwned() && !giftEggs() && !boxHasPets()) giveFound(IT_EGG, true);
+  // el huevo que esperaba, el de la despedida o el de regalo: a la mochila en la NVS antes de que el
+  // hueco quede vacio ("hm1" va antes que "bpack" en save(), y "uid" tambien): un corte, uno de mas
+  if (items[IT_EGG] != eggsBefore) saveBag();
   vacate();
 }
 
@@ -284,15 +354,23 @@ void Pet::syncClock(uint32_t nowEpoch) {
   travelCheck();  // Y5: un viaje que acabo con la placa apagada vuelve ahora
   encCheck();     // v2.2: el encuentro de hoy (las tiradas que tocaban apagada, y el que ya se fue)
   uint32_t mins = (seen && nowEpoch > seen) ? (nowEpoch - seen) / 60 : 0;
+  // v3.0: cada hueco de casa por su cuenta
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    FocusGuard g(*this, s);
+    if (!g.ok) continue;  // (reentrada: nunca sobre el bicho equivocado)
+    syncHome(seen, mins);
+  }
+  save();  // tambien la primera vez o sin tiempo que aplicar
+}
+
+// el tiempo apagado de un hueco (el del foco)
+void Pet::syncHome(uint32_t seen, uint32_t mins) {
   // v1.64: la hora del Revivir es real: apagada tambien corre (el resto del tiempo esta parado)
   if (dying && ceremony == CER_NONE && mins) {
     uint32_t m = dyingMin + mins;
     dyingMin = m > REVIVE_LIMIT_MIN ? REVIVE_LIMIT_MIN : (uint8_t)m;
   }
-  if (mins < 2 || busyEnding() || starterPick || vacant) {
-    save();  // primera vez, sin tiempo que aplicar, aun eligiendo inicial o sin nadie en casa
-    return;
-  }
+  if (mins < 2 || busyEnding() || starterPick || vacant) return;  // aun eligiendo inicial o sin nadie
   if (mins > OFFLINE_MAX_MIN) mins = OFFLINE_MAX_MIN;  // tope: 2 semanas
   if (yardEgg()) eggClockStamp();  // puesto sin hora: cuenta desde la ultima vista
 
@@ -325,16 +403,20 @@ void Pet::syncClock(uint32_t nowEpoch) {
     // la evolucion NO se aplica offline: queda lista y la dispara el usuario
     // tocando al bicho cuando vuelve (para que vea la transformacion)
   }
-  Serial.printf("offline: %u min aplicados (nv.%u)\n", mins, level());
-  save();
+  Serial.printf("offline: hueco %u, %u min aplicados (nv.%u)\n", focusSlot, mins, level());
 }
 
 void Pet::update(uint32_t nowMs) {
-  // fin de ceremonia: la criatura se va y la casa se queda vacia (v1.41, ver endLife)
-  if (ceremony != CER_NONE && !timeLeft(ceremonyUntil)) {
+  // fin de ceremonia: la criatura se va y su hueco se queda vacio (v1.41, ver endLife). v3.0: el de cada hueco
+  bool ended = false;
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    if (home(s).ceremony == CER_NONE || timeLeft(home(s).ceremonyUntil)) continue;
+    FocusGuard g(*this, s);
+    if (!g.ok) continue;
     endLife(ceremony);
-    return;
+    ended = true;
   }
+  if (ended) return;
   while (nowMs - lastTick >= PET_TICK_MS) {
     lastTick += PET_TICK_MS;
     tick();
@@ -342,23 +424,36 @@ void Pet::update(uint32_t nowMs) {
 }
 
 void Pet::tick() {
-  travelCheck();  // Y5: el viaje de un bicho de la caja (no depende del de casa)
-  encCheck();     // v2.2: el encuentro salvaje del dia (del jugador: tampoco depende del de casa)
+  travelCheck();  // Y5: el viaje de un bicho de la caja (no depende de los de casa)
+  encCheck();     // v2.2: el encuentro salvaje del dia (del jugador: tampoco depende de los de casa)
+  bool counts = false;
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {  // v3.0: cada hueco de casa, su minuto
+    FocusGuard g(*this, s);
+    if (!g.ok) continue;
+    counts |= tickHome();
+  }
+  // autoguardado periodico: NO escribir a flash aqui (corre dentro del loop,
+  // mientras se anima); solo marcar y dejar que el loop lo vuelque al atenuar
+  if (counts && ++ticksSinceSave >= 5) pendingSave = true;
+}
+
+// el minuto de un hueco de casa (el del foco). true: cuenta para el autoguardado periodico
+bool Pet::tickHome() {
   // muriendose (v1.64): solo corre la hora del Revivir; al acabarse, la UI dice que murio
   if (dying && ceremony == CER_NONE && dyingMin < REVIVE_LIMIT_MIN) {
     if (++dyingMin >= REVIVE_LIMIT_MIN) {
       diedNow = true;
       pendingSave = true;
-    } else if (++ticksSinceSave >= 5) {
-      pendingSave = true;
+      return false;
     }
+    return true;
   }
-  if (busyEnding()) return;  // el tiempo se detiene en la despedida
-  if (vacant) return;                // casa vacia: nadie que envejezca ni que eclosione
-  if (starterPick) return;  // la partida no empieza hasta elegir inicial: si el
-                            // tiempo corriera aqui, el huevo eclosionaria solo a
-                            // los 3 min con la especie sorteada y se perderia la
-                            // eleccion del jugador
+  if (busyEnding()) return false;  // el tiempo se detiene en la despedida
+  if (vacant) return false;        // hueco vacio: nadie que envejezca ni que eclosione
+  if (starterPick) return false;   // la partida no empieza hasta elegir inicial: si el
+                                   // tiempo corriera aqui, el huevo eclosionaria solo a
+                                   // los 3 min con la especie sorteada y se perderia la
+                                   // eleccion del jugador
   bool full = sated();  // la tarta (v1.54): este minuto la comida no baja
   ageMinutes++;
 
@@ -369,7 +464,7 @@ void Pet::tick() {
     } else if (ageMinutes >= STARTER_EGG_MIN) {
       hatch();  // si no lo tocas, eclosiona solo a los 3 min
     }
-    return;
+    return false;
   }
   growMin++;  // el nivel sale de aqui (growth.h), despierto o dormido
   int h = localHour();
@@ -383,10 +478,8 @@ void Pet::tick() {
     sleepMinute(full, h);
     if (weight > 0 && ageMinutes % WEIGHT_BURN_SLEEP_MIN == 0) weight--;
     checkMedals();  // aun puede cruzar un nivel por edad mientras duerme
-    if (++ticksSinceSave >= 5) pendingSave = true;
-    return;
+    return true;
   }
-
   // la subida de nivel ya no suena aqui: la detecta la UI (fx.h) por cualquier via (minuto,
   // tiempo apagado, Caramelo Raro, LVL) y la anuncia con su propio sonido
 
@@ -436,7 +529,7 @@ void Pet::tick() {
       if (neglectMin < 255) neglectMin++;
     } else if (++deathMin >= DEATH_MIN) {
       startDying();
-      return;
+      return false;
     }
   } else {
     neglectMin = deathMin = dyingMin = 0;
@@ -445,9 +538,7 @@ void Pet::tick() {
   // ciclo completo (forma final + 3 dias): la despedida NO salta sola; queda
   // lista (canFarewellNow) y la dispara el usuario con el boton, para que la vea
 
-  // autoguardado periodico: NO escribir a flash aqui (corre dentro del loop,
-  // mientras se anima); solo marcar y dejar que el loop lo vuelque al atenuar
-  if (++ticksSinceSave >= 5) pendingSave = true;
+  return true;
 }
 
 // vuelca el guardado periodico pendiente (lo llama el loop en un momento sin
@@ -471,7 +562,7 @@ bool Pet::lineHasUnregistered(int16_t base) const {
   return false;
 }
 
-uint8_t Pet::eggRarity() const {
+uint8_t PetLife::eggRarity() const {
   return (eggTarget >= 1 && eggTarget <= 151) ? DEX_TBL[eggTarget].rarity : R_COMUN;
 }
 
@@ -510,10 +601,10 @@ int16_t Pet::pickEggSpecies() {
   return CLASSIC_DEX[random(NUM_CLASSIC_DEX)];  // inalcanzable, por si acaso
 }
 
-void Pet::registerSpecies(int16_t dex) {
+void Pet::registerSpecies(int16_t dex, bool sh) {
   if (dex < 1 || dex > 151) return;
   dexReg[(dex - 1) >> 3] |= (1 << ((dex - 1) & 7));
-  if (shiny) dexShinyReg[(dex - 1) >> 3] |= (1 << ((dex - 1) & 7));
+  if (sh) dexShinyReg[(dex - 1) >> 3] |= (1 << ((dex - 1) & 7));
 }
 
 // la racha y el vinculo mejoran el sorteo del huevo (0..~14)
@@ -527,26 +618,37 @@ int Pet::careBonus() const {
 void Pet::registerCare(bool saveNow) {
   if (isEgg() || busyEnding()) return;
   uint32_t d = today();
-  if (d == 0 || d == lastCareDay) return;  // sin reloj, o ya conto hoy
-  if (lastCareDay == 0 || d == lastCareDay + 1) {
-    streak++;
-  } else {
-    streak = 1;        // hubo un hueco de dias
-    lastMilestone = 0;
+  if (d == 0) return;  // sin reloj
+  bool changed = false;
+  // v3.0: el primer cuidado de ESTE bicho hoy: su vinculo (cada uno el suyo, aunque la racha ya contara)
+  if (careDay != d) {
+    careDay = d;
+    if (bondDay != d) {  // el tope diario de vinculo es por dia (ver addBond)
+      bondDay = d;
+      bondToday = 0;
+    }
+    bond = clamp100(bond + BOND_CARE_DAY);  // fuera del tope diario de addBond
+    changed = true;
   }
-  lastCareDay = d;
-  if (bondDay != d) {  // el tope diario de vinculo es por dia (ver addBond)
-    bondDay = d;
-    bondToday = 0;
+  // la racha (del jugador): el primer cuidado del dia, de quien sea
+  if (d != lastCareDay) {
+    if (lastCareDay == 0 || d == lastCareDay + 1) {
+      streak++;
+    } else {
+      streak = 1;        // hubo un hueco de dias
+      lastMilestone = 0;
+    }
+    lastCareDay = d;
+    if (streak > bestStreak) bestStreak = streak;
+    uint16_t ms = (streak >= 100) ? 100 : (streak >= 30) ? 30
+                : (streak >= 7)   ? 7   : (streak >= 3)  ? 3 : 0;
+    if (ms > lastMilestone) {
+      lastMilestone = ms;
+      milestoneNew = streak;  // lo celebra la UI cuando se pueda ver
+    }
+    changed = true;
   }
-  if (streak > bestStreak) bestStreak = streak;
-  bond = clamp100(bond + BOND_CARE_DAY);  // fuera del tope diario de addBond
-  uint16_t ms = (streak >= 100) ? 100 : (streak >= 30) ? 30
-              : (streak >= 7)   ? 7   : (streak >= 3)  ? 3 : 0;
-  if (ms > lastMilestone) {
-    lastMilestone = ms;
-    milestoneNew = streak;  // lo celebra la UI cuando se pueda ver
-  }
+  if (!changed) return;
   checkMedals(saveNow);
   persist(saveNow);
 }
@@ -596,7 +698,7 @@ static uint16_t calcStat(uint8_t base, uint8_t gene, uint16_t lvl, uint8_t tr) {
   return (uint16_t)base * gene / 100 + lvl + tr;
 }
 
-uint16_t Pet::statAt(uint8_t which, uint16_t lv) const {
+uint16_t PetLife::statAt(uint8_t which, uint16_t lv) const {
   if (isEgg()) return 0;
   const DexEntry &d = DEX_TBL[speciesId];
   if (which == 0) return calcStat(d.bAtk, geneAtk, lv, trAtk);
@@ -604,13 +706,13 @@ uint16_t Pet::statAt(uint8_t which, uint16_t lv) const {
   return calcStat(d.bSpe, geneSpe, lv, trSpe);
 }
 
-uint16_t Pet::atkStat() const {
+uint16_t PetLife::atkStat() const {
   return isEgg() ? 0 : calcStat(DEX_TBL[speciesId].bAtk, geneAtk, level(), trAtk);
 }
-uint16_t Pet::defStat() const {
+uint16_t PetLife::defStat() const {
   return isEgg() ? 0 : calcStat(DEX_TBL[speciesId].bDef, geneDef, level(), trDef);
 }
-uint16_t Pet::speStat() const {
+uint16_t PetLife::speStat() const {
   return isEgg() ? 0 : calcStat(DEX_TBL[speciesId].bSpe, geneSpe, level(), trSpe);
 }
 
@@ -623,7 +725,7 @@ uint16_t Pet::registeredCount() const {
 
 // forma final que ya cumplio su ciclo (3 dias): lista para despedirse. La
 // despedida la dispara el usuario con el boton (no salta sola, para que la vea)
-bool Pet::canFarewellNow() const {
+bool PetLife::canFarewellNow() const {
   return !isEgg() && !sleeping && !busyEnding() &&
          DEX_TBL[speciesId].evolvesTo == 0 && ageMinutes >= FAREWELL_AGE_MIN;
 }
@@ -724,11 +826,12 @@ void Pet::hatch() {
   bond = 0;          // vinculo, medallas y nombre son del individuo
   bondToday = 0;
   bondDay = today();
+  careDay = 0;       // v3.0: su primer cuidado de hoy aun no lo tuvo
   medals = 0;
   newMedal = 0;
   nick[0] = 0;
   uid = newUid();    // identidad del individuo (caja, v1.37)
-  registerSpecies(speciesId);  // criado = registrado en la pokedex
+  registerSpecies(speciesId, shiny);  // criado = registrado en la pokedex
   checkMedals();     // por si nace ya en forma final (legendario)
   // sin sonido aqui: la UI ve la eclosion y suena en el destello de su animacion (fx.h), o
   // al momento si la pantalla no estaba a la vista
@@ -739,7 +842,7 @@ void Pet::hatch() {
 // evolucion 1 nivel, y ademas tiene que estar bien cuidado en ese momento
 // (ninguna estadistica por debajo de 40). NO evoluciona sola: la dispara el
 // usuario tocando al bicho (evolve()), para que vea la transformacion.
-bool Pet::canEvolveNow() const {
+bool PetLife::canEvolveNow() const {
   if (isEgg() || sleeping || busyEnding()) return false;
   const DexEntry &d = DEX_TBL[speciesId];
   if (d.evolvesTo == 0) return false;
@@ -764,7 +867,7 @@ void Pet::evolve() {
   // el gusto sale de la especie (lovesBerry): si al evolucionar cambia, la baya favorita vuelve a ser
   // un secreto (v1.57). Si no, la estrella del menu de comida senalaria la baya de antes
   if (berryKnown && (before % 3) != (speciesId % 3)) berryKnown = false;
-  registerSpecies(speciesId);
+  registerSpecies(speciesId, shiny);
   sfxPlay(SFX_EVOLVE);
   evolveUntil = millis() + EVOLVE_ANIM_MS;
   save();
@@ -985,18 +1088,13 @@ void Pet::nightMinute(int h, bool live) {
   pendingSave = true;  // sin vinculo: no lo acostaste tu
 }
 
-uint8_t Pet::poopSlots() const {
-  uint8_t n = poops > POOP_MAX ? POOP_MAX : poops;
-  uint8_t m = poopMask & ((1 << POOP_MAX) - 1);
-  return __builtin_popcount(m) == n ? m : (uint8_t)((1 << n) - 1);
-}
-
 void Pet::addPoop() {
   if (poops >= POOP_MAX) return;
   uint8_t m = poopSlots();
   uint8_t i = 0;
   while (m & (1 << i)) i++;  // el primer hueco libre
   poopMask = m | (1 << i);
+  poopAt[i] = ageMinutes;  // v3.0: su edad (la usara la v3.1)
   poops++;
 }
 
@@ -1072,24 +1170,39 @@ void Pet::addSteps(uint32_t n, uint32_t day) {
   stepsTotal += n;
   pendingSave = true;  // nunca save(): la escritura a flash congela ~1 s
 
-  bool rewarded = !isEgg() && !sleeping && !busyEnding() && !starterPick;
-  if (rewarded) {
+  // v3.0: lo de caminar llega a cada bicho de casa nacido y despierto (los dos con lo mismo, cada uno con
+  // su tope de vinculo); el tope diario de felicidad y los hallazgos son del jugador (una vez)
+  bool rewarded[HOME_SLOTS];
+  bool anyRewarded = false;
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    const PetLife &l = home(s);
+    rewarded[s] = !l.isEgg() && !l.sleeping && !l.busyEnding() && !starterPick;
+    anyRewarded |= rewarded[s];
+  }
+  if (anyRewarded) {
     uint32_t j = joyRem + n;
     joyRem = j % STEPS_PER_JOY;
     uint32_t gain = j / STEPS_PER_JOY;
     uint32_t room = stepJoyToday < STEP_JOY_DAY_CAP ? STEP_JOY_DAY_CAP - stepJoyToday : 0;
     if (gain > room) gain = room;
-    joy = clamp100(joy + (int)gain);
     stepJoyToday += gain;
 
     uint32_t w = weightRem + n;
     weightRem = w % STEPS_PER_WEIGHT;
     uint32_t burn = w / STEPS_PER_WEIGHT;
-    weight = burn >= weight ? 0 : weight - burn;
 
     uint32_t b = bondRem + n;
     bondRem = b % STEPS_PER_BOND;
-    for (uint32_t i = b / STEPS_PER_BOND; i > 0; i--) addBond(1);  // el tope diario lo pone addBond
+    uint32_t bonds = b / STEPS_PER_BOND;
+
+    for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+      if (!rewarded[s]) continue;
+      FocusGuard g(*this, s);
+      if (!g.ok) continue;
+      joy = clamp100(joy + (int)gain);
+      weight = burn >= weight ? 0 : weight - burn;
+      for (uint32_t k = bonds; k > 0; k--) addBond(1);  // el tope diario lo pone addBond (el de cada uno)
+    }
 
     if (!findAt) findAt = nextFindAt();
     uint32_t f = (uint32_t)findRem + n;
@@ -1102,16 +1215,18 @@ void Pet::addSteps(uint32_t n, uint32_t day) {
     findRem = (uint16_t)f;
   }
 
-  // huevos (v1.39): con todos los pasos, este como este el bicho, y sin tope diario. Con la casa
-  // vacia, el huevo encontrado va derecho a casa (sin escribir aun: el loop guarda con la pantalla
-  // atenuada). v1.40: solo el encontrado; los de la mochila esperan al boton de la casa vacia.
+  // huevos (v1.39): con todos los pasos, esten como esten los bichos, y sin tope diario. v3.0: con los dos
+  // huecos de casa vacios, el huevo encontrado va derecho al primero (sin escribir aun: el loop guarda con
+  // la pantalla atenuada); si no, envuelto. v1.40: solo el encontrado; los de la mochila esperan al boton
   if (!eggAt) eggAt = nextEggAt();
   uint32_t e = (uint32_t)eggRem + n;
   while (e >= eggAt) {
     e -= eggAt;
     eggAt = nextEggAt();
-    if (vacant) {
+    if (home(0).isVacant() && home(1).isVacant()) {
       queueFound(IT_EGG, false, false);
+      FocusGuard g(*this, 0);
+      if (!g.ok) continue;
       newEgg(false);
     } else {
       giveGift(IT_EGG);  // envuelto en casa (v1.55); con la cola llena, a la mochila con aviso
@@ -1135,25 +1250,27 @@ void Pet::addSteps(uint32_t n, uint32_t day) {
   }
 }
 
-// premio de cada meta. El banner y la racha (la primera) se dan siempre; lo demas, con el
-// bicho nacido y despierto, como el resto de premios de caminar. Los regalos no cuentan
+// premio de cada meta. El banner y la racha (la primera) se dan siempre; lo demas, a cada bicho
+// nacido y despierto, como el resto de premios de caminar. Los regalos (una vez) no cuentan
 // para el tope de hallazgos al azar, y el vinculo va fuera del tope diario de addBond.
 // v1.36: cada meta sube niveles (STEP_GOAL_LEVELS: +1, +1, +2), con la barra igual de llena.
-void Pet::goalReward(uint8_t tier, bool rewarded) {
-  if (rewarded) {
+void Pet::goalReward(uint8_t tier, const bool *rewarded) {
+  uint8_t bestLv = 0;
+  bool any = false;
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    if (!rewarded[s]) continue;
+    any = true;
+    FocusGuard g(*this, s);
+    if (!g.ok) continue;
     uint16_t before = level();
     growMin = addLevels(growMin, STEP_GOAL_LEVELS[tier - 1]);
     uint16_t gained = level() - before;  // menos en el tope (999)
-    goalBannerLv = (uint8_t)(goalBannerLv + gained);
+    if (gained > bestLv) bestLv = (uint8_t)gained;
     if (tier == 1) {
       joy = clamp100(joy + GOAL_JOY);
-      bonusFindsToday++;
-      findItem();
     } else if (tier == 2) {
       joy = clamp100(joy + GOAL2_JOY);
       bond = clamp100(bond + GOAL2_BOND);
-      bonusFindsToday++;
-      findItem();
     } else {  // 10000: +2 niveles (arriba) en vez del Caramelo Raro de la v1.25
       joy = clamp100(joy + GOAL3_JOY);
       bond = clamp100(bond + GOAL3_BOND);
@@ -1161,7 +1278,18 @@ void Pet::goalReward(uint8_t tier, bool rewarded) {
     }
     checkMedals(false);  // las de nivel (10, 25, 50) que abran los niveles nuevos, y MARATON
   }
-  if (tier == 1) registerCare(false);  // cuenta como dia de cuidado para la racha
+  goalBannerLv = (uint8_t)(goalBannerLv + bestLv);  // el banner: lo del que mas subio
+  if (any && tier <= 2) {  // el regalo de la meta, una vez
+    bonusFindsToday++;
+    findItem();
+  }
+  // cuenta como dia de cuidado para la racha (y como primer cuidado de cada bicho)
+  if (tier == 1)
+    for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+      FocusGuard g(*this, s);
+      if (!g.ok) continue;
+      registerCare(false);
+    }
 }
 
 // el bicho encuentra algo por el camino (FR-1.5 / FR-1.6)
@@ -1332,52 +1460,64 @@ bool Pet::useItem(uint8_t it) {
 // agitarlo dormido con la pantalla encendida: se despierta de mal humor. Sin
 // credito de cuidado; un segundo despertar en menos de 60 s no resta mas.
 void Pet::wakeGrumpy() {
-  if (isEgg() || !sleeping || busyEnding()) return;
-  sleeping = false;
-  wokeUp();
-  uint32_t now = millis();
-  if (!grumpied || now - lastGrumpy >= GRUMPY_COOLDOWN_MS) {
-    joy = clamp100(joy - GRUMPY_JOY);
-    grumpied = true;
-    lastGrumpy = now;
+  bool any = false;
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {  // v3.0: los dos de casa
+    FocusGuard g(*this, s);
+    if (!g.ok) continue;
+    if (isEgg() || !sleeping || busyEnding()) continue;
+    sleeping = false;
+    wokeUp();
+    uint32_t now = millis();
+    if (!grumpied || now - lastGrumpy >= GRUMPY_COOLDOWN_MS) {
+      joy = clamp100(joy - GRUMPY_JOY);
+      grumpied = true;
+      lastGrumpy = now;
+    }
+    startEmote(EMOTE_ANGRY);
+    any = true;
   }
-  startEmote(EMOTE_ANGRY);
-  sfxPlay(SFX_DENY);
+  if (!any) return;
+  sfxPlay(SFX_DENY);  // uno solo aunque se despierten los dos
   pendingSave = true;
 }
 
 // agitarlo despierto: se marea. 3 sacudidas en 2 min restan felicidad, como
-// mucho una vez cada 10 min. El huevo solo se tambalea.
+// mucho una vez cada 10 min. El huevo solo se tambalea. v3.0: los dos de casa (los dormidos, no: eso es
+// wakeGrumpy, que la UI llama despues)
 bool Pet::shaken() {
-  if (busyEnding()) return false;
-  if (isEgg()) {
-    if (vacant) return false;
-    startEmote(EMOTE_WOBBLE);
-    // el del patio (Y3): la sacudida le quita minutos (una cada EGG_SHAKE_COOLDOWN_MS, hasta el tope).
-    // Solo se marca el guardado: lo vuelca el loop con la pantalla atenuada
-    if (yardEgg() && eggShake(&eggSaved, &eggShakeMs, &eggShakeHave, millis())) {
-      pendingSave = true;
-      return true;
+  bool counted = false;
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    FocusGuard g(*this, s);
+    if (!g.ok) continue;
+    if (busyEnding() || vacant) continue;
+    if (isEgg()) {
+      startEmote(EMOTE_WOBBLE);
+      // el del patio (Y3): la sacudida le quita minutos (una cada EGG_SHAKE_COOLDOWN_MS, hasta el tope).
+      // Solo se marca el guardado: lo vuelca el loop con la pantalla atenuada
+      if (yardEgg() && eggShake(&eggSaved, &eggShakeMs, &eggShakeHave, millis())) {
+        pendingSave = true;
+        counted = true;
+      }
+      continue;
     }
-    return false;
+    if (sleeping) continue;  // dormido es wakeGrumpy()
+    startEmote(EMOTE_DIZZY);
+    uint32_t now = millis();
+    if (shakeN == DIZZY_SHAKES) {
+      for (uint8_t i = 1; i < DIZZY_SHAKES; i++) shakeAt[i - 1] = shakeAt[i];
+      shakeN--;
+    }
+    shakeAt[shakeN++] = now;
+    if (shakeN == DIZZY_SHAKES && now - shakeAt[0] <= DIZZY_WINDOW_MS &&
+        (!dizzyPenalized || now - lastDizzyPenalty >= DIZZY_COOLDOWN_MS)) {
+      joy = clamp100(joy - DIZZY_JOY);
+      dizzyPenalized = true;
+      lastDizzyPenalty = now;
+      shakeN = 0;
+      pendingSave = true;
+    }
   }
-  if (sleeping) return false;  // dormido es wakeGrumpy()
-  startEmote(EMOTE_DIZZY);
-  uint32_t now = millis();
-  if (shakeN == DIZZY_SHAKES) {
-    for (uint8_t i = 1; i < DIZZY_SHAKES; i++) shakeAt[i - 1] = shakeAt[i];
-    shakeN--;
-  }
-  shakeAt[shakeN++] = now;
-  if (shakeN == DIZZY_SHAKES && now - shakeAt[0] <= DIZZY_WINDOW_MS &&
-      (!dizzyPenalized || now - lastDizzyPenalty >= DIZZY_COOLDOWN_MS)) {
-    joy = clamp100(joy - DIZZY_JOY);
-    dizzyPenalized = true;
-    lastDizzyPenalty = now;
-    shakeN = 0;
-    pendingSave = true;
-  }
-  return false;
+  return counted;
 }
 
 // ---------- combate: felicidad y botin ----------
@@ -1401,13 +1541,25 @@ uint8_t Pet::rollBattleItem() {
   return it;
 }
 
+// v3.0: a los dos de casa (la hora es del jugador: se marca si alguno la recibio). Devuelve la mayor subida
 uint8_t Pet::practiceJoy() {
-  if (isEgg() || busyEnding() || !practiceRewardReady()) return 0;
-  practiceRewarded = true;
-  lastPracticeReward = millis();
-  uint8_t before = joy;
-  joy = clamp100(joy + PRACTICE_JOY);
-  return joy - before;
+  if (!practiceRewardReady()) return 0;
+  uint8_t best = 0;
+  bool any = false;
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    FocusGuard g(*this, s);
+    if (!g.ok) continue;
+    if (isEgg() || busyEnding()) continue;
+    any = true;
+    uint8_t before = joy;
+    joy = clamp100(joy + PRACTICE_JOY);
+    if (joy - before > best) best = joy - before;
+  }
+  if (any) {
+    practiceRewarded = true;
+    lastPracticeReward = millis();
+  }
+  return best;
 }
 
 // ---------- estadios ----------
@@ -1426,13 +1578,15 @@ void Pet::setTeam(const uint32_t *uids, uint8_t n) {
 
 int8_t Pet::teamSlotOf(uint32_t id) const {
   if (!id) return -1;
-  if (!isEgg() && id == uid) return TEAM_HOME;
+  int8_t s = slotOfUid(id);  // v3.0: uno de los dos de casa
+  if (s >= 0) return (int8_t)(TEAM_HOME0 + s);
   return slotOf(id);
 }
 
 bool Pet::teamCanFight(uint32_t id) const {
   int8_t k = teamSlotOf(id);
-  return k == TEAM_HOME ? canBattle() : (k >= 0 && !slotTravelling((uint8_t)k));  // de viaje (Y5): no
+  if (teamIsHome(k)) return home(teamHomeSlot(k)).canBattle();
+  return k >= 0 && !slotTravelling((uint8_t)k);  // de viaje (Y5): no
 }
 
 // ---------- monedas (Y4) ----------
@@ -1675,10 +1829,13 @@ StageReward Pet::stageDone(uint8_t stage, bool cleared, const uint32_t *uids, ui
         for (uint8_t j = 0; j < i; j++) dup |= (uids[j] == id);
         if (!id || dup) continue;
         int8_t k = teamSlotOf(id);
-        if (k == TEAM_HOME) {
+        if (teamIsHome(k)) {  // v3.0: el de ese hueco de casa
+          FocusGuard g(*this, teamHomeSlot(k));
+          if (!g.ok) continue;
           if (busyEnding()) continue;  // se esta muriendo o despidiendo: nada que crecer
           growMin += STAGE_GROW_MIN;   // las subidas de nivel las ve la UI (fx.h); la evolucion, el boton
           bond = clamp100(bond + STAGE_BOND);  // fuera del tope diario de addBond
+          checkMedals(false);  // puede haber cruzado el 10, 25 o 50
           res.pets++;
         } else if (k >= 0) {
           // 3. hiberna, pero el premio lo recibe igual: crece y su nivel puede pasar el de su
@@ -1691,12 +1848,12 @@ StageReward Pet::stageDone(uint8_t stage, bool cleared, const uint32_t *uids, ui
         }
       }
       res.item = rollBattleItem();  // seguro: sale siempre
-      // con la casa vacia no hay quien abra un regalo: a la mochila con su aviso (como unwrapGifts)
-      if (vacant) giveFound(res.item);
+      // con los huecos de casa vacios no hay quien abra un regalo: a la mochila con su aviso (como
+      // unwrapGifts). Con un huevo, espera envuelto a que nazca
+      if (homeVacant() == HOME_SLOTS) giveFound(res.item);
       else giveGift(res.item);
     }
   }
-  checkMedals(false);  // el de casa puede haber cruzado el 10, 25 o 50 (no hace nada con un huevo)
   save();              // 4. fin de una pantalla de juego: se guarda ya
   return res;
 }
@@ -1726,7 +1883,7 @@ uint16_t Pet::encMinutesLeft() const { return encActive() ? ::encMinutesLeft(enc
 
 // alguien con quien pelear: el de casa nacido o alguien en la caja (dormido o de viaje tambien: el encuentro
 // espera 6 h). Sin eso no se tira (la tirada se queda para luego)
-bool Pet::encCanRoll() const { return !starterPick && (!isEgg() || boxHasPets()); }
+bool Pet::encCanRoll() const { return !starterPick && (homeHatched() || boxHasPets()); }  // v3.0: cualquiera de casa
 
 void Pet::encStart(int16_t dex, uint32_t rng) {
   EncWild w = encRollWild(yardMapWanted(), badges, rng);
@@ -1842,13 +1999,17 @@ EncReward Pet::encounterDone(bool won, uint32_t fighter) {
   }
   r.won = true;
   int8_t k = teamSlotOf(fighter);
-  if (k == TEAM_HOME && !busyEnding()) {
-    r.lvBefore = level();
-    growMin += ENC_WIN_GROW_MIN;  // las subidas de nivel las ve la UI (fx.h); la evolucion, el boton
-    r.lvAfter = level();
-    uint8_t before = joy;
-    joy = clamp100(joy + ENC_WIN_JOY);
-    r.joy = joy - before;
+  if (teamIsHome(k)) {  // v3.0: el de ese hueco de casa (crece y se alegra)
+    FocusGuard g(*this, teamHomeSlot(k));
+    if (g.ok && !isEgg() && !busyEnding()) {
+      r.lvBefore = level();
+      growMin += ENC_WIN_GROW_MIN;  // las subidas de nivel las ve la UI (fx.h); la evolucion, el boton
+      r.lvAfter = level();
+      uint8_t before = joy;
+      joy = clamp100(joy + ENC_WIN_JOY);
+      r.joy = joy - before;
+      checkMedals(false);
+    }
   } else if (k >= 0 && k < BOX_SLOTS) {
     PetRecord rec = boxRec[k];
     r.lvBefore = levelFor(rec.growMin);
@@ -1863,7 +2024,6 @@ EncReward Pet::encounterDone(bool won, uint32_t fighter) {
     else r.itemLost = true;
   }
   encFlags |= ENCF_WON;
-  checkMedals(false);
   save();  // 2.
   Serial.printf("enc: #%d vencido, nv %u->%u, objeto %d%s\n", encDexV, r.lvBefore, r.lvAfter,
                 r.item == IT_COUNT ? -1 : r.item, r.itemLost ? " (perdido)" : "");
@@ -1898,73 +2058,72 @@ void Pet::releaseWild() {
   save();
 }
 
-// boca abajo de noche: a dormir, como el boton de luz pero sin escribir ya en flash
+// boca abajo de noche: a dormir, como el boton de luz pero sin escribir ya en flash (v3.0: los dos)
 void Pet::sleepDeferred() {
-  if (busyEnding() || isEgg() || sleeping) return;
-  goToBed();
-  pendingSave = true;
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    FocusGuard g(*this, s);
+    if (!g.ok) continue;
+    if (busyEnding() || isEgg() || sleeping) continue;
+    goToBed();
+    pendingSave = true;
+  }
 }
 
-PetMood Pet::mood() const {
-  if (sleeping) return MOOD_SLEEPING;
-  if (eating()) return MOOD_EATING;
-  if (lowestStat() < NEED_LOW) return MOOD_SAD;
-  return MOOD_HAPPY;
-}
-
+// v3.0: el hueco 0 va a las claves de siempre y el 1 a "hm1", tenga quien tenga el foco
 void Pet::save() {
   ticksSinceSave = 0;
   pendingSave = false;
-  prefs.putUChar("full", fullness);
-  prefs.putUChar("joy", joy);
-  prefs.putUChar("ene", energy);
-  prefs.putUChar("hyg", hygiene);
-  prefs.putUChar("poop", poops);
-  prefs.putUChar("wgt", weight);
-  prefs.putUInt("cake", satedUntil);
-  prefs.putUChar("gatk", geneAtk);
-  prefs.putUChar("gdef", geneDef);
-  prefs.putUChar("gspe", geneSpe);
-  prefs.putUChar("tatk", trAtk);
-  prefs.putUChar("tdef", trDef);
-  prefs.putUChar("tspe", trSpe);
-  prefs.putBool("bk", berryKnown);
-  prefs.putBool("shy", shiny);
-  prefs.putBool("eshy", eggShiny);
+  const PetLife &h = home(0);
+  prefs.putUChar("full", h.fullness);
+  prefs.putUChar("joy", h.joy);
+  prefs.putUChar("ene", h.energy);
+  prefs.putUChar("hyg", h.hygiene);
+  prefs.putUChar("poop", h.poops);
+  prefs.putUChar("wgt", h.weight);
+  prefs.putUInt("cake", h.satedUntil);
+  prefs.putUChar("gatk", h.geneAtk);
+  prefs.putUChar("gdef", h.geneDef);
+  prefs.putUChar("gspe", h.geneSpe);
+  prefs.putUChar("tatk", h.trAtk);
+  prefs.putUChar("tdef", h.trDef);
+  prefs.putUChar("tspe", h.trSpe);
+  prefs.putBool("bk", h.berryKnown);
+  prefs.putBool("shy", h.shiny);
+  prefs.putBool("eshy", h.eggShiny);
   prefs.putBool("stpk", starterPick);
   prefs.putBytes("dexsh", dexShinyReg, sizeof(dexShinyReg));
-  prefs.putUInt("age", ageMinutes);
-  prefs.putUInt("grow", growMin);
-  prefs.putShort("dexn", speciesId);
-  prefs.putShort("eggT2", eggTarget);
-  prefs.putUChar("crack", eggTaps);
-  prefs.putUInt("yegg", eggPlaced);  // el huevo del patio (Y3)
-  prefs.putUChar("ysav", eggSaved);
-  prefs.putUChar("mist", careMistakes);
-  prefs.putBool("sleep", sleeping);
-  prefs.putBool("nslp", nightSleep);  // la noche (v1.63)
-  prefs.putUInt("bedn", bedNight);
+  prefs.putUInt("age", h.ageMinutes);
+  prefs.putUInt("grow", h.growMin);
+  prefs.putShort("dexn", h.speciesId);
+  prefs.putShort("eggT2", h.eggTarget);
+  prefs.putUChar("crack", h.eggTaps);
+  prefs.putUInt("yegg", h.eggPlaced);  // el huevo del patio (Y3)
+  prefs.putUChar("ysav", h.eggSaved);
+  prefs.putUChar("mist", h.careMistakes);
+  prefs.putBool("sleep", h.sleeping);
+  prefs.putBool("nslp", h.nightSleep);  // la noche (v1.63)
+  prefs.putUInt("bedn", h.bedNight);
   prefs.putUChar("lend", lastEnd);
   // abandono (v1.60): la cuenta y el dialogo de la muerte sobreviven a un reinicio
-  prefs.putUChar("ngl", neglectMin);
-  prefs.putUChar("dth", deathMin);
-  prefs.putBool("dying", dying);
-  prefs.putUChar("dym", dyingMin);  // v1.64: la hora del Revivir
-  prefs.putShort("degg", deathEgg);
+  prefs.putUChar("ngl", h.neglectMin);
+  prefs.putUChar("dth", h.deathMin);
+  prefs.putBool("dying", h.dying);
+  prefs.putUChar("dym", h.dyingMin);  // v1.64: la hora del Revivir
+  prefs.putShort("degg", h.deathEgg);
   if (lastSeenEpoch) prefs.putUInt("seen", lastSeenEpoch);
   prefs.putBytes("dexreg", dexReg, sizeof(dexReg));
   prefs.putUShort("strk", streak);
   prefs.putUShort("bstrk", bestStreak);
   prefs.putUInt("cday", lastCareDay);
-  prefs.putUChar("bond", bond);
-  prefs.putUShort("medal", medals);
+  prefs.putUChar("bond", h.bond);
+  prefs.putUShort("medal", h.medals);
   prefs.putUShort("tmedal", totalMedals);
   prefs.putUShort("mstone", lastMilestone);
   prefs.putUShort("ghi", gameHi);
   prefs.putUShort("shi", strHi);
   prefs.putUShort("zhi", zenHi);
   prefs.putUShort("dhi", dashHi);
-  prefs.putString("nick", nick);
+  prefs.putString("nick", h.nick);
   // pasos y mochila (v1.20)
   prefs.putUInt("stpT", stepsToday);
   prefs.putUInt("stpA", stepsTotal);
@@ -1981,9 +2140,10 @@ void Pet::save() {
   prefs.putUShort("fAt", findAt);
   prefs.putUShort("eRem", eggRem);  // huevos (v1.39)
   prefs.putUShort("eAt", eggAt);
-  prefs.putUInt("bondD", bondDay);
-  prefs.putUChar("bondT", bondToday);
-  prefs.putBool("vac", vacant);
+  prefs.putUInt("bondD", h.bondDay);
+  prefs.putUChar("bondT", h.bondToday);
+  prefs.putBool("vac", h.vacant);
+  prefs.putUInt("pcd", h.careDay);  // v3.0: el primer cuidado de hoy del hueco 0 (su vinculo)
   // estadios (del jugador). Antes del bloque del uid: no tocan nada de los movimientos de la caja, y
   // asi la ventana entre el uid y "eggH" no se alarga. stageDone ya los escribe por su cuenta antes de
   // pagar (aqui solo repiten el mismo valor). "stD" antes que "stM", como en payStageDay
@@ -1998,107 +2158,129 @@ void Pet::save() {
   prefs.putUInt("stD", stageDay);
   prefs.putUChar("stM", stageMask);
   prefs.putBytes("team", team, sizeof(team));
-  // caja (v1.37). El uid va el ULTIMO: la NVS escribe en orden, asi que si un corte de luz
-  // deja el uid nuevo, todo lo demas del bicho ya esta escrito. boxBoot() se fia de eso para
+  // caja (v1.37). El uid (del hueco 0; "hm1" es el del hueco 1) va el ULTIMO: la NVS escribe en orden,
+  // asi que si un corte de luz deja el uid nuevo, todo lo demas del bicho ya esta escrito. boxBoot() se fia de eso para
   // saber si un movimiento llego a cambiar el bicho activo. "eggH" va despues: un corte entre
   // los dos deja un huevo activo con eggH puesto, y boxBoot() lo quita.
   // La mochila va justo despues del uid (v1.39): guardar en la caja puede sacar un huevo de ella, y
   // un corte antes del uid devuelve al bicho desde su hueco con la mochila sin tocar. Entre el uid y
   // la mochila un corte deja el huevo en casa y el de la mochila aun contado: como mucho uno de mas,
   // nunca uno perdido.
-  prefs.putUInt("uid", uid);
+  prefs.putUInt("uid", h.uid);
+  // v3.0: el hueco 1, entero en una entrada (si cambio). Despues del uid del 0 y antes de la mochila: un
+  // movimiento de la caja con el hueco 1 se decide aqui (como con el uid para el 0), y un huevo que sale de
+  // la mochila hacia el se cuenta como mucho dos veces, nunca ninguna
+  saveOk = saveHome1();
+  if (!saveOk) {
+    // no se pudo escribir "hm1": lo de despues (la mochila sobre todo) no se escribe, para no apuntar un
+    // huevo que salio de ella hacia el hueco 1 sin que el hueco lo tenga. Se reintenta en el siguiente
+    Serial.println("save: hm1 no se pudo escribir");
+    pendingSave = true;
+    return;
+  }
   prefs.putBytes("bpack", items, sizeof(items));
   {  // regalos (v1.55), despues de la mochila: [cuantos, objetos...]
     uint8_t g[GIFT_MAX + 1] = { giftN };
     memcpy(g + 1, gifts, giftN);
     prefs.putBytes("gifts", g, sizeof(g));
   }
-  prefs.putBool("eggH", eggHeldFlag);
+  prefs.putBool("eggH", h.eggHeldFlag);
   // encuentros (v2.2), despues de la mochila: los huevos de captura son de los de la mochila (un corte
   // entre las dos deja un huevo de mas sin su especie, nunca una especie sin huevo: load los ajusta)
-  {
-    uint8_t c[1 + 2 * CAP_EGG_MAX] = { capN };
-    for (uint8_t i = 0; i < capN; i++) {
-      c[1 + 2 * i] = capDex[i];
-      c[2 + 2 * i] = capShiny[i] ? 1 : 0;
-    }
-    prefs.putBytes("cegg", c, sizeof(c));
-  }
-  prefs.putBool("ecap", eggCap);
+  saveCapEggs();
+  prefs.putBool("ecap", h.eggCap);
   encPersist();
   // el resultado de un viaje sin ver (Y5), lo ultimo: un corte antes lo deja sin aviso, pero con el premio
   if (trvResPending) prefs.putBytes("trvR", &trvResult, sizeof(trvResult));
   else if (prefs.isKey("trvR")) prefs.remove("trvR");
 }
 
-void Pet::load() {
-  fullness = prefs.getUChar("full", 80);
-  joy = prefs.getUChar("joy", 80);
-  energy = prefs.getUChar("ene", 80);
-  hygiene = prefs.getUChar("hyg", 100);
-  poops = prefs.getUChar("poop", 0);
-  weight = prefs.getUChar("wgt", 0);
-  satedUntil = prefs.getUInt("cake", 0);
-  geneAtk = prefs.getUChar("gatk", 0);
-  geneDef = prefs.getUChar("gdef", 0);
-  geneSpe = prefs.getUChar("gspe", 0);
-  if (geneAtk == 0) {  // mascota anterior a los genes: tirada unica ahora
-    geneAtk = 90 + random(21);
-    geneDef = 90 + random(21);
-    geneSpe = 90 + random(21);
+// "cegg": los huevos de captura ([n, dex, shiny] x CAP_EGG_MAX)
+void Pet::saveCapEggs() {
+  uint8_t c[1 + 2 * CAP_EGG_MAX] = { capN };
+  for (uint8_t i = 0; i < capN; i++) {
+    c[1 + 2 * i] = capDex[i];
+    c[2 + 2 * i] = capShiny[i] ? 1 : 0;
   }
-  trAtk = prefs.getUChar("tatk", 0);
-  trDef = prefs.getUChar("tdef", 0);
-  trSpe = prefs.getUChar("tspe", 0);
-  berryKnown = prefs.getBool("bk", false);
-  shiny = prefs.getBool("shy", false);
-  eggShiny = prefs.getBool("eshy", false);
+  prefs.putBytes("cegg", c, sizeof(c));
+}
+
+// la mochila (y sus huevos de captura) ya, antes que el hueco: un huevo que pasa de casa a la mochila
+// (endLife) queda escrito antes de que el hueco deje de tenerlo. Un corte entre los dos: un huevo de mas
+void Pet::saveBag() {
+  prefs.putBytes("bpack", items, sizeof(items));
+  saveCapEggs();
+}
+
+void Pet::load() {
+  PetLife &h = slotRef(0);  // v3.0: las claves de siempre son el hueco 0
+  h.fullness = prefs.getUChar("full", 80);
+  h.joy = prefs.getUChar("joy", 80);
+  h.energy = prefs.getUChar("ene", 80);
+  h.hygiene = prefs.getUChar("hyg", 100);
+  h.poops = prefs.getUChar("poop", 0);
+  h.weight = prefs.getUChar("wgt", 0);
+  h.satedUntil = prefs.getUInt("cake", 0);
+  h.geneAtk = prefs.getUChar("gatk", 0);
+  h.geneDef = prefs.getUChar("gdef", 0);
+  h.geneSpe = prefs.getUChar("gspe", 0);
+  if (h.geneAtk == 0) {  // mascota anterior a los genes: tirada unica ahora
+    h.geneAtk = 90 + random(21);
+    h.geneDef = 90 + random(21);
+    h.geneSpe = 90 + random(21);
+  }
+  h.trAtk = prefs.getUChar("tatk", 0);
+  h.trDef = prefs.getUChar("tdef", 0);
+  h.trSpe = prefs.getUChar("tspe", 0);
+  h.berryKnown = prefs.getBool("bk", false);
+  h.shiny = prefs.getBool("shy", false);
+  h.eggShiny = prefs.getBool("eshy", false);
   starterPick = prefs.getBool("stpk", false);
   prefs.getBytes("dexsh", dexShinyReg, sizeof(dexShinyReg));
-  ageMinutes = prefs.getUInt("age", 0);
+  h.ageMinutes = prefs.getUInt("age", 0);
   if (prefs.isKey("dexn")) {
-    speciesId = prefs.getShort("dexn", -1);
-    eggTarget = prefs.getShort("eggT2", 4);
+    h.speciesId = prefs.getShort("dexn", -1);
+    h.eggTarget = prefs.getShort("eggT2", 4);
   } else {
     // migracion desde la version con indices de flash (0-8)
     static const uint8_t OLD2DEX[9] = { 4, 5, 6, 1, 2, 3, 7, 8, 9 };
     int8_t old = prefs.getChar("spec", -1);
-    speciesId = (old >= 0 && old < 9) ? OLD2DEX[old] : -1;
+    h.speciesId = (old >= 0 && old < 9) ? OLD2DEX[old] : -1;
     int8_t oldT = prefs.getChar("eggT", 0);
-    eggTarget = (oldT >= 0 && oldT < 9) ? OLD2DEX[oldT] : 4;
+    h.eggTarget = (oldT >= 0 && oldT < 9) ? OLD2DEX[oldT] : 4;
   }
-  eggTaps = prefs.getUChar("crack", 0);
+  h.eggTaps = prefs.getUChar("crack", 0);
   // el huevo del patio (Y3). Sin la clave (un guardado anterior) no lo es: un huevo a medias del sistema
   // de toques lo termina asi (3 toques, o solo a los 3 min de edad)
-  eggPlaced = prefs.isKey("yegg") ? prefs.getUInt("yegg", 0) : 0;
-  eggSaved = prefs.isKey("ysav") ? prefs.getUChar("ysav", 0) : 0;
-  if (eggSaved > EGG_SHAKE_CAP) eggSaved = EGG_SHAKE_CAP;
-  careMistakes = prefs.getUChar("mist", 0);
-  sleeping = prefs.getBool("sleep", false);
-  nightSleep = sleeping && prefs.getBool("nslp", false);
-  bedNight = prefs.getUInt("bedn", 0);
+  h.eggPlaced = prefs.isKey("yegg") ? prefs.getUInt("yegg", 0) : 0;
+  h.eggSaved = prefs.isKey("ysav") ? prefs.getUChar("ysav", 0) : 0;
+  if (h.eggSaved > EGG_SHAKE_CAP) h.eggSaved = EGG_SHAKE_CAP;
+  h.careMistakes = prefs.getUChar("mist", 0);
+  h.sleeping = prefs.getBool("sleep", false);
+  h.nightSleep = h.sleeping && prefs.getBool("nslp", false);
+  h.bedNight = prefs.getUInt("bedn", 0);
   lastEnd = prefs.getUChar("lend", CER_NONE);
-  neglectMin = prefs.getUChar("ngl", 0);
-  deathMin = prefs.getUChar("dth", 0);
-  if (deathMin > DEATH_MIN) deathMin = DEATH_MIN;
-  dying = prefs.getBool("dying", false);
-  dyingMin = prefs.getUChar("dym", 0);
-  if (dyingMin > REVIVE_LIMIT_MIN) dyingMin = REVIVE_LIMIT_MIN;
-  deathEgg = prefs.getShort("degg", 0);
-  if (deathEgg < 0 || deathEgg > 151) deathEgg = 0;
+  h.neglectMin = prefs.getUChar("ngl", 0);
+  h.deathMin = prefs.getUChar("dth", 0);
+  if (h.deathMin > DEATH_MIN) h.deathMin = DEATH_MIN;
+  h.dying = prefs.getBool("dying", false);
+  h.dyingMin = prefs.getUChar("dym", 0);
+  if (h.dyingMin > REVIVE_LIMIT_MIN) h.dyingMin = REVIVE_LIMIT_MIN;
+  h.deathEgg = prefs.getShort("degg", 0);
+  if (h.deathEgg < 0 || h.deathEgg > 151) h.deathEgg = 0;
   prefs.getBytes("dexreg", dexReg, sizeof(dexReg));
   streak = prefs.getUShort("strk", 0);
   bestStreak = prefs.getUShort("bstrk", 0);
   lastCareDay = prefs.getUInt("cday", 0);
-  bond = prefs.getUChar("bond", 0);
-  medals = prefs.getUShort("medal", 0);
+  h.bond = prefs.getUChar("bond", 0);
+  h.medals = prefs.getUShort("medal", 0);
   totalMedals = prefs.getUShort("tmedal", 0);
   lastMilestone = prefs.getUShort("mstone", 0);
   gameHi = prefs.getUShort("ghi", 0);
   strHi = prefs.getUShort("shi", 0);
   zenHi = prefs.getUShort("zhi", 0);
   dashHi = prefs.getUShort("dhi", 0);
-  prefs.getString("nick", nick, sizeof(nick));
+  prefs.getString("nick", h.nick, sizeof(h.nick));
   // pasos y mochila (v1.20): un guardado anterior no trae las claves y quedan a 0
   stepsToday = prefs.getUInt("stpT", 0);
   stepsTotal = prefs.getUInt("stpA", 0);
@@ -2164,7 +2346,7 @@ void Pet::load() {
       }
   }
   if (capN > items[IT_EGG]) capN = items[IT_EGG];
-  eggCap = prefs.getBool("ecap", false);
+  h.eggCap = prefs.getBool("ecap", false);
   encDay = 0;
   encRolled = 0;
   encSpawnAt = 0;
@@ -2211,8 +2393,8 @@ void Pet::load() {
   yardOwned = prefs.getUShort("ybgO", 0) & (uint16_t)(((1u << (YARD_MAPS + 1)) - 1) & ~1u);
   yardChosen = prefs.getUChar("ybg", 0);
   if (yardChosen > YARD_MAPS) yardChosen = 0;
-  bondDay = prefs.getUInt("bondD", 0);
-  bondToday = prefs.getUChar("bondT", 0);
+  h.bondDay = prefs.getUInt("bondD", 0);
+  h.bondToday = prefs.getUChar("bondT", 0);
   // estadios: un guardado anterior no trae las claves (sin medallas, nada pagado, sin equipo)
   badges = prefs.getUChar("bdg", 0);
   stageDay = prefs.getUInt("stD", 0);
@@ -2222,18 +2404,47 @@ void Pet::load() {
   // crecimiento (v1.35). Un guardado anterior no trae "grow": el nivel salia de la edad
   // (1 nivel por hora). Se traduce a la curva nueva con el mismo nivel y la barra igual de
   // llena, para que nadie suba ni baje de nivel al actualizar. Va despues de speciesId.
-  if (prefs.isKey("grow")) growMin = prefs.getUInt("grow", 0);
-  else growMin = isEgg() ? 0 : growthFromLegacyAge(ageMinutes);
+  if (prefs.isKey("grow")) h.growMin = prefs.getUInt("grow", 0);
+  else h.growMin = h.isEgg() ? 0 : growthFromLegacyAge(h.ageMinutes);
   // siembra: la mascota actual cuenta como criada (guardados antiguos)
-  if (speciesId >= 1) registerSpecies(speciesId);
+  if (h.speciesId >= 1) registerSpecies(h.speciesId, h.shiny);
   // caja (v1.37). Sin la clave "uid" (guardado anterior) queda a 0 y begin() le da una despues
   // de boxBoot(); un 0 guardado es un huevo, y boxBoot() lo necesita tal cual
-  uid = prefs.getUInt("uid", 0);
-  eggHeldFlag = prefs.getBool("eggH", false);
+  h.uid = prefs.getUInt("uid", 0);
+  h.eggHeldFlag = prefs.getBool("eggH", false);
   // casa vacia (v1.39): solo sin bicho nacido (un corte a mitad de un despertar puede dejar "vac"
   // a medias; boxBoot decide por "boxT" y "eggH")
-  vacant = prefs.getBool("vac", false) && speciesId < 0 && !uid;
+  h.vacant = prefs.getBool("vac", false) && h.speciesId < 0 && !h.uid;
+  // v3.0: el primer cuidado del hueco 0 (sin la clave, el de la racha: hoy ya le dio su vinculo)
+  h.careDay = prefs.isKey("pcd") ? prefs.getUInt("pcd", 0) : lastCareDay;
+  // v3.0: el hueco 1. Sin "hm1" (un guardado de la v2.x) esta vacio
+  PetLife &h1 = slotRef(1);
+  h1 = vacantPetLife();
+  hm1Have = false;
+  if (prefs.isKey("hm1")) {
+    HomeRec r;
+    memset(&r, 0, sizeof(r));
+    if (prefs.getBytes("hm1", &r, sizeof(r)) == sizeof(r) && homeRecValid(r)) {
+      homeRecApply(r, h1);
+      hm1Saved = r;
+      hm1Have = true;
+      if (h1.speciesId >= 1) registerSpecies(h1.speciesId, h1.shiny);
+    } else {
+      Serial.println("hm1: danado, el hueco 2 queda vacio");
+    }
+  }
 }
+
+// "hm1": el hueco 1 entero, solo si cambio (no se escribe nada mientras siga vacio sin haberse usado)
+bool Pet::saveHome1() {
+  HomeRec r = homeRecOf(home(1), 0);  // (sin hora: asi un hueco que no cambia no se reescribe)
+  if (hm1Have ? memcmp(&r, &hm1Saved, sizeof(r)) == 0 : (r.kind == HOME_VACANT && !r.flags)) return true;
+  if (prefs.putBytes("hm1", &r, sizeof(r)) != sizeof(r)) return false;
+  hm1Saved = r;
+  hm1Have = true;
+  return true;
+}
+
 
 // ---------- la caja (docs/NEXT_FEATURES.md, Tarea BOX, v1.37) ----------
 //
@@ -2244,7 +2455,7 @@ void Pet::load() {
 //   despertar B con A:     1. boxT = B   2. box k = A   3. B activo, save()   4. borrar boxT
 //   despertar B con huevo: 1. boxT = B   2. eggH        3. B activo, save()   4. vaciar k   5. borrar boxT
 
-static_assert(sizeof(((PetRecord *)0)->nick) == sizeof(((Pet *)0)->nick), "el apodo cabe entero en el registro");
+static_assert(sizeof(((PetRecord *)0)->nick) == sizeof(((PetLife *)0)->nick), "el apodo cabe entero en el registro");
 
 static void slotKey(char *key, uint8_t k) {
   key[0] = 'b';
@@ -2332,10 +2543,11 @@ void Pet::migrateGrowthCurve() {
   if (prefs.isKey("gmig")) prefs.remove("gmig");
 }
 
-PetRecord Pet::toRecord() const {
+PetRecord PetLife::record(uint32_t epoch) const {
   PetRecord r;
   memset(&r, 0, sizeof(r));
-  r.flags = (shiny ? REC_SHINY : 0) | (berryKnown ? REC_BERRY : 0) | (sleeping ? REC_SLEEP : 0);
+  r.flags = (shiny ? REC_SHINY : 0) | (berryKnown ? REC_BERRY : 0) | (sleeping ? REC_SLEEP : 0) |
+            (careDay && careDay == bondDay ? REC_CARED : 0);  // v3.0: su primer cuidado de ese dia, ya dado
   r.uid = uid;
   r.speciesId = speciesId;
   memcpy(r.nick, nick, sizeof(r.nick));
@@ -2359,15 +2571,15 @@ PetRecord Pet::toRecord() const {
   r.bondToday = bondToday;
   r.bondDay = bondDay;
   r.medals = medals;
-  r.storedEpoch = lastSeenEpoch;
+  r.storedEpoch = epoch;
   recordSeal(r);
   return r;
 }
 
-// Pasa a ser el bicho de r. Solo cambia lo del individuo: racha, pasos, mochila, records,
-// Pokedex y la incubadora son del jugador y se quedan. Lo que solo vive en RAM (enfriamientos,
+// Pasa a ser el bicho de r. Solo cambia lo del individuo: racha, pasos, mochila, records y Pokedex
+// son del jugador, y la incubadora del hueco de casa (los campos del huevo), y se quedan. Lo que solo vive en RAM (enfriamientos,
 // "mantener forma", animaciones) empieza de cero, como tras un reinicio.
-void Pet::fromRecord(const PetRecord &r) {
+void PetLife::loadRecord(const PetRecord &r) {
   vacant = false;
   uid = r.uid;
   speciesId = r.speciesId;
@@ -2387,6 +2599,7 @@ void Pet::fromRecord(const PetRecord &r) {
   hygiene = r.hygiene;
   poops = r.poops > 3 ? 3 : r.poops;
   poopMask = (1 << poops) - 1;  // sus cacas, en los primeros huecos
+  for (uint8_t i = 0; i < POOP_MAX; i++) poopAt[i] = r.ageMinutes;  // recien hechas (no lleva su edad)
   weight = r.weight;
   satedUntil = 0;  // la tarta no viaja en la caja (v1.54): quien sale de ella no esta lleno
   geneAtk = r.geneAtk;
@@ -2399,6 +2612,7 @@ void Pet::fromRecord(const PetRecord &r) {
   bond = r.bond;
   bondToday = r.bondToday;
   bondDay = r.bondDay;
+  careDay = (r.flags & REC_CARED) ? r.bondDay : 0;  // v3.0 (un registro de antes: puede darle el suyo hoy)
   medals = r.medals;
   ceremony = CER_NONE;
   mistakeCooldown = 0;
@@ -2413,6 +2627,10 @@ void Pet::fromRecord(const PetRecord &r) {
   emoteUntil = 0;
   newMedal = 0;
   pendingMedals = 0;
+  diedNow = false;
+  lastTickHour = -1;
+  grumpied = dizzyPenalized = false;
+  shakeN = 0;
 }
 
 void Pet::readSlot(uint8_t k) {
@@ -2457,7 +2675,7 @@ int8_t Pet::slotOf(uint32_t id) const {
 uint32_t Pet::newUid() const {
   for (;;) {
     uint32_t id = ((uint32_t)random(0x10000) << 16) | (uint32_t)random(0x10000);
-    if (id && id != uid && slotOf(id) < 0) return id;
+    if (id && id != home(0).uid && id != home(1).uid && slotOf(id) < 0) return id;  // v3.0: ni los dos de casa
   }
 }
 
@@ -2468,44 +2686,98 @@ uint8_t Pet::boxUsed() const {
   return n;
 }
 
-bool Pet::store(uint8_t k) {
-  if (!canStore(k)) return false;
+bool Pet::store(uint8_t k, uint8_t s) {
+  if (!canStore(k, s)) return false;
+  FocusGuard g(*this, s);  // v3.0: el del hueco de casa s
+  if (!g.ok) return false;
+  // (v3.0, hueco 1) lo que freeHome puede cambiar, por si "hm1" no llega a escribirse
+  PetLife before = *this;
+  uint8_t itemsB[IT_COUNT], giftsB[GIFT_MAX], giftNB = giftN, capNB = capN, capDexB[CAP_EGG_MAX];
+  bool capShinyB[CAP_EGG_MAX];
+  memcpy(itemsB, items, sizeof(items));
+  memcpy(giftsB, gifts, sizeof(gifts));
+  memcpy(capDexB, capDex, sizeof(capDex));
+  memcpy(capShinyB, capShiny, sizeof(capShiny));
   if (!writeSlot(k, toRecord())) return false;  // 1. la copia entera, a su hueco
-  freeHome();  // 2. el huevo que esperaba, uno de la mochila o nadie; save() deja el uid (0) casi al final
+  // 2. el huevo que esperaba, uno de la mochila o nadie; save() deja el uid (0) casi al final (hueco 0) o
+  // "hm1" (hueco 1)
+  freeHome();
+  if (s == 1 && !saveOk) {
+    // "hm1" no se escribio: el bicho sigue en casa (y en el hueco k, que el arranque resuelve: gana la
+    // copia de la caja, que es el mismo). Se deshace en RAM y se intenta vaciar k
+    static_cast<PetLife &>(*this) = before;
+    memcpy(items, itemsB, sizeof(items));
+    memcpy(gifts, giftsB, sizeof(gifts));
+    giftN = giftNB;
+    capN = capNB;
+    memcpy(capDex, capDexB, sizeof(capDex));
+    memcpy(capShiny, capShinyB, sizeof(capShiny));
+    clearSlot(k);
+    return false;
+  }
   return true;
 }
 
-bool Pet::wake(uint8_t k) {
-  if (!canWake(k)) return false;
+bool Pet::wake(uint8_t k, uint8_t s) {
+  if (!canWake(k, s)) return false;
+  FocusGuard g(*this, s);  // v3.0: al hueco de casa s
+  if (!g.ok) return false;
   PetRecord b = boxRec[k];
+  PetLife before = *this;
   bool egg = isEgg() && !vacant;
+  // 0. (v3.0) a que hueco de casa va, antes que nada: sin "boxTs" el arranque entiende el 0 (asi un
+  // despertar al 0 escribe lo mismo que antes; uno que quedara de otro se borra primero)
+  if (s) {
+    if (prefs.putUChar("boxTs", s) != 1) return false;
+  } else if (prefs.isKey("boxTs")) {
+    prefs.remove("boxTs");
+    if (prefs.isKey("boxTs")) return false;
+  }
   // 1. con un huevo, el huevo espera en la incubadora, tal cual. Va ANTES que boxT (v1.39): asi un
-  // despertar cortado sin el uid de B se sabe si venia de un huevo (eggH) o de la casa vacia
+  // despertar cortado sin el uid de B se sabe si venia de un huevo (eggH) o del hueco vacio. Hueco 1: en "hm1"
   if (egg) {
     eggHeldFlag = true;
-    prefs.putBool("eggH", true);
+    bool ok = s == 0 ? prefs.putBool("eggH", true) == 1 : saveHome1();
+    if (s && !ok) {
+      eggHeldFlag = false;
+      prefs.remove("boxTs");
+      return false;
+    }
   }
   // 2. la copia de transferencia: mientras exista, el arranque sabe que hay un despertar a medias
   if (prefs.putBytes("boxT", &b, sizeof(b)) != sizeof(b)) {
     if (egg) {
       eggHeldFlag = false;
-      prefs.putBool("eggH", false);
+      if (s == 0) prefs.putBool("eggH", false);
+      else saveHome1();
     }
+    if (s) prefs.remove("boxTs");
     return false;
   }
-  if (isEgg()) {  // un huevo (que espera) o la casa vacia: B pasa a casa y su hueco queda libre
-    fromRecord(b);  // 3. B activo (save() escribe su uid casi al final)
+  if (isEgg()) {  // un huevo (que espera) o el hueco vacio: B pasa a casa y su hueco queda libre
+    fromRecord(b);  // 3. B activo (save() escribe su uid casi al final, o "hm1")
     save();
+    if (s == 1 && !saveOk) {
+      // "hm1" no llego: en la NVS B sigue en su hueco y "boxT" lo dice. Se deshace en RAM; boxT y boxTs se
+      // quedan (el arranque rehace el huevo o deja el hueco vacio)
+      static_cast<PetLife &>(*this) = before;
+      return false;
+    }
     if (!clearSlot(k)) return true;  // 4. su hueco, libre (si falla, boxT se queda y lo hace el arranque)
   } else {
     if (!writeSlot(k, toRecord())) {  // 2. el activo, al hueco de B
       prefs.remove("boxT");
+      if (s) prefs.remove("boxTs");
       return false;
     }
     fromRecord(b);  // 3.
     save();
+    // hueco 1 sin "hm1" escrito: A ya esta en el hueco k y B solo en boxT. Se quedan boxT y boxTs: un
+    // guardado que llegue, o el arranque, termina el cambio (B en casa)
+    if (s == 1 && !saveOk) return false;
   }
   prefs.remove("boxT");  // hecho
+  if (s) prefs.remove("boxTs");
   return true;
 }
 
@@ -2522,18 +2794,42 @@ bool Pet::boxPut(uint8_t k, PetRecord r) {
 }
 
 // Al arrancar, antes que nada: lee los huecos y, si un corte de luz pillo un movimiento a medias,
-// lo termina o lo deshace. El uid guardado del activo dice hasta donde llego save() (va el ultimo).
+// lo termina o lo deshace. El uid guardado del activo dice hasta donde llego save() (va el ultimo); el
+// del hueco 1 (v3.0), "hm1". "boxTs" dice a que hueco de casa iba un despertar cortado (sin el, al 0).
 void Pet::boxBoot() {
   for (uint8_t k = 0; k < BOX_SLOTS; k++) readSlot(k);
-  if (prefs.isKey("boxT")) {
-    PetRecord t;
-    memset(&t, 0, sizeof(t));
-    bool ok = prefs.getBytes("boxT", &t, sizeof(t)) == sizeof(t) && recordValid(t);
-    if (ok && uid == t.uid) {
+  bool hasTs = prefs.isKey("boxTs");
+  uint8_t ts = hasTs ? (prefs.getUChar("boxTs", 0) & 1) : 0;
+  PetRecord t;
+  memset(&t, 0, sizeof(t));
+  bool hasT = prefs.isKey("boxT");
+  bool tOk = hasT && prefs.getBytes("boxT", &t, sizeof(t)) == sizeof(t) && recordValid(t);
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    FocusGuard g(*this, s);
+    if (!g.ok) continue;
+    boxBootSlot(s, hasT && s == ts, t, tOk);
+  }
+  if (hasT) prefs.remove("boxT");
+  if (hasTs) prefs.remove("boxTs");
+  // v3.0: el mismo bicho en los dos huecos de casa (no deberia pasar): se queda en el 0
+  if (home(1).hatched() && home(1).uid && home(1).uid == home(0).uid) {
+    Serial.println("box: el hueco 2 repetia al 1, se vacia");
+    FocusGuard g(*this, 1);
+    if (g.ok) {
+      if (eggHeldFlag) newEgg();  // el huevo que esperaba en su incubadora vuelve ya (no al otro arranque)
+      else vacate();
+    }
+  }
+}
+
+// lo de un hueco de casa (el del foco). wakeHere: el despertar cortado ("boxT" = t) iba a este hueco
+void Pet::boxBootSlot(uint8_t s, bool wakeHere, const PetRecord &t, bool tOk) {
+  if (wakeHere) {
+    if (tOk && uid == t.uid) {
       // el despertar llego a guardar a B: solo puede quedar su copia en el hueco (si habia huevo)
       for (uint8_t k = 0; k < BOX_SLOTS; k++)
         if (boxSt[k] == BOX_OK && boxRec[k].uid == uid) clearSlot(k);
-    } else if (ok && uid && slotOf(uid) >= 0) {
+    } else if (tOk && uid && slotOf(uid) >= 0) {
       // intercambio cortado con el activo ya en el hueco de B: B solo esta en boxT. Se termina.
       fromRecord(t);
       save();
@@ -2545,7 +2841,6 @@ void Pet::boxBoot() {
       if (eggHeldFlag) newEgg();
       else vacate();
     }
-    prefs.remove("boxT");
   }
   // un guardado cortado antes de que el huevo quedara escrito: la copia del hueco esta entera y
   // la del activo puede estar a medias. Gana la del hueco y el hueco se vacia (se guarda otra vez)
@@ -2556,13 +2851,14 @@ void Pet::boxBoot() {
     clearSlot((uint8_t)k);
   }
   // el huevo solo espera mientras hay un bicho nacido despierto (un corte entre el uid y "eggH").
-  // Con la casa vacia no deberia pasar nunca; si pasa, el huevo que esperaba vuelve a casa
+  // Con el hueco vacio no deberia pasar nunca; si pasa, el huevo que esperaba vuelve a casa
   if (isEgg() && eggHeldFlag) {
     if (vacant) {
       newEgg();
     } else {
       eggHeldFlag = false;
-      prefs.putBool("eggH", false);
+      if (s == 0) prefs.putBool("eggH", false);
+      else saveHome1();
     }
   }
 }

@@ -692,8 +692,8 @@ TEST(train, carrera_da_vel_cansa_quema_peso_y_guarda_record) {
   p.fullness = 80;
   p.weight = 40;
   p.joy = 10;
-  CHECK_EQ(p.dashResult(41), (uint8_t)6);  // 1 punto cada 6 filas
-  CHECK_EQ(p.trSpe, (uint8_t)16);
+  CHECK_EQ(p.dashResult(41), (uint8_t)(41 / DASH_PER_POINT));  // 1 punto cada DASH_PER_POINT filas
+  CHECK_EQ(p.trSpe, (uint8_t)(10 + 41 / DASH_PER_POINT));
   CHECK_EQ(p.energy, (uint8_t)68);
   CHECK_EQ(p.fullness, (uint8_t)75);
   CHECK_EQ(p.weight, (uint8_t)35);  // 40 - 41/8

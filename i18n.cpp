@@ -101,6 +101,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Viaje", "De viaje", "De camino...", "\255%s ha vuelto!", "fuera", "Ir", "Mochila llena", "NUEVO", "Hallado el %s", "Colecci\242n", "Guarda un bicho en la Caja\npara mandarlo de viaje", "Pon la hora para viajar", "Com\243n", "Poco com\243n", "Raro", "%s est\240 de viaje",
     // encuentros salvajes (v2.2)
     "Para un salvaje vencido", "\255Un %s salvaje!", "Toca para luchar", "Elige luchador", "Salvaje", "\255Ganaste!", "Se escap\242...", "+1 h de crecimiento", "\250Lanzar una Pok\202 Ball?", "Te quedan %u", "Lanzar", "\255%s capturado!", "Su huevo, en la mochila", "%s se march\242", "\255%s huy\242!", "No te quedan Pok\202 Balls", "No caben m\240s huevos", "\255Huevo capturado!",
+    // dos bichos en casa (v3.0): la caja pregunta cual
+    "\250Cu\240l va a la caja?", "\250Con cu\240l lo cambias?",
   },
   // ---------------- EN ----------------
   {
@@ -196,6 +198,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Travel", "Travelling", "On the way...", "%s is back!", "away", "Go", "Bag full", "NEW", "Found on %s", "Collection", "Store a pet in the Box\nto send it travelling", "Set the clock to travel", "Common", "Uncommon", "Rare", "%s is away",
     // encuentros salvajes (v2.2)
     "For a beaten wild pet", "A wild %s appeared!", "Tap to fight", "Choose a fighter", "Wild", "You won!", "It got away...", "+1 h of growth", "Throw a Pok\202 Ball?", "%u left", "Throw", "%s captured!", "Its egg is in the Backpack", "%s went away", "%s fled!", "No Pok\202 Balls left", "No room for another egg", "Captured egg!",
+    // dos bichos en casa (v3.0): la caja pregunta cual
+    "Which one goes to the Box?", "Swap with which one?",
   },
   // ---------------- FR ----------------
   {
@@ -291,6 +295,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Voyage", "En voyage", "En route...", "%s est de retour !", "absent", "Partir", "Sac plein", "NOUVEAU", "Trouve le %s", "Collection", "Range un bicho dans la Boite\npour l'envoyer en voyage", "Regle l'heure pour voyager", "Commun", "Peu commun", "Rare", "%s est parti",
     // encuentros salvajes (v2.2)
     "Pour un sauvage vaincu", "Un %s sauvage!", "Touche pour combattre", "Choisis un combattant", "Sauvage", "Gagne!", "Il a fui...", "+1 h de croissance", "Lancer une Poke Ball?", "Il en reste %u", "Lancer", "%s capture!", "Son oeuf est dans le sac", "%s est parti", "%s a fui!", "Plus de Poke Balls", "Plus de place pour un oeuf", "Oeuf capture!",
+    // dos bichos en casa (v3.0): la caja pregunta cual
+    "Lequel va dans la boite?", "Echanger avec lequel?",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -391,6 +397,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Reise", "Unterwegs", "Auf dem Weg...", "%s ist zurueck!", "weg", "Los", "Beutel voll", "NEU", "Gefunden am %s", "Sammlung", "Lege ein Tier in die Box,\num es auf Reisen zu schicken", "Stelle die Uhr zum Reisen", "Haeufig", "Selten", "Sehr selten", "%s ist unterwegs",
     // encuentros salvajes (v2.2)
     "Fuer ein besiegtes wildes", "Ein wildes %s!", "Tippe zum Kampf", "Waehle einen Kaempfer", "Wild", "Gewonnen!", "Entkommen...", "+1 h Wachstum", "Pokeball werfen?", "Noch %u", "Werfen", "%s gefangen!", "Sein Ei ist im Rucksack", "%s ist weg", "%s ist geflohen!", "Keine Pokebaelle mehr", "Kein Platz fuer ein Ei", "Gefangenes Ei!",
+    // dos bichos en casa (v3.0): la caja pregunta cual
+    "Wer kommt in die Box?", "Mit wem tauschen?",
   },
   // ---------------- IT ----------------
   {
@@ -486,6 +494,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Viaggio", "In viaggio", "In cammino...", "%s e tornato!", "via", "Vai", "Zaino pieno", "NUOVO", "Trovato il %s", "Collezione", "Metti un mostro nel Box\nper mandarlo in viaggio", "Imposta l'ora per viaggiare", "Comune", "Non comune", "Raro", "%s e in viaggio",
     // encuentros salvajes (v2.2)
     "Per un selvatico battuto", "Un %s selvatico!", "Tocca per lottare", "Scegli chi lotta", "Selvatico", "Vinto!", "E fuggito...", "+1 h di crescita", "Lanciare una Poke Ball?", "Ne restano %u", "Lancia", "%s catturato!", "Il suo uovo e nello zaino", "%s se ne e andato", "%s e fuggito!", "Niente Poke Ball", "Non c'e posto per un uovo", "Uovo catturato!",
+    // dos bichos en casa (v3.0): la caja pregunta cual
+    "Chi va nel box?", "Scambiare con chi?",
   },
   // ---------------- PT ----------------
   {
@@ -581,6 +591,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Viagem", "Em viagem", "A caminho...", "%s voltou!", "fora", "Ir", "Mochila cheia", "NOVO", "Achado em %s", "Colecao", "Guarde um bicho na Caixa\npara mandar viajar", "Acerte a hora para viajar", "Comum", "Incomum", "Raro", "%s esta viajando",
     // encuentros salvajes (v2.2)
     "Para um selvagem vencido", "Um %s selvagem!", "Toca para lutar", "Escolhe quem luta", "Selvagem", "Ganhaste!", "Fugiu...", "+1 h de crescimento", "Lancar uma Poke Bola?", "Restam %u", "Lancar", "%s capturado!", "O ovo esta na mochila", "%s foi embora", "%s fugiu!", "Sem Poke Bolas", "Nao cabem mais ovos", "Ovo capturado!",
+    // dos bichos en casa (v3.0): la caja pregunta cual
+    "Qual vai para a caixa?", "Trocar com qual?",
   },
   // ---------------- JA ----------------
   {
@@ -698,6 +710,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "たび", "たびのさいちゅう", "とちゅう...", "%sがかえってきた！", "るす", "ゴー", "ふくろがいっぱい", "あたらしい", "%sにはっけん", "コレクション", "ボックスにあずけてね\nたびにだせるよ", "とけいをあわせてね", "ふつう", "ちょっとめずらしい", "レア", "%sはたびのなか",
     // encuentros salvajes (v2.2)
     "かったやせいにつかう", "やせいの%sがあらわれた!", "タッチでたたかう", "たたかうポケモンをえらぶ", "やせい", "かった!", "にげられた...", "+1じかんぶんせいちょう", "ボールをなげる?", "のこり%u", "なげる", "%sをつかまえた!", "タマゴはバッグに", "%sはさっていった", "%sはにげた!", "ボールがない", "タマゴがいっぱい", "つかまえたタマゴ!",
+    // dos bichos en casa (v3.0): la caja pregunta cual
+    "どちらを ボックスへ?", "どちらと こうかん?",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -798,6 +812,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "여행", "여행 중", "가는 중...", "%s 돌아왔어요!", "외출", "출발", "가방이 가득", "새로운", "%s에 발견", "수집", "상자에 넣어 두세요\n여행을 보낼 수 있어요", "시계를 맞춰 주세요", "흔함", "드묾", "레어", "%s 여행 중",
     // encuentros salvajes (v2.2)
     "이긴 야생에게 사용", "야생 %s 등장!", "터치해서 싸우기", "싸울 포켓몬 선택", "야생", "이겼다!", "도망쳤다...", "+1시간 성장", "볼을 던질까?", "남은 볼 %u", "던지기", "%s 잡았다!", "알은 가방에", "%s 떠났다", "%s 도망쳤다!", "볼이 없다", "알 자리가 없다", "잡은 알!",
+    // dos bichos en casa (v3.0): la caja pregunta cual
+    "어느 쪽을 박스에?", "어느 쪽과 교환?",
   },
 };
 
