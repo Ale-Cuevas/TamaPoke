@@ -59,28 +59,36 @@ enum : uint8_t { PM_SLEEP = 0, PM_FOOD, PM_CARE, PM_STATUS, PM_EVOLVE, PM_FAREWE
 #define PM_GAP 6
 #define PM_W 150
 #define PM_EDGE 4    // px por dentro del circulo util
-#define PM_MAX 5     // v3.9: la interfaz nunca pasa de 5 (Evolucionar o Despedirse; la comida y volver)
+#define PM_MAX 5     // v3.9: la interfaz nunca pasa de 5 (Evolucionar o Despedirse; la comida, v3.10, 4 como mucho)
 #define PM_HUD_BOTTOM 58  // la cartera del HUD (y 40: 14 px de texto, la moneda de r 9 y su sombra) acaba aqui
-// la cabecera de la columna: el nombre y, debajo, la cajita de necesidades (v3.8 barritas, v3.9 en una caja)
+// la cabecera de la columna: el nombre y, debajo, la caja de necesidades (v3.8 barritas, v3.9 en una caja, v3.10
+// con las etiquetas a tamano 2). Con 5 filas no cabe todo encima: el nombre va a la izquierda de la caja, a la
+// altura de su centro.
 #define PM_NAME_H 18       // el nombre a tamano 2 y su sombra
 #define PM_NEED_PAD 5      // margen de la caja
-#define PM_NEED_TXT 7      // la etiqueta a tamano 1 (5x7)
-#define PM_NEED_PITCH 11   // de una fila a la siguiente (7 px de texto y 4 de aire)
+#define PM_NEED_TXT 14     // la etiqueta a tamano 2 (5x7 doble)
+#define PM_NEED_PITCH 17   // de una fila a la siguiente (14 px de texto y 3 de aire)
 #define PM_NEED_BAR_H 5
 #define PM_NEED_BAR_W 64
-#define PM_NEED_LABEL_W 24  // 4 letras a tamano 1 (FOOD, COM, ENE...)
-#define PM_NEED_BOX_W (2 * PM_NEED_PAD + PM_NEED_LABEL_W + 4 + PM_NEED_BAR_W)  // 102
-#define PM_NEED_BOX_H (2 * PM_NEED_PAD + 2 * PM_NEED_PITCH + PM_NEED_TXT)      // 39
+#define PM_NEED_LABEL_W 48  // 4 letras a tamano 2 (FOOD, COM, ENE...)
+#define PM_NEED_BOX_W (2 * PM_NEED_PAD + PM_NEED_LABEL_W + 6 + PM_NEED_BAR_W)  // 128
+#define PM_NEED_BOX_H (2 * PM_NEED_PAD + 2 * PM_NEED_PITCH + PM_NEED_TXT)      // 58
 #define PM_NEED_H (PM_NEED_BOX_H + 6)  // la caja, su sombra y aire hasta la columna
-// lo mas alto que empieza la columna: la cabecera entera queda bajo la cartera (con 5 filas la columna baja un
-// poco y su hueco se encoge; hasta 4 sigue centrada)
-#define PM_TOP (PM_HUD_BOTTOM + PM_NAME_H + PM_NEED_H)  // 121
+#define PM_NAME_GAP 6      // del nombre (al lado) a la caja
+#define PM_NEED_RAD 6      // esquinas de la caja
+// el nombre va al lado de la caja (no encima) con 5 filas
+inline bool petMenuNameBeside(uint8_t n) { return n >= 5; }
+// lo mas alto que empieza la columna: la cabecera entera queda bajo la cartera. Hasta 3 filas sigue centrada;
+// con 4 baja un poco; con 5 (el nombre al lado) el hueco entre filas se encoge
+#define PM_TOP (PM_HUD_BOTTOM + PM_NEED_H)               // 122: con el nombre al lado
+#define PM_TOP_NAMED (PM_TOP + PM_NAME_H)                 // 140: con el nombre encima
+inline int petMenuMinTop(uint8_t n) { return petMenuNameBeside(n) ? PM_TOP : PM_TOP_NAMED; }
 #define PM_BOTTOM (Y_DOCK_Y - Y_DOCK_HIT_R - 2)  // 374: encima de los circulos tocables del dock
 
 // el hueco entre filas: PM_GAP, o menos si n filas no caben entre PM_TOP y PM_BOTTOM
 inline int petMenuGap(uint8_t n) {
   if (n < 2) return PM_GAP;
-  int g = (PM_BOTTOM - PM_TOP - n * PM_ROW_H) / (n - 1);
+  int g = (PM_BOTTOM - petMenuMinTop(n) - n * PM_ROW_H) / (n - 1);
   return g < 0 ? 0 : g > PM_GAP ? PM_GAP : g;
 }
 inline int petMenuHeight(uint8_t n) { return n ? n * PM_ROW_H + (n - 1) * petMenuGap(n) : 0; }
@@ -88,7 +96,7 @@ inline int petMenuHeight(uint8_t n) { return n ? n * PM_ROW_H + (n - 1) * petMen
 inline int petMenuTop(uint8_t n) {
   int h = petMenuHeight(n), t = Y_CY - h / 2;
   if (t + h > PM_BOTTOM) t = PM_BOTTOM - h;
-  if (t < PM_TOP) t = PM_TOP;
+  if (t < petMenuMinTop(n)) t = petMenuMinTop(n);
   return t;
 }
 // x de la columna: el borde derecho en el circulo util a la altura de la esquina mas lejana (menos PM_EDGE)
@@ -112,11 +120,20 @@ inline int petMenuSafeRight(int y, int h) {
   return Y_CX + half - PM_EDGE;
 }
 inline int petMenuNeedsY(uint8_t n) { return petMenuTop(n) - PM_NEED_H; }
-inline int petMenuNameY(uint8_t n) { return petMenuNeedsY(n) - PM_NAME_H; }
+// al lado (5 filas) el nombre va centrado en el alto de la caja, lejos de la cartera
+inline int petMenuNameY(uint8_t n) {
+  return petMenuNameBeside(n) ? petMenuNeedsY(n) + (PM_NEED_BOX_H - PM_NAME_H) / 2 : petMenuNeedsY(n) - PM_NAME_H;
+}
 // el borde derecho de la cabecera en la franja [y, y + h)
 inline int petMenuHeadRight(uint8_t n, int y, int h) {
   int r = petMenuX(n) + PM_W, c = petMenuSafeRight(y, h);
   return c < r ? c : r;
+}
+// x de la caja de necesidades
+inline int petMenuBoxX(uint8_t n) { return petMenuHeadRight(n, petMenuNeedsY(n), PM_NEED_BOX_H) - PM_NEED_BOX_W; }
+// borde derecho del nombre: el de la cabecera o, al lado, PM_NAME_GAP antes de la caja
+inline int petMenuNameRight(uint8_t n) {
+  return petMenuNameBeside(n) ? petMenuBoxX(n) - PM_NAME_GAP : petMenuHeadRight(n, petMenuNameY(n), PM_NAME_H);
 }
 
 // la fila i de un menu de n filas; false si no existe
@@ -142,7 +159,7 @@ inline int petMenuHit(uint8_t n, int px, int py) {
 // En la misma columna: FOOD_PER_PAGE comidas por pagina (la baya normal, las bayas de colores que se tienen,
 // la tarta y la dorada) y debajo una fila para volver al menu; con mas de una pagina esa fila se parte en dos:
 // volver (izquierda) y "mas" (derecha, pasa de pagina). Asi nunca hay mas de 5 filas: la columna del menu.
-#define FOOD_PER_PAGE 4
+#define FOOD_PER_PAGE 3  // v3.10: 3 y volver, 4 filas como mucho: deja sitio a la cabecera
 #define FL_NAV_GAP 6
 enum { FL_BACK = -2, FL_MORE = -3 };
 

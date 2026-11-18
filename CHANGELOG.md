@@ -6,6 +6,15 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.10] - 2026-11-18
+
+### Changed
+
+- **Bigger need labels.** FOOD / JOY / ENE (COM / FEL / ENE) in the pet menu's need box are now the normal text
+  size, so they're easy to read; the bars stay the same. To make room, the 4-row menu sits a little lower, the
+  Food list shows 3 foods per page (plus Back), and when the Evolve or Farewell button is showing the pet's name
+  moves to the left of the box.
+
 ## [3.9] - 2026-11-18
 
 ### Changed
