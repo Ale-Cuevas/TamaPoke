@@ -1,8 +1,9 @@
 #pragma once
 // El patio (v2.0, fase Y2): los bichos que pasean por el mapa (logica pura, test/test_yard.cpp).
 //
-// Cada bicho tiene sus pies en (x, y) del lienzo de 466x466 y pasea por la mascara de paso del
-// mapa (yardbg.h: 15x15 celdas de 32 px, 1 = no se pisa). El planificador sustituye al de la
+// Cada bicho tiene sus pies en (x, y) del mundo (v3.6: el mapa entero a 4,4, 1056x1056; la camara de
+// TamaPoke.ino elige la ventana que se ve) y pasea por la mascara de paso del mapa (yardbg.h: 15x15
+// celdas de 70 px, 1 = no se pisa). El planificador sustituye al de la
 // escena de lado (beh/behNext): quieto unos segundos, un gesto (Pose/Nod/Breath) o un paseo a
 // una celda libre al azar, por un camino de celdas (BFS en la rejilla) que se acorta en linea
 // recta cuando no cruza nada bloqueado. Nunca pisa una celda bloqueada (se comprueba en cada
@@ -17,19 +18,22 @@
 #include "yardbg.h"
 
 #define YARD_PETS_MAX 3          // el bicho de casa + 1 de la caja (y sitio para otro de casa)
-#define YARD_SPEED 30.0f         // px/s, como el paseo de la escena de lado
-#define YARD_TILT_SPEED 50.0f    // px/s hacia el lado inclinado
-#define YARD_MIN_DIST 64         // px entre los pies de dos bichos
+// v3.6: las distancias del patio se pensaron con el mapa a escala 2; YARD_K las lleva a la de ahora
+#define YARD_K (YBG_ZOOM10 / 20.0f)  // 2,2
+#define YARD_KI (YBG_ZOOM10 / 20)    // 2: la escala entera de los dibujos del suelo (cacas, regalos...) es 2 * YARD_KI
+#define YARD_SPEED (30.0f * YARD_K)       // px/s, como el paseo de la escena de lado
+#define YARD_TILT_SPEED (50.0f * YARD_K)  // px/s hacia el lado inclinado
+#define YARD_MIN_DIST ((int)(64 * YARD_K))  // px entre los pies de dos bichos
 #define YARD_IDLE_MS 2000        // quieto entre paseos: 2-5 s
 #define YARD_IDLE_RAND_MS 3000
 #define YARD_WALK_MAX_MS 25000   // un paseo que no llega (otro bicho en medio) se deja
 #define YARD_TILT_REST_MS 800    // al nivelar la placa, quieto un momento
 #define YARD_PATH_MAX 64
-#define YARD_THING_GAP 36      // px entre dos cosas del suelo (cacas de 32 px)
+#define YARD_THING_GAP (36 * YARD_KI)  // px entre dos cosas del suelo (cacas de 32 px a escala 2)
 #define YARD_CELLS (YBG_GRID * YBG_GRID)
-// escala de los bichos en decimas sobre su escala entera (v2.1: 11; v3.5: 12, asi casi todos, a escala
-// entera 2, quedan a 2,4 como el mapa, YBG_ZOOM10)
-#define YARD_PET_SCALE10 12
+// escala de los bichos en decimas sobre su escala entera (v2.1: 11; v3.5: 12; v3.6: 22, asi casi todos, a
+// escala entera 2, quedan a 4,4 como el mapa, YBG_ZOOM10)
+#define YARD_PET_SCALE10 22
 
 // modo de un bicho
 enum : uint8_t { YM_IDLE = 0, YM_WALK, YM_GESTURE, YM_SLEEP, YM_STAY };
@@ -49,7 +53,7 @@ struct YardRng {
 struct YardPet {
   bool on = false;
   bool walks = true;      // tiene sprite de andar (sin el, solo quieto y gestos)
-  float x = 233, y = 233; // los pies, en el lienzo
+  float x = YBG_WORLD / 2, y = YBG_WORLD / 2;  // los pies, en el mundo
   uint8_t mode = YM_IDLE;
   int8_t face = 1;        // -1 mira a la izquierda, 1 a la derecha
   uint8_t act = 0;        // gesto en curso (lo pone pickGesture o el juego, YM_GESTURE)
@@ -88,25 +92,18 @@ inline bool yardSpotOk(const uint8_t *walk, float x, float y) {
   return x >= 0 && y >= 0 && !yardPointBlocked(walk, (int)x, (int)y);
 }
 
-// bloquea las celdas fuera del circulo y bajo el HUD, con las mismas reglas que tools/pack_yard.py
-// (outside_or_hud: el centro de cada celda). v3.5: tambien sobre la mascara de un mapa, por si el .bin
-// se hizo con otra escala del mapa (YBG_ZOOM10)
+// v3.6: bloquea el anillo de celdas del borde del mapa (con la camara en un extremo, sus centros caerian fuera
+// del circulo). Tambien sobre la mascara de un mapa, por si el .bin no lo trae (los de antes de la v3.6)
 inline void yardMaskFrame(uint8_t *walk) {
   for (int cy = 0; cy < YBG_GRID; cy++)
-    for (int cx = 0; cx < YBG_GRID; cx++) {
-      int px = yardCellCenter(cx), py = yardCellCenter(cy);
-      int dx = px - YBG_CANVAS / 2, dy = py - YBG_CANVAS / 2, r = YBG_CANVAS / 2 - 12;
-      bool out = dx * dx + dy * dy > r * r;
-      bool clock = px >= 140 && px <= 326 && py >= 20 && py <= 110;
-      bool dock = px >= 130 && px <= 336 && py >= 376 && py <= 440;  // = DOCK_ZONE de tools/pack_yard.py
-      if (out || clock || dock) {
+    for (int cx = 0; cx < YBG_GRID; cx++)
+      if (cx == 0 || cy == 0 || cx == YBG_GRID - 1 || cy == YBG_GRID - 1) {
         int k = yardCellIdx(cx, cy);
         walk[k >> 3] |= (uint8_t)(1 << (k & 7));
       }
-    }
 }
 
-// mascara de respaldo (sin mapa): todo se pisa salvo fuera del circulo y bajo el HUD
+// mascara de respaldo (sin mapa): todo se pisa salvo el borde
 inline void yardFallbackWalk(uint8_t *walk) {
   memset(walk, 0, YBG_WALK_BYTES);
   yardMaskFrame(walk);
@@ -479,16 +476,17 @@ inline void yardStep(YardWorld &w, const uint8_t *walk, uint32_t now, uint32_t d
 inline bool yardDropSpot(const uint8_t *walk, float x, float y, const int16_t *ox, const int16_t *oy, int n, int *rx,
                          int *ry) {
   auto ok = [&](float px, float py) {
-    if (!yardSpotOk(walk, px, py) || !yardSpotOk(walk, px - 12, py) || !yardSpotOk(walk, px + 12, py)) return false;
+    if (!yardSpotOk(walk, px, py) || !yardSpotOk(walk, px - 12 * YARD_KI, py) || !yardSpotOk(walk, px + 12 * YARD_KI, py))
+      return false;
     for (int k = 0; k < n; k++)
       if (yardDist(px, py, ox[k], oy[k]) < YARD_THING_GAP) return false;
     return true;
   };
   static const int8_t TRY[6][2] = { { -38, 6 }, { 38, 6 }, { -38, -12 }, { 38, -12 }, { 0, 24 }, { -60, 14 } };
   for (auto &t : TRY)
-    if (ok(x + t[0], y + t[1])) {
-      *rx = (int)(x + t[0]);
-      *ry = (int)(y + t[1]);
+    if (ok(x + t[0] * YARD_KI, y + t[1] * YARD_KI)) {
+      *rx = (int)(x + t[0] * YARD_KI);
+      *ry = (int)(y + t[1] * YARD_KI);
       return true;
     }
   int best = -1;
@@ -508,7 +506,7 @@ inline bool yardDropSpot(const uint8_t *walk, float x, float y, const int16_t *o
   return true;
 }
 
-// una celda libre al azar lejos (40 px) de las cosas (ox, oy, n) y de los bichos: su centro
+// una celda libre al azar lejos (40 px a escala 2) de las cosas (ox, oy, n) y de los bichos: su centro
 inline bool yardFreeSpot(const YardWorld &w, const uint8_t *walk, YardRng &rng, const int16_t *ox, const int16_t *oy,
                          int n, int *rx, int *ry) {
   int free = yardFreeCount(walk);
@@ -519,9 +517,9 @@ inline bool yardFreeSpot(const YardWorld &w, const uint8_t *walk, YardRng &rng, 
       if (yardFree(walk, c) && k-- == 0) break;
     float px = (float)yardCellCenter(yardCellCX(c)), py = (float)yardCellCenter(yardCellCY(c));
     bool far = true;
-    for (int j = 0; j < n && far; j++) far = yardDist(px, py, ox[j], oy[j]) >= 40;
+    for (int j = 0; j < n && far; j++) far = yardDist(px, py, ox[j], oy[j]) >= 40 * YARD_KI;
     for (int j = 0; j < w.n && far && tries < 48; j++)
-      if (w.p[j].on) far = yardDist(px, py, w.p[j].x, w.p[j].y) >= 40;
+      if (w.p[j].on) far = yardDist(px, py, w.p[j].x, w.p[j].y) >= 40 * YARD_KI;
     if (!far) continue;
     *rx = (int)px;
     *ry = (int)py;
@@ -573,7 +571,7 @@ inline void yardHeading(const YardPet &p, float *dx, float *dy) {
 // en cuanto llega. Una por bicho; la logica de Pet decide lo demas. (Hasta la v3.2 la comida caia, el bicho
 // la veia y andaba hasta ella: ese camino ya no existe.)
 #define YARD_FOOD_EAT_MS 900          // el bocado: la comida se encoge y desaparece
-#define YARD_FOOD_FRONT_DX 28         // px delante de sus pies
+#define YARD_FOOD_FRONT_DX (28 * YARD_KI)  // px delante de sus pies
 #define YARD_FOOD_QUEUE_MAX_MS 6000   // si no acaba de apartarse (algo en medio), se le sirve donde este
 
 enum : uint8_t { YF_NONE = 0, YF_QUEUED, YF_EAT };

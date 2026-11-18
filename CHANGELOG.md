@@ -6,6 +6,24 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.6] - 2026-11-18
+
+### Changed
+
+- **Big pets in a scrolling yard.** Pets in the yard are about 80 % bigger (4.4x), and the map is drawn at the
+  same scale, so it is now bigger than the screen: the view follows the pet in focus and slides around the whole
+  map. Poops, gifts, eggs, food and the wild-encounter bush grew to match. Pets can now also walk under the clock
+  and the dock; only the outer edge of each map is off limits. Pets keep the same pace relative to the map.
+
+### Added
+
+- **Arrows to things off screen.** Anything outside the view gets an arrow on the edge of the circle with its
+  icon: the other pet (its picture, or a speech bubble when it has something to say), an egg, a poop, a gift or
+  the red marks of a wild encounter. Tap the other pet's arrow to switch to it; tap any other arrow and the view
+  goes there for 5 seconds so you can tap it. Serial: `MARK tap ...` is logged.
+- Re-send the maps to the SD (`tools/send_sd.py --yard`) to open up the cells under the old clock and dock spots;
+  older map files still work.
+
 ## [3.5] - 2026-11-18
 
 ### Changed
