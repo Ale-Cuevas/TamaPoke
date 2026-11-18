@@ -49,13 +49,13 @@ struct PetLife {
   uint8_t fullness = 80;  // comida
   uint8_t joy = 80;       // felicidad
   uint8_t energy = 80;    // energia
-  uint8_t hygiene = 100;  // limpieza
+  uint8_t hygiene = 100;  // SIN USO desde v3.1 (se guarda por compatibilidad: siempre 100)
   uint8_t poops = 0;      // cacas en el suelo (max POOP_MAX)
   uint8_t weight = 0;     // 0-100: las chuches engordan, el minijuego quema
   // cacas (v1.58): huecos ocupados (bit i = la caca i en el suelo). Solo en RAM: el guardado trae la
   // cuenta (poops) y al cargar se ocupan los primeros huecos (ver poopSlots)
   uint8_t poopMask = 0;
-  // la edad (ageMinutes) a la que salio cada caca (v3.0: aun sin uso; la v3.1 les dara edad)
+  // la edad (ageMinutes) a la que salio cada caca (v3.1: las viejas drenan felicidad, ver stalePoops)
   uint32_t poopAt[POOP_MAX] = { 0 };
   // genes (90-110%, se tiran al eclosionar) y entrenamiento (0-100)
   uint8_t geneAtk = 100, geneDef = 100, geneSpe = 100;
@@ -142,9 +142,9 @@ struct PetLife {
   bool reviveExpired() const { return dying && dyingMin >= REVIVE_LIMIT_MIN; }
   uint8_t reviveMinutesLeft() const { return dying && dyingMin < REVIVE_LIMIT_MIN ? REVIVE_LIMIT_MIN - dyingMin : 0; }
   uint8_t dyingMinutes() const { return dyingMin; }
-  // las cuatro necesidades a cero, despierto: el vinculo se apaga (y luego se muere)
+  // las tres necesidades a cero, despierto: el vinculo se apaga (y luego se muere)
   bool neglected() const {
-    return !isEgg() && !sleeping && !busyEnding() && fullness == 0 && joy == 0 && energy == 0 && hygiene == 0;
+    return !isEgg() && !sleeping && !busyEnding() && fullness == 0 && joy == 0 && energy == 0;
   }
   uint8_t neglectMinutes() const { return neglectMin; }
   uint8_t deathMinutes() const { return deathMin; }
@@ -172,8 +172,8 @@ struct PetLife {
   uint16_t levelMinutesCost() const { return levelCost(level()); }
   void setLevel(uint16_t lv) { growMin = levelStart(lv); }  // comando LVL y pruebas
   uint8_t lowestStat() const {
-    uint8_t a = fullness < joy ? fullness : joy, b = energy < hygiene ? energy : hygiene;
-    return a < b ? a : b;
+    uint8_t a = fullness < joy ? fullness : joy;
+    return a < energy ? a : energy;
   }
   PetMood mood() const {
     if (sleeping) return MOOD_SLEEPING;
@@ -191,6 +191,21 @@ struct PetLife {
     uint8_t n = poops > POOP_MAX ? POOP_MAX : poops;
     uint8_t m = poopMask & ((1 << POOP_MAX) - 1);
     return __builtin_popcount(m) == n ? m : (uint8_t)((1 << n) - 1);
+  }
+  // v3.1: cuantas cacas llevan en el suelo mas de POOP_STALE_MIN minutos (de edad del bicho)
+  uint8_t stalePoops() const {
+    uint8_t m = poopSlots(), n = 0;
+    for (uint8_t i = 0; i < POOP_MAX; i++)
+      if ((m & (1 << i)) && ageMinutes > poopAt[i] && ageMinutes - poopAt[i] > POOP_STALE_MIN) n++;
+    return n;
+  }
+  // las marcas de edad de las cacas puestas, seguidas desde el primer hueco (como las recompone poopSlots
+  // al cargar); las demas a 0 (asi el blob "poopA" solo cambia cuando cambian las cacas)
+  void poopStamps(uint32_t out[POOP_MAX]) const {
+    uint8_t m = poopSlots(), k = 0;
+    for (uint8_t i = 0; i < POOP_MAX; i++)
+      if (m & (1 << i)) out[k++] = poopAt[i];
+    while (k < POOP_MAX) out[k++] = 0;
   }
   // la incubadora de este hueco (serie BOX y pruebas)
   bool eggHeld() const { return eggHeldFlag; }
@@ -224,8 +239,12 @@ struct PetLife {
   void dbgClearAnims() { eatUntil = heartUntil = evolveUntil = 0; emoteKind = EMOTE_NONE; }
   void dbgEggSaved(uint8_t m) { eggSaved = m > EGG_SHAKE_CAP ? EGG_SHAKE_CAP : m; }
   void dbgEggClear() { eggPlaced = 0; eggSaved = 0; eggTaps = 0; }  // cada escena, sin huevo del patio ni grietas
-  void dbgSetPoops(uint8_t n) { poops = n > POOP_MAX ? POOP_MAX : n; poopMask = (1 << poops) - 1; }
-  void dbgAbandon() { fullness = joy = energy = hygiene = 0; }  // serie ABANDON: empieza la cuenta
+  void dbgSetPoops(uint8_t n) {  // v3.1: recien hechas (sin edad)
+    poops = n > POOP_MAX ? POOP_MAX : n;
+    poopMask = (1 << poops) - 1;
+    for (uint8_t i = 0; i < POOP_MAX; i++) poopAt[i] = ageMinutes;
+  }
+  void dbgAbandon() { fullness = joy = energy = 0; }  // serie ABANDON: empieza la cuenta
   void dbgClearDying() { dying = false; deathEgg = 0; neglectMin = deathMin = dyingMin = 0; }
 };
 static_assert(std::is_trivially_copyable<PetLife>::value, "el foco intercambia PetLife enteros");

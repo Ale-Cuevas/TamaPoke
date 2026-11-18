@@ -6,6 +6,20 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.1] - 2026-11-17
+
+### Changed
+
+- **No more hygiene: one less bar to watch with two pets.** Pets now have three needs (FOOD, JOY, ENE). The bath
+  is gone from the Care panel, and the card and the bubbles no longer mention cleanliness.
+- **Old poops make a pet sad.** A poop left on the grass for more than 5 minutes starts draining JOY: 1 every 3
+  minutes with one old poop, 2 with two, 4 with three. Tap poops to clean them (the bath no longer does). Nothing
+  drains while the pet sleeps.
+- **The waterfall washes the area.** A full waterfall session clears every poop of the pet that played, instead of
+  giving hygiene.
+- **The heart gives +20 JOY** (was +5); the bond from petting is unchanged.
+- Serial `NEED 1` now answers that hygiene was removed; `STATS` no longer prints it.
+
 ## [3.0] - 2026-11-17
 
 ### Added

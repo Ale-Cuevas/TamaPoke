@@ -40,7 +40,6 @@ static void dress(Pet &p, uint8_t seed) {
   p.fullness = 50 + seed;
   p.joy = 60 + seed;
   p.energy = 40 + seed;
-  p.hygiene = 70 + seed;
   p.poops = seed % 3;
   p.weight = 10 + seed;
   p.geneAtk = 91 + seed;
@@ -197,7 +196,6 @@ TEST(box, el_registro_conserva_todo_el_individuo) {
   CHECK_EQ(q.fullness, p.fullness);
   CHECK_EQ(q.joy, p.joy);
   CHECK_EQ(q.energy, p.energy);
-  CHECK_EQ(q.hygiene, p.hygiene);
   CHECK_EQ(q.poops, p.poops);
   CHECK_EQ(q.weight, p.weight);
   CHECK_EQ(q.geneAtk, p.geneAtk);
@@ -294,7 +292,7 @@ TEST(box, un_huevo_no_se_guarda_ni_durante_evolucion_o_despedida) {
   // evolucionando (Charmander, si el huevo era otro: se fuerza la especie)
   p.speciesId = 4;
   p.setLevel(16);
-  p.fullness = p.joy = p.energy = p.hygiene = 90;
+  p.fullness = p.joy = p.energy = 90;
   p.careMistakes = 0;
   CHECK(p.canEvolveNow());
   p.evolve();

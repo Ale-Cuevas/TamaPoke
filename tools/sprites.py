@@ -491,16 +491,6 @@ def icon_berry_green():
     return g.rows()
 
 
-def icon_clean():
-    g = G(16)
-    g.disk(7, 10, 4.6, 4.4, 'b', 'B')
-    g.disk(12, 4.5, 2.2, 2.2, 'b', 'B')
-    g.disk(3.5, 4, 1.4, 1.4, 'b')
-    g.outline()
-    g.px(5, 8, 'w'); g.px(6, 9, 'w'); g.px(11, 4, 'w')
-    return g.rows()
-
-
 # ------------------------------------------------- objetos de la mochila (pasos)
 
 def icon_golden():
@@ -781,6 +771,28 @@ def icon_cake():
     g.px(7, 2, 'w')
     g.px(9, 0, 'G'); g.px(8, 1, 'G')
     return g.rows()
+
+
+def icon_pet():
+    # corazon del mimo (v2.3): se anadio a species.h a mano; fijado tal cual
+    return [
+        "................",
+        "................",
+        "................",
+        "...kkk....kkk...",
+        "..krrrk..krrrk..",
+        ".krwwrrkkrrrrRk.",
+        ".krwrrrrrrrrrRk.",
+        ".krrrrrrrrrrrRk.",
+        ".krrrrrrrrrrrRk.",
+        "..krrrrrrrrrRk..",
+        "...krrrrrrrRk...",
+        "....krrrrrRk....",
+        ".....krrrRk.....",
+        "......krRk......",
+        ".......kk.......",
+        "................",
+    ]
 
 
 def icon_revive():
@@ -1071,7 +1083,6 @@ SPRITES = {
     "ICON_FOOD": icon_food(),
     "ICON_PLAY": icon_play(),
     "ICON_LIGHT": icon_light(),
-    "ICON_CLEAN": icon_clean(),
     "ICON_BERRY_B": icon_berry_blue(),
     "ICON_BERRY_G": icon_berry_green(),
     "ICON_EGG": icon_egg(),
@@ -1091,6 +1102,7 @@ SPRITES = {
     "ICON_SUN": icon_sun(),
     "ICON_CAKE": icon_cake(),
     "ICON_REVIVE": icon_revive(),
+    "ICON_PET": icon_pet(),
     "BADGE_GRASS": badge_grass(),
     "BADGE_WATER": badge_water(),
     "BADGE_ROCK": badge_rock(),
@@ -1114,6 +1126,7 @@ SPRITES = {
 SPR_NOTE = {
     "ICON_DASH": "16x16: trineo con lineas de velocidad (v1.44)",
     "ICON_ZEN": "16x16: cascada sobre la poza (v1.43)",
+    "ICON_PET": "16x16: corazon, el mimo del panel Cuidar (v2.3)",
 }
 SPR_PRELUDE = {
     "ICON_EGG": "// huevo de la mochila (v1.39): el de la pantalla principal (SPR_EGG) en pequeno",

@@ -29,7 +29,7 @@ static void checkPanel(uint8_t kind) {
 
 TEST(yard_panels, cuidar_tarjetas_tocables_y_dentro) { checkPanel(PANEL_CARE); }
 
-// v2.3: la fila de cuidados (luz | bano | mimo) mide lo mismo que la de comida y no la pisa
+// v2.3: la fila de cuidados (luz | mimo, v3.1 sin bano) mide lo mismo que la de comida y no la pisa
 TEST(yard_panels, cuidar_fila_de_cuidados_alineada) {
   int fx0, fy, fw, fh, fx3, lx, ly, lw, lh, px, py, pw, ph;
   carePanelCard(CP_RED, fx0, fy, fw, fh);
@@ -47,7 +47,7 @@ TEST(yard_panels, jugar_tarjetas_tocables_y_dentro) { checkPanel(PANEL_PLAY); }
 TEST(yard_panels, sin_panel_no_hay_tarjetas) {
   CHECK_EQ(panelCount(PANEL_NONE), (uint8_t)0);
   CHECK_EQ(panelHit(PANEL_NONE, Y_CX, Y_CY), -1);
-  CHECK_EQ(panelCount(PANEL_CARE), (uint8_t)7);  // v2.3: + mimo
+  CHECK_EQ(panelCount(PANEL_CARE), (uint8_t)6);  // v2.3: + mimo; v3.1: sin bano
   CHECK_EQ(panelCount(PANEL_PLAY), (uint8_t)6);
   CHECK_EQ(panelCount(PANEL_TRAVEL), (uint8_t)0);  // la pantalla de viajes tiene su propia geometria (travel_ui.h)
 }

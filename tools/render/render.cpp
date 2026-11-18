@@ -158,8 +158,6 @@ static void resetUi() {
   if (yardMapForced) yardForceMap(0);
   // fase Y3: sin comida en el suelo ni huevo en el patio
   yardFood = YardFood{};
-  bathUntil = 0;  // un bano a medias (care-tap-bath) se acababa en la escena siguiente con su "+N" de limpieza
-  bathPending = false;
   fxo = FxOverlays{};  // ni "+N" ni otros efectos de la escena anterior
   yardHeartPopAt = 0;
   for (int s = 0; s < HOME_SLOTS; s++) {
@@ -200,7 +198,7 @@ static void resetUi() {
   pet.setBadges(0);
   pet.clearStageDay();
   pet.setTeam(nullptr, 0);
-  confirmUntil = choiceUntil = bathUntil = poopPuffUntil = 0;
+  confirmUntil = choiceUntil = poopPuffUntil = 0;
   panelKind = PANEL_NONE;  // paneles Cuidar / Jugar (v2.0, Y2)
   wasPressed = holdFired = swallowGesture = false;
   pet.berryKnown = false;  // (v1.57) la favorita no pasa de una escena a otra
@@ -313,7 +311,7 @@ static void pokemon(int16_t dex, int hour, bool shiny = false) {
   pet.fullness = 72;
   pet.joy = 88;
   pet.energy = 64;
-  pet.hygiene = 91;
+ 
   pet.dbgSetPoops(0);
   pet.careMistakes = 0;
   pet.lastSeenEpoch = epochAt(hour);
@@ -740,22 +738,21 @@ static const std::vector<Scene> &scenes() {
     { "yard-two-asleep", [] { pokemon(25, 23); pet.sleeping = true; yardForceMap(1); secondPet(133, 20); pet.slotRef(1).sleeping = true; } },
     { "yard-tap-pet2", [] { pokemon(25, 13); yardForceMap(1); secondPet(4, 14); render(); render();
                             onTap((int)yardW.p[1].x, (int)yardW.p[1].y - 20); } },
-    { "yard-home-poop", [] { pokemon(1, 10); pet.dbgSetPoops(3); pet.hygiene = 40; } },
-    { "yard-poop-tap", [] { pokemon(1, 10); pet.dbgSetPoops(3); pet.hygiene = 40; render();
+    { "yard-home-poop", [] { pokemon(1, 10); pet.dbgSetPoops(3); } },
+    { "yard-poop-tap", [] { pokemon(1, 10); pet.dbgSetPoops(3); render();
                             onTap(yardPoopX[0][1], yardPoopY[0][1] - 20); }, 3 },
     { "yard-home-gifts", [] { pokemon(25, 13); yardForceMap(1); for (int i = 0; i < 5; i++) pet.addGift(IT_CAKE); } },
-    { "yard-bubble-cycle-0", [] { pokemon(25, 13); yardForceMap(1); pet.fullness = 10; pet.hygiene = 12; gHostMillis = 200000 - 85; } },
-    { "yard-bubble-cycle-1", [] { pokemon(25, 13); yardForceMap(1); pet.fullness = 10; pet.hygiene = 12; gHostMillis = 201000 - 85; } },
-    { "yard-bubble-cycle-0-es", [] { pokemon(25, 13); yardForceMap(1); pet.fullness = 10; pet.hygiene = 12; gHostMillis = 200000 - 85;
+    { "yard-bubble-cycle-0", [] { pokemon(25, 13); yardForceMap(1); pet.fullness = 10; pet.energy = 12; gHostMillis = 200000 - 85; } },
+    { "yard-bubble-cycle-1", [] { pokemon(25, 13); yardForceMap(1); pet.fullness = 10; pet.energy = 12; gHostMillis = 201000 - 85; } },
+    { "yard-bubble-cycle-0-es", [] { pokemon(25, 13); yardForceMap(1); pet.fullness = 10; pet.energy = 12; gHostMillis = 200000 - 85;
                                      lang(LANG_ES); } },
-    { "yard-bubble-cycle-1-es", [] { pokemon(25, 13); yardForceMap(1); pet.fullness = 10; pet.hygiene = 12; gHostMillis = 201000 - 85;
+    { "yard-bubble-cycle-1-es", [] { pokemon(25, 13); yardForceMap(1); pet.fullness = 10; pet.energy = 12; gHostMillis = 201000 - 85;
                                      lang(LANG_ES); } },
     { "yard-home-asleep", [] { pokemon(25, 23); pet.sleeping = true; yardForceMap(1); boxPet(0, 7, 12); } },
     { "yard-home-asleep-es", [] { pokemon(25, 23); pet.sleeping = true; yardForceMap(1); lang(LANG_ES); } },
     { "yard-sleepy-es", [] { pokemon(25, 22); yardForceMap(1); lang(LANG_ES); } },
-    { "yard-abandoned-es", [] { pokemon(4, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.bond = 60; lang(LANG_ES); } },
+    { "yard-abandoned-es", [] { pokemon(4, 13); pet.fullness = pet.joy = pet.energy = 0; pet.bond = 60; lang(LANG_ES); } },
     { "yard-heart", [] { pokemon(133, 12); pet.feedBerry(0); gHostMillis += EAT_ANIM_MS + 100; }, 2 },
-    { "yard-bath", [] { pokemon(25, 13); yardForceMap(1); startBath(); }, 8 },
     { "yard-release-ask", [] { pokemon(25, 13); yardForceMap(1); confirmUntil = millis() + 5000; } },
     { "yard-evolve-btn", [] { pokemon(4, 11); pet.setLevel(18); pet.trAtk = pet.trDef = pet.trSpe = 40; } },
     { "yard-farewell-btn", [] { pokemon(55, 15); pet.dbgSetAge(FAREWELL_AGE_MIN + 60); pet.addGift(IT_CAKE); } },
@@ -804,31 +801,31 @@ static const std::vector<Scene> &scenes() {
     { "home-dusk", [] { pokemon(7, 19); } },
     { "home-night", [] { pokemon(133, 23); pet.sleeping = true; } },
     { "home-forest", [] { pokemon(1, 9); pet.dbgSetPoops(2); pet.fullness = 20; } },
-    // v1.58: a tap on a poop cleans just that one (the middle one here: sparkles where it was, "+10" HYG)
-    { "poop-tap", [] { pokemon(1, 9); pet.dbgSetPoops(3); pet.hygiene = 40; onTap(116, 282); }, 3 },
+    // v1.58: a tap on a poop cleans just that one (the middle one here: sparkles where it was, no HYG any more)
+    { "poop-tap", [] { pokemon(1, 9); pet.dbgSetPoops(3); onTap(116, 282); }, 3 },
     // v1.60: neglect. The bond fades with all four needs at 0, then "very weak", then the Revive dialog
-    { "abandoned", [] { pokemon(4, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.bond = 60; } },
-    { "abandoned-es", [] { pokemon(4, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.bond = 60;
+    { "abandoned", [] { pokemon(4, 13); pet.fullness = pet.joy = pet.energy = 0; pet.bond = 60; } },
+    { "abandoned-es", [] { pokemon(4, 13); pet.fullness = pet.joy = pet.energy = 0; pet.bond = 60;
                            setLang(LANG_ES); applyLangFont(); } },
     // la noche (v1.63): con sueño desde las 22, el globo con "zzz" (a la izquierda si anda por la derecha)
     { "sleepy", [] { pokemon(25, 22); } },
     { "sleepy-es", [] { pokemon(25, 22); setLang(LANG_ES); applyLangFont(); } },
-    { "weak", [] { pokemon(4, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.bond = 0; } },
-    { "dying-revive", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.dbgSetPoops(2);
+    { "weak", [] { pokemon(4, 13); pet.fullness = pet.joy = pet.energy = 0; pet.bond = 0; } },
+    { "dying-revive", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = 0; pet.dbgSetPoops(2);
                            pet.items[IT_REVIVE] = 3; pet.startDying(); }, 2 },
-    { "dying-revive-es", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.items[IT_REVIVE] = 3;
+    { "dying-revive-es", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = 0; pet.items[IT_REVIVE] = 3;
                               pet.startDying(); setLang(LANG_ES); applyLangFont(); }, 2 },
     // v1.64: la hora del Revivir; pasada, el dialogo dice que murio
-    { "dying-late", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.items[IT_REVIVE] = 3;
+    { "dying-late", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = 0; pet.items[IT_REVIVE] = 3;
                          pet.startDying(); pet.dbgDyingMin(REVIVE_LIMIT_MIN); }, 2 },
-    { "dying-late-es", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.items[IT_REVIVE] = 3;
+    { "dying-late-es", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = 0; pet.items[IT_REVIVE] = 3;
                             pet.startDying(); pet.dbgDyingMin(REVIVE_LIMIT_MIN); setLang(LANG_ES); applyLangFont(); }, 2 },
-    { "dying-left-es", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.items[IT_REVIVE] = 3;
+    { "dying-left-es", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = 0; pet.items[IT_REVIVE] = 3;
                             pet.startDying(); pet.dbgDyingMin(18); setLang(LANG_ES); applyLangFont(); }, 2 },
-    { "dying-none", [] { pokemon(25, 21); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.startDying(); }, 2 },
-    { "dying-none-es", [] { pokemon(25, 21); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.startDying();
+    { "dying-none", [] { pokemon(25, 21); pet.fullness = pet.joy = pet.energy = 0; pet.startDying(); }, 2 },
+    { "dying-none-es", [] { pokemon(25, 21); pet.fullness = pet.joy = pet.energy = 0; pet.startDying();
                             setLang(LANG_ES); applyLangFont(); }, 2 },
-    { "revived", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = pet.hygiene = 0; pet.items[IT_REVIVE] = 3;
+    { "revived", [] { pokemon(6, 13); pet.fullness = pet.joy = pet.energy = 0; pet.items[IT_REVIVE] = 3;
                       pet.startDying(); onTap(DIE_YES_X + 50, DIE_BTN_Y + 20); }, 3 },
     { "death-ceremony", [] { pokemon(25, 13); pet.startDying(); pet.letGo(); gHostMillis += 4000; }, 2 },
     { "death-egg", [] { pokemon(6, 13); pet.setLevel(DEATH_EGG_LEVEL);
@@ -905,7 +902,6 @@ static const std::vector<Scene> &scenes() {
     { "care-tap-cake", [] { pokemon(133, 12); pet.items[IT_CAKE] = 2; openCarePanel(); panelTapCard(CP_CAKE); }, 3 },
     { "care-tap-light", [] { pokemon(133, 21); openCarePanel(); panelTapCard(CP_LIGHT); }, 2 },
     { "care-tap-wake", [] { pokemon(133, 23); pet.sleeping = true; openCarePanel(); panelTapCard(CP_LIGHT); }, 2 },
-    { "care-tap-bath", [] { pokemon(133, 12); pet.dbgSetPoops(1); openCarePanel(); panelTapCard(CP_BATH); }, 4 },
     // v2.3: the pet card (third care card): heart, happy pose and "+5" joy; asleep it is greyed out and shakes
     { "care-tap-pet", [] { pokemon(133, 12); pet.joy = 40; openCarePanel(); panelTapCard(CP_PET); }, 3 },
     { "care-tap-pet-es", [] { pokemon(25, 13); yardForceMap(1); pet.joy = 40; setLang(LANG_ES); applyLangFont(); openCarePanel(); panelTapCard(CP_PET); }, 3 },
@@ -1165,8 +1161,8 @@ static const std::vector<Scene> &scenes() {
     { "picker-using-es", [] { pickerOpen(YARD_MAP_START, 50); es(); } },
     { "card-profile-es", [] { pokemon(25, 13); pet.streak = 365; pet.bestStreak = 365; setLang(LANG_ES); applyLangFont(); cardOpen = true; cardPage = 0; } },
     // v2.0: las 4 necesidades en el perfil (en el patio ya no hay barras)
-    { "card-profile-needs", [] { pokemon(25, 13); pet.fullness = 20; pet.joy = 45; pet.energy = 80; pet.hygiene = 10; cardOpen = true; cardPage = 0; } },
-    { "card-profile-needs-es", [] { pokemon(25, 13); pet.fullness = 20; pet.joy = 45; pet.energy = 80; pet.hygiene = 10;
+    { "card-profile-needs", [] { pokemon(25, 13); pet.fullness = 20; pet.joy = 45; pet.energy = 10; cardOpen = true; cardPage = 0; } },
+    { "card-profile-needs-es", [] { pokemon(25, 13); pet.fullness = 20; pet.joy = 45; pet.energy = 10;
                                     setLang(LANG_ES); applyLangFont(); cardOpen = true; cardPage = 0; } },
     { "card-profile-nick", [] { pokemon(6, 36); pet.rename("SPARKY"); pet.shiny = true; cardOpen = true; cardPage = 0; } },
     { "card-medals-es", [] { pokemon(25, 13); pet.medals = MED_LV10 | MED_BERRY | MED_MARATHON; setLang(LANG_ES); applyLangFont(); cardOpen = true; cardPage = 2; } },

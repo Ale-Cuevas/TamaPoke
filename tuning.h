@@ -35,22 +35,22 @@
 #define ENE_DRAIN 1             // energia -1/min...
 #define OVERWEIGHT_AT 50        // ...y -OVERWEIGHT_ENE_DRAIN mas con el peso por encima de esto
 #define OVERWEIGHT_ENE_DRAIN 1
-#define HYG_DRAIN 1             // limpieza -1/min...
-#define HYG_DRAIN_PER_POOP 4    // ...y -4 mas por cada caca en el suelo
 #define JOY_DRAIN 1             // felicidad -1/min...
-#define JOY_DRAIN_HUNGRY 2      // ...-2 mas con la comida por debajo de JOY_HUNGRY_BELOW...
+#define JOY_DRAIN_HUNGRY 2      // ...y -2 mas con la comida por debajo de JOY_HUNGRY_BELOW
 #define JOY_HUNGRY_BELOW 30
-#define JOY_DRAIN_DIRTY 2       // ...y -2 mas con la limpieza por debajo de JOY_DIRTY_BELOW
-#define JOY_DIRTY_BELOW 30
 #define NEED_LOW 25             // por debajo: esta triste (mood) y lo pide en un globo del patio
 
 // cacas (v1.58): probabilidad (%) por minuto despierto con la comida por encima de POOP_MIN_FOOD. Era 15 (una
-// cada ~7 min); con 5, una cada ~20 min. Cada una se limpia tocandola (POOP_TAP_HYG de limpieza) o todas a
-// la vez con el bano. POOP_MAX tambien es cuantas caben en el patio.
+// cada ~7 min); con 5, una cada ~20 min. Solo se quitan tocandolas (o con una sesion entera de cascada).
+// POOP_MAX tambien es cuantas caben en el patio.
 #define POOP_ODDS 5
 #define POOP_MIN_FOOD 40
 #define POOP_MAX 3
-#define POOP_TAP_HYG 10
+// v3.1 (sin limpieza): una caca con mas de POOP_STALE_MIN min en el suelo es "vieja" y, despierto, cada
+// POOP_JOY_EVERY min quita felicidad: POOP_JOY_DRAIN[n] con n = cuantas viejas hay (0..POOP_MAX). Dormido no
+#define POOP_STALE_MIN 5
+#define POOP_JOY_EVERY 3
+static const uint8_t POOP_JOY_DRAIN[POOP_MAX + 1] = { 0, 1, 2, 4 };
 
 // el peso es grasa de mas: 0 = en forma. Una tarta (+12) dura ~3 h despierto (v1.22)
 #define WEIGHT_BURN_AWAKE_MIN 15   // -1 de peso cada 15 min despierto
@@ -71,20 +71,15 @@
 // Dormido (Pet::sleepMinute) y la noche (Pet::nightMinute). Necesita el reloj.
 // --------------------------------------------------------------------------------------------
 #define SLEEP_ENE_GAIN 6           // energia +6/min dormido
-// siesta (de dia): comida y felicidad -1 cada NAP_FOOD_JOY_EVERY min, limpieza -1 cada NAP_HYG_EVERY,
-// sin bajar de sus suelos
+// siesta (de dia): comida y felicidad -1 cada NAP_FOOD_JOY_EVERY min, sin bajar de sus suelos
 #define NAP_FOOD_JOY_EVERY 2
-#define NAP_HYG_EVERY 3
 #define NAP_FOOD_FLOOR 30
 #define NAP_JOY_FLOOR 35
-#define NAP_HYG_FLOOR 45
 // de noche (de SLEEPY_HOUR a WAKE_HOUR) baja la mitad que en una siesta, con suelos mas altos: amanece con
 // todo a 50 o mas si se acosto bien cuidado
 #define NIGHT_FOOD_JOY_EVERY 4
-#define NIGHT_HYG_EVERY 6
 #define NIGHT_FOOD_FLOOR 50
 #define NIGHT_JOY_FLOOR 50
-#define NIGHT_HYG_FLOOR 55
 // Desde SLEEPY_HOUR tiene sueno (globo con "zzz"); a las BED_HOUR se duerme solo y, despertado antes de
 // WAKE_HOUR, vuelve a dormirse a los NIGHT_RESLEEP_MIN minutos despierto. A las WAKE_HOUR se despierta solo,
 // si se durmio de noche (desde EVENING_HOUR: una siesta de tarde no). Acostarlo tu con sueno da BED_BOND de
@@ -99,14 +94,14 @@
 // --------------------------------------------------------------------------------------------
 // Placa apagada (Pet::syncClock): el tiempo pasa igual, pero con piedad
 // --------------------------------------------------------------------------------------------
-// apagada baja al ritmo de despierto (FOOD_DRAIN, ENE_DRAIN, HYG_DRAIN, JOY_DRAIN) pero sin bajar de
+// apagada baja al ritmo de despierto (FOOD_DRAIN, ENE_DRAIN, JOY_DRAIN, y las cacas viejas) pero sin bajar de
 // OFFLINE_FLOOR (por encima de SLIP_AT: sin descuidos, abandono ni muerte en ausencia)
 #define OFFLINE_FLOOR 15
 #define OFFLINE_POOP_EVERY_MIN 240   // una caca cada 4 h despierto apagada
 #define OFFLINE_MAX_MIN (14UL * 24 * 60)  // como mucho 2 semanas de golpe
 
 // --------------------------------------------------------------------------------------------
-// Cuidados (pet.cpp: feedBerry, eatCake, clean, caress, useItem)
+// Cuidados (pet.cpp: feedBerry, eatCake, caress, useItem)
 // --------------------------------------------------------------------------------------------
 #define BERRY_FOOD 25              // baya normal
 #define FAV_BERRY_FOOD 35          // la favorita de la especie...
@@ -116,8 +111,7 @@
 #define CAKE_SATED_MIN 180
 #define CAKE_JOY 12
 #define CAKE_WEIGHT 12
-#define BATH_BOND 1                // el bano: limpieza a 100 y esto de vinculo
-#define CARESS_JOY 5               // mimarlo (el corazon del panel Cuidar, v2.3)...
+#define CARESS_JOY 20              // mimarlo (el corazon del panel Cuidar, v2.3; v3.1: 5 -> 20)...
 #define CARESS_BOND 1              // ...y vinculo como mucho cada PET_BOND_COOLDOWN_MS
 #define PET_BOND_COOLDOWN_MS (15UL * 60 * 1000)
 #define GOLDEN_FOOD 50             // baya dorada
@@ -181,7 +175,7 @@
 #define BOND_FADE_MIN 30
 #define DEATH_MIN 30
 #define REVIVE_LIMIT_MIN 60
-#define REVIVE_NEEDS 50                // revivido: las cuatro necesidades a 50
+#define REVIVE_NEEDS 50                // revivido: las tres necesidades a 50
 #define DEATH_EGG_LEVEL 50
 #define DEATH_EGG_ODDS 60
 
@@ -251,7 +245,6 @@ static const uint8_t STEP_GOAL_LEVELS[STEP_GOAL_TIERS] = { 1, 1, 2 };  // nivele
 #define ZEN_GAIN_MAX 8             // ...hasta 8
 #define ZEN_BONUS_TENTHS_PER_POINT 40  // bonificacion: 1 DEF cada 4 s en la franja mientras se mueve...
 #define ZEN_BONUS_MAX 3            // ...hasta 3
-#define ZEN_WASH 10                // limpieza tras una sesion completa (la cascada lava)
 #define ZEN_ENE_COST 8
 #define ZEN_FOOD_COST 3
 #define ZEN_JOY 6
