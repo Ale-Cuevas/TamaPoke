@@ -440,7 +440,7 @@ def heart():
 
 # ------------------------------------------------------------ iconos botones
 
-def icon_food():
+def icon_berry_red():
     g = G(16)
     g.disk(8, 9.5, 5.2, 4.8, 'r', 'R')
     g.px(8, 3, 'C'); g.px(8, 4, 'C')
@@ -469,6 +469,33 @@ def icon_light():
     g.outline()
     g.px(12, 3, 'f'); g.px(13, 5, 'f')
     return g.rows()
+
+
+def _berry16(body, shade, leaf='g'):
+    g = G(16)
+    g.disk(8, 9.5, 5.2, 4.8, body, shade)
+    g.px(8, 3, 'C'); g.px(8, 4, 'C')
+    g.px(10, 3, leaf); g.px(11, 2, leaf)
+    g.outline()
+    g.px(6, 7, 'w'); g.px(5, 8, 'w')
+    return g.rows()
+
+
+def icon_berry_plain():
+    # la baya normal (v3.2, gratis): lila, distinta de las seis de colores y de la dorada
+    return _berry16('u', 'U')
+
+
+def icon_berry_yellow():
+    return _berry16('v', 'V')
+
+
+def icon_berry_pink():
+    return _berry16('p', 'P')
+
+
+def icon_berry_orange():
+    return _berry16('o', 'O')
 
 
 def icon_berry_blue():
@@ -1080,11 +1107,15 @@ SPRITES = {
     "SQUIRTLE": squirtle(),
     "WARTORTLE": wartortle(),
     "BLASTOISE": blastoise(),
-    "ICON_FOOD": icon_food(),
+    "ICON_BERRY": icon_berry_plain(),
+    "ICON_BERRY_R": icon_berry_red(),
     "ICON_PLAY": icon_play(),
     "ICON_LIGHT": icon_light(),
     "ICON_BERRY_B": icon_berry_blue(),
     "ICON_BERRY_G": icon_berry_green(),
+    "ICON_BERRY_Y": icon_berry_yellow(),
+    "ICON_BERRY_P": icon_berry_pink(),
+    "ICON_BERRY_O": icon_berry_orange(),
     "ICON_EGG": icon_egg(),
     "ICON_GOLDEN": icon_golden(),
     "ICON_PROTEIN": icon_protein(),

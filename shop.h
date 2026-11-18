@@ -5,10 +5,13 @@
 #include "economy.h"
 
 // los objetos a la venta, en el orden en que aparecen en la tienda (ids de pet.h: IT_GOLDEN=0, PROTEIN,
-// IRON, CARBOS, CHARM, RARECANDY, EGG, CAKE, REVIVE, BALL). Solo entran los que cuestan algo.
+// IRON, CARBOS, CHARM, RARECANDY, EGG, CAKE, REVIVE, BALL, BERRY_R..O = 10..15). Solo entran los que cuestan algo.
 static const uint8_t SHOP_ORDER[] = { 0 /*GOLDEN*/, 7 /*CAKE*/, 5 /*RARECANDY*/, 1 /*PROTEIN*/, 2 /*IRON*/, 3 /*CARBOS*/,
-                                      8 /*REVIVE*/, 9 /*BALL*/ };
+                                      8 /*REVIVE*/, 9 /*BALL*/, 10 /*BERRY_R*/, 11 /*BERRY_B*/, 12 /*BERRY_G*/,
+                                      13 /*BERRY_Y*/, 14 /*BERRY_P*/, 15 /*BERRY_O*/ };
 #define SHOP_ITEMS ((int)(sizeof(SHOP_ORDER) / sizeof(SHOP_ORDER[0])))
+#define SHOP_PAGE0 8  // los de la 1.a pagina (con la tarjeta Fondos); el resto, las 6 bayas de colores, van en la 2.a (v3.2)
+static_assert(SHOP_ITEMS == SHOP_PAGE0 + 6, "la tienda: 8 objetos y 6 bayas de colores");
 
 // cuantos objetos se venden de verdad (precio > 0): el test comprueba que SHOP_ORDER los cubre todos
 inline int shopSellableCount() {

@@ -16,6 +16,13 @@ TEST(shop, la_lista_cubre_todo_lo_que_se_vende) {
   CHECK_EQ(SHOP_ORDER[6], (uint8_t)IT_REVIVE);
   CHECK_EQ(priceOfItem(IT_EGG), (uint16_t)0);
   CHECK_EQ(priceOfItem(IT_CHARM), (uint16_t)0);
+  // v3.2: las seis bayas de colores, en la 2.a pagina, cada una a PRICE_BERRY
+  CHECK_EQ(SHOP_ITEMS, SHOP_PAGE0 + BERRY_COLORS);
+  for (int c = 0; c < BERRY_COLORS; c++) {
+    CHECK_EQ(SHOP_ORDER[SHOP_PAGE0 + c], (uint8_t)(IT_BERRY_R + c));
+    CHECK_EQ(shopCheckItem(IT_BERRY_R + c, PRICE_BERRY, 0, ITEM_MAX), SB_OK);
+    CHECK_EQ(shopCheckItem(IT_BERRY_R + c, PRICE_BERRY - 1, 0, ITEM_MAX), SB_BROKE);
+  }
 }
 
 TEST(shop, comprobar_una_compra) {

@@ -59,7 +59,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "3.1"
+#define FW_VERSION "3.2"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -189,6 +189,7 @@ bool bagOpen = false;         // mochila (v1.53): su boton en la fila de abajo, 
 uint8_t itemConfirm = 0;      // mochila: objeto a confirmar + 1 (0 = ninguno)
 uint32_t itemConfirmUntil = 0;
 // la tienda de la mochila y el selector de fondos (v2.0, Y4b)
+uint8_t bagPage = 0;          // v3.2: Objetos y Tienda tienen 2 paginas (la 2.a, las bayas de colores)
 uint8_t bagTab = 0;           // 0 = Objetos, 1 = Tienda, 2 = Coleccion (v2.0, Y5b)
 uint8_t souvTip = 0;          // coleccion: recuerdo con la tarjeta abierta + 1 (0 = ninguna)
 uint8_t shopBuyId = 0;        // tienda: objeto a comprar + 1 (0 = ninguno)
@@ -202,9 +203,7 @@ uint32_t bagReviveHintUntil = 0;  // la pista del Revivir en la mochila (v1.59).
 uint8_t bagHintItem = IT_REVIVE;  // ...o la de la Poke Ball (v2.2): las dos dicen para que sirven
 uint32_t revivedMsgUntil = 0;     // "Revivido!" en el estado tras usar un Revivir (v1.60)
 bool foundShown = false;      // el ultimo frame enseno un hallazgo: un toque lo cierra
-uint32_t cakeHintUntil = 0;
-uint32_t tastesMsgUntil = 0;  // la baya favorita cambio al evolucionar (v1.57): "Sus gustos cambiaron!"   // tocar la tarta sin ninguna (v1.54): la cabecera dice donde se encuentra
-static_assert(S_IT_BALL - S_IT_GOLDEN == IT_BALL - IT_GOLDEN && IT_BALL + 1 == IT_COUNT, "nombres de objeto en el orden de IT_*");
+static_assert(S_IT_BERRY_O - S_IT_GOLDEN == IT_BERRY_O - IT_GOLDEN && IT_BERRY_O + 1 == IT_COUNT, "nombres de objeto en el orden de IT_*");
 bool clockOpen = false;       // pantalla de ajuste de hora (deslizar abajo)
 static int barLabelGap();  // (mas abajo, con drawBar; la usan antes la ficha y el patio)
 #define YDEMO_PAGES 3
@@ -1246,7 +1245,7 @@ void handleSerial() {
     if (line.startsWith("GIFT ")) {
       long it = line.substring(5).toInt();
       bool ok = it >= 0 && it < IT_COUNT && pet.addGift((uint8_t)it);
-      Serial.println(ok ? "gift added" : "gift refused (item 0-8, at most 8)");
+      Serial.println(ok ? "gift added" : "gift refused (item 0-15, at most 8)");
       pet.flushSave();
     }
     Serial.printf("gifts n=%u:", pet.giftCount());
@@ -1411,6 +1410,22 @@ void handleSerial() {
       Serial.printf("  map %u %s price=%u owned=%d chosen=%d wanted=%d%s\n", n, T((StrId)(S_MAP_1 + n - 1)), priceOfMap(n),
                     pet.ownsMap(n), pet.yardChosen == n, pet.yardMapWanted() == n, n == YARD_MAP_START ? " (start)" : "");
     Serial.println("DONE");
+  } else if (line == "FEED" || line.startsWith("FEED ")) {  // FEED <comida> (v3.2): da de comer al del foco, sin el patio
+    // 0 baya normal, 1-6 bayas de colores (roja, azul, verde, amarilla, rosa, naranja), 7 tarta, 8 dorada
+    String fa = line.length() > 5 ? line.substring(5) : String("");
+    fa.trim();
+    bool num = fa.length() > 0;
+    for (size_t i = 0; i < fa.length(); i++) num = num && fa[i] >= '0' && fa[i] <= '9';
+    long f = num ? fa.toInt() : -1;
+    if (!num || f < 0 || f >= FOOD_COUNT) {
+      Serial.println("feed: 0-8 (0 plain, 1-6 berries R B G Y P O, 7 cake, 8 golden)");
+    } else {
+      bool ok = pet.feedFood((uint8_t)f);
+      Serial.printf("feed %ld -> %s fav=%u known=%d full=%u joy=%u bond=%u\n", f, ok ? "ok" : "refused", favBerryOf(pet.speciesId),
+                    pet.berryKnown, pet.fullness, pet.joy, pet.bond);
+      wakeUI();
+    }
+    Serial.println("DONE");
   } else if (line == "FOCUS" || line.startsWith("FOCUS ")) {  // FOCUS <0|1> (v3.0): el bicho de casa que es "pet"
     if (line.length() > 6) {
       int fs = line.substring(6).toInt();
@@ -1429,6 +1444,12 @@ void handleSerial() {
                     (unsigned long)l.growMin);
     }
     Serial.printf("focus=%u focusErrors=%u\n", pet.focusSlot, pet.focusErrors);
+    // v3.2: bayas de colores (R B G Y P O) y la favorita de cada hueco (oculta: known=1 si ya la descubrio)
+    Serial.printf("berries=%u/%u/%u/%u/%u/%u", pet.items[IT_BERRY_R], pet.items[IT_BERRY_B], pet.items[IT_BERRY_G],
+                  pet.items[IT_BERRY_Y], pet.items[IT_BERRY_P], pet.items[IT_BERRY_O]);
+    for (uint8_t hs = 0; hs < HOME_SLOTS; hs++)
+      Serial.printf(" fav%u=%u(known=%d)", hs, favBerryOf(pet.home(hs).speciesId), pet.home(hs).berryKnown ? 1 : 0);
+    Serial.println();
     Serial.printf("spec=%d nv=%u com=%u fel=%u ene=%u desc=%u sd=%d mon=%d bat=%d usb=%d rtc=%u\n",
                   pet.speciesId, pet.level(), pet.fullness, pet.joy, pet.energy,
                   pet.careMistakes, sdReady, mon.loaded,
@@ -1866,11 +1887,8 @@ void onTap(int16_t x, int16_t y) {
     if (choiceKind == 1) {                 // evolucion
       if (b1) {
         int16_t old = pet.speciesId;
-        bool knew = pet.berryKnown;
         pet.evolve();
         evoPmd.load(old, pet.shiny);
-        // la baya favorita cambio con la especie (v1.57): se dice al acabar la animacion
-        if (knew && !pet.berryKnown) tastesMsgUntil = millis() + EVOLVE_ANIM_MS + 6000;
       }
       else if (b2) pet.declineEvolve();
     } else if (choiceKind == 2) {          // despedida
@@ -2516,7 +2534,7 @@ static uint32_t screenKey() {
     for (uint32_t v : { (uint32_t)pet.eggsOwned(), (uint32_t)itemConfirm, (uint32_t)pet.sleeping, (uint32_t)gLang,
                         (uint32_t)(timeLeft(bagReviveHintUntil) > 0), (uint32_t)bagHintItem,
                         // v2.0 (Y4b): pestana, tienda, aviso, selector de fondos y lo que lo cambia
-                        (uint32_t)bagTab, (uint32_t)shopBuyId, (uint32_t)shopToast, (uint32_t)yardMapPreview,
+                        (uint32_t)bagTab | ((uint32_t)bagPage << 8), (uint32_t)shopBuyId, (uint32_t)shopToast, (uint32_t)yardMapPreview,
                         (uint32_t)pet.coins, (uint32_t)pet.yardOwned, (uint32_t)pet.yardChosen,
                         (uint32_t)pet.yardMapWanted(), (uint32_t)(yardMapPreview ? sceneHour() : 0),
                         // Y5b: la coleccion (que se tiene y la tarjeta abierta; la fecha sale de la mascara)
@@ -4051,6 +4069,12 @@ static const char *const *const BADGE_ICON[STAGE_COUNT] = {
 static const char *const *const ITEM_ICON[IT_COUNT] = {
   SPR_ICON_GOLDEN, SPR_ICON_PROTEIN, SPR_ICON_IRON, SPR_ICON_CARBOS, SPR_ICON_CHARM, SPR_ICON_RARECANDY, SPR_ICON_EGG,
   SPR_ICON_CAKE, SPR_ICON_REVIVE, SPR_ICON_PLAY,  // la Poke Ball (v2.2) es la del boton Jugar
+  SPR_ICON_BERRY_R, SPR_ICON_BERRY_B, SPR_ICON_BERRY_G, SPR_ICON_BERRY_Y, SPR_ICON_BERRY_P, SPR_ICON_BERRY_O,  // v3.2
+};
+// el icono de cada comida (FOOD_*, food.h): la baya normal, las 6 de colores, la tarta y la dorada
+static const char *const *const FOOD_ICON[FOOD_COUNT] = {
+  SPR_ICON_BERRY, SPR_ICON_BERRY_R, SPR_ICON_BERRY_B, SPR_ICON_BERRY_G, SPR_ICON_BERRY_Y, SPR_ICON_BERRY_P,
+  SPR_ICON_BERRY_O, SPR_ICON_CAKE, SPR_ICON_GOLDEN,
 };
 
 // llama + numero de racha arriba a la izquierda
@@ -4709,10 +4733,7 @@ void renderCardProfile() {
   cardRow(276, 32);
   drawCardStat(274, T(S_VIN), pet.bond, 100, C565(0xd4, 0x52, 0x7e));
 
-  const char *berry = !pet.berryKnown ? T(S_BERRY_UNK)
-                      : pet.lovesBerry(0) ? T(S_BERRY_RED)
-                      : pet.lovesBerry(1) ? T(S_BERRY_BLUE)
-                                          : T(S_BERRY_GREEN);
+  const char *berry = !pet.berryKnown ? T(S_BERRY_UNK) : T((StrId)(S_IT_BERRY_R + favBerryOf(pet.speciesId)));
   char info[48];
   snprintf(info, sizeof(info), T(S_INFO_FMT), berry,
            (unsigned long)(pet.ageMinutes / 1440));
@@ -4951,9 +4972,18 @@ void renderCardWalk() {
 #define BAG_ASK_PILL_GAP 24
 // orden en pantalla: lo que se come, las vitaminas, el caramelo y lo que no se usa a mano
 static const uint8_t BAG_ORDER[] = { IT_GOLDEN, IT_CAKE, IT_RARECANDY, IT_PROTEIN, IT_IRON, IT_CARBOS,
-                                     IT_CHARM, IT_EGG, IT_REVIVE, IT_BALL };
+                                     IT_CHARM, IT_EGG, IT_REVIVE, IT_BALL,
+                                     IT_BERRY_R, IT_BERRY_B, IT_BERRY_G, IT_BERRY_Y, IT_BERRY_P, IT_BERRY_O };  // v3.2: 2.a pagina
 #define BAG_SLOTS (sizeof(BAG_ORDER) / sizeof(BAG_ORDER[0]))
+#define BAG_PAGE0 10   // casillas de la 1.a pagina; el resto (las 6 bayas de colores) van en la 2.a
+#define BAG_PAGES 2
+#define BAG_PAGER_X (CX + 104)  // el "1/2" a la derecha de las monedas
+#define BAG_PAGER_Y (BAG_COIN_Y + 2)
 static_assert(BAG_SLOTS == IT_COUNT, "cada objeto tiene su casilla en la mochila");
+
+// la casilla k de la mochila (o la tienda) en su pagina: las de la 2.a vuelven a empezar arriba a la izquierda
+static int bagPageOf(int k) { return k < BAG_PAGE0 ? 0 : 1; }
+static int bagCellOf(int k) { return k < BAG_PAGE0 ? k : k - BAG_PAGE0; }
 
 void bagSlotXY(int k, int &x, int &y) {
   x = BAG_X + (k % BAG_COLS) * (BAG_SLOT_W + BAG_GAP);
@@ -4971,6 +5001,7 @@ static void bagAskPills(int &xUse, int &wUse, int &xNo, int &wNo) {
 void openBag() {
   bagOpen = true;
   bagTab = 0;
+  bagPage = 0;
   souvTip = 0;
   itemConfirm = 0;
   shopBuyId = 0;
@@ -5021,6 +5052,16 @@ static void shopPrice(int cx, int y, uint16_t price, uint16_t col) {
   yCoin(x + 7, y + 7, 7);
   gfx->setTextColor(col);
   setCur(x + 19, y);
+  printT(s);
+}
+
+// v3.2: "1/2" de las paginas de Objetos y Tienda (tocarlo pasa de pagina)
+static void bagPager() {
+  char s[12];
+  snprintf(s, sizeof(s), "%d/%d", bagPage + 1, BAG_PAGES);
+  gfx->setTextColor(Y_TEXT_DIM);
+  setSize(2);
+  setCur(BAG_PAGER_X - textW(s, 2) / 2, BAG_PAGER_Y);
   printT(s);
 }
 
@@ -5080,8 +5121,10 @@ static void shopAskPills(const char *yes, int &xY, int &wY, int &xN, int &wN) {
 }
 
 static void renderShop() {
-  for (int k = 0; k < SHOP_ITEMS; k++) shopCell(k, SHOP_ORDER[k]);
-  shopBgCell();
+  for (int k = 0; k < SHOP_ITEMS; k++)
+    if (k >= SHOP_PAGE0 ? bagPage == 1 : bagPage == 0) shopCell(k >= SHOP_PAGE0 ? k - SHOP_PAGE0 : k, SHOP_ORDER[k]);
+  if (bagPage == 0) shopBgCell();
+  if (!shopBuyId) bagPager();
   if (shopToast) {
     shopDrawToast(BAG_HINT_Y - 8);
   } else {
@@ -5230,8 +5273,9 @@ static void shopTap(int16_t x, int16_t y) {
     return;
   }
   for (int k = 0; k < SHOP_ITEMS; k++) {
+    if ((k >= SHOP_PAGE0 ? 1 : 0) != bagPage) continue;
     int sx, sy;
-    bagSlotXY(k, sx, sy);
+    bagSlotXY(k >= SHOP_PAGE0 ? k - SHOP_PAGE0 : k, sx, sy);
     if (!yInRect(x, y, sx, sy, BAG_SLOT_W, BAG_SLOT_H)) continue;
     shopBuyId = SHOP_ORDER[k] + 1;
     shopBuyUntil = millis() + 10000;
@@ -5241,7 +5285,7 @@ static void shopTap(int16_t x, int16_t y) {
   }
   int bx, by;
   bagSlotXY(SHOP_BG_SLOT, bx, by);
-  if (yInRect(x, y, bx, by, 2 * BAG_SLOT_W + BAG_GAP, BAG_SLOT_H)) {
+  if (bagPage == 0 && yInRect(x, y, bx, by, 2 * BAG_SLOT_W + BAG_GAP, BAG_SLOT_H)) {
     uint8_t w = pet.yardMapWanted();
     yardMapPreview = w >= 1 && w <= YARD_MAPS ? w : 1;  // se abre en el que se usa
     shopToast = 0;
@@ -5261,9 +5305,19 @@ void bagSwipe(int dir) {
     return;
   }
   if (itemConfirm || shopBuyId || souvTip) return;  // con una pregunta o una tarjeta abierta, no
-  int t = (int)bagTab + (dir > 0 ? -1 : 1);  // derecha = la anterior, izquierda = la siguiente
+  int d = dir > 0 ? -1 : 1;  // derecha = la anterior, izquierda = la siguiente
+  if (bagTab < 2) {          // v3.2: Objetos y Tienda, primero sus paginas
+    int p = (int)bagPage + d;
+    if (p >= 0 && p < BAG_PAGES) {
+      bagPage = (uint8_t)p;
+      shopToast = 0;
+      return;
+    }
+  }
+  int t = (int)bagTab + d;
   if (t < 0 || t >= BAG_TABS) return;
   bagTab = (uint8_t)t;
+  bagPage = (d < 0 && t < 2) ? BAG_PAGES - 1 : 0;  // volviendo, a la ultima pagina de la anterior
   shopToast = 0;
 }
 
@@ -5356,9 +5410,10 @@ void renderBag() {
   // una tarjeta por objeto, con su cuenta; el amuleto, enmarcado si se lleva. Sin ninguno, la
   // tarjeta queda hundida (solo el borde) y el icono en silueta.
   for (int k = 0; k < (int)BAG_SLOTS; k++) {
+    if (bagPageOf(k) != bagPage) continue;
     uint8_t i = BAG_ORDER[k];
     int x, y;
-    bagSlotXY(k, x, y);
+    bagSlotXY(bagCellOf(k), x, y);
     // los huevos (v1.40): tambien el que espera en la incubadora
     uint8_t n = (i == IT_EGG) ? pet.eggsOwned() : pet.items[i];
     bool held = (i == IT_CHARM) && n;
@@ -5391,6 +5446,7 @@ void renderBag() {
   setSize(2);
   setCur(centerX(hint, 2), BAG_HINT_Y);
   printT(hint);
+  if (!itemConfirm) bagPager();
   yBackBtn();
 
   // "usar objeto?" (mismo dialogo que "soltar?"): tarjeta encima de la rejilla, Usar / NO
@@ -5443,7 +5499,7 @@ void bagTap(int16_t x, int16_t y) {
         if (ok) closeBag();
       } else if (pet.useItem(it)) {
         fxNeeds(ns);
-        sfxPlay(it == IT_GOLDEN || it == IT_CAKE ? SFX_EAT : SFX_LEVEL);
+        sfxPlay(foodOfItem(it) != FOOD_COUNT ? SFX_EAT : SFX_LEVEL);
         // a la pantalla principal a verlo: comer, subir de nivel o entrenar (v1.30, "ATK +3")
         closeBag();
       } else {
@@ -5460,8 +5516,15 @@ void bagTap(int16_t x, int16_t y) {
   if (tab >= 0) {
     if (bagTab != tab) sfxPlay(SFX_TAP);
     bagTab = (uint8_t)tab;
+    bagPage = 0;
     shopToast = 0;
     souvTip = 0;
+    return;
+  }
+  if (bagTab < 2 && yInRect(x, y, BAG_PAGER_X - 36, BAG_PAGER_Y - 8, 72, BAG_Y - (BAG_PAGER_Y - 8))) {  // v3.2: el "1/2" cambia de pagina
+    bagPage = (uint8_t)((bagPage + 1) % BAG_PAGES);
+    shopToast = 0;
+    sfxPlay(SFX_TAP);
     return;
   }
   if (bagTab == 1) {
@@ -5473,8 +5536,9 @@ void bagTap(int16_t x, int16_t y) {
     return;
   }
   for (int k = 0; k < (int)BAG_SLOTS; k++) {
+    if (bagPageOf(k) != bagPage) continue;
     int sx, sy;
-    bagSlotXY(k, sx, sy);
+    bagSlotXY(bagCellOf(k), sx, sy);
     if (x < sx || x >= sx + BAG_SLOT_W || y < sy || y >= sy + BAG_SLOT_H) continue;
     uint8_t i = BAG_ORDER[k];
     if (pet.canUseItem(i) || (i == IT_EGG && pet.items[IT_EGG] && pet.vacantSlot() >= 0 && !pet.awaitingStarter())) {
@@ -7092,13 +7156,22 @@ void openPlayPanel() {
   }
 }
 
+// v3.2: la comida de cada una de las 4 tarjetas del panel Cuidar: la baya normal y las 3 primeras comidas que se
+// tienen (bayas de colores en su orden, la tarta, la dorada). FOOD_COUNT = vacia
+static uint8_t careFood(uint8_t i) {
+  if (i == 0) return FOOD_PLAIN;
+  uint8_t n = i;
+  for (uint8_t f = FOOD_BERRY0; f < FOOD_COUNT; f++)
+    if (pet.items[foodItem(f)] && --n == 0) return f;
+  return FOOD_COUNT;
+}
+
 // que tarjeta se puede usar ahora (las que no, con contorno e icono apagado)
 static bool panelItemOn(uint8_t kind, uint8_t i) {
   bool awake = !pet.sleeping && !pet.isEgg();
   if (kind == PANEL_CARE) {
     // Y3: la comida cae al patio, una a la vez: con una en el suelo, las demas esperan
-    if ((i <= CP_CAKE) && yardFood.phase != YF_NONE) return false;
-    if (i == CP_CAKE) return awake && pet.items[IT_CAKE];
+    if (i < CP_LIGHT) return awake && yardFood.phase == YF_NONE && careFood(i) != FOOD_COUNT;
     if (i == CP_LIGHT) return true;
     if (i == CP_PET) return awake;  // v2.3: el mimo, despierto
     return awake;
@@ -7133,8 +7206,11 @@ void mixPanelKey(uint32_t &h) {
   if (panelKind == PANEL_TRAVEL) mixTravelKey(h);
   h = mixKey(h, (uint32_t)(panelPressed() + 1));
   for (uint8_t i = 0; i < panelCount(panelKind); i++) h = mixKey(h, panelItemOn(panelKind, i));
-  for (uint32_t v : { (uint32_t)pet.items[IT_CAKE], (uint32_t)pet.sleeping, (uint32_t)pet.berryKnown,
-                      (uint32_t)pet.speciesId, (uint32_t)(timeLeft(cakeHintUntil) > 0), (uint32_t)gLang })
+  for (uint8_t i = 0; i < CP_LIGHT; i++) {
+    uint8_t f = careFood(i), it = f == FOOD_COUNT ? FOOD_NO_ITEM : foodItem(f);
+    h = mixKey(h, (uint32_t)f | ((uint32_t)(it == FOOD_NO_ITEM ? 0 : pet.items[it]) << 8));
+  }
+  for (uint32_t v : { (uint32_t)pet.sleeping, (uint32_t)pet.berryKnown, (uint32_t)pet.speciesId, (uint32_t)gLang })
     h = mixKey(h, v);
 }
 
@@ -7163,38 +7239,34 @@ static int panelCardDraw(uint8_t i, const char *const *icon, const char *label) 
 
 static void renderCarePanel() {
   yTitle(T(S_DOCK_CARE), nullptr);
-  static const char *const *const BERRY[3] = { SPR_ICON_FOOD, SPR_ICON_BERRY_B, SPR_ICON_BERRY_G };
-  for (uint8_t c = 0; c < 3; c++) {
-    int x = panelCardDraw(c, BERRY[c], nullptr);
+  // v3.2 (interino): la baya normal y las 3 primeras comidas que se tienen; sin ninguna, apagada
+  for (uint8_t c = 0; c < CP_LIGHT; c++) {
+    uint8_t f = careFood(c);
+    int x = panelCardDraw(c, f == FOOD_COUNT ? SPR_ICON_BERRY : FOOD_ICON[f], nullptr);
+    if (f == FOOD_COUNT) continue;
+    int y = CP_FOOD_Y;
     // la favorita, ya descubierta (v1.57): marco dorado y una estrella en su esquina
-    if (pet.berryKnown && pet.lovesBerry(c)) {
-      int y = CP_FOOD_Y;
+    if (foodIsBerry(f) && pet.berryKnown && pet.lovesBerry(f - FOOD_BERRY0)) {
       gfx->drawRoundRect(x, y, CP_FOOD_W, CP_FOOD_W, Y_CARD_RAD, UI_BAR_WARN);
       gfx->drawRoundRect(x + 1, y + 1, CP_FOOD_W - 2, CP_FOOD_W - 2, Y_CARD_RAD - 1, UI_BAR_WARN);
-      drawMap(SPR_STAR, 16, x + CP_FOOD_W - 19, y + 3, 1, false);
+      drawMap(SPR_STAR, 16, x + 3, y + 3, 1, false);  // (arriba a la izquierda: a la derecha va la chapa de cuantas hay)
     }
-  }
-  // la tarta (v1.54), con cuantas quedan en una chapa; sin ninguna, apagada
-  int x = panelCardDraw(CP_CAKE, SPR_ICON_CAKE, nullptr);
-  uint8_t cakes = pet.items[IT_CAKE];
-  if (cakes) {
-    char cn[4];
-    snprintf(cn, sizeof(cn), "%u", cakes);
-    int bx = x + CP_FOOD_W - 12, by = CP_FOOD_Y + 12;
-    gfx->fillCircle(bx, by, 10, UI_BAR_BAD);
-    setSize(2);
-    gfx->setTextColor(UI_WHITE);
-    setCur(bx - textW(cn, 2) / 2 + 1, by - 7);
-    printT(cn);
+    // cuantas quedan, en una chapa (la baya normal no se acaba)
+    uint8_t it = foodItem(f), n = it == FOOD_NO_ITEM ? 0 : pet.items[it];
+    if (n) {
+      char cn[4];
+      snprintf(cn, sizeof(cn), "%u", n);
+      int bx = x + CP_FOOD_W - 12, by = y + 12;
+      gfx->fillCircle(bx, by, 10, UI_BAR_BAD);
+      setSize(2);
+      gfx->setTextColor(UI_WHITE);
+      setCur(bx - textW(cn, 2) / 2 + 1, by - 7);
+      printT(cn);
+    }
   }
   // dormido: el sol lo despierta
   panelCardDraw(CP_LIGHT, pet.sleeping ? SPR_ICON_SUN : SPR_ICON_LIGHT, nullptr);
   panelCardDraw(CP_PET, SPR_ICON_PET, nullptr);
-  // tocar la tarta sin ninguna: donde se encuentra (en casa lo decia la cabecera)
-  if (timeLeft(cakeHintUntil)) {
-    gfx->setTextColor(Y_TEXT);
-    printTight(T(S_NO_CAKE), CX, CP_FOOD_Y + CP_FOOD_W + 15, 380);
-  }
 }
 
 static void renderPlayPanel() {
@@ -7221,8 +7293,7 @@ void renderPanel() {
 }
 
 static void carePanelTap(int i) {
-  if (!panelItemOn(PANEL_CARE, i)) {  // dormido: ni comida ni mimo; la tarta sin ninguna dice donde hay
-    if (i == CP_CAKE && !pet.items[IT_CAKE]) cakeHintUntil = millis() + 2500;
+  if (!panelItemOn(PANEL_CARE, i)) {  // dormido: ni comida ni mimo
     panelDeny(i);
     return;
   }
@@ -7238,13 +7309,14 @@ static void carePanelTap(int i) {
     sfxPlay(SFX_HEART);
     fxPose(pmd.has(PMD_POSE) ? PMD_POSE : PMD_HOP, millis(), 1200);
   } else {
-    // Y3: la comida cae al patio y el bicho va a por ella; Pet la aplica al comersela (yardFoodEaten).
-    // La tarta se mira ya (canUseItem) pero no se gasta hasta entonces
-    if (i == CP_CAKE && !pet.canUseItem(IT_CAKE)) {
+    // Y3: la comida cae al patio y el bicho va a por ella; Pet la aplica (y gasta el objeto) al comersela
+    // (yardFoodEaten). Aqui solo se mira que se pueda
+    uint8_t food = careFood(i);
+    if (food == FOOD_COUNT || !pet.canFeed(food)) {
       panelDeny(i);
       return;
     }
-    int r = yardDropFood(i == CP_CAKE ? 3 : (uint8_t)i);
+    int r = yardDropFood(food);
     if (r == 0) {  // ya hay una en el suelo
       panelDeny(i);
       return;
@@ -7256,15 +7328,11 @@ static void carePanelTap(int i) {
     }
     // -1: sin bicho en el patio (no deberia pasar): como siempre, al momento
     FxNeedSnap ns = fxSnap();
-    if (i == CP_CAKE) {
-      if (!pet.eatCake()) {  // (con tartas: en una ceremonia)
-        panelDeny(i);
-        return;
-      }
-    } else {
-      pet.feedBerry(i);
+    if (!pet.feedFood(food)) {
+      panelDeny(i);
+      return;
     }
-    fxNeeds(ns);  // "+25" sobre la barra de comida
+    fxNeeds(ns);  // "+N" sobre la barra de comida
     sfxPlay(SFX_EAT);
   }
   panelKind = PANEL_NONE;  // como el menu: hecho, a casa a verlo
@@ -8183,12 +8251,7 @@ void yardFoodEaten(uint8_t kind, int owner) {
   bool ok = false;
   pet.onSlot((uint8_t)owner, [&] {
     FxNeedSnap ns = fxSnap();
-    if (kind == 3) {
-      ok = pet.eatCake();  // (sin tartas ya, p. ej. gastada desde la mochila: no se gasta nada)
-    } else {
-      pet.feedBerry(kind);
-      ok = pet.eating();
-    }
+    ok = pet.feedFood(kind);  // gasta el objeto aqui y solo si se aplica (sin tarta/baya ya, p. ej. gastada desde la mochila: nada)
     if (ok) fxNeeds(ns);
   });
   Serial.printf("FOOD eaten kind=%u slot=%d ok=%d\n", kind, owner, ok ? 1 : 0);
@@ -8338,8 +8401,6 @@ void yardDrawPet(int i, uint32_t now) {
 }
 
 // ---- la comida que cae y el huevo (fase Y3) ----
-static const char *const *const YARD_FOOD_ICON[4] = { SPR_ICON_FOOD, SPR_ICON_BERRY_B, SPR_ICON_BERRY_G, SPR_ICON_CAKE };
-
 // la comida en el suelo: cae desde arriba con un bote, espera, y en el bocado se encoge y se va
 void yardDrawFood(uint32_t now) {
   const YardFood &f = yardFood;
@@ -8362,7 +8423,7 @@ void yardDrawFood(uint32_t now) {
   }
   int sw = 26 - lift / 10;  // la sombra crece al acercarse al suelo
   if (sw > 6) yardShadow(f.x, f.y, sw);
-  drawMap(YARD_FOOD_ICON[f.kind & 3], 16, f.x - 8 * s, f.y - 15 * s - lift, s, false);
+  drawMap(FOOD_ICON[f.kind < FOOD_COUNT ? f.kind : 0], 16, f.x - 8 * s, f.y - 15 * s - lift, s, false);
 }
 
 // lo de encima del bicho por la comida: el "!" al verla (el que la pidio), y el corazon que sale al
@@ -8731,7 +8792,7 @@ int yardGiftAt(int16_t x, int16_t y) {
   return -1;
 }
 
-// suelta la comida del panel Cuidar (kind: baya 0-2, tarta 3) cerca del bicho del foco. 1 cae, 0 ya hay
+// suelta la comida del panel Cuidar (kind: FOOD_*, food.h) cerca del bicho del foco. 1 cae, 0 ya hay
 // una en el suelo, -1 no hay bicho en el patio
 int yardDropFood(uint8_t kind) {
   if (yardFood.phase != YF_NONE) return 0;
@@ -8757,8 +8818,6 @@ int yardDropFood(uint8_t kind) {
 const char *yardEventMsg(uint8_t s) {
   const PetLife &l = pet.home(s);
   bool focus = s == pet.focusSlot;
-  if (focus && timeLeft(cakeHintUntil)) return T(S_NO_CAKE);
-  if (focus && timeLeft(tastesMsgUntil) && !l.sleeping) return T(S_TASTES);
   if (l.emote() == EMOTE_ANGRY) return T(S_GRUMPY);
   if (l.emote() == EMOTE_DIZZY) return T(S_DIZZY);
   if (l.sleeping) return "Zzz...";

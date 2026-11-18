@@ -564,7 +564,7 @@ enum : uint8_t { YF_NONE = 0, YF_FALL, YF_NOTICE, YF_WALK, YF_EAT };
 
 struct YardFood {
   uint8_t phase = YF_NONE;
-  uint8_t kind = 0;    // lo que es (el juego: baya 0-2, tarta 3)
+  uint8_t kind = 0;    // lo que es (el juego: FOOD_* de food.h)
   int16_t x = 0, y = 0; // donde esta en el suelo (el centro de su celda)
   int16_t cell = -1;    // la celda a la que se anda (-1: se come donde esta el bicho)
   uint32_t t0 = 0;      // inicio de la fase de ahora

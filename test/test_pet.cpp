@@ -124,28 +124,29 @@ TEST(egg, rareza_del_huevo_es_valida) {
 }
 
 // ---------------------------------------------------------------- comida
-TEST(feed, baya_normal_sube_25_y_topa_en_100) {
+TEST(feed, baya_normal_sube_lo_de_tuning_y_topa_en_100) {
   Pet p;
   makePet(p, 4);
   p.fullness = 50;
-  uint8_t notLoved = (uint8_t)((p.speciesId + 1) % 3);
-  p.feedBerry(notLoved);
-  CHECK_EQ(p.fullness, (uint8_t)75);
-  p.feedBerry(notLoved);
-  CHECK_EQ(p.fullness, (uint8_t)100);  // 100 en vez de 105
+  p.feed();
+  CHECK_EQ(p.fullness, (uint8_t)(50 + PLAIN_BERRY_FOOD));
+  p.feedFood(FOOD_PLAIN);
+  p.feedFood(FOOD_PLAIN);
+  CHECK_EQ(p.fullness, (uint8_t)100);  // 100 en vez de 110
 }
 
 TEST(feed, baya_favorita_sube_mas_y_da_corazon) {
   Pet p;
-  makePet(p, 4);  // 4 % 3 == 1 -> le gusta la azul
-  CHECK(p.lovesBerry(1));
-  CHECK(!p.lovesBerry(0));
-  CHECK(!p.lovesBerry(2));
+  makePet(p, 4);
+  uint8_t fav = favBerryOf(4);
+  CHECK(p.lovesBerry(fav));
+  CHECK(!p.lovesBerry((fav + 1) % BERRY_COLORS));
   p.fullness = 10;
   p.joy = 10;
-  p.feedBerry(1);
-  CHECK_EQ(p.fullness, (uint8_t)45);
-  CHECK_EQ(p.joy, (uint8_t)20);
+  p.items[IT_BERRY_R + fav] = 1;
+  CHECK(p.feedFood(FOOD_BERRY0 + fav));
+  CHECK_EQ(p.fullness, (uint8_t)(10 + FAV_BERRY_FOOD));
+  CHECK_EQ(p.joy, (uint8_t)(10 + FAV_BERRY_JOY));
   CHECK(p.berryKnown);
   CHECK(p.showHeart());
   CHECK(p.eating());
@@ -285,7 +286,8 @@ TEST(feed, dormido_o_huevo_no_come) {
   p.fullness = 40;
   p.toggleLight();  // a dormir
   CHECK(p.sleeping);
-  p.feedBerry(1);
+  p.feed();
+  CHECK_EQ(p.fullness, (uint8_t)40);
   p.items[IT_CAKE] = 1;
   CHECK(!p.eatCake());
   CHECK_EQ(p.items[IT_CAKE], (uint8_t)1);
@@ -296,7 +298,7 @@ TEST(feed, dormido_o_huevo_no_come) {
   e.begin();
   e.chooseStarter(4);
   e.fullness = 40;
-  e.feedBerry(0);
+  e.feed();
   CHECK_EQ(e.fullness, (uint8_t)40);
 }
 
@@ -552,41 +554,20 @@ TEST(evolve, transforma_registra_y_anima) {
   CHECK(!p.evolving());
 }
 
-// v1.57: la baya favorita sale de la especie; si al evolucionar cambia, vuelve a ser un secreto (la
-// estrella del menu de comida no puede senalar la de antes)
-TEST(evolve, si_cambia_la_baya_favorita_se_olvida) {
+// v3.2: la baya favorita sale de la forma BASE de la linea: evolucionar no la cambia ni la olvida
+TEST(evolve, la_baya_favorita_descubierta_sigue_al_evolucionar) {
   Pet p;
-  makePet(p, 4);  // Charmander: azul (4 % 3); Charmeleon, verde
-  p.feedBerry(1);
+  makePet(p, 4);  // Charmander -> Charmeleon
+  uint8_t fav = favBerryOf(4);
+  p.items[IT_BERRY_R + fav] = 1;
+  p.feedFood(FOOD_BERRY0 + fav);
   CHECK(p.berryKnown);
   p.setLevel(21);
   setStats(p, 80, 80, 80);
   p.evolve();
   CHECK_EQ(p.speciesId, (int16_t)5);
-  CHECK(!p.berryKnown);
-  p.feedBerry(2);
   CHECK(p.berryKnown);
-}
-
-TEST(evolve, si_no_cambia_se_recuerda) {
-  bool tried = false;
-  for (int seed = 1; seed <= 60 && !tried; seed++) {  // Eevee (133) -> Flareon (136): el mismo gusto (% 3)
-    randomSeed(seed);
-    Pet p;
-    makePet(p, DEX_EEVEE);
-    p.feedBerry(DEX_EEVEE % 3);
-    CHECK(p.berryKnown);
-    p.setLevel(41);
-    setStats(p, 80, 80, 80);
-    p.evolve();
-    if (p.speciesId % 3 == DEX_EEVEE % 3) {
-      tried = true;
-      CHECK(p.berryKnown);
-    } else {
-      CHECK(!p.berryKnown);
-    }
-  }
-  CHECK(tried);
+  CHECK(p.lovesBerry(fav));
 }
 
 TEST(evolve, forma_final_no_evoluciona) {
@@ -905,7 +886,7 @@ TEST(mood, refleja_el_estado) {
   p.joy = 20;
   CHECK_EQ((int)p.mood(), (int)MOOD_SAD);
   p.joy = 80;
-  p.feedBerry(0);
+  p.feed();
   CHECK_EQ((int)p.mood(), (int)MOOD_EATING);
   mockAdvanceMillis(EAT_ANIM_MS + 1);
   p.toggleLight();
@@ -1101,7 +1082,8 @@ TEST(medals, forma_final_al_nacer) {
 TEST(medals, la_baya_favorita_da_medalla) {
   Pet p;
   makePet(p, 4);
-  p.feedBerry(1);  // su favorita
+  p.items[IT_BERRY_R + favBerryOf(p.speciesId)] = 1;
+  p.feedFood(FOOD_BERRY0 + favBerryOf(p.speciesId));  // su favorita
   CHECK(p.berryKnown);
   advance(p, 1);
   CHECK(p.hasMedal(MED_BERRY));
@@ -1178,7 +1160,7 @@ TEST(death, un_cuidado_para_la_cuenta_y_lo_perdido_no_vuelve) {
   CHECK_EQ(p.neglectMinutes(), (uint8_t)10);
   uint8_t b = p.bond;
   CHECK(b < 70);
-  p.feedBerry(0);
+  p.feed();
   advance(p, 1);
   CHECK_EQ(p.neglectMinutes(), (uint8_t)0);
   CHECK(p.bond <= b + 2);  // la baya da su +2, nada mas
@@ -1215,7 +1197,7 @@ TEST(death, un_cuidado_en_la_ultima_media_hora_tambien_la_salva) {
   p.bond = 0;
   setStats(p, 0, 0, 0);
   advance(p, DEATH_MIN - 2);
-  p.feedBerry(0);  // +25 de comida (un mimo no basta: +5 de felicidad se va en el mismo minuto)
+  p.feed();  // +PLAIN_BERRY_FOOD de comida (un mimo no basta: se va en el mismo minuto)
   advance(p, 5);
   CHECK(!p.isDying());
   CHECK_EQ(p.deathMinutes(), (uint8_t)0);
@@ -1269,7 +1251,7 @@ TEST(death, muriendose_el_tiempo_se_para_y_nada_funciona) {
   uint32_t age = p.ageMinutes;
   advance(p, 30);
   CHECK_EQ(p.ageMinutes, age);
-  p.feedBerry(0);
+  p.feed();
   p.play();
   p.caress();
   p.toggleLight();
@@ -1556,7 +1538,7 @@ TEST(ceremony, durante_la_ceremonia_no_se_puede_interactuar) {
   setStats(p, 50, 50, 50);
   p.poops = 2;
   p.release();
-  p.feedBerry(0);
+  p.feed();
   p.items[IT_CAKE] = 1;
   CHECK(!p.eatCake());
   p.play();
@@ -1913,29 +1895,37 @@ TEST(steps, tope_de_hallazgos_al_dia) {
 TEST(steps, probabilidades_de_cada_objeto) {
   Pet p;
   makeWalker(p);
-  mockForceRandom(34);  // < 35: baya (v1.54: eran 55; v1.59: 40)
+  // los tramos salen de ODDS_* (tuning.h), en el orden baya dorada, tarta, vitamina, amuleto, revivir, baya de color
+  const int vit0 = ODDS_GOLDEN + ODDS_CAKE, chm0 = vit0 + ODDS_VITAMIN, rev0 = chm0 + ODDS_CHARM, col0 = rev0 + ODDS_REVIVE;
+  mockForceRandom(ODDS_GOLDEN - 1);
   p.addSteps(FIND_MIN_STEPS + 34, DIA);
   CHECK_EQ(p.giftItem(0), (uint8_t)IT_GOLDEN);
-  mockForceRandom(50);  // 35..54: tarta (v1.54)
+  mockForceRandom(vit0 - 1);
   p.addSteps(FIND_MIN_STEPS + 50, DIA);
   CHECK_EQ(p.giftItem(1), (uint8_t)IT_CAKE);
-  mockForceRandom(75);  // 55..84: vitamina (random(3) forzado = 2: carburante)
+  mockForceRandom(chm0 - 1);  // vitamina (random(3) forzado = 2: carburante)
   p.addSteps(FIND_MIN_STEPS + 75, DIA);
   CHECK_EQ(p.giftItem(2), (uint8_t)IT_CARBOS);
-  mockForceRandom(90);  // 85..94: amuleto (otro dia: con cuatro hallazgos se cruzaria la meta de 3000)
+  mockForceRandom(rev0 - 1);  // amuleto (otro dia: con cuatro hallazgos se cruzaria la meta de 3000)
   p.addSteps(FIND_MIN_STEPS + 90, DIA + 1);
   CHECK_EQ(p.giftItem(3), (uint8_t)IT_CHARM);
   p.addSteps(FIND_MIN_STEPS + 90, DIA + 2);  // otro amuleto: envuelto aun no se sabe que ya hay uno
   CHECK_EQ(p.giftItem(4), (uint8_t)IT_CHARM);
-  mockForceRandom(97);  // 95..99: Revivir (v1.59)
+  mockForceRandom(col0 - 1);  // Revivir (v1.59)
   p.addSteps(FIND_MIN_STEPS + 97, DIA + 3);
   CHECK_EQ(p.giftItem(5), (uint8_t)IT_REVIVE);
+  mockForceRandom(99);  // v3.2: la baya de color (random(6) forzado = el ultimo color)
+  p.addSteps(FIND_MIN_STEPS + 99, DIA + 4);
+  CHECK(p.giftItem(6) >= IT_BERRY_R && p.giftItem(6) <= IT_BERRY_O);
   while (p.giftCount()) p.openGift();  // al abrirlo, el segundo amuleto se vuelve baya
   CHECK_EQ(p.items[IT_CHARM], (uint8_t)1);
   CHECK_EQ(p.items[IT_GOLDEN], (uint8_t)2);
   CHECK_EQ(p.items[IT_CAKE], (uint8_t)1);
   CHECK_EQ(p.items[IT_CARBOS], (uint8_t)1);
   CHECK_EQ(p.items[IT_REVIVE], (uint8_t)(REVIVE_START + 1));
+  uint8_t berries = 0;
+  for (uint8_t c = IT_BERRY_R; c <= IT_BERRY_O; c++) berries += p.items[c];
+  CHECK_EQ(berries, (uint8_t)1);  // una baya de color llegada envuelta se abre como los demas objetos
 }
 
 TEST(steps, las_tres_vitaminas_salen_con_el_azar_real) {

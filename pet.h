@@ -39,8 +39,12 @@
 // un guardado anterior trae solo las 5 (6, 7, 8) primeras. El huevo (v1.39) tampoco se usa a mano: va a
 // casa solo. La tarta (v1.54) se come desde el menu de comida o desde la mochila. El Revivir (v1.59)
 // tampoco se usa a mano: se ofrece cuando el bicho se muere de abandono. La Poke Ball (v2.2) tampoco: se
-// lanza al ganar a un bicho salvaje (encounter.h).
-enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_RARECANDY, IT_EGG, IT_CAKE, IT_REVIVE, IT_BALL, IT_COUNT };
+// lanza al ganar a un bicho salvaje (encounter.h). Las seis bayas de colores (v3.2: roja, azul, verde, amarilla,
+// rosa, naranja) van detras de la Poke Ball: un guardado anterior trae menos huecos y el resto vale 0.
+enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_RARECANDY, IT_EGG, IT_CAKE, IT_REVIVE, IT_BALL,
+       IT_BERRY_R, IT_BERRY_B, IT_BERRY_G, IT_BERRY_Y, IT_BERRY_P, IT_BERRY_O, IT_COUNT };
+
+#define PACK_OLD 10  // objetos de "bpack" (hasta IT_BALL): el formato de antes. Las bayas, en "bpk2" (v3.2). No es de equilibrio
 
 // --- trucos del IMU (Tarea 2): lo que restan el enfado y el mareo, en tuning.h
 
@@ -180,8 +184,10 @@ public:
   void update(uint32_t nowMs);  // llamar en cada loop()
 
   // Acciones (botones tactiles): el bicho del foco
-  void feed();              // baya roja (compatibilidad)
-  void feedBerry(uint8_t color);  // 0 roja, 1 azul, 2 verde
+  void feed();              // la baya normal (gratis)
+  // v3.2: da de comer FOOD_* (food.h) y gasta su objeto solo si se aplica; false = no pudo comer (no gasta nada)
+  bool canFeed(uint8_t food) const;
+  bool feedFood(uint8_t food);
   bool eatCake();  // una tarta de la mochila (v1.54): false si no hay o no puede comer
   void playResult(uint8_t score);  // recompensa del minijuego (entrena VEL)
   uint8_t trainStrength(uint16_t hits);  // saco de entrenamiento (entrena FUE)
@@ -612,6 +618,7 @@ private:
   void registerSpecies(int16_t dex, bool sh);  // sh: tambien en la de shinies
   bool saveHome1();                 // "hm1" (si cambio); false si no se pudo escribir
   bool saveOk = true;               // el ultimo save() llego a escribir "hm1" (y lo de despues)
+  void putPack();                   // "bpack" (10 objetos de antes) + "bpk2" (las 6 bayas), v3.2
   void saveBag();                   // "bpack" y "cegg" ya (endLife: un huevo de casa a la mochila)
   void saveCapEggs();               // "cegg"
   HomeRec hm1Saved;                 // lo ultimo escrito en "hm1" (para no repetirlo)

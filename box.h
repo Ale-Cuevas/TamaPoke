@@ -21,7 +21,9 @@ enum : uint8_t { BOX_EMPTY = 0, BOX_OK, BOX_DAMAGED };
 
 // bits de PetRecord::flags
 // REC_CARED (v3.0, sin cambiar la version): el primer cuidado de su dia (bondDay) ya le dio su vinculo
-enum : uint8_t { REC_SHINY = 1 << 0, REC_BERRY = 1 << 1, REC_SLEEP = 1 << 2, REC_CARED = 1 << 3 };
+// REC_BERRY (el gusto por especie % 3, hasta v3.1) ya no se escribe ni se lee; REC_FAV6 (v3.2, sin cambiar la
+// version): descubrio su baya favorita de las 6 (por la forma base de la linea). Todos empiezan sin descubrirla.
+enum : uint8_t { REC_SHINY = 1 << 0, REC_BERRY = 1 << 1, REC_SLEEP = 1 << 2, REC_CARED = 1 << 3, REC_FAV6 = 1 << 4 };
 
 // Un bicho en un hueco de la caja: un putBytes de 55 bytes por hueco (unas 4 entradas de la
 // NVS). Empaquetado y en el orden de la memoria (la placa y el PC son little-endian).

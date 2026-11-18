@@ -3,6 +3,7 @@
 #include <type_traits>
 #include "growth.h"  // el nivel sale de growMin
 #include "box.h"     // PetRecord: lo que va a la caja
+#include "food.h"    // favBerryOf: la baya favorita de la linea (v3.2)
 #include "tuning.h"  // POOP_MAX, DIZZY_SHAKES, REVIVE_LIMIT_MIN...
 
 // La vida de un bicho de casa (v3.0, dos bichos en casa). Todo lo que es de un individuo (o del hueco de
@@ -60,7 +61,7 @@ struct PetLife {
   // genes (90-110%, se tiran al eclosionar) y entrenamiento (0-100)
   uint8_t geneAtk = 100, geneDef = 100, geneSpe = 100;
   uint8_t trAtk = 0, trDef = 0, trSpe = 0;
-  bool berryKnown = false;  // ya descubrio su baya favorita
+  bool berryKnown = false;  // ya descubrio su baya favorita (v3.2: se guarda con REC_FAV6 / "fk"; el "bk" de antes se ignora)
   bool shiny = false;       // variante de color rara (se sortea en el huevo)
   uint32_t ageMinutes = 0;  // edad real en minutos (huevo incluido): dias, despedida
   // minutos de crecimiento (v1.35, growth.h): de ellos sale el nivel. Avanzan con la edad
@@ -152,7 +153,8 @@ struct PetLife {
   // la tarta lo tiene lleno: la comida no baja (ni con el tiempo ni jugando) hasta satedUntil
   bool sated() const { return !isEgg() && ageMinutes < satedUntil; }
   uint32_t satedMinutesLeft() const { return sated() ? satedUntil - ageMinutes : 0; }
-  bool lovesBerry(uint8_t color) const { return !isEgg() && (speciesId % 3) == color; }  // gusto oculto por especie
+  // v3.2: la baya favorita sale de la forma base de su linea (food.h), asi no cambia al evolucionar; color 0..5
+  bool lovesBerry(uint8_t color) const { return !isEgg() && favBerryOf(speciesId) == color; }
   bool eating() const { return timeLeft(eatUntil) > 0; }
   bool showHeart() const { return timeLeft(heartUntil) > 0; }
   bool evolving() const { return timeLeft(evolveUntil) > 0; }

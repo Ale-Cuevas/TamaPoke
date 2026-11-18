@@ -20,7 +20,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "PUNTOS: %u", "Qu\202 felicidad!", "+felicidad",
     "AJUSTAR HORA", "HORA", "MIN", "desliza arriba: cancelar", "Idioma",
     "MEDALLA!", "GENIAL!", "RACHA %u DIAS!",
-    "RACHA %u  rec %u", "VIN", "BAYA ???", "BAYA ROJA", "BAYA AZUL", "BAYA VERDE",
+    "RACHA %u  rec %u", "VIN", "BAYA ???",
     "%s   EDAD %lud", "toca el nombre: renombrar",
     "COMBATE", "FUE", "DEF", "VEL", "PES",
     "MEDALLAS %d/%d", "toca: volver",
@@ -39,6 +39,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "META!", "HALLAZGO!", "Mochila llena", "Usar %s?", "Amuleto: huevo shiny", "Vac\241a: sal a pasear!",
     "Est\240 enfadado!", "Qu\202 mareo...",
     "BAYA DORADA", "PROTEINA", "HIERRO", "CARBURANTE", "AMULETO IRIS", "CARAMELO RARO", "HUEVO", "TARTA", "REVIVIR", "POK\220 BALL",
+    "BAYA ROJA", "BAYA AZUL", "BAYA VERDE", "BAYA AMARILLA", "BAYA ROSA", "BAYA NARANJA",  // v3.2
     // combate (v1.24)
     "ENTRENAMIENTO", "Es muy eficaz!", "No es muy eficaz...", "No le afecta...", "Golpe cr\241tico!", "Especial!",
     "Toca para cargar!", "Muerte s\243bita!", "Retroceso!", "GANASTE!", "PERDISTE...", "EMPATE", "Felicidad +%u", "Premio: una vez por hora",
@@ -117,7 +118,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "SCORE: %u", "So much fun!", "+happiness",
     "SET TIME", "HOUR", "MIN", "swipe up: cancel", "Lang",
     "MEDAL!", "AWESOME!", "%u DAY STREAK!",
-    "STREAK %u  best %u", "BOND", "BERRY ???", "RED BERRY", "BLUE BERRY", "GREEN BERRY",
+    "STREAK %u  best %u", "BOND", "BERRY ???",
     "%s   AGE %lud", "tap name: rename",
     "BATTLE", "ATK", "DEF", "SPD", "WGT",
     "MEDALS %d/%d", "tap: back",
@@ -136,6 +137,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "GOAL!", "FOUND!", "Backpack full", "Use %s?", "Charm: shinier egg", "Empty: go for a walk!",
     "Grumpy!", "So dizzy...",
     "GOLDEN BERRY", "PROTEIN", "IRON", "CARBOS", "SHINY CHARM", "RARE CANDY", "EGG", "CAKE", "REVIVE", "POK\220 BALL",
+    "RED BERRY", "BLUE BERRY", "GREEN BERRY", "YELLOW BERRY", "PINK BERRY", "ORANGE BERRY",  // v3.2
     // combate (v1.24)
     "PRACTICE", "Super effective!", "Not very effective...", "No effect...", "Critical hit!", "Special!",
     "Tap to charge!", "Sudden death!", "Recoil!", "YOU WIN!", "YOU LOST...", "DRAW", "Joy +%u", "Reward: once an hour",
@@ -214,7 +216,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "SCORE: %u", "Trop bien!", "+bonheur",
     "R\220GLER L'HEURE", "HEURE", "MIN", "glisse haut: annuler", "Langue",
     "M\220DAILLE!", "SUPER!", "S\220RIE %u JOURS!",
-    "S\220RIE %u  rec %u", "LIEN", "BAIE ???", "BAIE ROUGE", "BAIE BLEUE", "BAIE VERTE",
+    "S\220RIE %u  rec %u", "LIEN", "BAIE ???",
     "%s   AGE %lud", "touche le nom: renommer",
     "COMBAT", "ATQ", "DEF", "VIT", "PDS",
     "M\220DAILLES %d/%d", "touche: retour",
@@ -233,6 +235,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "OBJECTIF!", "TROUV\220!", "Sac plein", "Utiliser %s?", "Charme: oeuf chroma", "Vide: va te balader!",
     "Grognon!", "Tout \202tourdi...",
     "BAIE DOR\220E", "PROT\220INE", "FER", "CARBONE", "CHARME CHROMA", "SUPER BONBON", "OEUF", "GATEAU", "RANIMER", "POKE BALL",
+    "BAIE ROUGE", "BAIE BLEUE", "BAIE VERTE", "BAIE JAUNE", "BAIE ROSE", "BAIE ORANGE",  // v3.2
     // combate (v1.24)
     "ENTRA\214NEMENT", "Super efficace!", "Pas tr\212s efficace...", "Aucun effet...", "Coup critique!", "Sp\202cial!",
     "Tape pour charger!", "Mort subite !", "Recul !", "GAGN\220!", "PERDU...", "\220GALIT\220", "Bonheur +%u", "Prix: une fois par heure",
@@ -316,7 +319,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "PUNKTE: %u", "Wie sch\224n!", "+Freude",
     "ZEIT STELLEN", "STD", "MIN", "hoch wischen: Abbruch", "Sprache",
     "MEDAILLE!", "TOLL!", "%u TAGE SERIE!",
-    "SERIE %u  rek %u", "BND", "BEERE ???", "ROTE BEERE", "BLAUE BEERE", "GR\232NE BEERE",
+    "SERIE %u  rek %u", "BND", "BEERE ???",
     "%s   ALTER %lud", "Name tippen: umbenennen",
     "KAMPF", "ANG", "VER", "INI", "GEW",
     "MEDAILLEN %d/%d", "tippen: zur\201ck",
@@ -335,6 +338,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "ZIEL!", "GEFUNDEN!", "Rucksack voll", "%s nutzen?", "Pin: Ei schillert", "Leer: geh spazieren!",
     "Grummelig!", "Schwindelig...",
     "GOLDBEERE", "PROTEIN", "EISEN", "CARBON", "SCHILLERPIN", "SONDERBONBON", "EI", "KUCHEN", "BELEBER", "POKEBALL",
+    "ROTE BEERE", "BLAUE BEERE", "GR\232NE BEERE", "GELBE BEERE", "ROSA BEERE", "ORANGE BEERE",  // v3.2
     // combate (v1.24)
     "TRAINING", "Sehr effektiv!", "Nicht sehr effektiv...", "Keine Wirkung...", "Volltreffer!", "Spezial!",
     "Tippen zum Laden!", "Sudden Death!", "R\201cksto\341!", "GEWONNEN!", "VERLOREN...", "UNENTSCHIEDEN", "Laune +%u", "Belohnung: 1x pro Stunde",
@@ -413,7 +417,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "PUNTI: %u", "Che gioia!", "+felicit\205",
     "IMPOSTA ORA", "ORA", "MIN", "scorri su: annulla", "Lingua",
     "MEDAGLIA!", "GRANDE!", "SERIE %u GIORNI!",
-    "SERIE %u  rec %u", "LEG", "BACCA ???", "BACCA ROSSA", "BACCA BLU", "BACCA VERDE",
+    "SERIE %u  rec %u", "LEG", "BACCA ???",
     "%s   ETA %lud", "tocca il nome: rinomina",
     "LOTTA", "ATT", "DIF", "VEL", "PES",
     "MEDAGLIE %d/%d", "tocca: indietro",
@@ -432,6 +436,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "OBIETTIVO!", "TROVATO!", "Zaino pieno", "Usare %s?", "Amuleto: uovo shiny", "Vuoto: fai due passi!",
     "Arrabbiato!", "Che capogiro...",
     "BACCA D'ORO", "PROTEINA", "FERRO", "CARBURANTE", "CROMAMULETO", "CARAMELLA RARA", "UOVO", "TORTA", "RIANIMA", "POKE BALL",
+    "BACCA ROSSA", "BACCA BLU", "BACCA VERDE", "BACCA GIALLA", "BACCA ROSA", "BACCA ARANCIO",  // v3.2
     // combate (v1.24)
     "ALLENAMENTO", "Superefficace!", "Non \212 molto efficace...", "Nessun effetto...", "Brutto colpo!", "Speciale!",
     "Tocca per caricare!", "Morte improvvisa!", "Contraccolpo!", "HAI VINTO!", "HAI PERSO...", "PAREGGIO", "Felicit\205 +%u", "Premio: una volta l'ora",
@@ -510,7 +515,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "PONTOS: %u", "Que alegria!", "+alegria",
     "AJUSTAR HORA", "HORA", "MIN", "deslize cima: cancelar", "Idioma",
     "MEDALHA!", "OTIMO!", "%u DIAS SEGUIDOS!",
-    "SEQ %u  rec %u", "LA\200O", "BAGA ???", "BAGA VERMELHA", "BAGA AZUL", "BAGA VERDE",
+    "SEQ %u  rec %u", "LA\200O", "BAGA ???",
     "%s   IDADE %lud", "toque no nome: renomear",
     "COMBATE", "ATQ", "DEF", "VEL", "PES",
     "MEDALHAS %d/%d", "toque: voltar",
@@ -529,6 +534,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "META!", "ACHOU!", "Mochila cheia", "Usar %s?", "Amuleto: ovo shiny", "Vazia: vai passear!",
     "Zangado!", "Que tontura...",
     "BAGA DOURADA", "PROTEINA", "FERRO", "CARBOS", "AMULETO BRILHANTE", "DOCE RARO", "OVO", "BOLO", "REVIVER", "POKE BOLA",
+    "BAGA VERMELHA", "BAGA AZUL", "BAGA VERDE", "BAGA AMARELA", "BAGA ROSA", "BAGA LARANJA",  // v3.2
     // combate (v1.24)
     "TREINO", "Super efetivo!", "Pouco efetivo...", "Sem efeito...", "Golpe cr\241tico!", "Especial!",
     "Toque para carregar!", "Morte s\243bita!", "Recuo!", "VENCEU!", "PERDEU...", "EMPATE", "Alegria +%u", "Pr\210mio: 1 vez por hora",
@@ -616,7 +622,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
 
     "メダル！", "すごい！", "%u にちれんぞく！",
 
-    "れんぞく %u  きろく %u", "なかよし", "きのみ ???", "あかいきのみ", "あおいきのみ", "みどりのきのみ",
+    "れんぞく %u  きろく %u", "なかよし", "きのみ ???",
 
     "%s   %luにち", "なまえをタッチ: へんこう",
 
@@ -648,6 +654,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "もくひょう！", "みつけた！", "リュックがいっぱい", "%sをつかう？", "おまもり: いろちがい", "からっぽ: さんぽしよう！",
     "ぷんぷん！", "くらくら...",
     "きんのみ", "プロテイン", "アイアン", "カーボス", "ひかるおまもり", "ふしぎなアメ", "たまご", "ケーキ", "ふっかつ", "モンスターボール",
+    "あかいきのみ", "あおいきのみ", "みどりのきのみ", "きいろいきのみ", "ピンクのきのみ", "オレンジのきのみ",  // v3.2
     // combate (v1.24)
     "れんしゅう", "こうかは ばつぐんだ！", "こうかは いまひとつ...", "こうかが ない...", "きゅうしょに あたった！", "ひっさつ！",
     "タッチで ためる！", "サドンデス！", "はんどう！", "かった！", "まけた...", "ひきわけ", "ごきげん +%u", "ごほうびは 1じかんに 1かい",
@@ -731,7 +738,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "점수: %u", "정말 즐거워요!", "+행복",
     "시간 설정", "시", "분", "위로 스와이프: 취소", "언어",
     "메달!", "최고예요!", "%u일 연속!",
-    "연속 %u  최고 %u", "유대감", "열매 ???", "빨간 열매", "파란 열매", "초록 열매",
+    "연속 %u  최고 %u", "유대감", "열매 ???",
     "%s   나이 %lud", "이름 탭: 이름변경",
     "배틀", "공격", "방어", "속도", "무게",
     "메달 %d/%d", "탭: 뒤로",
@@ -750,6 +757,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "목표 달성!", "발견!", "배낭이 가득", "%s 사용?", "부적: 이로치 알", "비었어요: 산책하자!",
     "화났어!", "어지러워...",
     "황금열매", "프로테인", "아이언", "카보스", "빛나는부적", "이상한사탕", "알", "케이크", "부활", "몬스터볼",
+    "빨간 열매", "파란 열매", "초록 열매", "노란 열매", "분홍 열매", "주황 열매",  // v3.2
     // combate (v1.24)
     "연습", "효과가 굉장했다!", "효과가 별로인 듯...", "효과가 없다...", "급소에 맞았다!", "필살기!",
     "탭해서 모으기!", "서든데스!", "반동!", "이겼다!", "졌다...", "무승부", "기분 +%u", "보상은 1시간에 1번",

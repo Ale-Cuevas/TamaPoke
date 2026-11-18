@@ -401,7 +401,26 @@ static const char* const SPR_BLASTOISE[32] = {  // 32x32
   ".......kkkkkk......kkkkkk.......",
 };
 
-static const char* const SPR_ICON_FOOD[16] = {  // 16x16
+static const char* const SPR_ICON_BERRY[16] = {  // 16x16
+  "................",
+  "................",
+  "...........k....",
+  "........k.k.....",
+  "........k.......",
+  ".......kuk......",
+  ".....kkuuukk....",
+  "....kuwuuuuuk...",
+  "....kwuuuuuuk...",
+  "...kuuuuuuuuUk..",
+  "...kuuuuuuuuUk..",
+  "....kuuuuuuuk...",
+  "....kuuuuuuUk...",
+  ".....kkUUUkk....",
+  ".......kkk......",
+  "................",
+};
+
+static const char* const SPR_ICON_BERRY_R[16] = {  // 16x16
   "................",
   "................",
   "...........k....",
@@ -492,6 +511,63 @@ static const char* const SPR_ICON_BERRY_G[16] = {  // 16x16
   "....kgggggggk...",
   "....kggggggGk...",
   ".....kkGGGkk....",
+  ".......kkk......",
+  "................",
+};
+
+static const char* const SPR_ICON_BERRY_Y[16] = {  // 16x16
+  "................",
+  "................",
+  "...........k....",
+  "........k.k.....",
+  "........k.......",
+  ".......kvk......",
+  ".....kkvvvkk....",
+  "....kvwvvvvvk...",
+  "....kwvvvvvvk...",
+  "...kvvvvvvvvVk..",
+  "...kvvvvvvvvVk..",
+  "....kvvvvvvvk...",
+  "....kvvvvvvVk...",
+  ".....kkVVVkk....",
+  ".......kkk......",
+  "................",
+};
+
+static const char* const SPR_ICON_BERRY_P[16] = {  // 16x16
+  "................",
+  "................",
+  "...........k....",
+  "........k.k.....",
+  "........k.......",
+  ".......kpk......",
+  ".....kkpppkk....",
+  "....kpwpppppk...",
+  "....kwppppppk...",
+  "...kppppppppPk..",
+  "...kppppppppPk..",
+  "....kpppppppk...",
+  "....kppppppPk...",
+  ".....kkPPPkk....",
+  ".......kkk......",
+  "................",
+};
+
+static const char* const SPR_ICON_BERRY_O[16] = {  // 16x16
+  "................",
+  "................",
+  "...........k....",
+  "........k.k.....",
+  "........k.......",
+  ".......kok......",
+  ".....kkoookk....",
+  "....kowoooook...",
+  "....kwooooook...",
+  "...kooooooooOk..",
+  "...kooooooooOk..",
+  "....koooooook...",
+  "....kooooooOk...",
+  ".....kkOOOkk....",
   ".......kkk......",
   "................",
 };

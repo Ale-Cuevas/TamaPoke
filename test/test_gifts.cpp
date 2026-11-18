@@ -194,18 +194,29 @@ TEST(battle_drop, la_tabla_y_el_huevo_es_lo_mas_raro) {
   int n[IT_COUNT] = { 0 };
   for (int i = 0; i < N; i++) n[p.rollBattleItem()]++;
   auto pct = [&](int c) { return 100.0 * c / N; };
-  CHECK_MSG(pct(n[IT_CAKE]) > 26 && pct(n[IT_CAKE]) < 28, "tarta " + std::to_string(pct(n[IT_CAKE])));  // v2.2: 35 - 8
-  CHECK_MSG(pct(n[IT_BALL]) > 7.5 && pct(n[IT_BALL]) < 8.5, "poke ball " + std::to_string(pct(n[IT_BALL])));
-  CHECK_MSG(pct(n[IT_REVIVE]) > 4.5 && pct(n[IT_REVIVE]) < 5.5, "revivir " + std::to_string(pct(n[IT_REVIVE])));
-  CHECK_MSG(pct(n[IT_GOLDEN]) > 24 && pct(n[IT_GOLDEN]) < 26, "baya " + std::to_string(pct(n[IT_GOLDEN])));
+  // cada peso sale de BDROP_* (tuning.h), con un margen de 1 punto
+  auto near = [&](const char *what, int c, double w) {
+    CHECK_MSG(pct(c) > w - 1.0 && pct(c) < w + 1.0, std::string(what) + " " + std::to_string(pct(c)));
+  };
+  near("tarta", n[IT_CAKE], BDROP_CAKE);
+  near("poke ball", n[IT_BALL], BDROP_BALL);
+  near("revivir", n[IT_REVIVE], BDROP_REVIVE);
+  near("baya dorada", n[IT_GOLDEN], BDROP_GOLDEN);
   int vit = n[IT_PROTEIN] + n[IT_IRON] + n[IT_CARBOS];
-  CHECK_MSG(pct(vit) > 20 && pct(vit) < 22, "vitaminas " + std::to_string(pct(vit)));
+  near("vitaminas", vit, BDROP_VITAMIN);
   CHECK(n[IT_PROTEIN] > 0 && n[IT_IRON] > 0 && n[IT_CARBOS] > 0);
-  CHECK_MSG(pct(n[IT_RARECANDY]) > 6.5 && pct(n[IT_RARECANDY]) < 7.5, "caramelo " + std::to_string(pct(n[IT_RARECANDY])));
-  CHECK_MSG(pct(n[IT_CHARM]) > 3.5 && pct(n[IT_CHARM]) < 4.5, "amuleto " + std::to_string(pct(n[IT_CHARM])));
-  CHECK_MSG(pct(n[IT_EGG]) > 2.6 && pct(n[IT_EGG]) < 3.4, "huevo " + std::to_string(pct(n[IT_EGG])));
-  for (uint8_t it = 0; it < IT_COUNT; it++)  // el huevo es lo que menos sale de todo lo que sale
-    if (it != IT_EGG && n[it]) CHECK(n[IT_EGG] < n[it]);
+  near("caramelo", n[IT_RARECANDY], BDROP_RARECANDY);
+  near("amuleto", n[IT_CHARM], BDROP_CHARM);
+  near("huevo", n[IT_EGG], BDROP_EGG);
+  int colored = 0;  // v3.2: una baya de color al azar (los seis colores salen)
+  for (int c = 0; c < BERRY_COLORS; c++) {
+    colored += n[IT_BERRY_R + c];
+    CHECK(n[IT_BERRY_R + c] > 0);
+  }
+  near("bayas de color", colored, BDROP_COLORED);
+  // el huevo es lo que menos sale de todo lo que sale (cada color por separado cae por debajo: es una sola casilla)
+  for (uint8_t it = 0; it < IT_COUNT; it++)
+    if (it != IT_EGG && (it < IT_BERRY_R || it > IT_BERRY_O) && n[it]) CHECK(n[IT_EGG] < n[it]);
   p.items[IT_CHARM] = 1;  // con un amuleto ya, el que tocaria es una tarta
   mockForceRandom(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY);
   CHECK_EQ(p.rollBattleItem(), (uint8_t)IT_CAKE);
@@ -215,8 +226,31 @@ TEST(battle_drop, la_tabla_y_el_huevo_es_lo_mas_raro) {
   CHECK_EQ(p.rollBattleItem(), (uint8_t)IT_REVIVE);  // v1.59
   mockForceRandom(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDROP_CHARM + BDROP_REVIVE);
   CHECK_EQ(p.rollBattleItem(), (uint8_t)IT_BALL);  // v2.2
+  mockForceRandom(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDROP_CHARM + BDROP_REVIVE + BDROP_BALL);
+  uint8_t col = p.rollBattleItem();  // v3.2: una baya de color
+  CHECK(col >= IT_BERRY_R && col <= IT_BERRY_O);
   mockForceRandom(99);
   CHECK_EQ(p.rollBattleItem(), (uint8_t)IT_EGG);
+}
+
+// v3.2: una baya de color envuelta se abre como cualquier otro objeto
+TEST(gifts, una_baya_de_color_envuelta_se_abre_en_la_mochila) {
+  Pet p;
+  gBorn(p);
+  CHECK(p.addGift(IT_BERRY_P));
+  CHECK_EQ(p.giftItem(0), (uint8_t)IT_BERRY_P);
+  bool full = true;
+  CHECK_EQ(p.openGift(&full), (uint8_t)IT_BERRY_P);
+  CHECK(!full);
+  CHECK_EQ(p.items[IT_BERRY_P], (uint8_t)1);
+  Pet q;  // un regalo guardado con una baya de color sobrevive a un reinicio
+  gBorn(q);
+  CHECK(q.addGift(IT_BERRY_O));
+  q.flushSave();
+  Pet r;
+  r.begin();
+  CHECK_EQ(r.giftCount(), (uint8_t)1);
+  CHECK_EQ(r.giftItem(0), (uint8_t)IT_BERRY_O);
 }
 
 TEST(gifts, uno_que_no_cabe_no_tapa_a_los_de_detras) {

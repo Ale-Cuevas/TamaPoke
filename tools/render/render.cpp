@@ -139,7 +139,7 @@ static void resetUi() {
   galleryOpen = cardOpen = bagOpen = kbOpen = clockOpen = gameOpen = sackOpen = zenOpen = dashOpen = false;
   yardDemoOpen = false;  // el patio (v2.0)
   yardDemoPage = 0;
-  bagTab = 0;  // la tienda y el selector de fondos (Y4b)
+  bagTab = 0; bagPage = 0;  // la tienda y el selector de fondos (Y4b)
   shopBuyId = shopToast = yardMapPreview = 0;
   pet.yardOwned = 0;
   pet.yardChosen = 0;
@@ -217,10 +217,8 @@ static void resetUi() {
   // paseo e IMU (v1.20)
   itemConfirm = 0;
   foundShown = false;
-  cakeHintUntil = 0;
   pet.satedUntil = 0;  // la tarta (v1.54) no pasa de una escena a otra
   pet.dbgClearGifts();  // ni los regalos (v1.55)
-  tastesMsgUntil = 0;
   while (pet.hasFound()) pet.popFound();
   pet.takeGoalBanner();
   pet.takeMedal();       // (v1.30) las celebraciones pendientes no pasan de una escena a otra
@@ -476,6 +474,7 @@ static void feedTap(uint8_t card, Lang l = LANG_EN) {
   pokemon(25, 13);
   yardForceMap(1);
   pet.items[IT_CAKE] = 2;
+  pet.items[IT_BERRY_R + favBerryOf(25)] = 2;  // v3.2: card 1 = Pikachu's favourite berry, card 2 = cake
   setLang(l);
   applyLangFont();
   render();
@@ -572,13 +571,14 @@ static void yardWalkScene(uint8_t dex, int fromY, int toY) {
 }
 
 // the Backpack's Shop tab with `coins` and a few items already owned (Y4b)
-static void shopOpen(uint16_t coins, std::initializer_list<uint8_t> have = { 0, 0, 0, 0, 0, 0, 0, 0, 0 }) {
+static void shopOpen(uint16_t coins, std::initializer_list<uint8_t> have = { 0, 0, 0, 0, 0, 0, 0, 0, 0 }, uint8_t page = 0) {
   pokemon(25, 13);
   int i = 0;
   for (uint8_t n : have) pet.items[i++] = n;
   pet.coins = coins;
   openBag();
   bagTab = 1;
+  bagPage = page;
 }
 static void shopAsk(uint8_t id) {
   shopBuyId = id + 1;
@@ -752,7 +752,7 @@ static const std::vector<Scene> &scenes() {
     { "yard-home-asleep-es", [] { pokemon(25, 23); pet.sleeping = true; yardForceMap(1); lang(LANG_ES); } },
     { "yard-sleepy-es", [] { pokemon(25, 22); yardForceMap(1); lang(LANG_ES); } },
     { "yard-abandoned-es", [] { pokemon(4, 13); pet.fullness = pet.joy = pet.energy = 0; pet.bond = 60; lang(LANG_ES); } },
-    { "yard-heart", [] { pokemon(133, 12); pet.feedBerry(0); gHostMillis += EAT_ANIM_MS + 100; }, 2 },
+    { "yard-heart", [] { pokemon(133, 12); pet.items[IT_BERRY_R + favBerryOf(133)] = 1; pet.feedFood(FOOD_BERRY0 + favBerryOf(133)); gHostMillis += EAT_ANIM_MS + 100; }, 2 },
     { "yard-release-ask", [] { pokemon(25, 13); yardForceMap(1); confirmUntil = millis() + 5000; } },
     { "yard-evolve-btn", [] { pokemon(4, 11); pet.setLevel(18); pet.trAtk = pet.trDef = pet.trSpe = 40; } },
     { "yard-farewell-btn", [] { pokemon(55, 15); pet.dbgSetAge(FAREWELL_AGE_MIN + 60); pet.addGift(IT_CAKE); } },
@@ -764,13 +764,13 @@ static const std::vector<Scene> &scenes() {
     { "yard-walk-up-charmander", [] { yardWalkScene(4, 330, 120); }, 6 },
     { "yard-walk-down-charmander", [] { yardWalkScene(4, 150, 360); }, 6 },
     // fase Y3: la comida cae al patio y el bicho va a por ella; el huevo en el patio
-    { "yard-feed-drop", [] { feedTap(CP_RED); }, 4 },
-    { "yard-feed-walk", [] { feedTap(CP_BLUE); feedUntil(YF_WALK); }, 3 },
-    { "yard-feed-eat", [] { feedTap(CP_CAKE); feedUntil(YF_EAT); }, 4 },
-    { "yard-feed-heart", [] { feedTap(CP_GREEN); feedUntil(YF_EAT); feedUntil(YF_NONE); }, 4 },
-    { "yard-feed-heart-es", [] { feedTap(CP_GREEN, LANG_ES); feedUntil(YF_EAT); feedUntil(YF_NONE); }, 4 },
-    { "yard-feed-busy", [] { feedTap(CP_RED); gHostMillis += 85; render(); openCarePanel(); } },
-    { "yard-feed-busy-es", [] { feedTap(CP_RED, LANG_ES); gHostMillis += 85; render(); openCarePanel(); } },
+    { "yard-feed-drop", [] { feedTap(CP_FOOD0); }, 4 },
+    { "yard-feed-walk", [] { feedTap(CP_FOOD1); feedUntil(YF_WALK); }, 3 },
+    { "yard-feed-eat", [] { feedTap(CP_FOOD2); feedUntil(YF_EAT); }, 4 },
+    { "yard-feed-heart", [] { feedTap(CP_FOOD1); feedUntil(YF_EAT); feedUntil(YF_NONE); }, 4 },
+    { "yard-feed-heart-es", [] { feedTap(CP_FOOD1, LANG_ES); feedUntil(YF_EAT); feedUntil(YF_NONE); }, 4 },
+    { "yard-feed-busy", [] { feedTap(CP_FOOD0); gHostMillis += 85; render(); openCarePanel(); } },
+    { "yard-feed-busy-es", [] { feedTap(CP_FOOD0, LANG_ES); gHostMillis += 85; render(); openCarePanel(); } },
     { "yard-egg", [] { yardEggScene(40, 0); }, 40 },
     // v2.4: the egg in its type's colours. Tangela, grass only: all green; Zapdos, electric/flying:
     // yellow top-left, sky blue bottom-right, blended along a ( / ) diagonal
@@ -884,22 +884,22 @@ static const std::vector<Scene> &scenes() {
     { "gift-full", [] { pokemon(25, 13); gHostMillis += 3000; pet.items[IT_GOLDEN] = ITEM_MAX; pet.addGift(IT_GOLDEN); openGiftTap(); }, 6 },
     { "gifts-farewell-btn", [] { pokemon(55, 15); pet.dbgSetAge(FAREWELL_AGE_MIN + 60); pet.addGift(IT_CAKE); pet.addGift(IT_CAKE); pet.addGift(IT_CAKE); } },
     // v1.57: a star on the favourite berry once it's known; "Its tastes changed!" after an evolution that changed it
-    { "feed-star", [] { pokemon(133, 12); pet.berryKnown = true; pet.items[IT_CAKE] = 2; openCarePanel(); } },
-    { "feed-star-red", [] { pokemon(25, 12); pet.berryKnown = true; openCarePanel(); } },
-    { "feed-star-night", [] { pokemon(7, 21); pet.berryKnown = true; openCarePanel(); } },
+    { "feed-star", [] { pokemon(133, 12); pet.berryKnown = true; pet.items[IT_CAKE] = 2; pet.items[IT_BERRY_R + favBerryOf(133)] = 3; openCarePanel(); } },
+    { "feed-star-red", [] { pokemon(25, 12); pet.berryKnown = true; pet.items[IT_BERRY_R + favBerryOf(25)] = 1; openCarePanel(); } },
+    { "feed-star-night", [] { pokemon(7, 21); pet.berryKnown = true; pet.items[IT_BERRY_R + favBerryOf(7)] = 1; openCarePanel(); } },
     // v2.0 (Y2): the Care and Play panels that replace the popups, in Spanish, and their taps
     { "feed-es", [] { pokemon(133, 12); openCarePanel(); setLang(LANG_ES); applyLangFont(); } },
-    { "feed-star-es", [] { pokemon(133, 12); pet.berryKnown = true; pet.items[IT_CAKE] = 2; openCarePanel(); setLang(LANG_ES); applyLangFont(); } },
+    { "feed-star-es", [] { pokemon(133, 12); pet.berryKnown = true; pet.items[IT_CAKE] = 2; pet.items[IT_BERRY_R + favBerryOf(133)] = 3; openCarePanel(); setLang(LANG_ES); applyLangFont(); } },
     { "care-menu-asleep-es", [] { pokemon(133, 23); pet.sleeping = true; openCarePanel(); setLang(LANG_ES); applyLangFont(); } },
     { "play-menu-es", [] { pokemon(133, 12); openPlayPanel(); setLang(LANG_ES); applyLangFont(); } },
     { "play-menu-no-imu-es", [] { pokemon(133, 12); gStubImuPresent = false; openPlayPanel(); setLang(LANG_ES); applyLangFont(); } },
-    { "care-no-cake", [] { pokemon(133, 12); openCarePanel(); panelTapCard(CP_CAKE); } },
-    { "care-no-cake-es", [] { pokemon(133, 12); openCarePanel(); setLang(LANG_ES); applyLangFont(); panelTapCard(CP_CAKE); } },
-    { "care-pressed", [] { pokemon(133, 12); pet.items[IT_CAKE] = 1; openCarePanel(); panelHold(CP_BLUE); } },
+    { "care-no-food", [] { pokemon(133, 12); openCarePanel(); panelTapCard(CP_FOOD3); } },
+    { "care-no-food-es", [] { pokemon(133, 12); openCarePanel(); setLang(LANG_ES); applyLangFont(); panelTapCard(CP_FOOD3); } },
+    { "care-pressed", [] { pokemon(133, 12); pet.items[IT_CAKE] = 1; openCarePanel(); panelHold(CP_FOOD1); } },
     { "play-pressed", [] { pokemon(133, 12); openPlayPanel(); panelHold(PP_SACK); } },
-    { "care-asleep-deny", [] { pokemon(133, 23); pet.sleeping = true; openCarePanel(); panelTapCard(CP_GREEN); } },
-    { "care-tap-berry", [] { pokemon(133, 12); openCarePanel(); panelTapCard(CP_RED); }, 3 },
-    { "care-tap-cake", [] { pokemon(133, 12); pet.items[IT_CAKE] = 2; openCarePanel(); panelTapCard(CP_CAKE); }, 3 },
+    { "care-asleep-deny", [] { pokemon(133, 23); pet.sleeping = true; openCarePanel(); panelTapCard(CP_FOOD2); } },
+    { "care-tap-berry", [] { pokemon(133, 12); openCarePanel(); panelTapCard(CP_FOOD0); }, 3 },
+    { "care-tap-cake", [] { pokemon(133, 12); pet.items[IT_CAKE] = 2; openCarePanel(); panelTapCard(CP_FOOD1); }, 3 },
     { "care-tap-light", [] { pokemon(133, 21); openCarePanel(); panelTapCard(CP_LIGHT); }, 2 },
     { "care-tap-wake", [] { pokemon(133, 23); pet.sleeping = true; openCarePanel(); panelTapCard(CP_LIGHT); }, 2 },
     // v2.3: the pet card (third care card): heart, happy pose and "+5" joy; asleep it is greyed out and shakes
@@ -915,10 +915,6 @@ static const std::vector<Scene> &scenes() {
     { "play-asleep-box", [] { pokemon(133, 23); pet.sleeping = true; boxThree(); openPlayPanel(); } },
     { "panel-back", [] { pokemon(133, 12); openPlayPanel(); onTap(Y_BACK_X, Y_BACK_Y); } },
     { "panel-user-key", [] { pokemon(133, 12); openCarePanel(); onBack(); } },
-    { "tastes-changed", [] { pokemon(5, 12); tastesMsgUntil = millis() + 6000; } },
-    { "tastes-changed-es", [] { pokemon(5, 12); tastesMsgUntil = millis() + 6000; setLang(LANG_ES); applyLangFont(); } },
-    { "no-cake", [] { pokemon(133, 12); gHostMillis += 3000; /* past an earlier scene's heart */ cakeHintUntil = millis() + 2500; fxo.push(FXO_DENY, 0, 0, millis()); } },
-    { "no-cake-es", [] { pokemon(133, 12); gHostMillis += 3000; cakeHintUntil = millis() + 2500; setLang(LANG_ES); applyLangFont(); } },
     { "bag-es", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 0, 1, 0 }); openBag(); setLang(LANG_ES); applyLangFont(); } },
     { "bag-empty", [] { pokemon(25, 13); openBag(); } },
     { "bag-empty-es", [] { pokemon(25, 13); openBag(); setLang(LANG_ES); applyLangFont(); } },
@@ -1129,6 +1125,17 @@ static const std::vector<Scene> &scenes() {
     { "shop-mid", [] { shopOpen(100, { 9, 0, 0, 0, 0, 4, 0, 1, 0 }); } },
     { "shop-rich-es", [] { shopOpen(500, { 2, 1, 0, 3, 1, 1, 2, 3, 3 }); es(); } },
     { "shop-poor-es", [] { shopOpen(35); es(); } },
+    // v3.2: coloured berries (Care panel, Backpack page 2, Shop page 2, the card's favourite line)
+    { "care-berries", [] { pokemon(133, 12); pet.items[IT_BERRY_B] = 4; pet.items[IT_BERRY_Y] = 1; pet.items[IT_CAKE] = 2; openCarePanel(); } },
+    { "care-berries-es", [] { pokemon(133, 12); pet.items[IT_BERRY_B] = 4; pet.items[IT_BERRY_Y] = 1; pet.items[IT_CAKE] = 2; openCarePanel(); es(); } },
+    { "care-plain-only", [] { pokemon(133, 12); openCarePanel(); } },
+    { "bag-berries", [] { pokemon(25, 13); pet.items[IT_BERRY_R] = 3; pet.items[IT_BERRY_G] = 1; pet.items[IT_BERRY_O] = 9; openBag(); bagPage = 1; } },
+    { "bag-berries-es", [] { pokemon(25, 13); pet.items[IT_BERRY_R] = 3; pet.items[IT_BERRY_G] = 1; pet.items[IT_BERRY_O] = 9; openBag(); bagPage = 1; es(); } },
+    { "bag-berries-confirm", [] { pokemon(25, 13); pet.items[IT_BERRY_P] = 2; openBag(); bagPage = 1; itemConfirm = IT_BERRY_P + 1; itemConfirmUntil = millis() + 10000; } },
+    { "shop-berries", [] { shopOpen(500, { 0 }, 1); pet.items[IT_BERRY_B] = 2; } },
+    { "shop-berries-es", [] { shopOpen(500, { 0 }, 1); pet.items[IT_BERRY_B] = 2; es(); } },
+    { "card-fav-known", [] { pokemon(25, 13); pet.berryKnown = true; cardOpen = true; cardPage = 0; } },
+    { "card-fav-known-es", [] { pokemon(25, 13); pet.berryKnown = true; es(); cardOpen = true; cardPage = 0; } },
     { "shop-confirm", [] { shopOpen(500); shopAsk(IT_RARECANDY); } },
     { "shop-confirm-poor", [] { shopOpen(35); shopAsk(IT_REVIVE); } },
     { "shop-confirm-es", [] { shopOpen(500); shopAsk(IT_RARECANDY); es(); } },

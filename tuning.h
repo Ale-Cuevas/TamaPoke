@@ -101,11 +101,14 @@ static const uint8_t POOP_JOY_DRAIN[POOP_MAX + 1] = { 0, 1, 2, 4 };
 #define OFFLINE_MAX_MIN (14UL * 24 * 60)  // como mucho 2 semanas de golpe
 
 // --------------------------------------------------------------------------------------------
-// Cuidados (pet.cpp: feedBerry, eatCake, caress, useItem)
+// Cuidados (pet.cpp: feedFood, eatCake, caress, useItem)
 // --------------------------------------------------------------------------------------------
-#define BERRY_FOOD 25              // baya normal
-#define FAV_BERRY_FOOD 35          // la favorita de la especie...
-#define FAV_BERRY_JOY 10
+// comida (v3.2, food.h): la baya normal es gratis y sin limite; las de colores se consiguen (tienda, botin, paseos)
+#define PLAIN_BERRY_FOOD 20        // baya normal: solo comida
+#define BERRY_FOOD 30              // baya de color: mas comida y algo de felicidad
+#define BERRY_JOY 3
+#define FAV_BERRY_FOOD 35          // la favorita de la linea (su forma base)...
+#define FAV_BERRY_JOY 12
 #define FAV_BERRY_BOND 2
 // tarta (v1.54): limitada. Llena la comida y la deja llena CAKE_SATED_MIN minutos; engorda.
 #define CAKE_SATED_MIN 180
@@ -190,12 +193,14 @@ static const uint8_t POOP_JOY_DRAIN[POOP_MAX + 1] = { 0, 1, 2, 4 };
 #define FIND_MAX_STEPS 1200
 #define FINDS_PER_DAY 5            // ...como mucho 5 al dia (los regalos de las metas van aparte)
 // lo que se encuentra (%), suman 100
-#define ODDS_BERRY 35
-#define ODDS_CAKE 20
+#define ODDS_GOLDEN 28
+#define ODDS_CAKE 17
 #define ODDS_VITAMIN 30
 #define ODDS_CHARM 10
 #define ODDS_REVIVE 5
-static_assert(ODDS_BERRY + ODDS_CAKE + ODDS_VITAMIN + ODDS_CHARM + ODDS_REVIVE == 100, "los hallazgos suman 100");
+#define ODDS_COLORED 10            // v3.2: una baya de color (la tirada de cual, al azar entre las 6)
+static_assert(ODDS_GOLDEN + ODDS_CAKE + ODDS_VITAMIN + ODDS_CHARM + ODDS_REVIVE + ODDS_COLORED == 100,
+              "los hallazgos suman 100");
 // metas diarias: 3000, 6000 y 10000 pasos, cada una una vez al dia y en orden
 #define STEP_GOAL_TIERS 3          // (estructura: no cambiar)
 static const uint32_t STEP_GOALS[STEP_GOAL_TIERS] = { 3000, 6000, 10000 };
@@ -281,16 +286,17 @@ static const uint8_t STEP_GOAL_LEVELS[STEP_GOAL_TIERS] = { 1, 1, 2 };  // nivele
 #define STAGE_GROW_MIN 60              // minutos de crecimiento
 #define STAGE_BOND 5                   // vinculo, fuera del tope diario
 // el objeto del jefe (%), suman 100
-#define BDROP_CAKE 27
-#define BDROP_GOLDEN 25
+#define BDROP_CAKE 22
+#define BDROP_GOLDEN 20
 #define BDROP_VITAMIN 21
 #define BDROP_RARECANDY 7
 #define BDROP_CHARM 4
 #define BDROP_REVIVE 5
 #define BDROP_EGG 3
 #define BDROP_BALL 8
+#define BDROP_COLORED 10           // v3.2: una baya de color al azar
 static_assert(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDROP_CHARM + BDROP_REVIVE + BDROP_EGG +
-                      BDROP_BALL == 100,
+                      BDROP_BALL + BDROP_COLORED == 100,
               "el botin suma 100");
 
 // --------------------------------------------------------------------------------------------
@@ -314,13 +320,15 @@ static_assert(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDRO
 #define ENC_WIN_GROW_MIN 60
 #define ENC_WIN_JOY 3
 #define ENC_DROP_PCT 50
-#define WDROP_CAKE 30
-#define WDROP_GOLDEN 30
+#define WDROP_CAKE 25
+#define WDROP_GOLDEN 25
 #define WDROP_VITAMIN 21
 #define WDROP_RARECANDY 8
 #define WDROP_REVIVE 7
 #define WDROP_CHARM 4
-static_assert(WDROP_CAKE + WDROP_GOLDEN + WDROP_VITAMIN + WDROP_RARECANDY + WDROP_REVIVE + WDROP_CHARM == 100,
+#define WDROP_COLORED 10           // v3.2: una baya de color al azar
+static_assert(WDROP_CAKE + WDROP_GOLDEN + WDROP_VITAMIN + WDROP_RARECANDY + WDROP_REVIVE + WDROP_CHARM + WDROP_COLORED ==
+                100,
               "lo que suelta un salvaje suma 100");
 #define BALL_START 3              // Poke Balls de una partida nueva (y una vez al actualizar)
 
@@ -349,6 +357,7 @@ static const uint8_t ECO_GOAL_COINS[ECO_GOAL_TIERS] = { 10, 20, 40 };  // metas 
 #define PRICE_CAKE 40
 #define PRICE_REVIVE 80
 #define PRICE_BALL 100
+#define PRICE_BERRY 25            // v3.2: cada baya de color
 // mapas del patio 1..5 (prado, cantera, bosque, playa, ruinas): el prado es gratis y de salida
 #define YARD_MAPS 5               // (estructura: los .bin de la SD)
 static const uint16_t ECO_MAP_PRICE[YARD_MAPS] = { 0, 150, 150, 200, 250 };
@@ -364,8 +373,8 @@ static const uint8_t TRV_ITEM_PCT[TRV_TIERS] = { 25, 50, 100 };      // probabil
 static const uint8_t TRV_SOUV_PCT[TRV_TIERS] = { 40, 75, 100 };      // probabilidad de un recuerdo
 #define TRV_DUP_COINS 10          // un recuerdo repetido se cambia por monedas
 // peso de cada objeto que puede traer (suman 100), en el orden de TRV_POOL_ID (travel.h): baya dorada, tarta,
-// proteina, hierro, carburante, caramelo raro, revivir, Poke Ball
-#define TRV_POOL_N 8              // (estructura)
-static const uint8_t TRV_POOL_W[TRV_POOL_N] = { 30, 15, 10, 10, 10, 10, 5, 10 };
+// proteina, hierro, carburante, caramelo raro, revivir, Poke Ball y (v3.2) una baya de color (cual, al azar de la semilla)
+#define TRV_POOL_N 9              // (estructura)
+static const uint8_t TRV_POOL_W[TRV_POOL_N] = { 24, 11, 10, 10, 10, 10, 5, 10, 10 };
 // peso (%) de recuerdo comun / poco comun / raro por duracion: 1 h sin raros; 3 h pocos; 8 h muchos
 static const uint8_t TRV_RARITY_W[TRV_TIERS][3] = { { 70, 30, 0 }, { 60, 32, 8 }, { 40, 35, 25 } };

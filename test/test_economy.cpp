@@ -184,6 +184,22 @@ TEST(economy, comprar_objetos) {
   CHECK_EQ(p.coins, (uint16_t)0);
 }
 
+// v3.2: cada baya de color cuesta PRICE_BERRY (tuning.h) y la baya normal no se vende (es gratis)
+TEST(economy, las_bayas_de_colores_se_compran) {
+  Pet p;
+  eBorn(p);
+  for (uint8_t i = IT_BERRY_R; i <= IT_BERRY_O; i++) CHECK_EQ(priceOfItem(i), (uint16_t)PRICE_BERRY);
+  p.addCoins(PRICE_BERRY * 2 + 3, false);
+  CHECK(p.buyItem(IT_BERRY_Y));
+  CHECK(p.buyItem(IT_BERRY_Y));
+  CHECK(!p.buyItem(IT_BERRY_Y));  // sin monedas
+  CHECK_EQ(p.items[IT_BERRY_Y], (uint8_t)2);
+  CHECK_EQ(p.coins, (uint16_t)3);
+  p.addCoins(500, false);
+  p.items[IT_BERRY_O] = ITEM_MAX;
+  CHECK(!p.buyItem(IT_BERRY_O));  // tope de la mochila
+}
+
 TEST(economy, mochila_llena_no_compra) {
   Pet p;
   eBorn(p);

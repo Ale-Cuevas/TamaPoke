@@ -866,11 +866,7 @@ void Pet::evolve() {
       if (!isRegistered(b)) opts[n++] = b;
     next = n > 0 ? opts[random(n)] : (int16_t)(134 + random(3));
   }
-  int16_t before = speciesId;
-  speciesId = next;
-  // el gusto sale de la especie (lovesBerry): si al evolucionar cambia, la baya favorita vuelve a ser
-  // un secreto (v1.57). Si no, la estrella del menu de comida senalaria la baya de antes
-  if (berryKnown && (before % 3) != (speciesId % 3)) berryKnown = false;
+  speciesId = next;  // la baya favorita sale de la forma base (v3.2): no cambia al evolucionar
   registerSpecies(speciesId, shiny);
   sfxPlay(SFX_EVOLVE);
   evolveUntil = millis() + EVOLVE_ANIM_MS;
@@ -878,38 +874,41 @@ void Pet::evolve() {
 }
 
 void Pet::feed() {
-  feedBerry(0);
+  feedFood(FOOD_PLAIN);
 }
 
-void Pet::feedBerry(uint8_t color) {
-  if (busyEnding()) return;
-  if (isEgg() || sleeping) return;
-  if (lovesBerry(color)) {
-    fullness = clamp100(fullness + FAV_BERRY_FOOD);
-    joy = clamp100(joy + FAV_BERRY_JOY);
-    heartUntil = millis() + HEART_MS;  // "le encanta!"
-    berryKnown = true;                 // descubierto: se muestra en la ficha
-    addBond(FAV_BERRY_BOND);
-  } else {
-    fullness = clamp100(fullness + BERRY_FOOD);
+// v3.2: ¿puede comerse esa comida ahora? Despierto, no huevo, y con su objeto en la mochila (la baya normal, no)
+bool Pet::canFeed(uint8_t food) const {
+  if (food >= FOOD_COUNT || busyEnding() || isEgg() || sleeping) return false;
+  uint8_t it = foodItem(food);
+  return it == FOOD_NO_ITEM || items[it] > 0;
+}
+
+// da de comer: gasta el objeto SOLO si se aplica (sin bicho que coma, no se gasta nada). La comida del patio
+// llega aqui cuando el bicho se la come, nunca al soltarla
+bool Pet::feedFood(uint8_t food) {
+  if (!canFeed(food)) return false;
+  uint8_t it = foodItem(food);
+  if (it != FOOD_NO_ITEM) items[it]--;
+  FoodEffect e = foodEffect(food, foodIsBerry(food) && lovesBerry(food - FOOD_BERRY0));
+  fullness = clamp100(fullness + e.fullness);
+  if (food == FOOD_CAKE) {
+    fullness = 100;
+    satedUntil = ageMinutes + CAKE_SATED_MIN;  // lleno 3 h (tambien apagado: syncClock)
+    weight = clamp100(weight + CAKE_WEIGHT);   // como la chuche a la que sustituye, pasa factura
   }
+  if (e.joy) joy = clamp100(joy + e.joy);
+  if (foodIsBerry(food) && e.heart) berryKnown = true;  // la favorita: descubierta, se muestra en la ficha
+  if (e.bond) addBond(e.bond);
   eatUntil = millis() + EAT_ANIM_MS;
-  registerCare();
-  save();
-}
-
-bool Pet::eatCake() {
-  if (!canUseItem(IT_CAKE)) return false;
-  items[IT_CAKE]--;
-  fullness = 100;
-  satedUntil = ageMinutes + CAKE_SATED_MIN;  // lleno 3 h (tambien apagado: syncClock)
-  joy = clamp100(joy + CAKE_JOY);
-  weight = clamp100(weight + CAKE_WEIGHT);  // como la chuche a la que sustituye, pasa factura
-  eatUntil = millis() + EAT_ANIM_MS;
-  heartUntil = millis() + HEART_MS;
+  if (e.heart) heartUntil = millis() + HEART_MS;  // "le encanta!"
   registerCare();
   save();
   return true;
+}
+
+bool Pet::eatCake() {
+  return feedFood(FOOD_CAKE);
 }
 
 void Pet::playResult(uint8_t score) {
@@ -1295,11 +1294,12 @@ void Pet::findItem() {
   findsToday++;
   long r = random(100);
   uint8_t it;
-  if (r < ODDS_BERRY) it = IT_GOLDEN;
-  else if (r < ODDS_BERRY + ODDS_CAKE) it = IT_CAKE;
-  else if (r < ODDS_BERRY + ODDS_CAKE + ODDS_VITAMIN) it = IT_PROTEIN + random(3);
-  else if (r < ODDS_BERRY + ODDS_CAKE + ODDS_VITAMIN + ODDS_CHARM) it = IT_CHARM;
-  else it = IT_REVIVE;
+  if (r < ODDS_GOLDEN) it = IT_GOLDEN;
+  else if ((r -= ODDS_GOLDEN) < ODDS_CAKE) it = IT_CAKE;
+  else if ((r -= ODDS_CAKE) < ODDS_VITAMIN) it = IT_PROTEIN + random(3);
+  else if ((r -= ODDS_VITAMIN) < ODDS_CHARM) it = IT_CHARM;
+  else if ((r -= ODDS_CHARM) < ODDS_REVIVE) it = IT_REVIVE;
+  else it = IT_BERRY_R + random(BERRY_COLORS);  // v3.2
   if (it == IT_CHARM && items[IT_CHARM]) it = IT_GOLDEN;  // solo se lleva un amuleto
   giveGift(it);  // v1.55: llega envuelto, se abre en casa
 }
@@ -1431,14 +1431,9 @@ bool Pet::canUseItem(uint8_t it) const {
 
 bool Pet::useItem(uint8_t it) {
   if (!canUseItem(it)) return false;
-  if (it == IT_CAKE) return eatCake();  // la misma tarta que la del menu de comida
+  if (foodOfItem(it) != FOOD_COUNT) return feedFood(foodOfItem(it));  // tarta, baya dorada y bayas de colores (v3.2)
   items[it]--;
-  if (it == IT_GOLDEN) {
-    fullness = clamp100(fullness + GOLDEN_FOOD);
-    joy = clamp100(joy + GOLDEN_JOY);
-    eatUntil = millis() + EAT_ANIM_MS;
-    heartUntil = millis() + HEART_MS;
-  } else if (it == IT_RARECANDY) {
+  if (it == IT_RARECANDY) {
     // +1 nivel (v1.35): salta el crecimiento, no la edad, y la barra conserva lo que llevaba.
     // Puede abrir la evolucion y las medallas de nivel.
     growMin = addLevels(growMin, RARE_CANDY_LEVELS);
@@ -1534,6 +1529,7 @@ uint8_t Pet::rollBattleItem() {
   else if ((r -= BDROP_RARECANDY) < BDROP_CHARM) it = IT_CHARM;
   else if ((r -= BDROP_CHARM) < BDROP_REVIVE) it = IT_REVIVE;
   else if ((r -= BDROP_REVIVE) < BDROP_BALL) it = IT_BALL;  // v2.2
+  else if ((r -= BDROP_BALL) < BDROP_COLORED) it = IT_BERRY_R + random(BERRY_COLORS);  // v3.2
   else it = IT_EGG;
   if (it == IT_CHARM && items[IT_CHARM]) it = IT_CAKE;  // solo se lleva un amuleto
   return it;
@@ -1588,7 +1584,10 @@ bool Pet::teamCanFight(uint32_t id) const {
 }
 
 // ---------- monedas (Y4) ----------
-static_assert(IT_BALL + 1 == ECO_ITEMS, "economy.h: un precio por objeto de pet.h");
+static_assert(FOOD_ITEM_BERRY0 == IT_BERRY_R && FOOD_ITEM_CAKE == IT_CAKE && FOOD_ITEM_GOLDEN == IT_GOLDEN,
+              "food.h: los ids de objeto son los de pet.h");
+static_assert(PACK_OLD == IT_BERRY_R, "\"bpack\" guarda los objetos de antes de las bayas");
+static_assert(IT_BERRY_O + 1 == ECO_ITEMS && IT_BERRY_O + 1 == IT_COUNT, "economy.h: un precio por objeto de pet.h");
 
 uint16_t Pet::coinsEarnedToday() const { return coinDay == today() ? coinToday : 0; }
 
@@ -1651,7 +1650,8 @@ void Pet::chooseMap(uint8_t n) {
 static_assert(TRV_DESTS == YARD_MAPS, "travel.h: un destino por mapa del patio");
 static_assert(TRV_POOL_ID[0] == IT_GOLDEN && TRV_POOL_ID[1] == IT_CAKE && TRV_POOL_ID[2] == IT_PROTEIN &&
                 TRV_POOL_ID[3] == IT_IRON && TRV_POOL_ID[4] == IT_CARBOS && TRV_POOL_ID[5] == IT_RARECANDY &&
-                TRV_POOL_ID[6] == IT_REVIVE && TRV_POOL_ID[7] == IT_BALL,
+                TRV_POOL_ID[6] == IT_REVIVE && TRV_POOL_ID[7] == IT_BALL && TRV_POOL_ID[8] == IT_BERRY_R &&
+                TRV_POOL_BERRY == IT_BERRY_R && TRV_BERRY_COLORS == 6 && IT_BERRY_O == IT_BERRY_R + 5,
               "travel.h: los ids de objeto son los de pet.h");
 
 uint8_t Pet::souvenirCount() const {
@@ -1978,7 +1978,8 @@ uint8_t Pet::rollWildItem() {
   else if ((r -= WDROP_GOLDEN) < WDROP_VITAMIN) it = IT_PROTEIN + random(3);
   else if ((r -= WDROP_VITAMIN) < WDROP_RARECANDY) it = IT_RARECANDY;
   else if ((r -= WDROP_RARECANDY) < WDROP_REVIVE) it = IT_REVIVE;
-  else it = IT_CHARM;
+  else if ((r -= WDROP_REVIVE) < WDROP_CHARM) it = IT_CHARM;
+  else it = IT_BERRY_R + random(BERRY_COLORS);  // v3.2
   if (it == IT_CHARM && items[IT_CHARM]) it = IT_CAKE;  // solo se lleva un amuleto
   return it;
 }
@@ -2090,7 +2091,7 @@ void Pet::save() {
   prefs.putUChar("tatk", h.trAtk);
   prefs.putUChar("tdef", h.trDef);
   prefs.putUChar("tspe", h.trSpe);
-  prefs.putBool("bk", h.berryKnown);
+  prefs.putBool("fk", h.berryKnown);  // v3.2: la favorita nueva (el "bk" de antes se ignora)
   prefs.putBool("shy", h.shiny);
   prefs.putBool("eshy", h.eggShiny);
   prefs.putBool("stpk", starterPick);
@@ -2181,7 +2182,7 @@ void Pet::save() {
     pendingSave = true;
     return;
   }
-  prefs.putBytes("bpack", items, sizeof(items));
+  putPack();
   {  // regalos (v1.55), despues de la mochila: [cuantos, objetos...]
     uint8_t g[GIFT_MAX + 1] = { giftN };
     memcpy(g + 1, gifts, giftN);
@@ -2210,8 +2211,14 @@ void Pet::saveCapEggs() {
 
 // la mochila (y sus huevos de captura) ya, antes que el hueco: un huevo que pasa de casa a la mochila
 // (endLife) queda escrito antes de que el hueco deje de tenerlo. Un corte entre los dos: un huevo de mas
+// la mochila a la NVS: "bpack" (10) y justo despues "bpk2" (las bayas). Un corte entre las dos solo desfasa las bayas
+void Pet::putPack() {
+  prefs.putBytes("bpack", items, PACK_OLD);
+  prefs.putBytes("bpk2", items + PACK_OLD, IT_COUNT - PACK_OLD);
+}
+
 void Pet::saveBag() {
-  prefs.putBytes("bpack", items, sizeof(items));
+  putPack();
   saveCapEggs();
 }
 
@@ -2235,7 +2242,7 @@ void Pet::load() {
   h.trAtk = prefs.getUChar("tatk", 0);
   h.trDef = prefs.getUChar("tdef", 0);
   h.trSpe = prefs.getUChar("tspe", 0);
-  h.berryKnown = prefs.getBool("bk", false);
+  h.berryKnown = prefs.getBool("fk", false);
   h.shiny = prefs.getBool("shy", false);
   h.eggShiny = prefs.getBool("eshy", false);
   starterPick = prefs.getBool("stpk", false);
@@ -2315,7 +2322,10 @@ void Pet::load() {
   eggRem = prefs.getUShort("eRem", 0);
   if (eggAt && eggRem >= eggAt) eggRem = eggAt - 1;
   memset(items, 0, sizeof(items));
-  prefs.getBytes("bpack", items, sizeof(items));
+  // v3.2: "bpack" sigue con los 10 primeros objetos (un firmware anterior lo lee en un buffer de 10 y un blob mas
+  // largo le daria una mochila vacia); las 6 bayas de colores van en "bpk2". Sin "bpk2": 0 bayas
+  prefs.getBytes("bpack", items, PACK_OLD);
+  if (prefs.isKey("bpk2")) prefs.getBytes("bpk2", items + PACK_OLD, IT_COUNT - PACK_OLD);
   {
     uint8_t g[GIFT_MAX + 1] = { 0 };
     giftN = 0;
@@ -2333,14 +2343,14 @@ void Pet::load() {
   if (!prefs.isKey("rvg")) {
     uint16_t n = items[IT_REVIVE] + REVIVE_START;
     items[IT_REVIVE] = n > ITEM_MAX ? ITEM_MAX : n;
-    prefs.putBytes("bpack", items, sizeof(items));
+    putPack();
     prefs.putBool("rvg", true);
   }
   // v2.2: una partida de antes de la Poke Ball recibe las 3 de una partida nueva, una vez (como "rvg")
   if (!prefs.isKey("ballg")) {
     uint16_t n = items[IT_BALL] + BALL_START;
     items[IT_BALL] = n > ITEM_MAX ? ITEM_MAX : n;
-    prefs.putBytes("bpack", items, sizeof(items));
+    putPack();
     prefs.putBool("ballg", true);
   }
   // encuentros (v2.2): un guardado anterior no trae las claves (sin encuentro, sin huevos de captura)
@@ -2398,8 +2408,10 @@ void Pet::load() {
       memcpy(&trvSeed, t + 12, 4);
     }
   }
-  if (prefs.isKey("trvR") && prefs.getBytes("trvR", &trvResult, sizeof(trvResult)) == sizeof(trvResult) && trvResult.valid)
+  if (prefs.isKey("trvR") && prefs.getBytes("trvR", &trvResult, sizeof(trvResult)) == sizeof(trvResult) && trvResult.valid) {
     trvResPending = true;
+    if (trvResult.item != TRV_NONE && trvResult.item >= IT_COUNT) trvResult.item = TRV_NONE;  // id desconocido: se descarta
+  }
   yardOwned = prefs.getUShort("ybgO", 0) & (uint16_t)(((1u << (YARD_MAPS + 1)) - 1) & ~1u);
   yardChosen = prefs.getUChar("ybg", 0);
   if (yardChosen > YARD_MAPS) yardChosen = 0;
@@ -2556,7 +2568,7 @@ void Pet::migrateGrowthCurve() {
 PetRecord PetLife::record(uint32_t epoch) const {
   PetRecord r;
   memset(&r, 0, sizeof(r));
-  r.flags = (shiny ? REC_SHINY : 0) | (berryKnown ? REC_BERRY : 0) | (sleeping ? REC_SLEEP : 0) |
+  r.flags = (shiny ? REC_SHINY : 0) | (berryKnown ? REC_FAV6 : 0) | (sleeping ? REC_SLEEP : 0) |
             (careDay && careDay == bondDay ? REC_CARED : 0);  // v3.0: su primer cuidado de ese dia, ya dado
   r.uid = uid;
   r.speciesId = speciesId;
@@ -2595,7 +2607,7 @@ void PetLife::loadRecord(const PetRecord &r) {
   speciesId = r.speciesId;
   prevSpeciesId = r.speciesId;
   shiny = (r.flags & REC_SHINY) != 0;
-  berryKnown = (r.flags & REC_BERRY) != 0;
+  berryKnown = (r.flags & REC_FAV6) != 0;  // v3.2: el REC_BERRY de antes (otra baya favorita) se ignora
   sleeping = (r.flags & REC_SLEEP) != 0;
   nightSleep = sleeping;  // dormido en la caja: se despierta solo por la mañana (v1.63)
   nightAwakeMin = 0;

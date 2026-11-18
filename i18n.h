@@ -36,7 +36,7 @@ enum StrId : uint16_t {
   // celebracion
   S_MEDAL_BANNER, S_GREAT, S_STREAK_DAYS_FMT,
   // ficha: perfil
-  S_STREAK_FMT, S_VIN, S_BERRY_UNK, S_BERRY_RED, S_BERRY_BLUE, S_BERRY_GREEN,
+  S_STREAK_FMT, S_VIN, S_BERRY_UNK,
   S_INFO_FMT, S_RENAME_HINT,
   // ficha: combate
   S_BATTLE, S_STAT_ATK, S_STAT_DEF, S_STAT_SPE, S_STAT_WGT,
@@ -65,6 +65,7 @@ enum StrId : uint16_t {
   // nombres de los objetos, en el orden de IT_* (pet.h)
   S_IT_GOLDEN, S_IT_PROTEIN, S_IT_IRON, S_IT_CARBOS, S_IT_CHARM, S_IT_RARECANDY, S_IT_EGG, S_IT_CAKE, S_IT_REVIVE,
   S_IT_BALL,  // v2.2
+  S_IT_BERRY_R, S_IT_BERRY_B, S_IT_BERRY_G, S_IT_BERRY_Y, S_IT_BERRY_P, S_IT_BERRY_O,  // v3.2: bayas de colores
   // combate de practica (v1.24): tarjeta VS, rotulos de cada golpe, resultado
   S_PRACTICE, S_SUPER_EFF, S_NOT_EFF, S_NO_EFFECT, S_CRITICAL, S_SPECIAL, S_TAP_CHARGE,
   S_SUDDEN_DEATH, S_RECOIL,  // v1.67: muerte subita (ataque 21 en adelante)

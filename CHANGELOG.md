@@ -6,6 +6,25 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.2] - 2026-11-18
+
+### Added
+
+- **Six coloured berries to collect.** Red, blue, green, yellow, pink and orange berries are now Backpack items.
+  Buy them in the Shop (25 coins each, on its second page) or find them on walks, as stage loot, after wild wins
+  and from trips. A coloured berry gives more FOOD and a little JOY than the plain one.
+- **Each family has a favourite berry.** It is hidden until the pet eats it, and it stays the same through
+  evolution. The favourite gives extra FOOD, JOY and bond, and the card then shows it. Favourites changed with the
+  new colours, so every pet has to discover its own again.
+- Serial `FEED f` (0 plain, 1-6 berries, 7 cake, 8 Golden Berry) feeds the selected pet; `STATS` lists your berries.
+
+### Changed
+
+- **The plain berry is the only free food.** The Care panel shows it plus the first three foods you own (berries,
+  cake, Golden Berry, with how many you have). A food you drop is spent only when the pet eats it.
+- The Bag and the Shop have a second page for the berries (swipe, or tap "1/2").
+- Cake and Golden Berry come a little less often from walks, stages, wild wins and trips, to make room for berries.
+
 ## [3.1] - 2026-11-17
 
 ### Changed
