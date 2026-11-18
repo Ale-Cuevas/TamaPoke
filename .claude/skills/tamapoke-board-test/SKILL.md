@@ -23,11 +23,18 @@ board is unplugged: ask the user to plug it in with a data cable and stop there.
 
 ## The procedure
 
-1. **Back up first** if the test changes the save (needs, `HATCH`, `BYE`, `EGG`, `STEPS`, `COINS`, `BOXFILL`, battles
-   that pay, `WIPE`...): `board.py backup`, then `board.py cmd STATS BOX` and keep that output to compare.
+1. **Back up first** if the test changes the save (needs, `HATCH`, `BYE`, `EGG`, `STEPS`, `COINS`, `BOXFILL`, `WAKE`,
+   `STORE`, battles that pay, `WIPE`...): `board.py backup`, then `board.py cmd STATS BOX` and keep that output to
+   compare. Before flashing a version that changes the save format, also keep a dated copy
+   (`cp nvs_backup.bin nvs_backup_vX.Y_DATE.bin`; `nvs_backup*.bin` is git-ignored): the next backup overwrites
+   `nvs_backup.bin`.
 2. **Flash** if the build on the board is older than the code: `pio run -e tamapoke -t upload` (no sandbox). It
    doesn't touch the save. The boot log (`board.py reboot`) prints `TamaPoke fw vX.Y`; the clock/settings screen
    shows it too.
+   - **Flash what you mean to flash.** If the working tree has unfinished edits (an agent mid-task, the user's own
+     `tuning.h`), don't build from it: build a released commit in a throwaway worktree
+     (`git worktree add --detach $TMPDIR/tp-vX.Y <commit>`, `pio run -e tamapoke -t upload` there, then
+     `git worktree remove --force`; worktree commands need the sandbox disabled).
 3. **Run the check**: set the state with serial commands, act with `TAP x y`, and read the answers and the
    `log` output. Most actions print a line (`FOOD drop`, `FOOD eaten kind=0 ok=1`, `tap x y battle=...`).
 4. **Restore** the backup if you changed the save: `board.py restore nvs_backup.bin`, then `STATS` / `BOX` should match
@@ -40,16 +47,31 @@ board is unplugged: ask the user to plug it in with a data cable and stop there.
 ## Commands
 
 The full table is in `docs/GAME_LOGIC.md` §16; read it there, it stays current. The most used ones:
-- `STATS`, `NEED i v` (0 food, 1 hygiene, 2 joy, 3 energy), `LVL n`, `SPEC n`, `TIME [epoch]`, `NIGHT`, `COINS n`, `GIFT item`.
+- `STATS`, `NEED i v` (0 food, 1 hygiene (removed from v3.1), 2 joy, 3 energy), `LVL n`, `SPEC n`, `TIME [epoch]`,
+  `NIGHT`, `COINS n`, `GIFT item`.
 - `HATCH`, `EGGD dex`, `BOX`, `ENC [dex]`, `STAGE n`, `BATTLE`, `TRAVEL`, `BALL`, `DASH`, `ZEN`.
-- `TAP x y`, `BACK`, `FX name`, `PERF`, `HEALTH`.
+- `TAP x y`, `BACK`, `FX name`, `PERF`, `HEALTH` (uptime, heap, SD, sprite; it does **not** show PSRAM).
+
+### Two home pets (v3.0+)
+
+Home has two places (slots 0 and 1); each is a pet, an egg or empty. The pet commands (`NEED`, `LVL`, `SPEC`,
+`HATCH`, `NICK`, `DIE`...) act on the **focused** slot, as do the Care panel and the games.
+- `FOCUS n`: which home slot the other commands act on. Refused (and logged) while a modal screen is open.
+- `STATS` starts with one line per slot (`home0* pet ...`, `home1 vacant ...`; `*` = focused) and `focusErrors`,
+  which must stay 0. `BOX` lists `active home0` / `other home1`, then the 6 Box slots.
+- `STORE k [s]`: store home slot s (default: focused) into Box slot k.
+- `WAKE k [s]`: wake Box slot k into home slot s (default: the first empty slot, then an egg's slot, then the
+  focused one; a full slot swaps).
+- To check something on the second pet: `FOCUS 1`, run the commands, `FOCUS 0` when done.
 
 ## Tap coordinates
 
 `TAP` takes **canvas coordinates** (466×466, centre 233,233), the same space as `onTap`, not the 480 panel. Derive
-them from `yard_ui.h` and `yard_panels.h` if the layouts have changed. At v2.6:
+them from `yard_ui.h` and `yard_panels.h` if the layouts have changed (the v3 plan replaces the Care panel with a
+pet menu in v3.3 and removes the bath in v3.1). At v3.0:
 - Dock (y 404): Care 161, Play 233, Bag 305.
 - Care panel: food row y 168: red berry 98, blue 188, green 278, cake 368; care row y 292: light 113, bath 233, heart 353.
+- Pets walk, so there is no fixed spot to tap one: use `FOCUS n` for logic checks and leave "tap a pet" to the user.
 - Play panel: row 1 y 166: ball 121, battle 233, bag 345; row 2 y 290: sled 121, waterfall 233, travel 345.
 - Header back area: y < 72 in the minigames.
 
