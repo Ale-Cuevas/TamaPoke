@@ -1033,72 +1033,7 @@ TEST(bonus, racha_y_vinculo_mejoran_el_huevo) {
 }
 
 // ---------------------------------------------------------------- medallas
-TEST(medals, nivel_10_da_medalla) {
-  Pet p;
-  makePet(p, 4);
-  CHECK(!p.hasMedal(MED_LV10));
-  p.growMin = levelStart(10) - 1;
-  advance(p, 1);
-  CHECK(p.hasMedal(MED_LV10));
-  CHECK(p.takeMedal() & MED_LV10);  // (con EN FORMA a la vez: nivel >= 5 sin descuidos)
-}
-
-// sin sobrepeso, nivel 5 y cero descuidos
-TEST(medals, en_forma_llega_al_nivel_5) {
-  Pet p;
-  makePet(p, 4);
-  p.weight = 0;
-  p.growMin = levelStart(5) - 1;
-  advance(p, 1);
-  CHECK(p.hasMedal(MED_FIT));
-  CHECK_EQ(p.totalMedals, (uint16_t)1);
-
-  Pet q;
-  makePet(q, 4);
-  q.careMistakes = 1;   // un descuido la deja fuera
-  q.growMin = levelStart(5) - 1;
-  advance(q, 1);
-  CHECK(!q.hasMedal(MED_FIT));
-}
-
-TEST(medals, cada_medalla_nueva_suma_al_total) {
-  Pet p;
-  makePet(p, 4);
-  p.weight = 0;
-  p.growMin = levelStart(10) - 1;
-  advance(p, 1);  // cruza nivel 10: MED_LV10 + MED_FIT de golpe
-  CHECK(p.hasMedal(MED_LV10));
-  CHECK(p.hasMedal(MED_FIT));
-  CHECK_MSG(p.totalMedals == 2, "el total cuenta cada bit ganado, no cada evento");
-}
-
-TEST(medals, forma_final_al_nacer) {
-  Pet p;
-  makePet(p, 143);  // SNORLAX ya es forma final
-  CHECK(p.hasMedal(MED_FINAL));
-  CHECK_EQ(p.totalMedals, (uint16_t)1);
-}
-
-TEST(medals, la_baya_favorita_da_medalla) {
-  Pet p;
-  makePet(p, 4);
-  p.items[IT_BERRY_R + favBerryOf(p.speciesId)] = 1;
-  p.feedFood(FOOD_BERRY0 + favBerryOf(p.speciesId));  // su favorita
-  CHECK(p.berryKnown);
-  advance(p, 1);
-  CHECK(p.hasMedal(MED_BERRY));
-}
-
-TEST(medals, el_total_acumula_entre_crianzas) {
-  Pet p;
-  makePet(p, 143);
-  CHECK_EQ(p.totalMedals, (uint16_t)1);
-  p.newEgg();
-  p.chooseStarter(144);  // ARTICUNO, otra forma final
-  p.eggTap(); p.eggTap(); p.eggTap();
-  CHECK_MSG(p.medals == MED_FINAL, "las medallas del individuo se reinician");
-  CHECK_MSG(p.totalMedals == 2, "el total del jugador se conserva");
-}
+// v3.4: las medallas del bicho (MED_*) ya no existen; las del jugador estan en test_medals.cpp
 
 // ---------------------------------------------------------------- ceremonias
 TEST(ceremony, despedida_solo_en_forma_final_y_a_los_3_dias) {
@@ -2267,9 +2202,8 @@ TEST(steps, las_tres_metas_saltan_una_vez_al_dia_y_en_orden) {
   CHECK_EQ(p.level(), (uint16_t)5);  // +2: la de 10000 ya no da Caramelo Raro
   CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)0);
   CHECK_EQ(p.bonusFindsToday, bonus);  // ni un regalo en la mochila
-  CHECK(p.hasMedal(MED_MARATHON));
+  CHECK_EQ(p.medalValue(MD_MARATHON), (uint32_t)1);  // v3.4: un dia de 10000 pasos (medalla del jugador)
   CHECK_EQ(p.streak, (uint16_t)1);  // la racha solo la cuenta la primera
-  uint16_t total = p.totalMedals;
   p.addSteps(5000, DIA);
   CHECK_EQ(p.takeGoalBanner(), (uint8_t)0);  // ninguna se repite el mismo dia
   CHECK_EQ(p.level(), (uint16_t)5);
@@ -2284,7 +2218,7 @@ TEST(steps, las_tres_metas_saltan_una_vez_al_dia_y_en_orden) {
   CHECK_EQ(p.bonusFindsToday, (uint8_t)(STEP_GOAL_TIERS - 1));  // los regalos de 3000 y 6000
   CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)0);
   CHECK_EQ(p.streak, (uint16_t)2);
-  CHECK_EQ(p.totalMedals, total);
+  CHECK_EQ(p.medalValue(MD_MARATHON), (uint32_t)2);  // otro dia, otro (una vez por dia)
 }
 
 // v1.36: la barra conserva lo que llevaba y la edad no cambia
@@ -2310,15 +2244,16 @@ TEST(steps, los_niveles_de_las_metas_se_paran_en_el_tope) {
   CHECK_EQ(lv, (uint8_t)1);
 }
 
-// el nivel 10 de una meta da su medalla al momento, no en el siguiente minuto
-TEST(steps, un_nivel_de_meta_da_la_medalla_de_nivel) {
+// el nivel 10 de una meta cuenta para la medalla del jugador al momento, no en el siguiente minuto
+TEST(steps, un_nivel_de_meta_cuenta_para_la_medalla_de_nivel) {
   Pet p;
   makeWalker(p);
   p.setLevel(9);
-  p.medals = 0;
+  uint32_t before = p.medalValue(MD_LV10);
   p.addSteps(3000, DIA);
   CHECK_EQ(p.level(), (uint16_t)10);
-  CHECK(p.hasMedal(MED_LV10));
+  CHECK(p.counted & PMB_LV10);
+  CHECK_EQ(p.medalValue(MD_LV10), before + 1);
 }
 
 TEST(steps, el_vinculo_de_las_metas_va_fuera_del_tope_diario) {
@@ -2346,7 +2281,7 @@ TEST(steps, dormido_las_metas_marcan_el_dia_sin_premio) {
   CHECK_EQ(lv, (uint8_t)0);                 // v1.36: dormido, sin niveles...
   CHECK_EQ(p.level(), lvBefore);
   CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)0);
-  CHECK(!p.hasMedal(MED_MARATHON));
+  CHECK_EQ(p.medalValue(MD_MARATHON), (uint32_t)1);  // v3.4: el dia de 10000 pasos es del jugador (dormido tambien)
   CHECK_EQ(p.joy, (uint8_t)50);
   CHECK_EQ(p.streak, (uint16_t)1);  // la racha si: es el dia del jugador
 }
@@ -2370,11 +2305,11 @@ TEST(items, el_caramelo_raro_sube_un_nivel_y_abre_la_evolucion) {
   p.toggleLight();
   CHECK(!p.useItem(IT_RARECANDY));  // dormido no
   p.toggleLight();
-  p.medals &= ~MED_LV10;  // la medalla de nivel 10 al cruzarlo
+  p.counted &= (uint8_t)~PMB_LV10;  // v3.4: cuenta para la medalla del jugador al cruzar el 10
   p.growMin = levelStart(9) + 19;  // nivel 9
   CHECK(p.useItem(IT_RARECANDY));
   CHECK_EQ(p.level(), (uint16_t)10);
-  CHECK(p.hasMedal(MED_LV10));
+  CHECK(p.counted & PMB_LV10);
   CHECK_EQ(p.items[IT_RARECANDY], (uint8_t)0);
 }
 
@@ -2830,29 +2765,19 @@ TEST(battle, el_estadio_no_toca_energia_ni_comida) {
 // ---------------------------------------------------------------- efectos (v1.30, fx.h)
 // El bicho ya no cronometra ni hace sonar sus celebraciones: deja pendientes que la UI recoge
 // y ensena cuando se pueden ver. Asi una medalla ganada con la pantalla apagada no caduca.
+// v3.4: la medalla del jugador queda pendiente (takeMedalNews) y el bicho no la hace sonar
 TEST(fx_pet, la_medalla_se_recoge_una_vez_y_el_bicho_no_la_hace_sonar) {
   Pet p;
   makePet(p, 4);
   mockSfxReset();
-  p.growMin = levelStart(10) - 1;
-  advance(p, 1);
-  CHECK(p.hasMedal(MED_LV10));
+  p.dbgMedalCount(MD_EVOLVE, (uint16_t)MEDAL_T[MD_EVOLVE][0]);  // el Bronce de Evolucion
+  CHECK_EQ(p.medalTierPaid(MD_EVOLVE), (uint8_t)MTIER_BRONZE);
   CHECK_EQ(mockSfxCount(SFX_MEDAL), 0);  // suena al verse el banner, no al ganarla
   mockAdvanceMillis(60UL * 60 * 1000);   // una hora despues sigue pendiente
-  CHECK(p.takeMedal() & MED_LV10);       // (y EN FORMA, ganada en el mismo salto)
-  CHECK_EQ(p.takeMedal(), (uint16_t)0);
-}
-
-TEST(fx_pet, dos_medallas_sin_recoger_se_suman) {
-  Pet p;
-  makePet(p, 4);
-  p.takeMedal();
-  p.weight = 0;
-  p.growMin = levelStart(5) - 1;
-  advance(p, 1);  // nivel 5: EN FORMA
-  p.growMin = levelStart(10) - 1;
-  advance(p, 1);  // nivel 10, sin haber recogido la anterior
-  CHECK_EQ(p.takeMedal(), (uint16_t)(MED_FIT | MED_LV10));
+  MedalNews n;
+  CHECK(p.takeMedalNews(&n));
+  CHECK_EQ(n.medal, (uint8_t)MD_EVOLVE);
+  CHECK(!p.takeMedalNews(&n));
 }
 
 TEST(fx_pet, subir_de_nivel_no_suena_en_el_bicho) {

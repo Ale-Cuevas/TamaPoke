@@ -173,9 +173,10 @@ TEST(home2, guardar_y_cargar_da_lo_mismo_con_cualquier_foco) {
     p.slotRef(1).eggTarget = 25;
     p.slotRef(1).eggShiny = true;
     p.slotRef(1).eggTaps = 2;
-    PetRecord r0 = p.home(0).record(0), r1 = p.home(1).record(0);
     p.focus(f);
     p.rename(f ? "H4" : "H3");  // guarda todo (el nombre ya era ese)
+    // (despues del guardado: v3.4, save() cuenta las medallas del jugador y marca lo contado en cada uno)
+    PetRecord r0 = p.home(0).record(0), r1 = p.home(1).record(0);
     Pet q;
     q.begin();
     CHECK_EQ(q.focusSlot, (uint8_t)0);

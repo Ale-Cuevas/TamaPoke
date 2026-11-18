@@ -38,6 +38,8 @@ enum StrId : uint16_t {
   // ficha: perfil
   S_STREAK_FMT, S_VIN, S_BERRY_UNK,
   S_INFO_FMT, S_RENAME_HINT,
+  // (v3.4: los de la antigua pagina de progreso, mas abajo, ya no se usan todos; se quedan: quitar un id corre las
+  // 8 filas de i18n.cpp. test_tools.py lee los ids de este enum: aqui los comentarios no nombran ids)
   // ficha: combate
   S_BATTLE, S_STAT_ATK, S_STAT_DEF, S_STAT_SPE, S_STAT_WGT,
   // ficha: medallas
@@ -135,13 +137,14 @@ enum StrId : uint16_t {
   S_PM_SLEEP, S_PM_WAKE, S_PM_FOOD, S_PM_STATUS, S_PM_EVOLVE, S_PM_FAREWELL, S_PM_BACK,
   S_FD_PLAIN, S_FD_RED, S_FD_BLUE, S_FD_GREEN, S_FD_YELLOW, S_FD_PINK, S_FD_ORANGE, S_FD_CAKE, S_FD_GOLDEN,
   S_PICK_PLAY, S_PICK_ITEM,
+  // v3.4: los tramos de las medallas del jugador y la 2.a pagina de la ficha (era "Combate")
+  S_TIER_BRONZE, S_TIER_SILVER, S_TIER_GOLD, S_STATS,
   STR_COUNT
 };
 
 const char *T(StrId id);       // texto en el idioma activo
-const char *medalName(int i);  // banner de medalla (MED_COUNT)
-const char *medalLabel(int i); // etiqueta corta de medalla
-const char *medalDesc(int i);  // descripcion larga de medalla
+const char *medalName(int i);  // v3.4: nombre de la medalla del jugador i (MD_*, MEDAL_COUNT)
+const char *medalDesc(int i);  // v3.4: lo que mide (su tarjeta en la pagina de medallas)
 #define STAGE_NAME_COUNT 8     // las 8 fases (igual que STAGE_COUNT de stage.h)
 const char *stageName(uint8_t i); // nombre del tema de la fase 0-7 (planta ... dragon)
 

@@ -19,6 +19,9 @@ static void tBorn(Pet &p) {
   p.eggTap();
   p.eggTap();
   p.eggTap();
+  // v3.4: el de casa ya conto todo para las medallas del jugador (crecer apagado no paga monedas: estos tests
+  // miden las del viaje)
+  p.counted = PMB_ALL;
   p.setClock(TT);
   p.growMin = 100;
   PetRecord r = p.toRecord();
@@ -421,6 +424,8 @@ TEST(travel, un_recuerdo_repetido_da_monedas) {
   Pet p;
   tBorn(p);
   p.setSouvenirMask(0x1Fu);  // todo el prado
+  p.coins = 0;               // v3.4: setSouvenirMask guarda y paga el Bronce de Coleccionista (5 recuerdos): aqui
+                             // solo cuentan las monedas del viaje
   CHECK(p.startTravel(0, 1, 2));
   p.travelFinishNow();
   TravelResult res;

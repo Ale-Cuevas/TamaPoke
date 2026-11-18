@@ -9,7 +9,7 @@
 //
 // Un bicho guardado hiberna: ni envejece, ni crece, ni le bajan las barras, ni suma descuidos.
 // En la caja solo esta lo del individuo (especie, nombre, edad, crecimiento, barras, genes,
-// entrenamiento, vinculo, medallas...). Lo del jugador (racha, pasos, mochila, records,
+// entrenamiento, vinculo, que medallas del jugador ya conto...). Lo del jugador (racha, pasos, mochila, records,
 // Pokedex) y el huevo de la incubadora se quedan donde estaban.
 
 #define BOX_SLOTS 6         // huecos de la caja
@@ -23,7 +23,10 @@ enum : uint8_t { BOX_EMPTY = 0, BOX_OK, BOX_DAMAGED };
 // REC_CARED (v3.0, sin cambiar la version): el primer cuidado de su dia (bondDay) ya le dio su vinculo
 // REC_BERRY (el gusto por especie % 3, hasta v3.1) ya no se escribe ni se lee; REC_FAV6 (v3.2, sin cambiar la
 // version): descubrio su baya favorita de las 6 (por la forma base de la linea). Todos empiezan sin descubrirla.
-enum : uint8_t { REC_SHINY = 1 << 0, REC_BERRY = 1 << 1, REC_SLEEP = 1 << 2, REC_CARED = 1 << 3, REC_FAV6 = 1 << 4 };
+// REC_V3 (v3.4, sin cambiar la version): `medals` ya no son las medallas del bicho (MED_* de antes) sino sus bits
+// "ya contado" para las medallas del jugador (PMB_*, medals.h). Sin el, `medals` se ignora (ver pmLegacyBits)
+enum : uint8_t { REC_SHINY = 1 << 0, REC_BERRY = 1 << 1, REC_SLEEP = 1 << 2, REC_CARED = 1 << 3, REC_FAV6 = 1 << 4,
+                 REC_V3 = 1 << 5 };
 
 // Un bicho en un hueco de la caja: un putBytes de 55 bytes por hueco (unas 4 entradas de la
 // NVS). Empaquetado y en el orden de la memoria (la placa y el PC son little-endian).
@@ -40,7 +43,7 @@ struct __attribute__((packed)) PetRecord {
   uint8_t trAtk, trDef, trSpe;
   uint8_t careMistakes, bond, bondToday;
   uint32_t bondDay;     // dia de bondToday: el tope diario de vinculo va con cada bicho
-  uint16_t medals;
+  uint16_t medals;      // v3.4 con REC_V3: bits PMB_* (contado para las medallas del jugador); sin el, nada
   uint32_t storedEpoch; // cuando entro en la caja (hora del RTC)
   uint16_t crc;         // CRC-16 de todo lo anterior
 };

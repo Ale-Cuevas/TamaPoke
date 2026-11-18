@@ -423,6 +423,8 @@ TEST(encounter, el_objeto_sale_la_mitad_de_las_veces_y_nunca_monedas_ni_bolas) {
   }
   CHECK_RANGE(colored * 100.0 / N, WDROP_COLORED - 1.5, WDROP_COLORED + 1.5);
   int drops = 0;
+  p.counted = PMB_ALL;  // v3.4: crecer (60 min por victoria) no paga medallas de bicho aqui
+  p.dbgMedalsQuiet();
   uint16_t coins = p.coins;
   for (int i = 0; i < 400; i++) {
     p.lastSeenEpoch = at(EDAY, 12);
@@ -433,7 +435,9 @@ TEST(encounter, el_objeto_sale_la_mitad_de_las_veces_y_nunca_monedas_ni_bolas) {
     p.releaseWild();
   }
   CHECK_RANGE(drops, 160, 240);
-  CHECK_EQ(p.coins, coins);
+  // ninguna moneda del salvaje: solo las de la medalla Domador (v3.4; aqui sale siempre a la misma hora, asi que
+  // cuenta como un solo encuentro)
+  CHECK_EQ(p.coins, (uint16_t)(coins + medalPayout(0, p.medalTierPaid(MD_WILD))));
 }
 
 TEST(encounter, el_de_la_caja_tambien_crece_al_ganar) {

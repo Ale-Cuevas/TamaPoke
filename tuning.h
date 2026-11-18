@@ -378,3 +378,37 @@ static const uint8_t TRV_SOUV_PCT[TRV_TIERS] = { 40, 75, 100 };      // probabil
 static const uint8_t TRV_POOL_W[TRV_POOL_N] = { 24, 11, 10, 10, 10, 10, 5, 10, 10 };
 // peso (%) de recuerdo comun / poco comun / raro por duracion: 1 h sin raros; 3 h pocos; 8 h muchos
 static const uint8_t TRV_RARITY_W[TRV_TIERS][3] = { { 70, 30, 0 }, { 60, 32, 8 }, { 40, 35, 25 } };
+
+// --------------------------------------------------------------------------------------------
+// Medallas del jugador (v3.4, medals.h): 19 medallas, cada una con Bronce / Plata / Oro
+// --------------------------------------------------------------------------------------------
+// Cada tramo paga sus monedas una sola vez (fuera del tope diario). Los umbrales van en el orden de
+// MD_* de medals.h (ese orden es del guardado "pm": no se cambia aqui, solo los numeros).
+static const uint16_t MEDAL_COINS[3] = { 25, 75, 200 };  // Bronce, Plata, Oro
+// lo que cuenta un bicho para las medallas de bicho (cada uno, una vez)
+static const uint16_t MEDAL_PET_LV[3] = { 10, 25, 50 };  // Creciendo, Veterano, Gran criador: el nivel
+#define MEDAL_BOND 100            // Mejores amigos: el vinculo
+#define MEDAL_FIT_LV 10           // En forma: desde este nivel...
+#define MEDAL_FIT_WEIGHT 0        // ...con este peso como mucho...
+#define MEDAL_FIT_MISTAKES 0      // ...y estos descuidos como mucho
+static const uint32_t MEDAL_T[][3] = {
+  { 2, 6, 15 },             // Creciendo: bichos que llegan al Nv.10
+  { 1, 4, 10 },             // Veterano: al Nv.25
+  { 1, 4, 8 },              // Gran criador: al Nv.50
+  { 1, 3, 8 },              // Mejores amigos: con el vinculo a 100
+  { 2, 5, 12 },             // Adulto: en una forma final
+  { 1, 3, 8 },              // En forma: Nv.10, peso 0 y sin descuidos
+  { 2, 6, 15 },             // Gourmet: baya favorita descubierta
+  { 3, 10, 30 },            // Evolucion: evoluciones
+  { 1, 3, 8 },              // Feliz adios: despedidas
+  { 15, 50, 120 },          // Pokedex: especies registradas
+  { 1, 3, 8 },              // Shiny: especies shiny registradas
+  { 7, 30, 100 },           // Cuidado diario: la mejor racha (dias)
+  { 50000, 250000, 1000000 },  // Caminante: pasos en total
+  { 1, 10, 30 },            // Maraton: dias de 10000 pasos
+  { 3, 6, 8 },              // Campeon: estadios vencidos
+  { 3, 15, 40 },            // Domador: salvajes vencidos
+  { 1, 5, 15 },             // Cazador: capturas
+  { 3, 15, 50 },            // Trotamundos: viajes completados
+  { 5, 15, 25 },            // Coleccionista: recuerdos
+};

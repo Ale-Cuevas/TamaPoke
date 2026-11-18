@@ -120,7 +120,7 @@ TEST(fx, la_que_ya_se_ve_no_la_corta_otra_de_mas_prioridad) {
   CHECK_EQ((int)q.step(FX_GOAL_MS, false)->kind, (int)FXB_LEVELUP);
 }
 
-// caja (v1.37): al cambiar de bicho se quitan su subida y su medalla; lo del jugador sigue
+// caja (v1.37): al cambiar de bicho se quita su subida; lo del jugador sigue (drop sirve para cualquier tipo)
 TEST(fx, drop_quita_un_tipo_tambien_el_que_se_ve) {
   FxQueue q;
   q.push(FXB_MEDAL, 1);
@@ -138,6 +138,23 @@ TEST(fx, drop_quita_un_tipo_tambien_el_que_se_ve) {
   CHECK_EQ((int)q.step(10 + e->dur, false)->kind, (int)FXB_GOAL);
   q.drop(FXB_MEDAL);  // sin ninguna: nada cambia
   CHECK(q.active);
+}
+
+// v3.4: la misma medalla del jugador que ya espera se funde (el tramo mas alto y la suma de monedas); otra
+// medalla va aparte
+TEST(fx, la_misma_medalla_se_funde_con_sus_monedas) {
+  FxQueue q;
+  CHECK(q.push(FXB_MEDAL, 9, 1, false, 0, 25));
+  CHECK(q.push(FXB_MEDAL, 9, 2, false, 0, 75));
+  CHECK(q.push(FXB_MEDAL, 3, 1, false, 0, 25));
+  CHECK_EQ((int)q.n, 2);
+  const FxEvent *e = q.step(0, false);
+  CHECK_EQ((int)e->a, 9);
+  CHECK_EQ((int)e->b, 2);
+  CHECK_EQ((int)e->c, 100);
+  e = q.step(e->dur, false);
+  CHECK_EQ((int)e->a, 3);
+  CHECK_EQ((int)e->c, 25);
 }
 
 TEST(fx, la_meta_de_10000_dura_mas) {

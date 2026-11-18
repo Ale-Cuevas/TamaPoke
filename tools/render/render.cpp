@@ -136,6 +136,9 @@ static void resetUi() {
   trvSelDest = 1;
   boxAwayUntil = 0;
   returnBannerShown = false;
+  userOpen = false;  // v3.4: la pagina del jugador
+  userPage = userMedalPage = 0;
+  userMedalTip = -1;
   galleryOpen = cardOpen = bagOpen = kbOpen = clockOpen = gameOpen = sackOpen = zenOpen = dashOpen = false;
   yardDemoOpen = false;  // el patio (v2.0)
   yardDemoPage = 0;
@@ -197,7 +200,6 @@ static void resetUi() {
   cardPage = 0;
   // fases (v1.65): menus cerrados, sin insignias, sin premios cobrados y sin equipo anterior
   stagesOpen = teamOpen = false;
-  boxPage = 0;
   teamPickN = 0;
   stShakeUntil = 0;
   stShakeIdx = -1;
@@ -227,7 +229,7 @@ static void resetUi() {
   pet.dbgClearGifts();  // ni los regalos (v1.55)
   while (pet.hasFound()) pet.popFound();
   pet.takeGoalBanner();
-  pet.takeMedal();       // (v1.30) las celebraciones pendientes no pasan de una escena a otra
+  pet.dbgMedalsQuiet();  // (v3.4) ni medallas pendientes ni tramos sin cobrar de la escena anterior
   pet.takeMilestone();
   pet.clearEmote();
   pet.stepsToday = pet.stepsTotal = 0;
@@ -698,12 +700,29 @@ static void tapTraveller(bool bubble) {
   }
   onTap(x, y);
 }
-// the collection tab with the given souvenirs owned
+// the collection page of the USER page (v3.4; it was a Bag tab) with the given souvenirs owned
 static void collection(uint32_t mask) {
   pokemon(25, 13);
   pet.setSouvenirMask(mask);
-  openBag();
-  bagTab = 2;
+  openUser(USERP_COLLECTION);
+}
+// v3.4: the medals page with a believable mid-game player: some pets counted, a few events, steps, badges
+static void userMedals(bool es_) {
+  memset(pet.dexReg, 0, sizeof(pet.dexReg));
+  memset(pet.dexShinyReg, 0, sizeof(pet.dexShinyReg));
+  for (int16_t d = 1; d <= 23; d++) pet.dbgRegister(d, d == 7);
+  pet.bestStreak = 12;
+  pet.stepsTotal = 61200;
+  pet.setBadges(0x07);
+  pet.setSouvenirMask(0x0A5B6D3);
+  pet.dbgMedalsQuiet();
+  const uint16_t cnt[] = { 3, 1, 0, 1, 2, 1, 4, 5, 1, 0, 0, 0, 0, 2, 0, 4, 2, 6, 0 };
+  for (uint8_t i = 0; i < MEDAL_COUNT; i++)
+    if (medalSource(i) != MSRC_DERIVED) pet.dbgMedalCount(i, cnt[i]);
+  pet.dbgClearMedalNews();
+  pet.coins = 120;
+  if (es_) es();
+  openUser(USERP_MEDALS);
 }
 static void collectionTip(uint32_t mask, uint8_t id) {
   collection(mask);
@@ -1082,8 +1101,7 @@ static const std::vector<Scene> &scenes() {
     { "walk-eggs-pt", [] {
        pokemon(25, 13);
        walker(6420, 88100, 4, { 3, 1, 0, 2, 1, 1, 2 }, 2);
-       cardOpen = true;
-       cardPage = 4;
+       openUser(USERP_WALK);
        setLang(LANG_PT);
        applyLangFont();
      } },
@@ -1096,8 +1114,7 @@ static const std::vector<Scene> &scenes() {
     { "walk-eggs", [] {
        pokemon(25, 13);
        walker(6420, 88100, 4, { 3, 1, 0, 2, 1, 1, 2 }, 2);
-       cardOpen = true;
-       cardPage = 4;
+       openUser(USERP_WALK);
      } },
     { "evolve", [] { pokemon(4, 11); pet.setLevel(18); choiceKind = 1; choiceUntil = millis() + 12000; } },
     { "card-profile", [] { pokemon(25, 13); cardOpen = true; cardPage = 0; } },
@@ -1109,8 +1126,31 @@ static const std::vector<Scene> &scenes() {
     { "card-battle-de", [] { pokemon(92, 6); pet.trAtk = 100; pet.trDef = 55; setLang(LANG_DE); applyLangFont(); cardOpen = true; cardPage = 1; } },
     { "card-battle-it", [] { pokemon(92, 6); pet.trAtk = 100; pet.trDef = 55; setLang(LANG_IT); applyLangFont(); cardOpen = true; cardPage = 1; } },
     { "card-battle-es", [] { pokemon(92, 6); pet.trAtk = 100; pet.trDef = 55; setLang(LANG_ES); applyLangFont(); cardOpen = true; cardPage = 1; } },
-    { "card-medals", [] { pokemon(25, 13); cardOpen = true; cardPage = 2; } },
-    { "card-progress", [] { pokemon(25, 13); cardOpen = true; cardPage = 3; } },
+    // v3.4: the card has two pages (profile with the evolution line and the slip-ups, and Stats)
+    { "card-profile-evo", [] { pokemon(4, 13); pet.setLevel(18); pet.careMistakes = 2; cardOpen = true; cardPage = 0; } },
+    { "card-profile-evo-es", [] { pokemon(4, 13); pet.setLevel(18); pet.careMistakes = 2; es(); cardOpen = true; cardPage = 0; } },
+    { "card-profile-blocked", [] { pokemon(4, 13); pet.setLevel(20); pet.fullness = 20; cardOpen = true; cardPage = 0; } },
+    { "card-stats", [] { pokemon(25, 13); cardOpen = true; cardPage = 1; } },
+    { "card-stats-es", [] { pokemon(25, 13); es(); cardOpen = true; cardPage = 1; } },
+    // v3.4: the USER page (swipe up): medals, walk, badges, collection
+    { "user-medals", [] { pokemon(25, 13); userMedals(false); } },
+    { "user-medals-es", [] { pokemon(25, 13); userMedals(true); } },
+    { "user-medals-p2", [] { pokemon(25, 13); userMedals(false); userMedalPage = 1; } },
+    { "user-medals-p3-es", [] { pokemon(25, 13); userMedals(true); userMedalPage = 2; } },
+    { "user-medals-p4", [] { pokemon(25, 13); userMedals(false); userMedalPage = 3; } },
+    { "user-medals-p4-es", [] { pokemon(25, 13); userMedals(true); userMedalPage = 3; } },
+    { "user-medals-empty", [] { pokemon(25, 13); pet.stepsTotal = 0; openUser(USERP_MEDALS); } },
+    { "user-medal-tip", [] { pokemon(25, 13); userMedals(false); userMedalTip = MD_WALKER; } },
+    { "user-medal-tip-es", [] { pokemon(25, 13); userMedals(true); userMedalTip = MD_LV10; } },
+    { "user-medal-tip-tap", [] { pokemon(25, 13); userMedals(false); onTap(CX, UMED_Y0 + 2 * UMED_STEP + 20); } },
+    { "user-walk", [] { pokemon(25, 13); walker(3512, 61200, 4, { 4, 0, 9, 1, 1 }, 1); openUser(USERP_WALK); } },
+    { "user-walk-es", [] { pokemon(25, 13); walker(3512, 61200, 4, { 4, 0, 9, 1, 1 }, 1); es(); openUser(USERP_WALK); } },
+    { "user-badges", [] { pokemon(25, 13); stageSetup(0x07, 0, false); openUser(USERP_BADGES); } },
+    { "user-badges-es", [] { pokemon(25, 13); stageSetup(0x07, 0, true); openUser(USERP_BADGES); } },
+    { "user-collection", [] { collection(0x0A5B6D3); } },
+    { "user-collection-es", [] { collection(0x0A5B6D3); es(); } },
+    { "user-swipe-up", [] { pokemon(25, 13); onSwipeV(-1); } },  // the yard's swipe up opens the USER page
+    { "user-swipe-left", [] { pokemon(25, 13); openUser(USERP_MEDALS); onSwipe(-1); } },  // -> Walk
     { "settings", [] { pokemon(25, 13); openClock(); } },
     { "settings-bright-max", [] { pokemon(25, 13); openClock(); gBright = BRIGHT_LEVELS - 1; } },
     // volume pill: 4 levels including off (v1.50)
@@ -1158,12 +1198,12 @@ static const std::vector<Scene> &scenes() {
     { "home-ja", [] { pokemon(25, 13); setLang(LANG_JA); applyLangFont(); } },
     { "home-streak", [] { pokemon(130, 16); pet.streak = 365; } },  // widest status row
     // steps and the Backpack (Task 1)
-    { "walk-empty", [] { pokemon(25, 13); cardOpen = true; cardPage = 4; } },
-    { "walk-mid", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 0 }); cardOpen = true; cardPage = 4; } },
-    { "walk-goal", [] { pokemon(25, 13); walker(3512, 61200, 4, { 4, 0, 9, 1, 1 }, 1); cardOpen = true; cardPage = 4; } },
+    { "walk-empty", [] { pokemon(25, 13); openUser(USERP_WALK); } },
+    { "walk-mid", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 0 }); openUser(USERP_WALK); } },
+    { "walk-goal", [] { pokemon(25, 13); walker(3512, 61200, 4, { 4, 0, 9, 1, 1 }, 1); openUser(USERP_WALK); } },
     // the 6000 and 10000 goals and the Rare Candy (v1.25)
-    { "walk-6000", [] { pokemon(25, 13); walker(7240, 65000, 6, { 4, 0, 9, 1, 1, 0 }, 2); cardOpen = true; cardPage = 4; } },
-    { "walk-10000", [] { pokemon(25, 13); walker(11032, 71500, 8, { 5, 1, 9, 2, 1, 1 }, 3); cardOpen = true; cardPage = 4; } },
+    { "walk-6000", [] { pokemon(25, 13); walker(7240, 65000, 6, { 4, 0, 9, 1, 1, 0 }, 2); openUser(USERP_WALK); } },
+    { "walk-10000", [] { pokemon(25, 13); walker(11032, 71500, 8, { 5, 1, 9, 2, 1, 1 }, 3); openUser(USERP_WALK); } },
     { "bag-candy-confirm", [] {
        pokemon(25, 13);
        walker(11032, 71500, 8, { 5, 1, 9, 2, 1, 1 }, 3);
@@ -1175,7 +1215,6 @@ static const std::vector<Scene> &scenes() {
     { "goal-10000", [] {
        pokemon(7, 10);
        pet.lastCareDay = pet.dayNumber();
-       pet.medals = (1 << MED_COUNT) - 1;  // every medal already won: only the goal banner on top
        pet.addSteps(STEP_GOALS[STEP_GOAL_TIERS - 1], pet.dayNumber());
        while (pet.hasFound()) pet.popFound();
        collect();
@@ -1185,12 +1224,10 @@ static const std::vector<Scene> &scenes() {
     { "goal-3000", [] {
        pokemon(7, 10);
        pet.lastCareDay = pet.dayNumber();
-       pet.medals = (1 << MED_COUNT) - 1;  // every medal already won: only the goal banner on top
        pet.addSteps(STEP_GOALS[0], pet.dayNumber());
        while (pet.hasFound()) pet.popFound();
        collect();
      }, 5 },
-    { "card-medals-9", [] { pokemon(25, 13); pet.medals = MED_LV10 | MED_BERRY | MED_MARATHON; cardOpen = true; cardPage = 2; } },
     { "bag-confirm", [] {
        pokemon(25, 13);
        walker(1840, 52310, 2, { 2, 1, 0, 3, 0 });
@@ -1262,16 +1299,13 @@ static const std::vector<Scene> &scenes() {
     { "card-profile-needs-es", [] { pokemon(25, 13); pet.fullness = 20; pet.joy = 45; pet.energy = 10;
                                     setLang(LANG_ES); applyLangFont(); cardOpen = true; cardPage = 0; } },
     { "card-profile-nick", [] { pokemon(6, 36); pet.rename("SPARKY"); pet.shiny = true; cardOpen = true; cardPage = 0; } },
-    { "card-medals-es", [] { pokemon(25, 13); pet.medals = MED_LV10 | MED_BERRY | MED_MARATHON; setLang(LANG_ES); applyLangFont(); cardOpen = true; cardPage = 2; } },
-    { "card-progress-es", [] { pokemon(25, 13); setLang(LANG_ES); applyLangFont(); cardOpen = true; cardPage = 3; } },
-    { "walk-goal-es", [] { pokemon(25, 13); walker(3512, 61200, 4, { 4, 0, 9, 1, 1, 0, 2 }, 1); setLang(LANG_ES); applyLangFont(); cardOpen = true; cardPage = 4; } },
+    { "walk-goal-es", [] { pokemon(25, 13); walker(3512, 61200, 4, { 4, 0, 9, 1, 1, 0, 2 }, 1); setLang(LANG_ES); applyLangFont(); openUser(USERP_WALK); } },
     { "keyboard-es", [] { pokemon(25, 13); pet.rename("PIKA"); openKeyboard(); setLang(LANG_ES); applyLangFont(); } },
-    { "walk-noimu", [] { pokemon(25, 13); gStubImuPresent = false; cardOpen = true; cardPage = 4; } },
+    { "walk-noimu", [] { pokemon(25, 13); gStubImuPresent = false; openUser(USERP_WALK); } },
     { "walk-ja", [] {
        pokemon(25, 13);
        walker(1840, 52310, 2, { 2, 1, 0, 3, 1 });
-       cardOpen = true;
-       cardPage = 4;
+       openUser(USERP_WALK);
        setLang(LANG_JA);
        applyLangFont();
      } },
@@ -1292,8 +1326,13 @@ static const std::vector<Scene> &scenes() {
     { "levelup-gains-ja", [] { pokemon(25, 13); setLang(LANG_JA); applyLangFont(); levelUp(1); }, 32 },
     { "levelup-ko", [] { pokemon(25, 13); setLang(LANG_KO); applyLangFont(); levelUp(1); }, 7 },
     { "levelup-gains-fr", [] { pokemon(25, 13); setLang(LANG_FR); applyLangFont(); levelUp(1); }, 32 },
-    { "medal-slide", [] { pokemon(25, 13); fxq.push(FXB_MEDAL, 0); }, 1 },
-    { "medal-confetti", [] { pokemon(25, 13); fxq.push(FXB_MEDAL, 0); }, 6 },
+    { "medal-slide", [] { pokemon(25, 13); fxq.push(FXB_MEDAL, MD_LV10, MTIER_BRONZE, false, 0, 25); }, 1 },
+    { "medal-confetti", [] { pokemon(25, 13); fxq.push(FXB_MEDAL, MD_LV10, MTIER_BRONZE, false, 0, 25); }, 6 },
+    // v3.4: a player medal reached through Pet (the Pokedex at 15 species): banner with its tier and coins
+    { "medal-banner", [] { pokemon(25, 13); memset(pet.dexReg, 0, sizeof(pet.dexReg)); pet.dbgMedalsQuiet(); for (int16_t d = 1; d <= 15; d++) pet.dbgRegister(d); pet.medalsUpdate(); collect(); }, 6 },
+    { "medal-banner-es", [] { pokemon(25, 13); es(); memset(pet.dexReg, 0, sizeof(pet.dexReg)); pet.dbgMedalsQuiet(); for (int16_t d = 1; d <= 15; d++) pet.dbgRegister(d); pet.medalsUpdate(); collect(); }, 6 },
+    { "medal-banner-gold", [] { pokemon(25, 13); fxq.push(FXB_MEDAL, MD_STAGES, MTIER_GOLD, false, 0, 300); }, 6 },
+    { "medal-banner-gold-es", [] { pokemon(25, 13); es(); fxq.push(FXB_MEDAL, MD_FAREWELL, MTIER_GOLD, false, 0, 200); }, 6 },
     { "streak-banner", [] { pokemon(25, 13); fxq.push(FXB_MILESTONE, 7); }, 4 },
     // (needs set by hand, not feedBerry(): its eating timer would leak into the next scenes,
     // which restart the host clock)
@@ -1497,20 +1536,14 @@ static const std::vector<Scene> &scenes() {
     { "team-vacant-es", [] { vacantNow(10); boxThree(); teamSetup({ 4 }, 3, true); } },
     { "box-dots", [] { pokemon(25, 13); boxThree(); openBox(); } },
     { "box-dots-es", [] { pokemon(25, 13); boxThree(); setLang(LANG_ES); applyLangFont(); openBox(); } },
-    { "badges-0", [] { pokemon(25, 13); stageSetup(0, 0, false); openBox(); boxPage = 1; } },
-    { "badges-0-es", [] { pokemon(25, 13); stageSetup(0, 0, true); openBox(); boxPage = 1; } },
-    { "badges-3", [] { pokemon(25, 13); stageSetup(0x07, 0, false); openBox(); boxPage = 1; } },
-    { "badges-3-es", [] { pokemon(25, 13); stageSetup(0x07, 0, true); openBox(); boxPage = 1; } },
-    { "badges-8", [] { pokemon(25, 13); stageSetup(0xFF, 0, false); openBox(); boxPage = 1; } },
-    { "badges-8-es", [] { pokemon(25, 13); stageSetup(0xFF, 0, true); openBox(); boxPage = 1; } },
-    { "box-chev-tap", [] { pokemon(25, 13); stageSetup(0x07, 0, false); boxThree(); openBox(); onTap(Y_CHEV_RX, Y_CY); } },
-    { "box-chev-back-tap", [] {  // badges, then < back to the box
-       pokemon(25, 13);
-       boxThree();
-       openBox();
-       boxPage = 1;
-       onTap(Y_CHEV_LX, Y_CY);
-     } },
+    { "badges-0", [] { pokemon(25, 13); stageSetup(0, 0, false); openUser(USERP_BADGES); } },
+    { "badges-0-es", [] { pokemon(25, 13); stageSetup(0, 0, true); openUser(USERP_BADGES); } },
+    { "badges-3", [] { pokemon(25, 13); stageSetup(0x07, 0, false); openUser(USERP_BADGES); } },
+    { "badges-3-es", [] { pokemon(25, 13); stageSetup(0x07, 0, true); openUser(USERP_BADGES); } },
+    { "badges-8", [] { pokemon(25, 13); stageSetup(0xFF, 0, false); openUser(USERP_BADGES); } },
+    { "badges-8-es", [] { pokemon(25, 13); stageSetup(0xFF, 0, true); openUser(USERP_BADGES); } },
+    // v3.4: the Box has one page (no "1/2", no chevrons): a swipe right there does nothing, the badges are on the USER page
+    { "box-swipe-right", [] { pokemon(25, 13); stageSetup(0x07, 0, false); boxThree(); openBox(); onSwipe(1); } },
     { "box-back-tap", [] { pokemon(25, 13); boxThree(); openBox(); onTap(Y_BACK_X, Y_BACK_Y); } },
     { "box-wake-ask-es", [] {
        pokemon(25, 13);

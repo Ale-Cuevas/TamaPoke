@@ -59,7 +59,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "3.3"
+#define FW_VERSION "3.4"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -147,7 +147,6 @@ uint32_t poopPuffUntil = 0;    // ...hasta aqui
 #define POOP_PUFF_MS 450
 int8_t boxShakeSlot = -1;     // hueco que no se puede usar: tiembla (como un boton, fx.h)
 uint32_t boxShakeUntil = 0;
-uint8_t boxPage = 0;          // 0 = los huecos, 1 = las insignias (v1.65; deslizar a la derecha desde la caja)
 // fases de combate (v1.65): la seleccion de fase y el selector de equipo (menus estaticos, como la caja)
 bool stagesOpen = false;
 bool teamOpen = false;
@@ -184,16 +183,24 @@ bool cardOpen = false;        // ficha del bicho (deslizar vertical)
 bool kbOpen = false;          // teclado para renombrar al bicho
 char nameBuf[12] = "";
 uint8_t nameLen = 0;
-uint8_t cardPage = 0;         // 0 perfil, 1 combate, 2 medallas, 3 progreso, 4 paseo
-#define CARD_PAGES 5
+uint8_t cardPage = 0;         // v3.4: 0 perfil (con descuidos y evolucion), 1 estadisticas (la de combate)
+#define CARD_PAGES 2
+// la pagina del jugador (v3.4, deslizar arriba en el patio): medallas, paseo, insignias y coleccion
+bool userOpen = false;
+uint8_t userPage = 0;         // USERP_*
+uint8_t userMedalPage = 0;    // medallas: la sub-pagina (USER_MEDAL_ROWS filas cada una)
+int8_t userMedalTip = -1;     // medallas: la tarjeta abierta (MD_*) o -1
+enum : uint8_t { USERP_MEDALS = 0, USERP_WALK, USERP_BADGES, USERP_COLLECTION, USER_PAGES };
+#define USER_MEDAL_ROWS 5
+#define USER_MEDAL_PAGES ((MEDAL_COUNT + USER_MEDAL_ROWS - 1) / USER_MEDAL_ROWS)
 bool bagOpen = false;         // mochila (v1.53): su boton en la fila de abajo, antes la pagina de paseo de la ficha
 uint8_t itemConfirm = 0;      // mochila: objeto a confirmar + 1 (0 = ninguno)
 int8_t itemConfirmSlot = -1;  // v3.3: el bicho de casa en el que se usara (el que podia al tocarlo; -1 = ninguno)
 uint32_t itemConfirmUntil = 0;
 // la tienda de la mochila y el selector de fondos (v2.0, Y4b)
 uint8_t bagPage = 0;          // v3.2: Objetos y Tienda tienen 2 paginas (la 2.a, las bayas de colores)
-uint8_t bagTab = 0;           // 0 = Objetos, 1 = Tienda, 2 = Coleccion (v2.0, Y5b). v3.3: la Tienda es su pantalla (dock)
-uint8_t souvTip = 0;          // coleccion: recuerdo con la tarjeta abierta + 1 (0 = ninguna)
+uint8_t bagTab = 0;           // 0 = Objetos, 1 = Tienda (v3.3: su pantalla, del dock). v3.4: la Coleccion, a la pagina del jugador
+uint8_t souvTip = 0;          // coleccion (pagina del jugador): recuerdo con la tarjeta abierta + 1 (0 = ninguna)
 uint8_t shopBuyId = 0;        // tienda: objeto a comprar + 1 (0 = ninguno)
 uint32_t shopBuyUntil = 0;
 uint8_t shopToast = 0;        // aviso verde / rojo (SHT_*) y hasta cuando
@@ -516,7 +523,7 @@ void monReset() { monFor[0] = monFor[1] = monBwFor = -2; }
 // bicho y el selector de bicho)
 bool uiModalOpen() {
   return gameOpen || sackOpen || zenOpen || dashOpen || battleOpen() || encOpen() || teamOpen || stagesOpen ||
-         cardOpen || kbOpen || clockOpen || bagOpen || panelKind || boxOpen || boxMove != BOXMV_NONE || galleryOpen ||
+         cardOpen || userOpen || kbOpen || clockOpen || bagOpen || panelKind || boxOpen || boxMove != BOXMV_NONE || galleryOpen ||
          confirmUntil || choiceKind || itemConfirm || petMenuOpen || petPick || pet.isDying() || pet.ceremony || pet.evolving() ||
          pet.home(0).isDying() || pet.home(1).isDying() || pet.home(0).ceremony || pet.home(1).ceremony;
 }
@@ -738,7 +745,7 @@ void onShake() {
   if (dimStage > 0) { wakeUI(); return; }
   wakeUI();
   if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen()) return;
-  if (galleryOpen || boxOpen || stagesOpen || teamOpen || cardOpen || bagOpen || kbOpen || clockOpen || panelKind || encOpen()) return;  // el bicho no esta en pantalla
+  if (galleryOpen || boxOpen || stagesOpen || teamOpen || cardOpen || userOpen || bagOpen || kbOpen || clockOpen || panelKind || encOpen()) return;  // el bicho no esta en pantalla
   // v3.0: a los dos de casa: los despiertos se marean (y los huevos se tambalean; el del patio dice lo que le
   // queda) y despues los dormidos se despiertan de mal humor
   if (pet.shaken()) yardEggInfo();
@@ -972,7 +979,7 @@ void handleSerial() {
   } else if (line == "CAREDAY") {  // simula un dia nuevo cuidado (pruebas)
     pet.setClock(pet.lastSeenEpoch + 86400);
     pet.caress();
-    Serial.printf("streak=%u bond=%u medals=0x%X\n", pet.streak, pet.bond, pet.medals);
+    Serial.printf("streak=%u bond=%u counted=0x%02X\n", pet.streak, pet.bond, pet.counted);
     Serial.println("DONE");
   } else if (line == "BYE") {
     pet.startFarewell();
@@ -1461,6 +1468,44 @@ void handleSerial() {
     }
     Serial.printf("pick=%u arg=%u\n", petPick, petPickArg);
     Serial.println("DONE");
+  } else if (line == "MEDALS") {  // v3.4: cada medalla del jugador (valor, tramo pagado, siguiente umbral) y lo contado
+    for (uint8_t i = 0; i < MEDAL_COUNT; i++) {
+      uint32_t v = pet.medalValue(i);
+      Serial.printf("medal %2u src=%u v=%lu tier=%u next=%lu  %s\n", i, medalSource(i), (unsigned long)v,
+                    pet.medalTierPaid(i), (unsigned long)medalNext(i, v), medalName(i));
+    }
+    for (uint8_t hs = 0; hs < HOME_SLOTS; hs++)
+      Serial.printf("home%u counted=0x%02X uid=%08lX\n", hs, pet.home(hs).counted, (unsigned long)pet.home(hs).uid);
+    for (uint8_t k = 0; k < BOX_SLOTS; k++)
+      if (pet.boxState(k) == BOX_OK) {
+        const PetRecord &r = pet.boxRecord(k);
+        Serial.printf("box%u counted=0x%02X%s legacy=0x%02X\n", k, (r.flags & REC_V3) ? r.medals : 0,
+                      (r.flags & REC_V3) ? "" : " (sin REC_V3)", pet.legacyBitsOf(r.uid));
+      }
+    Serial.printf("tiers=%u/%u coins=%u news=%u migrated=%d\n", pet.medalTiersTotal(), (unsigned)(MEDAL_COUNT * MEDAL_TIERS),
+                  pet.coins, pet.medalNewsPending(), pet.medalsMigratedNow() ? 1 : 0);
+    Serial.println("DONE");
+  } else if (line.startsWith("MEDAL ")) {  // MEDAL <i> <v> (v3.4): el contador de una de bicho (0-6) o de evento
+    String a = line.substring(6);
+    a.trim();
+    int sp = a.indexOf(' ');
+    int i = sp > 0 ? a.substring(0, sp).toInt() : -1;
+    long v = sp > 0 ? a.substring(sp + 1).toInt() : -1;
+    if (i >= 0 && i < MEDAL_COUNT && medalSource((uint8_t)i) != MSRC_DERIVED && v >= 0 && v <= 0xFFFF) {
+      pet.dbgMedalCount((uint8_t)i, (uint16_t)v);
+      Serial.printf("medal %d v=%lu tier=%u coins=%u\n", i, (unsigned long)pet.medalValue((uint8_t)i),
+                    pet.medalTierPaid((uint8_t)i), pet.coins);
+    } else {
+      Serial.println("MEDAL <i> <v>: i de bicho (0-6) o de evento (7, 8, 13, 15, 16, 17)");
+    }
+    Serial.println("DONE");
+  } else if (line == "USER" || line.startsWith("USER ")) {  // USER [pagina] (v3.4): 0 medallas, 1 paseo, 2 insignias, 3 coleccion
+    int pg = line.length() > 5 ? line.substring(5).toInt() : 0;
+    closeForDying();  // (cierra todo lo que tape la pantalla principal, como para el Revivir)
+    openUser((uint8_t)(pg >= 0 && pg < USER_PAGES ? pg : 0));
+    wakeUI();
+    Serial.printf("USER page=%u\n", userPage);
+    Serial.println("DONE");
   } else if (line == "FOCUS" || line.startsWith("FOCUS ")) {  // FOCUS <0|1> (v3.0): el bicho de casa que es "pet"
     if (line.length() > 6) {
       int fs = line.substring(6).toInt();
@@ -1493,9 +1538,15 @@ void handleSerial() {
                   pet.weight, pet.atkStat(), pet.defStat(), pet.speStat(),
                   pet.geneAtk, pet.geneDef, pet.geneSpe,
                   pet.trAtk, pet.trDef, pet.trSpe, pet.berryKnown);
-    Serial.printf("shiny=%d streak=%u/%u bond=%u bondT=%u medals=0x%X(%u) nick=%s\n",
-                  pet.shiny, pet.streak, pet.bestStreak, pet.bond, pet.bondGainedToday(), pet.medals,
-                  pet.totalMedals, pet.nick);
+    Serial.printf("shiny=%d streak=%u/%u bond=%u bondT=%u counted=0x%02X nick=%s\n",
+                  pet.shiny, pet.streak, pet.bestStreak, pet.bond, pet.bondGainedToday(), pet.counted, pet.nick);
+    {  // v3.4: las medallas del jugador, en resumen (MEDALS: el detalle)
+      uint8_t nt[MEDAL_TIERS + 1] = { 0 };
+      for (uint8_t i = 0; i < MEDAL_COUNT; i++) nt[pet.medalTierPaid(i)]++;
+      Serial.printf("medals: %u/%u tramos (oro %u, plata %u, bronce %u) news=%u%s\n", pet.medalTiersTotal(),
+                    (unsigned)(MEDAL_COUNT * MEDAL_TIERS), nt[MTIER_GOLD], nt[MTIER_SILVER], nt[MTIER_BRONZE],
+                    pet.medalNewsPending(), pet.medalsMigratedNow() ? " (migradas en este arranque)" : "");
+    }
     // abandono (v1.60): minutos apagando el vinculo, minutos hacia la muerte, el dialogo y su huevo
     Serial.printf("ngl=%u dth=%u dying=%d dym=%u degg=%d revive=%u lend=%u\n", pet.neglectMinutes(),
                   pet.deathMinutes(), pet.isDying() ? 1 : 0, pet.dyingMinutes(), pet.deathEggSpecies(),
@@ -1641,7 +1692,7 @@ void handleTouch() {
     // pulsacion larga sin moverse sobre un bicho de casa -> dialogo de soltar (v3.0: el que esta bajo el
     // dedo, que pasa a tener el foco)
     int hs = -1;
-    if (!holdFired && !swallowGesture && !yardDemoOpen && !galleryOpen && !boxOpen && !stagesOpen && !teamOpen && !cardOpen && !bagOpen && !kbOpen && !clockOpen && !panelKind && !petMenuOpen && !petPick && !encOpen() && millis() - tStart > 3000 &&
+    if (!holdFired && !swallowGesture && !yardDemoOpen && !galleryOpen && !boxOpen && !stagesOpen && !teamOpen && !cardOpen && !userOpen && !bagOpen && !kbOpen && !clockOpen && !panelKind && !petMenuOpen && !petPick && !encOpen() && millis() - tStart > 3000 &&
         abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && (hs = holdOnPet(tX0, tY0)) >= 0 &&
         !pet.home((uint8_t)hs).isEgg() && !confirmUntil && !pet.home((uint8_t)hs).busyEnding() && uiFocus((uint8_t)hs)) {
       confirmUntil = millis() + 10000;
@@ -1673,11 +1724,14 @@ void onSwipeV(int dir) {
     if (dir < 0) cardOpen = false;  // arriba cierra la ficha
     return;
   }
+  if (userOpen) {  // v3.4: en las medallas, arriba / abajo pasan sus sub-paginas; abajo desde la primera (o en otra pagina) cierra
+    userSwipeV(dir);
+    return;
+  }
   if (dir > 0) {                    // deslizar abajo: ajustar hora
     if (!confirmUntil && !panelKind) openClock();
-  } else if (!pet.isEgg() && !confirmUntil && !panelKind) {
-    cardOpen = true;                // deslizar arriba: ficha
-    cardPage = 0;
+  } else if (!confirmUntil && !panelKind) {
+    openUser(USERP_MEDALS);         // v3.4: deslizar arriba: la pagina del jugador (la ficha, desde Estado del menu del bicho)
   }
 }
 
@@ -1701,15 +1755,14 @@ void onSwipe(int dir) {
     cardPage = p < 0 ? 0 : (p > CARD_PAGES - 1 ? CARD_PAGES - 1 : p);
     return;
   }
+  if (userOpen) {  // v3.4: la pagina del jugador, 4 paginas; a la derecha desde la primera, a casa
+    userSwipe(dir);
+    return;
+  }
   if (stagesOpen || teamOpen) return;  // menus de fase: ni a casa ni a la Pokedex (se sale con USER o la cabecera)
-  if (boxOpen) {  // la caja, 2 paginas (v1.65): a la derecha las insignias; a la izquierda atras, y de la 1 a casa
+  if (boxOpen) {  // la caja (v3.4: una sola pagina; las insignias, a la pagina del jugador): a la izquierda, a casa
     if (boxMove) return;
-    if (boxPage == 0) {
-      if (dir < 0) closeBox();
-      else if (!boxAsk) boxPage = 1;
-    } else if (dir < 0) {
-      boxPage = 0;
-    }
+    if (dir < 0) closeBox();
     return;
   }
   if (!galleryOpen) {
@@ -1832,11 +1885,19 @@ void onBack() {
   if (pet.ceremony) return;                      // durante la despedida no hay vuelta atras
   if (petPick) { closePetPick(); return; }       // v3.3: el selector de bicho -> el panel Jugar o la mochila
   if (bagOpen && yardMapPreview) { yardMapPreview = 0; return; }  // selector de fondos -> tienda
-  if (bagOpen && souvTip) { souvTip = 0; return; }                 // tarjeta de un recuerdo -> coleccion
   if (bagOpen && shopBuyId) { shopBuyId = 0; return; }             // "comprar?": NO
   if (bagOpen && itemConfirm) { itemConfirm = 0; return; }  // "usar objeto?": NO
   if (bagOpen) { closeBag(); return; }
   if (cardOpen) { cardOpen = false; return; }
+  if (userOpen) {                                // v3.4: la tarjeta abierta -> la pagina -> casa
+    if (souvTip || userMedalTip >= 0) {
+      souvTip = 0;
+      userMedalTip = -1;
+    } else {
+      userOpen = false;
+    }
+    return;
+  }
   if (gameOpen) { gameOpen = false; return; }    // abandona sin premio, como tocar la cabecera
   if (choiceKind) { choiceKind = 0; return; }    // ni evoluciona ni rechaza: el boton sigue ahi
   if (confirmUntil) { confirmUntil = 0; return; }  // "soltar?": NO
@@ -1924,6 +1985,10 @@ void onTap(int16_t x, int16_t y) {
   if (cardOpen) {
     if (cardPage == 0 && y < CARD_NAME_TAP_Y) openKeyboard();  // tocar el nombre = renombrar
     else cardOpen = false;
+    return;
+  }
+  if (userOpen) {  // v3.4
+    userTap(x, y);
     return;
   }
   if (gameOpen) {
@@ -2534,13 +2599,14 @@ static bool staticScreen() {
   if (panelKind) return !timeLeft(panelShakeUntil);  // el panel Jugar (v2.0, Y2): quieto salvo una tarjeta que tiembla
   if (boxOpen) return !boxMove && !timeLeft(boxShakeUntil);  // la caja, quieta salvo la luz o un hueco que tiembla
   if (yardDemoOpen || kbOpen || clockOpen || bagOpen) return true;
+  if (userOpen) return true;  // v3.4: la pagina del jugador (sin animaciones)
   return cardOpen && cardPage != 0;  // la pagina 0 tiene el retrato animado
 }
 uint32_t walkStepsToday();
 static uint32_t mixKey(uint32_t h, uint32_t v) { return (h ^ v) * 16777619u; }
 static uint32_t screenKey() {
   uint32_t h = 2166136261u;
-  h = mixKey(h, pet.awaitingStarter() ? 1 : petPick ? 24 : teamOpen ? 23 : stagesOpen ? 22 : boxOpen ? 20 : kbOpen ? 2 : clockOpen ? 3 : bagOpen ? 21 : 4 + cardPage);
+  h = mixKey(h, pet.awaitingStarter() ? 1 : petPick ? 24 : teamOpen ? 23 : stagesOpen ? 22 : boxOpen ? 20 : kbOpen ? 2 : clockOpen ? 3 : bagOpen ? 21 : userOpen ? 30 + userPage : 4 + cardPage);
   h = mixKey(h, sdEpoch);
   h = mixKey(h, gBright);                      // el aviso de brillo va encima de todo
   h = mixKey(h, timeLeft(briToastUntil) > 0);  // y al irse tiene que repintarse
@@ -2559,8 +2625,6 @@ static uint32_t screenKey() {
   } else if (panelKind) {
     mixPanelKey(h);
   } else if (boxOpen) {
-    h = mixKey(h, boxPage);
-    h = mixKey(h, pet.badgeMask());
     // cada hueco (su CRC cambia con cualquier cosa del bicho), el activo, el huevo que espera y el dialogo
     for (uint8_t k = 0; k < BOX_SLOTS; k++) {
       h = mixKey(h, pet.boxState(k));
@@ -2581,8 +2645,7 @@ static uint32_t screenKey() {
                         (uint32_t)bagTab | ((uint32_t)bagPage << 8), (uint32_t)shopBuyId, (uint32_t)shopToast, (uint32_t)yardMapPreview,
                         (uint32_t)pet.coins, (uint32_t)pet.yardOwned, (uint32_t)pet.yardChosen,
                         (uint32_t)pet.yardMapWanted(), (uint32_t)(yardMapPreview ? sceneHour() : 0),
-                        // Y5b: la coleccion (que se tiene y la tarjeta abierta; la fecha sale de la mascara)
-                        (uint32_t)souvTip, pet.souvenirMask() })
+                        (uint32_t)gLang })
       h = mixKey(h, v);
   } else if (kbOpen) {
     h = mixKey(h, nameLen);
@@ -2591,19 +2654,24 @@ static uint32_t screenKey() {
     h = mixKey(h, clockH * 60 + clockM);
     h = mixKey(h, audioLevel());
     h = mixKey(h, gLang);
+  } else if (userOpen) {
+    // v3.4: la pagina del jugador. Medallas (tramos y lo que mide cada una), insignias, coleccion y el paseo
+    for (uint32_t v : { (uint32_t)userMedalPage, (uint32_t)(userMedalTip + 1), (uint32_t)souvTip, pet.souvenirMask(),
+                        (uint32_t)pet.badgeMask(), (uint32_t)gLang })
+      h = mixKey(h, v);
+    for (uint8_t i = 0; i < MEDAL_COUNT; i++) h = mixKey(h, pet.medalValue(i) * 4u + pet.medalTierPaid(i));
+    for (uint32_t v : { walkStepsToday(), pet.stepsTotal, (uint32_t)pet.findsToday, pet.stepDay, pet.goalDay,
+                        (uint32_t)pet.goalTier, (uint32_t)pet.bonusFindsToday, (uint32_t)pet.eggsOwned(),
+                        (uint32_t)imuPresent(), pet.dayNumber() })
+      h = mixKey(h, v);
   } else if (cardOpen) {
     // growMin: el nivel y su barra (v1.35); un Caramelo Raro o una meta lo saltan sin tocar la edad
     for (uint32_t v : { (uint32_t)pet.speciesId, (uint32_t)pet.shiny, (uint32_t)pet.ageMinutes, pet.growMin, (uint32_t)pet.streak,
-                        (uint32_t)pet.bestStreak, (uint32_t)pet.bond, (uint32_t)pet.medals, (uint32_t)pet.weight,
+                        (uint32_t)pet.bestStreak, (uint32_t)pet.bond, (uint32_t)pet.sleeping, (uint32_t)pet.weight,
                         (uint32_t)pet.trAtk, (uint32_t)pet.trDef, (uint32_t)pet.trSpe, (uint32_t)pet.geneAtk,
                         (uint32_t)pet.geneDef, (uint32_t)pet.geneSpe, (uint32_t)pet.careMistakes,
                         (uint32_t)pet.fullness, (uint32_t)pet.joy, (uint32_t)pet.energy,
                         (uint32_t)pet.berryKnown, (uint32_t)pet.strHi, (uint32_t)gLang })
-      h = mixKey(h, v);
-    // pagina de paseo: sin estos campos no se repintaria al llegar pasos
-    for (uint32_t v : { walkStepsToday(), pet.stepsTotal, (uint32_t)pet.findsToday, pet.stepDay, pet.goalDay,
-                        (uint32_t)pet.goalTier, (uint32_t)pet.bonusFindsToday,
-                        (uint32_t)imuPresent(), pet.dayNumber() })
       h = mixKey(h, v);
     for (const char *c = pet.nick; *c; c++) h = mixKey(h, (uint8_t)*c);
   }
@@ -2695,6 +2763,10 @@ bool render() {
   }
   if (cardOpen) {
     renderCard();
+    return true;
+  }
+  if (userOpen) {  // v3.4: la pagina del jugador
+    renderUser();
     return true;
   }
   if (petPick && (pet.ceremony || pet.isDying())) petPick = PICK_NONE;  // (como los paneles, abajo)
@@ -2937,6 +3009,7 @@ void sackTap() {
 
 void drawGameScene();  // prototipo (definida mas abajo)
 void drawCoinGain(int y, uint16_t n, uint16_t col);  // moneda + "+N" centrados (patio, Y4)
+const char *medalTierName(uint8_t tier);  // v3.4 (el conversor del .ino no saca el prototipo de un "const char *")
 
 void renderSack() {
   uint32_t now = millis();
@@ -4216,10 +4289,11 @@ void fxCollect(uint32_t now) {
         emptySfx |= empty;
       }
     }
-    uint16_t m = pet.takeMedal(s);
-    for (uint8_t i = 0; i < MED_COUNT; i++)
-      if (m & (1 << i)) fxq.push(FXB_MEDAL, i, 0, false, s);
   }
+  // v3.4: las medallas del jugador (un banner por medalla, con sus monedas). Esperan en Pet mientras la cola
+  // este llena (la migracion puede dejar muchas a la vez)
+  MedalNews mn;
+  while (fxq.n < FX_QUEUE - 2 && pet.takeMedalNews(&mn))  // (deja sitio a lo demas: subidas, hitos, metas) fxq.push(FXB_MEDAL, mn.medal, mn.tier, false, 0, mn.coins);
   if (poopSfx) sfxPlay(SFX_POOP);
   if (emptySfx) sfxPlay(SFX_ALERT);  // uno solo aunque se vacien varias a la vez (o en los dos)
   uint16_t days = pet.takeMilestone();
@@ -4276,7 +4350,7 @@ bool fxDebug(const String &k) {
   uint8_t fs = pet.focusSlot;  // v3.0: sobre el bicho del foco
   if (k == "levelup") fxq.push(FXB_LEVELUP, lv, lv + 1, false, fs);
   else if (k == "levelup6") fxq.push(FXB_LEVELUP, lv, lv + 6, false, fs);
-  else if (k == "medal") fxq.push(FXB_MEDAL, 0, 0, false, fs);
+  else if (k == "medal") fxq.push(FXB_MEDAL, MD_LV10, MTIER_SILVER, false, 0, medalCoins(MTIER_SILVER));
   else if (k == "streak") fxq.push(FXB_MILESTONE, 7);
   else if (k == "goal") fxq.push(FXB_GOAL, 1, STEP_GOAL_LEVELS[0] | (coinsForGoal(1) << 4));
   else if (k == "goal3") fxq.push(FXB_GOAL, STEP_GOAL_TIERS, STEP_GOAL_LEVELS[STEP_GOAL_TIERS - 1] | (coinsForGoal(STEP_GOAL_TIERS) << 4));
@@ -4477,19 +4551,30 @@ void drawFxBanner(uint32_t now) {
     drawCoinGain((lvl[0] ? 264 : 238) + oy, coinsWon, UI_INK);
     return;
   }
-  // medalla nueva o hito de racha
-  const char *l1, *l2;
+  // v3.4: medalla del jugador: "MEDALLA!", su nombre y el tramo, y las monedas que pago
+  if (ev.kind == FXB_MEDAL) {
+    int bh = ev.c ? 132 : 106;
+    gfx->fillRoundRect(73, 146 + oy, 320, bh, 16, UI_BAR_WARN);
+    gfx->drawRoundRect(73, 146 + oy, 320, bh, 16, UI_INK);
+    drawMedalDisc(110, 190 + oy, 18, (uint8_t)ev.b);
+    gfx->drawCircle(110, 190 + oy, 19, UI_INK);  // (el oro y el bronce, sobre el ambar del banner)
+    gfx->setTextColor(UI_INK);
+    setSize(3);
+    setCur(centerX(T(S_MEDAL_BANNER), 3) + 16, 168 + oy);
+    printT(T(S_MEDAL_BANNER));
+    setSize(2);
+    printTight(medalName(ev.a), CX, 204 + oy, 290);
+    printTight(medalTierName((uint8_t)ev.b), CX, 226 + oy, 290);
+    if (ev.c) drawCoinGain(250 + oy, ev.c, UI_INK);
+    drawConfetti(e);
+    return;
+  }
+  // hito de racha
   // 32 y no 20: "%u にちれんぞく！" ya pasa de 20 con una sola cifra, y snprintf
   // cortaba a mitad de un caracter de 3 bytes.
   char buf[32];
-  if (ev.kind == FXB_MEDAL) {
-    l1 = T(S_MEDAL_BANNER);
-    l2 = medalName(ev.a);
-  } else {
-    snprintf(buf, sizeof(buf), T(S_STREAK_DAYS_FMT), (unsigned)ev.a);
-    l1 = T(S_GREAT);
-    l2 = buf;
-  }
+  snprintf(buf, sizeof(buf), T(S_STREAK_DAYS_FMT), (unsigned)ev.a);
+  const char *l1 = T(S_GREAT), *l2 = buf;
   gfx->fillRoundRect(73, 150 + oy, 320, 96, 16, UI_BAR_WARN);
   gfx->drawRoundRect(73, 150 + oy, 320, 96, 16, UI_INK);
   gfx->setTextColor(UI_INK);
@@ -4499,7 +4584,6 @@ void drawFxBanner(uint32_t now) {
   setSize(2);
   setCur(centerX(l2, 2), 212 + oy);
   printT(l2);
-  if (ev.kind == FXB_MEDAL) drawConfetti(e);
 }
 
 // necesidades antes y despues de una accion: los cambios de FX_STAT_MIN o mas sacan su "+N"
@@ -4686,26 +4770,21 @@ void drawWalkNews() {
   }
 }
 
-// medallas en la ficha: badge con etiqueta, color si conseguida
-void drawMedalBadge(int x, int y, int i) {
-  bool got = pet.hasMedal(1 << i);
-  gfx->fillRoundRect(x, y, 100, 24, 6, got ? UI_BAR_OK : UI_TRACK);
-  if (!got) gfx->drawRoundRect(x, y, 100, 24, 6, UI_TRACK);
-  gfx->setTextColor(got ? UI_BG_DAY : 0x9492);
-  setSize(2);
-  setCur(x + (100 - textW(medalLabel(i), 2)) / 2, y + 5);
-  printT(medalLabel(i));
-}
-
 // Ficha en el panel del patio (Y1): disco oscuro, titulo blanco, filas en tarjetas, puntos de
 // pagina claros y el boton redondo de volver. Las tarjetas de fila van de CARD_ROW_X a +CARD_ROW_W.
 #define UI_BAR_SATED 0xF474  // #f08ca0, el rosa de la tarta: la comida esta llena y no baja (v1.54)
 #define CARD_ROW_X 70
 #define CARD_ROW_W 326
-#define CARD_DOTS_Y 374
+#define CARD_DOTS_Y 386  // v3.4: mas abajo (el perfil lleva 5 filas y la pista de renombrar)
 
 // tarjeta de fila de alto h, centrada en un texto de tamano 2 que empieza en ty
 static void cardRow(int ty, int h) { yCard(CARD_ROW_X, ty + 7 - h / 2, CARD_ROW_W, h, false); }
+// el perfil (v3.4): las necesidades y debajo 5 filas (racha, vinculo, baya y edad, evolucion, descuidos)
+#define CARD_NEEDS_Y 150
+#define CARD_ROW0_Y 222
+#define CARD_ROW_STEP 28
+#define CARD_ROW_H 24
+#define CARD_HINT_Y 358   // "toca el nombre: renombrar", bajo las filas
 
 // una barra de necesidad en la tarjeta del perfil: etiqueta, pista oscura y relleno
 // verde / ambar / rojo (rosa con la tarta)
@@ -4755,19 +4834,19 @@ void renderCardProfile() {
     printT(par);
   }
 
-  // retrato animado (a escala 3 desde v2.0: debajo van las necesidades)
-  // con apodo hay subtitulo (la especie): a escala 2 un bicho alto no lo tapa
-  if (pmd.loaded) drawPmdAct(PMD_IDLE, CX, 158, millis(), true, false, pet.nick[0] ? 2 : 3);
+  // retrato animado. v3.4: a escala 2 (debajo van las necesidades, la racha, el vinculo, la baya, la
+  // evolucion y los descuidos, que eran de la pagina de progreso)
+  if (pmd.loaded) drawPmdAct(PMD_IDLE, CX, pet.nick[0] ? 146 : 140, millis(), true, false, 2);
 
-  // las 4 necesidades (v2.0): en el patio ya no hay barras, y al tocar al bicho se ve aqui
-  cardNeeds(166);
+  // las 3 necesidades (v2.0): en el patio ya no hay barras, y al tocar al bicho se ve aqui
+  cardNeeds(CARD_NEEDS_Y);
 
   // racha con llama, centradas como grupo en su tarjeta
   char rl[40];  // en japones pierde cifras con 30 a partir de 100 dias
   snprintf(rl, sizeof(rl), T(S_STREAK_FMT), pet.streak, pet.bestStreak);
   setSize(2);
-  const int ry = 240;
-  cardRow(ry, 32);
+  int ry = CARD_ROW0_Y;
+  cardRow(ry, CARD_ROW_H);
   int sx = CX - (24 + textW(rl, 2)) / 2, sy = ry - 3;
   gfx->fillTriangle(sx + 8, sy, sx + 1, sy + 18, sx + 15, sy + 18, UI_BAR_BAD);
   gfx->fillTriangle(sx + 8, sy + 7, sx + 4, sy + 18, sx + 12, sy + 18, UI_BAR_WARN);
@@ -4775,28 +4854,62 @@ void renderCardProfile() {
   setCur(sx + 24, ry);
   printT(rl);
 
-  cardRow(276, 32);
-  drawCardStat(274, T(S_VIN), pet.bond, 100, C565(0xd4, 0x52, 0x7e));
+  ry += CARD_ROW_STEP;
+  cardRow(ry, CARD_ROW_H);
+  drawCardStat(ry - 2, T(S_VIN), pet.bond, 100, C565(0xd4, 0x52, 0x7e));
 
   const char *berry = !pet.berryKnown ? T(S_BERRY_UNK) : T((StrId)(S_IT_BERRY_R + favBerryOf(pet.speciesId)));
   char info[48];
   snprintf(info, sizeof(info), T(S_INFO_FMT), berry,
            (unsigned long)(pet.ageMinutes / 1440));
-  cardRow(312, 32);
+  ry += CARD_ROW_STEP;
+  cardRow(ry, CARD_ROW_H);
   gfx->setTextColor(Y_TEXT);
   setSize(2);
-  setCur(centerX(info, 2), 312);
+  setCur(centerX(info, 2), ry);
   printT(info);
 
-  gfx->setTextColor(Y_TEXT_DIM);
-  setCur(centerX(T(S_RENAME_HINT), 2), 348);
-  printT(T(S_RENAME_HINT));
+  // v3.4: el estado de la evolucion (era de la pagina de progreso): lista, bloqueada por una necesidad baja
+  // (EVOLVE_MIN_NEED), cuantos niveles faltan (cada descuido suma uno) o forma final
+  const DexEntry &d = DEX_TBL[pet.speciesId];
+  char evoBuf[32];
+  const char *evo;
+  uint16_t evoCol = Y_TEXT;
+  if (d.evolvesTo == 0) {
+    evo = T(S_FINAL_FORM);
+  } else {
+    int needed = d.evolveLevel + pet.careMistakes;
+    if (pet.level() >= needed) {
+      if (pet.lowestStat() >= EVOLVE_MIN_NEED) { evo = T(S_EVO_READY); evoCol = Y_ACCENT_GO; }
+      else { evo = T(S_EVO_BLOCKED); evoCol = Y_ACCENT_BAD; }
+    } else {
+      snprintf(evoBuf, sizeof(evoBuf), T(S_EVO_IN_FMT), (unsigned)(needed - pet.level()));
+      evo = evoBuf;
+    }
+  }
+  ry += CARD_ROW_STEP;
+  cardRow(ry, CARD_ROW_H);
+  gfx->setTextColor(evoCol);
+  printTight(evo, CX, ry, CARD_ROW_W - 16);
+
+  // descuidos (retrasan la evolucion)
+  char ms[24];
+  snprintf(ms, sizeof(ms), T(S_MISTAKES_FMT), pet.careMistakes);
+  ry += CARD_ROW_STEP;
+  cardRow(ry, CARD_ROW_H);
+  gfx->setTextColor(pet.careMistakes > 0 ? Y_ACCENT_BAD : Y_TEXT);
+  setSize(2);
+  setCur(centerX(ms, 2), ry);
+  printT(ms);
+
+  gfx->setTextColor(Y_TEXT_DIM);  // tocar el nombre lo cambia (el teclado)
+  printTight(T(S_RENAME_HINT), CX, CARD_HINT_Y, 300);
 }
 
-// pagina 1: combate (4 barras). El saco de entrenamiento ya no sale de aqui sino del menu de
-// JUGAR (v1.34), con los otros juegos: las barras ocupan el sitio del boton.
+// pagina 1: estadisticas (v3.4, era "Combate"; 4 barras). El saco de entrenamiento ya no sale de aqui sino
+// del menu de JUGAR (v1.34), con los otros juegos: las barras ocupan el sitio del boton.
 void renderCardStats() {
-  yTitle(T(S_BATTLE), nullptr);
+  yTitle(T(S_STATS), nullptr);
 
   // cada stat en su tarjeta: la barra de combate y debajo la fina del entrenamiento
   const int y0 = 104, step = 56;
@@ -4817,102 +4930,8 @@ void renderCardStats() {
   printT(T(S_TRAIN_LEGEND));
 }
 
-// pagina 2: medallas con etiqueta descriptiva: verdes y en blanco las conseguidas, apagadas las
-// que faltan. Dos columnas que caben en la parte estrecha de arriba del circulo.
-#define MEDAL_W 172
-#define MEDAL_H 40
-#define MEDAL_GAP 8
-#define MEDAL_Y 100
-void renderCardMedals() {
-  int got = 0;
-  for (int i = 0; i < MED_COUNT; i++)
-    if (pet.hasMedal(1 << i)) got++;
-  char head[24];
-  snprintf(head, sizeof(head), T(S_MEDALS_FMT), got, MED_COUNT);
-  yTitle(head, nullptr);
-
-  for (int i = 0; i < MED_COUNT; i++) {
-    int x = CX - MEDAL_W - MEDAL_GAP / 2 + (i % 2) * (MEDAL_W + MEDAL_GAP);
-    int y = MEDAL_Y + (i / 2) * (MEDAL_H + 6);
-    if (i == MED_COUNT - 1 && MED_COUNT % 2) x = CX - MEDAL_W / 2;  // la impar (MARATON), centrada abajo
-    bool g = pet.hasMedal(1 << i);
-    gfx->fillRoundRect(x, y, MEDAL_W, MEDAL_H, Y_CARD_RAD, g ? Y_ACCENT_GO : Y_CARD);
-    const char *t = medalDesc(i);
-    setSize(2);
-    int tx = x + (MEDAL_W - textW(t, 2)) / 2;  // sin marca: "BAYA HALLADA" llena la tarjeta; el verde basta
-    gfx->setTextColor(g ? Y_TEXT : Y_TEXT_DIM);
-    setCur(tx, y + (MEDAL_H - 14) / 2);
-    printT(t);
-  }
-}
-
-// pagina 3: progreso (nivel, evolucion, descuidos) — saca a la luz mecanicas
-// que antes eran invisibles (cuanto falta para subir/evolucionar y por que)
-void renderCardProgress() {
-  const DexEntry &d = DEX_TBL[pet.speciesId];
-  yTitle(T(S_PROGRESS), nullptr);
-
-  // nivel grande
-  char lv[10];
-  snprintf(lv, sizeof(lv), T(S_LVL_FMT), pet.level());
-  gfx->setTextColor(Y_TEXT);
-  setSize(5);
-  setCur(centerX(lv, 5), 84);
-  printT(lv);
-
-  // barra de progreso al siguiente nivel (v1.35: cada nivel cuesta lo suyo, 20 a 180 min,
-  // growth.h). En el tope (999) la barra queda llena y sin "siguiente nivel".
-  bool lvMax = pet.level() >= LEVEL_MAX;
-  uint16_t into = pet.levelMinutesInto(), cost = pet.levelMinutesCost();
-  int bx = 93, bw = 280, by = 136, bh = 18;
-  gfx->fillRoundRect(bx, by, bw, bh, bh / 2, Y_CARD_HI);
-  int fw = lvMax ? bw : (int)((uint32_t)bw * into / cost);
-  if (fw >= bh) gfx->fillRoundRect(bx, by, fw, bh, bh / 2, Y_ACCENT_GO);
-  if (!lvMax) {
-    char nx[32];
-    snprintf(nx, sizeof(nx), T(S_NEXT_LVL_FMT), (unsigned)(cost - into), (unsigned)(pet.level() + 1));
-    gfx->setTextColor(Y_TEXT_DIM);
-    setSize(2);
-    setCur(centerX(nx, 2), by + 28);
-    printT(nx);
-  }
-
-  // estado de evolucion, en su tarjeta
-  yCard(CARD_ROW_X, 202, CARD_ROW_W, 64, false);
-  gfx->setTextColor(Y_TEXT_DIM);
-  setSize(2);
-  setCur(centerX(T(S_EVO_LABEL), 2), 212);
-  printT(T(S_EVO_LABEL));
-  char evoBuf[32];
-  const char *evo;
-  uint16_t evoCol = Y_TEXT;
-  if (d.evolvesTo == 0) {
-    evo = T(S_FINAL_FORM);
-  } else {
-    int needed = d.evolveLevel + pet.careMistakes;
-    if (pet.level() >= needed) {
-      if (pet.lowestStat() >= EVOLVE_MIN_NEED) { evo = T(S_EVO_READY); evoCol = Y_ACCENT_GO; }
-      else { evo = T(S_EVO_BLOCKED); evoCol = Y_ACCENT_BAD; }
-    } else {
-      snprintf(evoBuf, sizeof(evoBuf), T(S_EVO_IN_FMT), needed - pet.level());
-      evo = evoBuf;
-    }
-  }
-  gfx->setTextColor(evoCol);
-  setCur(centerX(evo, 2), 238);
-  printT(evo);
-
-  // descuidos (retrasan la evolucion)
-  char ms[24];
-  snprintf(ms, sizeof(ms), T(S_MISTAKES_FMT), pet.careMistakes);
-  cardRow(290, 32);
-  gfx->setTextColor(pet.careMistakes > 0 ? Y_ACCENT_BAD : Y_TEXT);
-  setCur(centerX(ms, 2), 290);
-  printT(ms);
-}
-
-// pagina 4: paseo (FR-1.7). Pasos de hoy con un anillo hacia la meta, el total y los hallazgos
-// de hoy. La mochila tiene su boton desde la v1.53 (renderBag).
+// la pagina del paseo (FR-1.7; v3.4 en la pagina del jugador, era la 5.a de la ficha). Pasos de hoy con un anillo
+// hacia la meta, el total y los hallazgos de hoy. La mochila tiene su boton desde la v1.53 (renderBag).
 #define WALK_RING_Y 150
 #define WALK_RING_R 60   // radio exterior del anillo (el interior, 13 px menos)
 
@@ -4928,7 +4947,7 @@ void drawMapTint(const char *const *map, int n, int x, int y, int s, uint16_t co
   }
 }
 
-void renderCardWalk() {
+void renderUserWalk() {
   yTitle(T(S_WALK), nullptr);
 
   uint32_t day = pet.dayNumber();
@@ -5049,7 +5068,6 @@ void openBagTab(uint8_t tab) {
   bagOpen = true;
   bagTab = tab;
   bagPage = 0;
-  souvTip = 0;
   itemConfirm = 0;
   shopBuyId = 0;
   shopToast = 0;
@@ -5062,7 +5080,6 @@ void openShop() { openBagTab(1); }
 // cerrar la mochila del todo (el selector de fondos suelta su mapa de prueba: el patio recarga el suyo)
 void closeBag() {
   bagOpen = false;
-  souvTip = 0;
   itemConfirm = 0;
   shopBuyId = 0;
   shopToast = 0;
@@ -5077,24 +5094,11 @@ void closeBag() {
 #define PICK_PAGER_Y 322
 #define PICK_PILL_Y 350
 
-// pastillas con icono (Y5b): en espanol "OBJETOS / TIENDA / COLECCION" eran 330 px y a y 40 el disco deja
-// 214. Objetos = la baya dorada, Coleccion = una estrella de mar. v3.3: la Tienda es su propia pantalla (su
-// boton del dock), con su titulo en vez de pestanas
-#define SOUV_TAB_ICON 16  // el recuerdo que hace de icono de la pestana (la estrella de mar)
-static uint8_t bagTabOf(int t) { return t == 0 ? 0 : 2; }  // pestana -> bagTab (la 1, la Tienda, ya no es pestana)
+// la cabecera: v3.4, sin pestanas (la Coleccion se fue a la pagina del jugador). La mochila se titula
+// "Mochila" y la Tienda (v3.3, su boton del dock) "Tienda"; debajo, las monedas
 static void drawBagTabs() {
-  if (bagTab == 1) {
-    yTitle(T(S_SHOP), nullptr);
-  } else {
-    for (int t = 0; t < BAG_TABS; t++) {
-      int x = bagTabX(t);
-      gfx->fillRoundRect(x, BAG_TAB_TOP, BAG_TAB_W, BAG_TAB_H, BAG_TAB_H / 2, bagTab == bagTabOf(t) ? Y_BACK : Y_CARD);
-      int ix = x + (BAG_TAB_W - 32) / 2, iy = BAG_TAB_TOP + (BAG_TAB_H - 32) / 2;
-      if (t == 0) drawMap(ITEM_ICON[IT_GOLDEN], 16, ix, iy, 2, false);
-      else drawMap(SOUV_ICON[SOUV_TAB_ICON], 16, ix, iy, 2, false);
-    }
-  }
-  if (bagTab != 2) yCoinBadge(CX, BAG_COIN_Y, pet.coins, false);
+  yTitle(T(bagTab == 1 ? S_SHOP : S_BACKPACK), nullptr);
+  yCoinBadge(CX, BAG_COIN_Y, pet.coins, false);
 }
 
 // moneda pequena + precio, centrados como grupo en cx (y = arriba del texto)
@@ -5358,28 +5362,16 @@ void bagSwipe(int dir) {
     }
     return;
   }
-  if (itemConfirm || shopBuyId || souvTip) return;  // con una pregunta o una tarjeta abierta, no
+  if (itemConfirm || shopBuyId) return;  // con una pregunta abierta, no
   int d = dir > 0 ? -1 : 1;  // derecha = la anterior, izquierda = la siguiente
-  if (bagTab < 2) {          // v3.2: Objetos y Tienda, primero sus paginas
-    int p = (int)bagPage + d;
-    if (p >= 0 && p < BAG_PAGES) {
-      bagPage = (uint8_t)p;
-      shopToast = 0;
-      return;
-    }
+  int p = (int)bagPage + d;  // v3.2: Objetos y Tienda, sus 2 paginas (v3.4: la Coleccion ya no va detras)
+  if (p >= 0 && p < BAG_PAGES) {
+    bagPage = (uint8_t)p;
+    shopToast = 0;
   }
-  if (bagTab == 1) return;           // la tienda: solo sus paginas
-  if (bagTab == 0 && d > 0) {        // tras la ultima pagina de Objetos, la Coleccion
-    bagTab = 2;
-    bagPage = 0;
-  } else if (bagTab == 2 && d < 0) { // y de vuelta, a la ultima de Objetos
-    bagTab = 0;
-    bagPage = BAG_PAGES - 1;
-  }
-  shopToast = 0;
 }
 
-// ---------- la coleccion (v2.0, Y5b): 3.a pestana de la mochila ----------
+// ---------- la coleccion (v2.0, Y5b; v3.4: 4.a pagina del jugador, era una pestana de la mochila) ----------
 // Una rejilla de 5 x 5: una fila por mapa, de comun a raro de izquierda a derecha. Los que se tienen, en
 // color (el raro, con marco dorado); los que no, en silueta. Tocar uno abre su tarjeta.
 static const char *souvDestName(uint8_t id) { return T((StrId)(S_MAP_1 + souvenirDest(id) - 1)); }
@@ -5420,8 +5412,7 @@ static void renderSouvTip(uint8_t id) {
 static void renderCollection() {
   char head[32];
   snprintf(head, sizeof(head), "%s %u/%u", T(S_COLLECTION), (unsigned)pet.souvenirCount(), (unsigned)SOUV_COUNT);
-  gfx->setTextColor(Y_TEXT);
-  printTight(head, CX, SOUV_TITLE_Y, 330);
+  yTitleFit(head);  // v3.4: el titulo de la pagina del jugador
   for (int id = 0; id < SOUV_COUNT; id++) {
     int x = souvCellX(id), y = souvCellY(id);
     bool have = pet.hasSouvenir((uint8_t)id), rare = souvenirRarity((uint8_t)id) == SOUV_RARE;
@@ -5458,13 +5449,6 @@ void renderBag() {
     gfx->flush();
     return;
   }
-  if (bagTab == 2) {
-    renderCollection();
-    yBackBtn();
-    gfx->flush();
-    return;
-  }
-
   // una tarjeta por objeto, con su cuenta; el amuleto, enmarcado si se lleva. Sin ninguno, la
   // tarjeta queda hundida (solo el borde) y el icono en silueta.
   for (int k = 0; k < (int)BAG_SLOTS; k++) {
@@ -5568,11 +5552,6 @@ void bagTap(int16_t x, int16_t y) {
     shopTap(x, y);
     return;
   }
-  if (bagTab == 2 && souvTip) {  // la tarjeta de un recuerdo: cualquier toque la cierra
-    if (yBackHit(x, y)) closeBag();
-    else souvTip = 0;
-    return;
-  }
   if (itemConfirm) {  // solo la pastilla de Usar usa el objeto; cualquier otro toque es NO
     uint8_t it = itemConfirm - 1;
     itemConfirm = 0;
@@ -5599,16 +5578,7 @@ void bagTap(int16_t x, int16_t y) {
     closeBag();
     return;
   }
-  int tab = bagTab == 1 ? -1 : bagTabHit(x, y);  // las pestanas (la tienda no tiene)
-  if (tab >= 0) {
-    if (bagTab != bagTabOf(tab)) sfxPlay(SFX_TAP);
-    bagTab = bagTabOf(tab);
-    bagPage = 0;
-    shopToast = 0;
-    souvTip = 0;
-    return;
-  }
-  if (bagTab < 2 && yInRect(x, y, BAG_PAGER_X - 36, BAG_PAGER_Y - 8, 72, BAG_Y - (BAG_PAGER_Y - 8))) {  // v3.2: el "1/2" cambia de pagina
+  if (yInRect(x, y, BAG_PAGER_X - 36, BAG_PAGER_Y - 8, 72, BAG_Y - (BAG_PAGER_Y - 8))) {  // v3.2: el "1/2" cambia de pagina
     bagPage = (uint8_t)((bagPage + 1) % BAG_PAGES);
     shopToast = 0;
     sfxPlay(SFX_TAP);
@@ -5616,10 +5586,6 @@ void bagTap(int16_t x, int16_t y) {
   }
   if (bagTab == 1) {
     shopTap(x, y);
-    return;
-  }
-  if (bagTab == 2) {
-    collectionTap(x, y);
     return;
   }
   for (int k = 0; k < (int)BAG_SLOTS; k++) {
@@ -5663,15 +5629,224 @@ static void cardPageDots(int y) {
 void renderCard() {
   yPanelBg();
   if (cardPage == 0) renderCardProfile();
-  else if (cardPage == 1) renderCardStats();
-  else if (cardPage == 2) renderCardMedals();
-  else if (cardPage == 3) renderCardProgress();
-  else renderCardWalk();
+  else renderCardStats();
 
   // indicador de paginas + boton de volver (tocar en cualquier otro sitio tambien cierra)
   cardPageDots(CARD_DOTS_Y);
   yBackBtn();
   gfx->flush();
+}
+
+// ---------- la pagina del jugador (v3.4): deslizar arriba en el patio ----------
+// 4 paginas (USERP_*) que se pasan deslizando a los lados, con sus puntos: las medallas del jugador (medals.h),
+// el paseo (era la ultima pagina de la ficha), las insignias de los estadios (eran la 2.a pagina de la caja) y la
+// coleccion de recuerdos (era una pestana de la mochila). USER, el boton de volver o deslizar a la derecha desde
+// la primera vuelven al patio. Las medallas son 19: van en sub-paginas de USER_MEDAL_ROWS filas, que se pasan
+// tocando el "1/4" o deslizando arriba / abajo; tocar una fila abre su tarjeta (que mide y sus tres tramos).
+#define USER_DOTS_Y 384
+#define UMED_Y0 98        // primera fila de medallas
+#define UMED_H 44
+#define UMED_STEP 50
+#define UMED_DISC_R 13
+#define UMED_TEXT_X (CARD_ROW_X + 50)
+#define UMED_PAGER_Y Y_SUB_Y  // el "1/4" bajo el titulo (su zona de toque, toda la franja)
+
+void openUser(uint8_t page) {
+  userOpen = true;
+  userPage = page < USER_PAGES ? page : 0;
+  userMedalPage = 0;
+  userMedalTip = -1;
+  souvTip = 0;
+}
+
+// el color de un tramo (0 = sin tramo: la pista oscura)
+uint16_t medalTierColor(uint8_t tier) {
+  switch (tier) {
+    case MTIER_BRONZE: return C565(0xcd, 0x7f, 0x32);
+    case MTIER_SILVER: return C565(0xc8, 0xcc, 0xd8);
+    case MTIER_GOLD: return C565(0xff, 0xc8, 0x2e);
+    default: return Y_CARD_HI;
+  }
+}
+const char *medalTierName(uint8_t tier) {
+  return tier >= MTIER_BRONZE && tier <= MTIER_GOLD ? T((StrId)(S_TIER_BRONZE + tier - 1)) : "";
+}
+
+// una medalla: disco del color del tramo colgado de su cinta; sin tramo, solo el contorno
+void drawMedalDisc(int cx, int cy, int r, uint8_t tier) {
+  int top = cy - r;
+  if (tier) {
+    gfx->fillTriangle(cx - r + 2, top - r / 2 - 2, cx - 1, top - r / 2 - 2, cx - 2, top + 3, Y_BACK);
+    gfx->fillTriangle(cx + 1, top - r / 2 - 2, cx + r - 2, top - r / 2 - 2, cx + 2, top + 3, UI_BAR_BAD);
+    uint16_t col = medalTierColor(tier);
+    gfx->fillCircle(cx, cy, r, col);
+    gfx->drawCircle(cx, cy, r - 4, (uint16_t)((col >> 1) & 0x7BEF));  // un aro mas oscuro (la mitad de cada canal)
+  } else {  // (el gris del texto apagado: se ve sobre la tarjeta normal y sobre la resaltada)
+    gfx->drawCircle(cx, cy, r, Y_TEXT_DIM);
+  }
+}
+
+// titulo a tamano 3 si cabe en la franja estrecha de arriba del circulo; si no, a 2
+void yTitleFit(const char *t) {
+  gfx->setTextColor(Y_TEXT);
+  int ts = textW(t, 3) <= 236 ? 3 : 2;
+  setSize(ts);
+  setCur(centerX(t, ts), ts == 3 ? Y_TITLE_Y : Y_TITLE_Y + 4);
+  printT(t);
+}
+
+// la tarjeta de una medalla: que mide, lo que lleva y sus tres tramos con lo que pagan. Tapa la lista entera
+#define UMED_TIP_X (CARD_ROW_X - 4)
+#define UMED_TIP_Y (UMED_Y0 - 4)
+#define UMED_TIP_W (CARD_ROW_W + 8)
+#define UMED_TIP_H (USER_MEDAL_ROWS * UMED_STEP - (UMED_STEP - UMED_H) + 8)
+static void renderMedalTip(uint8_t i) {
+  uint32_t v = pet.medalValue(i);
+  uint8_t tier = pet.medalTierPaid(i);
+  yCard(UMED_TIP_X, UMED_TIP_Y, UMED_TIP_W, UMED_TIP_H, true);
+  drawMedalDisc(CX, UMED_TIP_Y + 46, 18, tier);
+  gfx->setTextColor(Y_TEXT);
+  printTight(medalName(i), CX, UMED_TIP_Y + 76, UMED_TIP_W - 24);
+  char line[48];
+  char num[12];
+  medalShortNum(num, sizeof(num), v);
+  snprintf(line, sizeof(line), "%s: %s", medalDesc(i), num);
+  gfx->setTextColor(Y_TEXT_DIM);
+  printTight(line, CX, UMED_TIP_Y + 102, UMED_TIP_W - 24);
+  const uint32_t *t = MEDAL_T[i];
+  for (uint8_t k = 0; k < MEDAL_TIERS; k++) {
+    int y = UMED_TIP_Y + 144 + k * 32;
+    bool got = tier > k;
+    drawMedalDisc(UMED_TIP_X + 40, y + 8, 8, got ? k + 1 : 0);
+    gfx->setTextColor(got ? medalTierColor(k + 1) : Y_TEXT_DIM);
+    setSize(2);
+    setCur(UMED_TIP_X + 58, y);
+    printT(medalTierName(k + 1));
+    medalShortNum(num, sizeof(num), t[k]);
+    setCur(UMED_TIP_X + 170, y);
+    printT(num);
+    shopPrice(UMED_TIP_X + UMED_TIP_W - 58, y, medalCoins(k + 1), got ? Y_TEXT : Y_TEXT_DIM);
+  }
+}
+
+static void renderUserMedals() {
+  char head[32];
+  snprintf(head, sizeof(head), T(S_MEDALS_FMT), (int)pet.medalTiersTotal(), (int)(MEDAL_COUNT * MEDAL_TIERS));
+  yTitleFit(head);
+  yPager(userMedalPage, USER_MEDAL_PAGES, UMED_PAGER_Y);
+  for (int r = 0; r < USER_MEDAL_ROWS; r++) {
+    int i = userMedalPage * USER_MEDAL_ROWS + r;
+    if (i >= MEDAL_COUNT) break;
+    int y = UMED_Y0 + r * UMED_STEP;
+    uint8_t tier = pet.medalTierPaid((uint8_t)i);
+    uint32_t v = pet.medalValue((uint8_t)i);
+    uint32_t next = medalNext((uint8_t)i, v);
+    yCard(CARD_ROW_X, y, CARD_ROW_W, UMED_H, false);
+    drawMedalDisc(CARD_ROW_X + 26, y + UMED_H / 2 + 3, UMED_DISC_R, tier);
+    gfx->setTextColor(Y_TEXT);
+    setSize(2);
+    setCur(UMED_TEXT_X, y + 5);
+    printT(medalName(i));
+    // lo que lleva hacia el siguiente tramo ("3/6"); con el Oro, solo el valor, dorado
+    char a[12], b[12], prog[26];
+    medalShortNum(a, sizeof(a), v);
+    if (next) {
+      medalShortNum(b, sizeof(b), next);
+      snprintf(prog, sizeof(prog), "%s/%s", a, b);
+    } else {
+      snprintf(prog, sizeof(prog), "%s", a);
+    }
+    int pw = textW(prog, 2);
+    int px = CARD_ROW_X + CARD_ROW_W - 12 - pw;
+    gfx->setTextColor(next ? Y_TEXT_DIM : medalTierColor(MTIER_GOLD));
+    setCur(px, y + 24);
+    printT(prog);
+    // la barra, desde el tramo anterior hasta el siguiente
+    int bx = UMED_TEXT_X, bw = px - 10 - bx, by = y + 28;
+    gfx->fillRoundRect(bx, by, bw, 8, 3, Y_CARD_HI);
+    uint32_t from = tier ? MEDAL_T[i][tier - 1] : 0;
+    int fw = next ? (int)((uint64_t)(v > from ? v - from : 0) * bw / (next - from)) : bw;
+    if (fw > bw) fw = bw;
+    if (fw > 2) gfx->fillRoundRect(bx, by, fw, 8, 3, medalTierColor(next ? tier + 1 : MTIER_GOLD));
+  }
+  if (userMedalTip >= 0) renderMedalTip((uint8_t)userMedalTip);
+}
+
+// puntos de pagina de la pagina del jugador (como los de la ficha)
+static void userPageDots(int y) {
+  for (int i = 0; i < USER_PAGES; i++) {
+    int dx = CX - (USER_PAGES - 1) * 13 + i * 26;
+    if (i == userPage) gfx->fillCircle(dx, y, 5, Y_TEXT);
+    else gfx->fillCircle(dx, y, 4, Y_CARD_HI);
+  }
+}
+
+void renderUser() {
+  yPanelBg();
+  if (userPage == USERP_MEDALS) renderUserMedals();
+  else if (userPage == USERP_WALK) renderUserWalk();
+  else if (userPage == USERP_BADGES) renderUserBadges();
+  else renderCollection();
+  userPageDots(USER_DOTS_Y);
+  yBackBtn();
+  gfx->flush();
+}
+
+// deslizar a los lados: izquierda avanza; a la derecha desde la primera, al patio
+void userSwipe(int dir) {
+  souvTip = 0;
+  userMedalTip = -1;
+  int p = (int)userPage + (dir > 0 ? -1 : 1);
+  if (p < 0) {
+    userOpen = false;
+    return;
+  }
+  if (p < USER_PAGES) userPage = (uint8_t)p;
+}
+
+// deslizar arriba / abajo: en las medallas pasa sus sub-paginas (arriba, la siguiente); abajo desde la primera
+// (o en cualquier otra pagina) cierra
+void userSwipeV(int dir) {
+  if (userPage == USERP_MEDALS && userMedalTip < 0) {
+    int p = (int)userMedalPage + (dir < 0 ? 1 : -1);
+    if (p >= 0 && p < USER_MEDAL_PAGES) {
+      userMedalPage = (uint8_t)p;
+      return;
+    }
+    if (p >= USER_MEDAL_PAGES) return;  // arriba en la ultima: nada
+  }
+  if (dir > 0) userOpen = false;
+}
+
+void userTap(int16_t x, int16_t y) {
+  if (yBackHit(x, y)) {
+    userOpen = false;
+    return;
+  }
+  if (souvTip || userMedalTip >= 0) {  // una tarjeta abierta: cualquier toque la cierra
+    souvTip = 0;
+    userMedalTip = -1;
+    return;
+  }
+  if (userPage == USERP_MEDALS) {
+    if (y >= UMED_PAGER_Y - 14 && y < UMED_Y0 - 2) {  // el "1/4": la siguiente sub-pagina
+      userMedalPage = (uint8_t)((userMedalPage + 1) % USER_MEDAL_PAGES);
+      sfxPlay(SFX_TAP);
+      return;
+    }
+    for (int r = 0; r < USER_MEDAL_ROWS; r++) {
+      int i = userMedalPage * USER_MEDAL_ROWS + r;
+      if (i >= MEDAL_COUNT) break;
+      int ry = UMED_Y0 + r * UMED_STEP;
+      if (yInRect(x, y, CARD_ROW_X, ry, CARD_ROW_W, UMED_H)) {
+        userMedalTip = (int8_t)i;
+        sfxPlay(SFX_TAP);
+        return;
+      }
+    }
+  } else if (userPage == USERP_COLLECTION) {
+    collectionTap(x, y);
+  }
 }
 
 // ---------- teclado para renombrar ----------
@@ -5931,7 +6106,6 @@ void galleryTap(int16_t x, int16_t y) {
 #define BOX_CW 112
 #define BOX_CH 106
 #define BOX_NOW_Y 330   // centro de la fila "Ahora: ..."
-#define BOX_PAGER_Y 366 // contador de pagina "1/2" (v1.65 eran puntos), bajo la fila "Ahora:"
 #define BOX_Z_INK Y_BACK  // la "z" de los que duermen
 #define BOX_DLG_LINE C565(0x4a, 0x4f, 0x6a)  // borde del dialogo, sobre el disco oscuro
 #define BOX_LIGHT C565(0xff, 0xe7, 0x9f)     // halo dorado de la luz
@@ -5956,7 +6130,6 @@ bool boxCanOpen() {
 
 void openBox() {
   boxOpen = true;
-  boxPage = 0;
   boxAsk = 0;
   boxAskPick = false;
   boxHome = pet.focusSlot;
@@ -5966,7 +6139,6 @@ void openBox() {
 
 void closeBox() {
   boxOpen = false;
-  boxPage = 0;
   boxAsk = 0;
   boxAskPick = false;
 }
@@ -6271,11 +6443,6 @@ void drawBoxAsk() {
 void renderBox() {
   uint32_t now = millis();
   yPanelBg();  // panel del patio (v2.0, Y1): siempre oscuro
-  if (boxPage == 1) {  // las insignias (v1.65)
-    renderBadges();
-    gfx->flush();
-    return;
-  }
 
   // el movimiento en marcha (0..1); desde 0,85 se ve como quedara
   float t = 0;
@@ -6361,9 +6528,7 @@ void renderBox() {
     gfx->setTextColor(Y_TEXT);
     printTight(aw, CX, BOX_NOW_Y - 7, aw_w - 16);
   }
-  yPager(0, 2, BOX_PAGER_Y);
-  yChevrons(false, !boxAsk && !boxMove);  // > las insignias, como deslizar a la derecha
-  yBackBtn();
+  yBackBtn();  // v3.4: sin "1/2" ni flechas (las insignias, en la pagina del jugador)
   if (boxAsk) drawBoxAsk();
   gfx->flush();
 }
@@ -6418,16 +6583,6 @@ void boxTap(int16_t x, int16_t y) {
     closeBox();
     return;
   }
-  int ch = yChevronHit(x, y);  // las flechas: como deslizar entre la caja y las insignias
-  if (ch > 0 && boxPage == 0) {
-    boxPage = 1;
-    return;
-  }
-  if (ch < 0 && boxPage == 1) {
-    boxPage = 0;
-    return;
-  }
-  if (boxPage != 0) return;  // las insignias no tienen nada que tocar
   int k = boxSlotAt(x, y);
   if (k < 0) return;
   if (pet.slotTravelling((uint8_t)k)) {  // de viaje (Y5b): un aviso, no el dialogo de despertar
@@ -6454,7 +6609,7 @@ void boxTap(int16_t x, int16_t y) {
 }
 
 // Despues de cualquier movimiento (tambien STORE / WAKE por serie): sprites del activo nuevo, su
-// paseo desde el centro, y los efectos del otro bicho fuera (fx.h: subida y medalla pendientes, "+N",
+// paseo desde el centro, y los efectos del otro bicho fuera (fx.h: la subida pendiente, "+N",
 // barras). Los vigilantes miran al nuevo sin evento: si no, verian "subir" su nivel o "nacer" al
 // que sustituye a un huevo. De vuelta a casa, el activo sale de una luz.
 void boxAfterMove() {
@@ -6463,8 +6618,7 @@ void boxAfterMove() {
   boxMove = BOXMV_NONE;
   monReset();  // recarga aunque sea la misma especie: ensureMon tambien vuelve a centrar el paseo
   ensureMon();
-  fxq.drop(FXB_LEVELUP);
-  fxq.drop(FXB_MEDAL);
+  fxq.drop(FXB_LEVELUP);  // (las medallas, v3.4, son del jugador: se quedan)
   fxo.clear();
   fxArmWatches();
   if (!pet.home(boxMoveHome).isVacant()) fxo.push(FXO_BOX, 0, 0, millis(), boxMoveHome);  // hueco vacio (v1.39): nadie sale de la luz
@@ -6617,12 +6771,10 @@ void boxFill() {
     r.trDef = (uint8_t)random(30);
     r.trSpe = (uint8_t)random(30);
     r.bond = (uint8_t)random(100);
-    // las medallas que ya tiene por su estado, como un bicho criado de verdad: sin ellas, al
-    // despertarlo checkMedals() se las daria y subiria totalMedals, que es del jugador
-    uint16_t lv = levelFor(r.growMin);
-    r.medals = (lv >= 10 ? MED_LV10 : 0) | (lv >= 25 ? MED_LV25 : 0) | (lv >= 50 ? MED_LV50 : 0) |
-               (DEX_TBL[r.speciesId].evolvesTo == 0 ? MED_FINAL : 0) | (lv >= 5 ? MED_FIT : 0) |  // peso 0, sin descuidos
-               (pet.streak >= 7 ? MED_STREAK7 : 0);
+    // v3.4: un bicho inventado ya "conto" todo a lo que llega: al despertarlo no sube las medallas del jugador
+    r.flags |= REC_V3;
+    r.medals = medalPetBits(levelFor(r.growMin), r.bond, DEX_TBL[r.speciesId].evolvesTo == 0, r.weight,
+                            r.careMistakes, false);
     r.storedEpoch = pet.lastSeenEpoch;
     pet.boxPut(k, r);
   }
@@ -6991,11 +7143,12 @@ void teamTap(int16_t x, int16_t y) {
   }
 }
 
-// segunda pagina de la caja: las 8 insignias, en color las ganadas y en silueta las que faltan
-void renderBadges() {
+// las 8 insignias, en color las ganadas y en silueta las que faltan (v3.4: 3.a pagina del jugador; era la
+// 2.a de la caja)
+void renderUserBadges() {
   char head[32];
   snprintf(head, sizeof(head), "%s %u/%u", T(S_BADGES), (unsigned)pet.badgeCount(), (unsigned)STAGE_COUNT);
-  yTitle(head, nullptr);  // el disco oscuro ya lo pinta renderBox
+  yTitleFit(head);  // el disco oscuro ya lo pinta renderUser
   int x0 = CX - (4 * BADGE_CELL_W) / 2;
   for (uint8_t i = 0; i < STAGE_COUNT; i++) {
     int cx = x0 + (i % 4) * BADGE_CELL_W + BADGE_CELL_W / 2, y = BADGE_ROW_Y + (i / 4) * BADGE_ROW_H;
@@ -7012,9 +7165,6 @@ void renderBadges() {
     gfx->setTextColor(got ? Y_TEXT : Y_TEXT_DIM);
     printTight(got ? stageName(i) : "???", cx, y + 80, BADGE_CELL_W - 8);  // 8 px entre nombres vecinos
   }
-  yPager(1, 2, BOX_PAGER_Y);
-  yChevrons(true, false);  // < la caja, como deslizar a la izquierda
-  yBackBtn();
 }
 
 #define BAT_ICON_W 27  // 24 de cuerpo + 3 de borne
@@ -9730,7 +9880,7 @@ void closeForDying() {
   }
   if (boxOpen && boxMove == BOXMV_NONE) closeBox();
   closeStages();
-  kbOpen = clockOpen = cardOpen = false;
+  kbOpen = clockOpen = cardOpen = userOpen = false;
   closeBag();
   itemConfirm = 0;
   choiceKind = 0;

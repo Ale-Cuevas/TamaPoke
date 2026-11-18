@@ -3,7 +3,7 @@
 #include "shim/Arduino.h"
 #include "shim/Preferences.h"
 #include "../i18n.h"
-#include "../pet.h"  // MED_COUNT
+#include "../pet.h"  // MEDAL_COUNT (medals.h)
 #include <ctype.h>
 #include <string.h>
 #include <vector>
@@ -180,6 +180,7 @@ TEST(i18n, los_formatos_cuadran_con_las_llamadas_del_sketch) {
   gLang = LANG_DEFAULT;
 }
 
+// v3.4: las medallas del jugador (nombre y lo que mide)
 TEST(i18n, las_medallas_estan_en_todos_los_idiomas) {
   for (int lang = 0; lang < LANG_COUNT; lang++) {
     gLang = (Lang)lang;
@@ -187,18 +188,19 @@ TEST(i18n, las_medallas_estan_en_todos_los_idiomas) {
     // fuente CP437. En CJK cada kana ocupa 3 bytes y el limite real es de anchura
     // en pantalla, que aqui no se puede medir: eso se comprueba en la placa.
     const bool cjk = LANG_IS_CJK(lang);
-    for (int m = 0; m < MED_COUNT; m++) {
-      const char *n = medalName(m), *l = medalLabel(m), *d = medalDesc(m);
+    for (int m = 0; m < MEDAL_COUNT; m++) {
+      const char *n = medalName(m), *d = medalDesc(m);
       char where[64];
       snprintf(where, sizeof(where), "[%s][medalla %d]", LANG_NAME[lang], m);
       CHECK_MSG(n && n[0], std::string("medalName vacio ") + where);
-      CHECK_MSG(l && l[0], std::string("medalLabel vacio ") + where);
       CHECK_MSG(d && d[0], std::string("medalDesc vacio ") + where);
-      // la etiqueta corta va en una casilla de la cuadricula de medallas
-      if (!cjk && l) CHECK_MSG(strlen(l) <= 6, std::string("etiqueta demasiado larga ") + where + ": " + l);
-      if (!cjk && n) CHECK_MSG(strlen(n) <= 12, std::string("nombre demasiado largo ") + where + ": " + n);
-      if (!cjk && d) CHECK_MSG(strlen(d) <= 16, std::string("descripcion demasiado larga ") + where + ": " + d);
+      // el nombre va en una fila de la pagina de medallas (con el disco a la izquierda) y en el banner; lo que
+      // mide, en su tarjeta (con ": <valor>" detras)
+      if (!cjk && n) CHECK_MSG(strlen(n) <= 14, std::string("nombre demasiado largo ") + where + ": " + n);
+      if (!cjk && d) CHECK_MSG(strlen(d) <= 24, std::string("descripcion demasiado larga ") + where + ": " + d);
     }
+    for (int t = S_TIER_BRONZE; t <= S_TIER_GOLD; t++)
+      if (!cjk) CHECK_MSG(strlen(T((StrId)t)) <= 10, std::string("tramo demasiado largo: ") + T((StrId)t));
   }
   gLang = LANG_DEFAULT;
 }
@@ -207,9 +209,9 @@ TEST(i18n, las_medallas_no_llevan_acentos) {
   for (int lang = 0; lang < LANG_COUNT; lang++) {
     if (LANG_IS_CJK(lang)) continue;  // los CJK van en UTF-8 con fuente U8g2
     gLang = (Lang)lang;
-    for (int m = 0; m < MED_COUNT; m++) {
-      const char *tab[3] = { medalName(m), medalLabel(m), medalDesc(m) };
-      for (int t = 0; t < 3; t++)
+    for (int m = 0; m < MEDAL_COUNT; m++) {
+      const char *tab[2] = { medalName(m), medalDesc(m) };
+      for (int t = 0; t < 2; t++)
         for (const char *c = tab[t]; c && *c; c++)
           CHECK_MSG((unsigned char)*c < 128, std::string("no ASCII: ") + tab[t]);
     }
