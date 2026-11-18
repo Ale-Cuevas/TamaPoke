@@ -59,7 +59,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "3.9"
+#define FW_VERSION "3.10"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -7760,22 +7760,27 @@ static void pmLabel(const char *t, int x, int y, int maxW) {
   }
 }
 // el nombre del bicho encima de la columna (n filas), alineado con su borde derecho, y debajo sus 3 necesidades
-// (v3.8; v3.9 en una caja del color de las filas, con su etiqueta delante): COM, FEL, ENE, colores de la ficha
+// (v3.8; v3.9 en una caja del color de las filas, con su etiqueta delante, v3.10 a tamano 2): COM, FEL, ENE,
+// colores de la ficha. Con 5 filas el nombre va a la izquierda de la caja
 static void pmName(uint8_t s, uint8_t n) {
   const PetLife &l = pet.home(s);
   const char *nm = l.nick[0] ? l.nick : dexName(l.speciesId);
-  int colX = petMenuX(n), ny = petMenuNameY(n);
+  int ny = petMenuNameY(n);
   setSize(2);
-  int w = textW(nm, 2), x = petMenuHeadRight(n, ny, PM_NAME_H) - w;
-  if (x < colX) x = colX;
+  int w = textW(nm, 2), x = petMenuNameRight(n) - w;
+  int minX = Y_CX * 2 - petMenuSafeRight(ny, PM_NAME_H);  // el borde izquierdo del circulo util a esa altura
+  if (!petMenuNameBeside(n) && petMenuX(n) > minX) minX = petMenuX(n);
+  if (x < minX) x = minX;
   yShadowText(x, ny, nm, 2, Y_TEXT);
   int by = petMenuNeedsY(n);
-  int bx = petMenuHeadRight(n, by, PM_NEED_BOX_H) - PM_NEED_BOX_W;
-  pmRow(bx, by, PM_NEED_BOX_W, PM_NEED_BOX_H, Y_PANEL_BG, false);
+  int bx = petMenuBoxX(n);
+  // como pmRow (color y sombra de las filas) pero con esquinas mas cerradas: las de Y_CARD_RAD comen las letras
+  gfx->fillRoundRect(bx + 2, by + 3, PM_NEED_BOX_W, PM_NEED_BOX_H, PM_NEED_RAD, Y_SHADOW);
+  gfx->fillRoundRect(bx, by, PM_NEED_BOX_W, PM_NEED_BOX_H, PM_NEED_RAD, Y_PANEL_BG);
   const StrId labs[3] = {S_BAR_FOOD, S_BAR_JOY, S_BAR_ENE};
   const uint8_t vals[3] = {l.fullness, l.joy, l.energy};
-  int lx = bx + PM_NEED_PAD, barX = lx + PM_NEED_LABEL_W + 4;
-  setSize(1);
+  int lx = bx + PM_NEED_PAD, barX = lx + PM_NEED_LABEL_W + 6;
+  setSize(2);
   gfx->setTextColor(Y_TEXT);
   for (uint8_t i = 0; i < 3; i++) {
     int y = by + PM_NEED_PAD + i * PM_NEED_PITCH;

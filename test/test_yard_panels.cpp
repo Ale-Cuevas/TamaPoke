@@ -82,29 +82,35 @@ TEST(yard_panels, menu_del_bicho_filas_tocables_y_dentro) {
   }
 }
 
-// v3.8/v3.9: el nombre y la caja de necesidades, entre la cartera del HUD y la primera fila, dentro del circulo
-// util y sin pisarse, con cualquier numero de filas
+// v3.8-v3.10: el nombre y la caja de necesidades, entre la cartera del HUD y la primera fila, dentro del circulo
+// util y sin pisarse, con cualquier numero de filas; con 5 el nombre va a la izquierda de la caja
 TEST(yard_panels, menu_del_bicho_cabecera_con_necesidades) {
   for (uint8_t n = 1; n <= PM_MAX; n++) {
     int x, y, w, h;
     CHECK(petMenuRow(0, n, x, y, w, h));
-    int ny = petMenuNameY(n), by = petMenuNeedsY(n);
+    int ny = petMenuNameY(n), by = petMenuNeedsY(n), bx = petMenuBoxX(n), nr = petMenuNameRight(n);
     CHECK(ny >= PM_HUD_BOTTOM);               // debajo de la cartera
-    CHECK(ny + PM_NAME_H <= by);              // el nombre encima de la caja
+    CHECK(by >= PM_HUD_BOTTOM);
     CHECK(by + PM_NEED_BOX_H + 3 <= y);       // la caja (y su sombra) encima de la columna
-    int br = petMenuHeadRight(n, by, PM_NEED_BOX_H);
-    CHECK(br <= x + PM_W);
-    CHECK(br - PM_NEED_BOX_W >= x);           // no sobresale por la izquierda de la columna
-    CHECK(rectInside(br - PM_NEED_BOX_W, by, PM_NEED_BOX_W, PM_NEED_BOX_H));
-    int nr = petMenuHeadRight(n, ny, PM_NAME_H);
-    CHECK(rectInside(nr - 40, ny, 40, PM_NAME_H));
+    CHECK(bx + PM_NEED_BOX_W <= x + PM_W);
+    CHECK(rectInside(bx, by, PM_NEED_BOX_W, PM_NEED_BOX_H));
+    if (petMenuNameBeside(n)) {
+      CHECK(ny > by && ny + PM_NAME_H <= by + PM_NEED_BOX_H);  // a la altura de la caja
+      CHECK(nr <= bx - PM_NAME_GAP);          // a la izquierda de la caja
+      CHECK(rectInside(nr - 120, ny, 120, PM_NAME_H));  // un nombre de 10 letras cabe
+    } else {
+      CHECK(ny + PM_NAME_H <= by);            // el nombre encima de la caja
+      CHECK(rectInside(nr - 40, ny, 40, PM_NAME_H));
+    }
   }
+  CHECK(!petMenuNameBeside(4));
+  CHECK(petMenuNameBeside(5));
 }
 
 TEST(yard_panels, menu_del_bicho_a_la_derecha_y_centrado) {
-  // hasta 4 filas la columna queda centrada en Y_CY, con el hueco de siempre, y en la mitad derecha de la
-  // pantalla (con 5, v3.9, baja un poco para dejar sitio a la cabecera; abajo)
-  for (uint8_t n = 1; n <= 4; n++) {
+  // hasta 3 filas la columna queda centrada en Y_CY, con el hueco de siempre, y en la mitad derecha de la
+  // pantalla (con 4 y 5, v3.10, baja para dejar sitio a la cabecera; abajo)
+  for (uint8_t n = 1; n <= 3; n++) {
     int x0, y0, w, h, xl, yl;
     CHECK(petMenuRow(0, n, x0, y0, w, h));
     CHECK(petMenuRow((uint8_t)(n - 1), n, xl, yl, w, h));
@@ -115,8 +121,12 @@ TEST(yard_panels, menu_del_bicho_a_la_derecha_y_centrado) {
     // el borde derecho casi toca el circulo: PM_EDGE mas a la derecha ya se saldria por una esquina
     CHECK(!rectInside(x0 + PM_EDGE + 1, y0, w, yl + h - y0));
   }
-  // con 5 filas (v3.9): empieza en PM_TOP, bajo la cabecera, y el hueco se encoge para no pisar el dock
+  // con 4 filas (v3.10): empieza en PM_TOP_NAMED, con el hueco de siempre
   int x, y, w, h;
+  CHECK(petMenuRow(0, 4, x, y, w, h));
+  CHECK_EQ(y, PM_TOP_NAMED);
+  CHECK_EQ(petMenuGap(4), PM_GAP);
+  // con 5 (el nombre al lado): empieza en PM_TOP, bajo la caja, y el hueco se encoge para no pisar el dock
   CHECK(petMenuRow(0, 5, x, y, w, h));
   CHECK_EQ(y, PM_TOP);
   CHECK(x > Y_CX);
@@ -149,20 +159,22 @@ TEST(yard_panels, menu_del_bicho_fuera_no_toca_nada) {
 
 // ---- la lista de comida ----
 
-TEST(yard_panels, comida_paginas_de_cuatro_mas_volver) {
+// v3.10: 3 comidas y volver por pagina, asi la lista nunca pasa de 4 filas y lleva el nombre encima de la caja
+TEST(yard_panels, comida_paginas_de_tres_mas_volver) {
+  CHECK_EQ(FOOD_PER_PAGE, 3);
   CHECK_EQ(foodPages(0), (uint8_t)1);
   CHECK_EQ(foodPages(1), (uint8_t)1);
   CHECK_EQ(foodPages(FOOD_PER_PAGE), (uint8_t)1);
   CHECK_EQ(foodPages(FOOD_PER_PAGE + 1), (uint8_t)2);
   CHECK_EQ(foodPages(9), (uint8_t)3);  // la baya normal, 6 de colores, la tarta y la dorada
   CHECK_EQ(foodOnPage(9, 0), (uint8_t)FOOD_PER_PAGE);
-  CHECK_EQ(foodOnPage(9, 2), (uint8_t)1);
+  CHECK_EQ(foodOnPage(10, 3), (uint8_t)1);
   CHECK_EQ(foodOnPage(3, 1), (uint8_t)0);
-  // nunca mas filas que el menu con Evolucionar: la misma columna
   for (uint8_t f = 1; f <= 9; f++)
     for (uint8_t p = 0; p < foodPages(f); p++) {
       CHECK(foodListRows(f, p) >= 2);
-      CHECK(foodListRows(f, p) <= 5);
+      CHECK(foodListRows(f, p) <= 4);
+      CHECK(!petMenuNameBeside(foodListRows(f, p)));
     }
 }
 

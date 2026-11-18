@@ -194,7 +194,7 @@ menu to it. It closes by itself after 30 s untouched.
   the status says "So full!"; games don't make it hungry either, and the time counts while the board
   is off), +12 JOY, but **+12 weight**. It has no favourite.
 - 🍽️ **The food list** (menu → Food, v3.3): the plain berry, then every food you own (coloured berries in order,
-  cake, Golden Berry) with how many are left, 4 per page (the bottom row is ← back, and "1/2 ▸" with more pages).
+  cake, Golden Berry) with how many are left, 3 per page (the bottom row is ← back, and "1/2 ▸" with more pages).
   The food you pick appears **in front of the pet** (once it has stepped out from under the menu) and it eats it
   **as soon as it finishes what it was eating**; one food per pet at a time (the list is grey until then, and a food
   already chosen for one pet can't be given to the other). Food is only used up when the pet has eaten it.
