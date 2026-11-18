@@ -149,8 +149,6 @@ static void resetUi() {
   pet.coins = 120;  // un saldo normal: las escenas comparten el pet (si no, se queda el 9999 de otra)
   // el patio (v2.0, Y2): bichos sin colocar, sin cosas en el suelo y el mapa del bioma
   yardW = YardWorld{};
-  yardCamFX = yardCamFY = -1;  // v3.6: la camara se coloca de golpe en cada escena
-  yardLookUntil = 0;
   yardLastStep = 0;
   yardPoopHave[0] = yardPoopHave[1] = 0;
   yardPoopBooted = false;
@@ -625,7 +623,7 @@ static void yardWalkScene(uint8_t dex, int fromY, int toY) {
   pokemon(dex, 13);
   yardForceMap(1);
   render();  // mete al bicho en el patio
-  int from = yardNearestFreeCell(yardWalk, CX + yardCamX, fromY + yardCamY), to = yardNearestFreeCell(yardWalk, CX + yardCamX, toY + yardCamY);
+  int from = yardNearestFreeCell(yardWalk, CX, fromY), to = yardNearestFreeCell(yardWalk, CX, toY);
   YardPet &p = yardW.p[0];
   p.x = (float)yardCellCenter(yardCellCX(from));
   p.y = (float)yardCellCenter(yardCellCY(from));
@@ -749,7 +747,7 @@ static void encRustleAt(uint32_t ms) {
 // tap the object in the yard (the intro opens)
 static void encTapYard() {
   render();
-  onTap(yScrX(yardEncX), yScrY(yardEncY - 30 * YARD_KI));
+  onTap(yardEncX, yardEncY - 30);
 }
 // the fight against it with the home pet at level `lv` (strong: it wins; weak: it loses), to the result
 static void encFight(uint16_t lv) {
@@ -817,7 +815,7 @@ static const std::vector<Scene> &scenes() {
     { "yard-tap-pet2", [] { pokemon(25, 13); yardForceMap(1); secondPet(4, 14); render(); tapPet(1); } },
     { "yard-home-poop", [] { pokemon(1, 10); pet.dbgSetPoops(3); } },
     { "yard-poop-tap", [] { pokemon(1, 10); pet.dbgSetPoops(3); render();
-                            onTap(yScrX(yardPoopX[0][1]), yScrY(yardPoopY[0][1] - 20 * YARD_KI)); }, 3 },
+                            onTap(yardPoopX[0][1], yardPoopY[0][1] - 20); }, 3 },
     { "yard-home-gifts", [] { pokemon(25, 13); yardForceMap(1); for (int i = 0; i < 5; i++) pet.addGift(IT_CAKE); } },
     { "yard-bubble-cycle-0", [] { pokemon(25, 13); yardForceMap(1); pet.fullness = 10; pet.energy = 12; gHostMillis = 200000 - 85; } },
     { "yard-bubble-cycle-1", [] { pokemon(25, 13); yardForceMap(1); pet.fullness = 10; pet.energy = 12; gHostMillis = 201000 - 85; } },
@@ -856,12 +854,12 @@ static const std::vector<Scene> &scenes() {
     { "yard-menu-asleep-deny", [] { pokemon(25, 23); pet.sleeping = true; yardForceMap(1); tapPet(0); menuTap(PM_FOOD); }, 2 },
     { "yard-menu-pressed", [] { menuScene(); menuHold(PM_CARE); } },
     { "yard-menu-switch", [] { menuScene(); render(); onTap((int16_t)yardW.p[1].x, (int16_t)(yardW.p[1].y - 20)); }, 3 },
-    { "yard-menu-step-aside", [] { pokemon(25, 13); yardForceMap(1); render(); yardW.p[0].x = 360 + yardCamX; yardW.p[0].y = 250 + yardCamY;
+    { "yard-menu-step-aside", [] { pokemon(25, 13); yardForceMap(1); render(); yardW.p[0].x = 360; yardW.p[0].y = 250;
                                    yardW.p[0].mode = YM_IDLE; onTap(360, 230); }, 50 },
-    { "yard-menu-step-aside-sad", [] { pokemon(25, 13); pet.fullness = 10; yardForceMap(1); render(); yardW.p[0].x = 360 + yardCamX;
-                                       yardW.p[0].y = 250 + yardCamY; yardW.p[0].mode = YM_IDLE; onTap(360, 230); }, 50 },
+    { "yard-menu-step-aside-sad", [] { pokemon(25, 13); pet.fullness = 10; yardForceMap(1); render(); yardW.p[0].x = 360;
+                                       yardW.p[0].y = 250; yardW.p[0].mode = YM_IDLE; onTap(360, 230); }, 50 },
     { "yard-menu-step-aside-feed", [] { pokemon(25, 13); if (!pet.uid) pet.uid = 0x7E57u; pet.fullness = 10; yardForceMap(1); render();
-                                        yardW.p[0].x = 360 + yardCamX; yardW.p[0].y = 250 + yardCamY; yardW.p[0].mode = YM_IDLE; onTap(360, 230);
+                                        yardW.p[0].x = 360; yardW.p[0].y = 250; yardW.p[0].mode = YM_IDLE; onTap(360, 230);
                                         menuTap(PM_FOOD); foodRowTap(0); }, 68 },
     { "yard-menu-care", [] { menuScene(); pet.joy = 40; menuTap(PM_CARE); }, 3 },
     { "yard-menu-care-es", [] { menuScene(false, LANG_ES); pet.joy = 40; menuTap(PM_CARE); }, 3 },
@@ -902,10 +900,10 @@ static const std::vector<Scene> &scenes() {
     { "yard-egg-zapdos", [] { yardEggScene(40, 0); pet.dbgEggSpecies(145); }, 40 },
     { "yard-egg-night", [] { yardEggScene(150, 30); pet.lastSeenEpoch = epochAt(22); }, 20 },
     { "yard-egg-shake", [] { yardEggScene(40, 0); render(); pet.shaken(); yardEggInfo(); }, 3 },
-    { "yard-egg-tap", [] { yardEggScene(160, 0); render(); onTap(yScrX(yardEggX[0]), yScrY(yardEggY[0]) - YARD_EGG_MID); }, 3 },
-    { "yard-egg-tap-hint", [] { yardEggScene(160, 0); render(); onTap(yScrX(yardEggX[0]), yScrY(yardEggY[0]) - YARD_EGG_MID); }, 12 },
-    { "yard-egg-tap-es", [] { yardEggScene(160, 0); lang(LANG_ES); render(); onTap(yScrX(yardEggX[0]), yScrY(yardEggY[0]) - YARD_EGG_MID); }, 3 },
-    { "yard-egg-tap-hint-es", [] { yardEggScene(160, 0); lang(LANG_ES); render(); onTap(yScrX(yardEggX[0]), yScrY(yardEggY[0]) - YARD_EGG_MID); }, 12 },
+    { "yard-egg-tap", [] { yardEggScene(160, 0); render(); onTap(yardEggX[0], yardEggY[0] - YARD_EGG_MID); }, 3 },
+    { "yard-egg-tap-hint", [] { yardEggScene(160, 0); render(); onTap(yardEggX[0], yardEggY[0] - YARD_EGG_MID); }, 12 },
+    { "yard-egg-tap-es", [] { yardEggScene(160, 0); lang(LANG_ES); render(); onTap(yardEggX[0], yardEggY[0] - YARD_EGG_MID); }, 3 },
+    { "yard-egg-tap-hint-es", [] { yardEggScene(160, 0); lang(LANG_ES); render(); onTap(yardEggX[0], yardEggY[0] - YARD_EGG_MID); }, 12 },
     { "yard-egg-hatch-shake", [] { yardEggScene(239, 0); render(); pet.hatchNow(); ensureMon(); fxo.push(FXO_HATCH, 0, 0, millis()); }, 6 },
     { "yard-egg-hatch-flash", [] { yardEggScene(239, 0); render(); pet.hatchNow(); ensureMon(); fxo.push(FXO_HATCH, 0, 0, millis()); }, 9 },
     { "yard-egg-hatch-reveal", [] { yardEggScene(239, 0); render(); pet.hatchNow(); ensureMon(); fxo.push(FXO_HATCH, 0, 0, millis()); }, 12 },

@@ -592,10 +592,9 @@ class TestPackYard(unittest.TestCase):
         self.assertEqual(bit(10, 4), 0)  # flores: se pisan
         self.assertEqual(bit(7, 7), 1)   # el agua maciza bloquea
         self.assertEqual(bit(7, 8), 0)   # su borde no
-        self.assertEqual(bit(7, 1), 0)   # v3.6: bajo la hora se pisa (la camara se mueve)
-        self.assertEqual(bit(7, 13), 0)  # y bajo el dock
-        self.assertEqual(bit(0, 0), 1)   # el anillo del borde, no
-        self.assertEqual(bit(7, 14), 1)
+        self.assertEqual(bit(7, 1), 1)   # zona de la hora
+        self.assertEqual(bit(7, 13), 1)  # zona del dock
+        self.assertEqual(bit(0, 0), 1)   # fuera del circulo
         self.assertEqual(bit(9, 9), 0)   # hierba libre
 
     def test_tpy1_corto_o_con_otra_firma(self):
@@ -617,9 +616,7 @@ class TestYardMapsRealPack(unittest.TestCase):
 
     # celdas sueltas (fuera de la zona grande) que ya tenian los mapas anteriores a esta prueba;
     # los mapas nuevos no pueden tener ninguna
-    # v3.6: sin la mascara del circulo se pisan mas celdas de las esquinas; las sueltas de las ruinas (detras de
-    # sus muros) las quita yardKeepLargestRegion al cargar
-    KNOWN_POCKETS = {'01-meadow': 2, '02-quarry': 6, '05-ruins': 8}
+    KNOWN_POCKETS = {'01-meadow': 2, '02-quarry': 6}
 
     def regiones(self, walk):
         libres = {(x, y) for y in range(15) for x in range(15)

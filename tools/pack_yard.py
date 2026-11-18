@@ -4,8 +4,8 @@
 Lee tools/yard/maps/NN-nombre.txt y su leyenda (tools/yard/legends/), compone una imagen de
 240x240 con baldosas de 16 px y escribe en tools/yard/out/:
   NN-nombre.bin           fichero TPY1 (paleta + mascara de paso + pixeles indexados)
-  NN-nombre_preview.png   466x466 redondo (la vista a x4,4 con la camara en el centro, HUD de muestra)
-  NN-nombre_debug.png     el mapa entero a x2 con la rejilla, las celdas bloqueadas y la vista previa
+  NN-nombre_preview.png   466x466 redondo (x2,4 del centro, recorte de 7, mascara, HUD de muestra)
+  NN-nombre_debug.png     lo mismo con la rejilla, las celdas bloqueadas y las zonas del HUD
 
 Ambiente opcional en la cabecera del mapa: "hue: A-B T", "tint: RRGGBB N" (mezcla N %) y "mist: N [RRGGBB]".
 
@@ -32,20 +32,27 @@ from pathlib import Path
 
 TILE, GRID = 16, 15
 SRC = TILE * GRID            # 240
-CANVAS, CROP = 466, 7        # el lienzo; el panel de 480 enseña 7 px mas por lado
+CANVAS, CROP = 466, 7        # el mapa expandido mide 480, dibujado en (-7,-7)
 FULL = 480
-ZOOM10 = 44                  # v3.6: = YBG_ZOOM10 de yardbg.h: el mapa entero a 4,4 es el mundo
-WORLD = SRC * ZOOM10 // 10   # 1056 (= YBG_WORLD); la camara de TamaPoke.ino elige la ventana que se ve
-CAM = WORLD // 2 - CANVAS // 2  # la camara de la vista previa: el centro del mapa
+ZOOM = 2.4                   # v3.5: = YBG_ZOOM10 / 10 de yardbg.h (antes 2)
+VIEW = int(FULL / ZOOM)      # 200 px de la fuente a la vista
+OFF = (SRC - VIEW) // 2      # 20 px de la fuente fuera por cada lado (= YBG_OFF)
 
 
-def src_to_world(v):
-    """px de la fuente -> px del mundo, como yardCellCenter/yardCellEdge de yardbg.h."""
-    return v * ZOOM10 // 10
+def src_to_canvas(v):
+    """px de la fuente -> px del lienzo, como yardCellCenter/yardCellEdge de yardbg.h (trunca hacia 0)."""
+    return int((v - OFF) * 24 / 10) - CROP
 
 
+def cell_box(x, y):
+    """Rectangulo (x0, y0, x1, y1) de la celda en el lienzo."""
+    return (src_to_canvas(x * TILE), src_to_canvas(y * TILE),
+            src_to_canvas((x + 1) * TILE) - 1, src_to_canvas((y + 1) * TILE) - 1)
 WALK_BYTES = (GRID * GRID + 7) // 8  # 29
-# (v3.6: el HUD ya no bloquea celdas: la camara se mueve)
+FRAME_INSET = 12             # nada se pisa a menos de 12 px del borde redondo
+# zonas del HUD en coordenadas del lienzo (x0, y0, x1, y1): hora + monedas, y el dock
+CLOCK_ZONE = (140, 20, 326, 110)
+DOCK_ZONE = (130, 376, 336, 440)   # = yard.h; el dock va cada 72 px (yard_ui.h)
 # colores del dock (yard_ui.h, v3.3: Y_DOCK_PLAY / BAG / SHOP)
 DOCK_COLS = ((0xF0, 0xA8, 0x30), (0x5E, 0x8F, 0xE0), (0xD8, 0x60, 0x9A))
 
@@ -320,17 +327,22 @@ def atmosphere(img, meta, map_path, seed):
     return img
 
 
-def on_edge(x, y):
-    """v3.6: el anillo de celdas del borde del mapa no se pisa (= yardMaskFrame de yard.h). Antes se bloqueaba lo
-    que caia fuera del circulo o bajo el HUD con el mapa fijo a escala 2; con la camara ya no hace falta."""
-    return x in (0, GRID - 1) or y in (0, GRID - 1)
+def outside_or_hud(cx, cy):
+    """True si el centro de la celda (en px de la fuente) cae fuera del circulo o en una zona del HUD."""
+    px, py = src_to_canvas(cx), src_to_canvas(cy)
+    if (px - CANVAS / 2) ** 2 + (py - CANVAS / 2) ** 2 > (CANVAS / 2 - FRAME_INSET) ** 2:
+        return True
+    for x0, y0, x1, y1 in (CLOCK_ZONE, DOCK_ZONE):
+        if x0 <= px <= x1 and y0 <= py <= y1:
+            return True
+    return False
 
 
 def walk_mask(blocked):
     bits = bytearray(WALK_BYTES)
     for y in range(GRID):
         for x in range(GRID):
-            if blocked[y][x] or on_edge(x, y):
+            if blocked[y][x] or outside_or_hud(x * TILE + TILE // 2, y * TILE + TILE // 2):
                 k = y * GRID + x
                 bits[k // 8] |= 1 << (k % 8)
     return bytes(bits)
@@ -368,23 +380,18 @@ def decode_tpy1(data):
     return pal, walk, px
 
 
-def to_world(img):
-    from PIL import Image
-    # vecino mas cercano como yardBgExpandWorld: el pixel X del mundo sale del X * 10 // 44 de la fuente
-    src = img.convert('RGB')
-    big = Image.new('RGB', (WORLD, WORLD))
-    idx = [X * 10 // ZOOM10 for X in range(WORLD)]
-    sp, bp = src.load(), big.load()
-    for Y in range(WORLD):
-        sy = idx[Y]
-        for X in range(WORLD):
-            bp[X, Y] = sp[idx[X], sy]
-    return big
-
-
 def to_canvas(img):
-    """La vista con la camara en el centro del mapa."""
-    return to_world(img).crop((CAM, CAM, CAM + CANVAS, CAM + CANVAS))
+    from PIL import Image
+    # vecino mas cercano como yardBgExpandFull: el pixel X sale del OFF + X * 10 // 24 de la fuente
+    src = img.convert('RGB')
+    big = Image.new('RGB', (FULL, FULL))
+    idx = [OFF + X * 10 // 24 for X in range(FULL)]
+    sp, bp = src.load(), big.load()
+    for Y in range(FULL):
+        sy = idx[Y]
+        for X in range(FULL):
+            bp[X, Y] = sp[idx[X], sy]
+    return big.crop((CROP, CROP, CROP + CANVAS, CROP + CANVAS))
 
 
 def round_mask(canvas):
@@ -425,28 +432,25 @@ def add_mock_hud(im, sprites):
         im.paste(spr, xy, spr)
 
 
-def debug_image(img, blocked):
-    """El mapa entero a escala 2 (480x480) con la rejilla, las celdas bloqueadas (rojo: objetos; azul: el borde)
-    y el lienzo de la vista previa (amarillo)."""
+def debug_image(canvas, blocked):
     from PIL import Image, ImageDraw
-    dbg = img.convert('RGB').resize((SRC * 2, SRC * 2), Image.NEAREST).convert('RGBA')
+    dbg = canvas.copy().convert('RGBA')
     ov = Image.new('RGBA', dbg.size, (0, 0, 0, 0))
     d = ImageDraw.Draw(ov)
-    c = TILE * 2
     for y in range(GRID):
         for x in range(GRID):
-            box = (x * c, y * c, x * c + c - 1, y * c + c - 1)
             if blocked[y][x]:
-                d.rectangle(box, fill=(255, 0, 0, 70))
-            elif on_edge(x, y):
-                d.rectangle(box, fill=(0, 0, 255, 40))
+                d.rectangle(cell_box(x, y), fill=(255, 0, 0, 70))
+            elif outside_or_hud(x * TILE + TILE // 2, y * TILE + TILE // 2):
+                d.rectangle(cell_box(x, y), fill=(0, 0, 255, 40))
+    for z in (CLOCK_ZONE, DOCK_ZONE):
+        d.rectangle(z, outline=(255, 255, 0, 255), width=2)
     for i in range(GRID + 1):
-        d.line((i * c, 0, i * c, SRC * 2), fill=(0, 0, 0, 50))
-        d.line((0, i * c, SRC * 2, i * c), fill=(0, 0, 0, 50))
-    k = 20 / ZOOM10
-    d.rectangle((CAM * k, CAM * k, (CAM + CANVAS) * k, (CAM + CANVAS) * k), outline=(255, 255, 0, 255), width=2)
+        e = src_to_canvas(i * TILE)
+        d.line((e, 0, e, CANVAS), fill=(0, 0, 0, 50))
+        d.line((0, e, CANVAS, e), fill=(0, 0, 0, 50))
     dbg.alpha_composite(ov)
-    return dbg.convert('RGB')
+    return round_mask(dbg.convert('RGB'))
 
 
 def scale_sprites(yard_dir, tilesets, legend_name):
@@ -460,7 +464,7 @@ def scale_sprites(yard_dir, tilesets, legend_name):
     for name, xy in (('spr_deco_sheep_01_strip4.png', (200, 230)), ('spr_deco_chicken_01_strip4.png', (270, 270))):
         if (d / name).exists():
             spr = Image.open(d / name).convert('RGBA').crop((0, 0, 32, 32))
-            out.append((spr.resize((141, 141), Image.NEAREST), xy))
+            out.append((spr.resize((77, 77), Image.NEAREST), xy))
     return out
 
 
@@ -499,7 +503,7 @@ def main(argv=None):
             prev = canvas.copy()
             add_mock_hud(prev, scale_sprites(yard, tilesets, meta['legend']))
             round_mask(prev).save(out / f'{mp.stem}_preview.png')
-            debug_image(img, blocked).save(out / f'{mp.stem}_debug.png')
+            debug_image(canvas, blocked).save(out / f'{mp.stem}_debug.png')
         print(f'{mp.stem}: {meta["name"]}  {colours} colours  {len(data)} bytes')
 
 
