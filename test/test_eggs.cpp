@@ -260,8 +260,8 @@ TEST(eggs, un_arranque_con_la_casa_vacia_y_huevos_en_la_mochila_los_deja) {
     Preferences raw;
     raw.begin("tamapoke");
     uint8_t bag[IT_COUNT] = { 0 };
-    bag[IT_EGG] = 1;
-    raw.putBytes("bpack", bag, sizeof(bag));
+    bag[IT_EGG] = 1;  // (v3.2: "bpack" son 10 bytes)
+    raw.putBytes("bpack", bag, PACK_OLD);
   }
   Pet q;
   q.begin();

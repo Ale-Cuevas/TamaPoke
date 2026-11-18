@@ -173,15 +173,21 @@ While **awake**, per minute:
   Each slip-up **delays evolution by 1 level** and cools the bond.
 
 ### Actions
-- 🍎 **Berry** (3 flavors): +25 FOOD. Each species has a **hidden favorite flavor**
-  → +35 FOOD, +10 JOY, ♥, bond, and it gets revealed. Once revealed, the Care panel marks it with a
-  gold frame and a star (v1.57). Evolving can change the favourite: then it's a secret again and the
-  status says "Its tastes changed!".
-- 🍰 **Cake** (v1.54, in the Care panel next to the berries): **limited**, found on walks
+- 🍎 **Plain berry** (v3.2): the only **free, unlimited** food: +20 FOOD, nothing else. It is always the
+  first card of the Care panel.
+- 🫐 **Coloured berries** (v3.2, six: red, blue, green, yellow, pink, orange): items you collect (Bag, page 2).
+  Any coloured berry beats the plain one: **+30 FOOD, +3 JOY**. Each evolution line has one **hidden favourite
+  colour**, fixed by the line's first form, so it never changes when the pet evolves. Feeding the favourite gives
+  **+35 FOOD, +12 JOY, ♥, +2 bond** and reveals it: the stat card then names it and the Care panel marks it with a
+  gold frame and a star. Every pet (including the old ones after updating) starts with its favourite unknown.
+  Sources: **Shop 25 coins each** (page 2), stage boss loot, wild-pet drops, walk finds and trips (a random colour
+  each time).
+- 🍰 **Cake** (v1.54, in the Care panel): **limited**, found on walks
   (and won from stage bosses). It fills FOOD to 100 and **keeps it full for 3 hours** (the bar turns pink and
   the status says "So full!"; games don't make it hungry either, and the time counts while the board
-  is off), +12 JOY, but **+12 weight**. The slot shows how many you have; with none it's grey and a
-  tap says where to find one.
+  is off), +12 JOY, but **+12 weight**. It has no favourite. The Care panel's food row is the plain berry plus
+  the first 3 foods you own (coloured berries in order, then cake, then Golden Berry); with none it's grey.
+  Food is only used up when the pet eats it.
 - ⚽ **Play:** a menu with all the games: the **ball minigame** (+JOY, −ENE; trains **SPEED** and
   burns weight; the ball keeps speeding up as you score: twice as fast at 80 as at 1, up to 3×),
   the **battle stages** (+3 JOY for a finished run, at most once an hour; a boss reward can bring an
@@ -393,9 +399,10 @@ pre-selected. **Start** begins; tap the title to go back to the list.
 
   | Loot | Odds |
   |---|---|
-  | Cake | 27 % |
+  | Cake | 22 % |
   | Poké Ball (v2.2) | 8 % |
-  | Golden Berry | 25 % |
+  | Golden Berry | 20 % |
+  | Coloured berry (v3.2) | 10 % (a random colour) |
   | Protein / Iron / Carbos | 21 % (7 % each) |
   | Rare Candy | 7 % |
   | Revive (v1.59) | 5 % |
@@ -428,8 +435,9 @@ Battles between two boards over the air are next (see the roadmap).
 
   | Drop | Odds |
   |---|---|
-  | Cake | 30 % |
-  | Golden Berry | 30 % |
+  | Cake | 25 % |
+  | Golden Berry | 25 % |
+  | Coloured berry (v3.2) | 10 % (a random colour) |
   | Protein / Iron / Carbos | 21 % (7 % each) |
   | Rare Candy | 8 % |
   | Revive | 7 % |
@@ -481,8 +489,9 @@ waving it around doesn't farm anything.
 
   | Item | Odds | Use |
   |---|---|---|
-  | Golden Berry | 35 % | +50 FOOD, +15 JOY, a heart |
-  | Cake (v1.54) | 20 % | FOOD full for 3 h, +12 JOY, +12 weight (Care panel or Bag) |
+  | Golden Berry | 28 % | +50 FOOD, +15 JOY, a heart |
+  | Cake (v1.54) | 17 % | FOOD full for 3 h, +12 JOY, +12 weight (Care panel or Bag) |
+  | Coloured berry (v3.2) | 10 % | A random one of the 6 colours: +30 FOOD, +3 JOY (the favourite: +35 FOOD, +12 JOY, ♥) |
   | Protein / Iron / Carbos | 30 % (1/3 each) | +3 ATK / DEF / SPD training (cap 100) |
   | Shiny Charm | 10 % | Held, not used: the **next egg** gets ×3 shiny odds (never better than 1/8). One at a time; a second one becomes a Golden Berry. |
   | Revive (v1.59) | 5 % | Not used by hand: when a neglected pet is dying, a dialog offers it to save the pet. A new game starts with **3**. |
@@ -655,14 +664,14 @@ on, care for your companion:
 If one bottoms out it counts as a *slip-up*.
 
 **The dock (three round buttons at the bottom, v2.0):**
-- 💗 **Care** → a panel with the 3 berries (each species has a hidden favourite that gives a bonus), the cake
-  (limited: full for 3 h, but it fattens), the light (🌙 sleep / ☀️ wake) and the heart to pet it
+- 💗 **Care** → a panel with the free plain berry and your first 3 other foods (coloured berries, the cake
+  (limited: full for 3 h, but it fattens), Golden Berry), the light (🌙 sleep / ☀️ wake) and the heart to pet it
   (+20 JOY). Food drops into the yard: the pet sees it, walks over and eats it. Asleep, the light still
   works.
 - ⚽ **Play** → the games: the pokeball minigame (SPEED), the battle stages, the training bag (STRENGTH), the
   sled run (SPEED) and the waterfall (DEFENSE). Each result pays a few coins.
-- 🎒 **Bag** → two tabs: **ITEMS** (your items and eggs; tap one to use it) and **SHOP** (buy items and
-  backgrounds with coins).
+- 🎒 **Bag** → two tabs: **ITEMS** (your items and eggs; tap one to use it; swipe or tap the "1/2" for page 2,
+  the coloured berries) and **SHOP** (buy items and backgrounds with coins; page 2 sells the berries).
 
 **In the yard:** tap a pet for its stat card (the first page shows the three needs; Care and Play then look
 after that pet), tap a poop to clear it, tap a gift to open it. An egg placed from the Bag sits in the
@@ -670,7 +679,7 @@ yard: tap it to see the time left, shake the board to speed it up.
 
 **Coins (v2.0):** each minigame pays 3–8 by result, a stage's first clear 50 and a repeat clear 10 (once per
 stage per day), walk goals 10 / 20 / 40. Games and repeat clears stop at 150 a day. They are spent in the
-Shop: berries 30, cake 40, protein / iron / carbos 60, Revive 80, Poké Ball 100 (v2.2), rare candy 150, and backgrounds 150–250.
+Shop: Golden Berry 30, coloured berries 25 each, cake 40, protein / iron / carbos 60, Revive 80, Poké Ball 100 (v2.2), rare candy 150, and backgrounds 150–250.
 Backgrounds are yours, not the pet's: you start with the meadow, and a map you buy works for every pet.
 
 **Touch gestures:**
@@ -915,7 +924,7 @@ Backpack to n eggs, for tests) · `REVIVES [n]` (Revives in the Backpack; with n
 form shows the farewell button) · `TAP <x> <y>` (a tap at
 canvas coordinates, through the same path as a finger; prints the battle phase) · `COINS [n]` (coins and
 today's capped earnings; with n, set them) · `SHOP` (prices, counts, maps owned) · `BUY <item>` /
-`BUYMAP <n>` (buy as if from the Shop) · `YARDBG <n>` (show yard map n, 0 = the chosen one) · `EGGD <dex>` (the egg at home becomes that species, for its colours) · `EGGT <min>`
+`BUYMAP <n>` (buy as if from the Shop) · `FEED <f>` (feed the focused pet food f without the yard: 0 plain, 1–6 the coloured berries R B G Y P O, 7 cake, 8 Golden Berry; spends the item as usual, v3.2; `STATS` prints the berries and each slot's favourite) · `YARDBG <n>` (show yard map n, 0 = the chosen one) · `EGGD <dex>` (the egg at home becomes that species, for its colours) · `EGGT <min>`
 (fast-forward the yard egg) · `ENC [dex]` (a wild encounter appears now; with a dex number, that
 species) · `ENC?` (today's rolls, the base roll's time, the wild pet, the captured eggs) · `ENCEND` (it goes
 away) · `BALLS [n]` (Poké Balls; with n, set them).

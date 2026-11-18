@@ -19,9 +19,12 @@ static const uint8_t TRV_EVENTS[TRV_TIERS] = { 1, 2, 3 };            // sucesos 
 #define TRV_EVENTS_MAX 3
 
 // objetos que pueden traer (su peso, TRV_POOL_W, en tuning.h, en este mismo orden): baya dorada, tarta, 3
-// vitaminas, caramelo raro, revivir y (v2.2) la Poke Ball
+// vitaminas, caramelo raro, revivir, (v2.2) la Poke Ball y (v3.2) una baya de color: el id de la lista es la
+// primera (10, IT_BERRY_R) y travelRoll le suma el color (0..5), sacado de la semilla
 static constexpr uint8_t TRV_POOL_ID[TRV_POOL_N] = { 0 /*GOLDEN*/, 7 /*CAKE*/, 1 /*PROTEIN*/, 2 /*IRON*/, 3 /*CARBOS*/,
-                                                 5 /*RARECANDY*/, 8 /*REVIVE*/, 9 /*BALL*/ };
+                                                 5 /*RARECANDY*/, 8 /*REVIVE*/, 9 /*BALL*/, 10 /*BERRY*/ };
+#define TRV_POOL_BERRY 10  // IT_BERRY_R: el primero de los seis colores
+#define TRV_BERRY_COLORS 6
 
 // ---- recuerdos: 5 mapas x 5. id = (mapa - 1) * 5 + i, i = 0..4 ----
 #define TRV_DESTS 5  // = YARD_MAPS (economy.h); pet.cpp lo comprueba
@@ -90,6 +93,7 @@ inline TravelResult travelRoll(uint32_t seed, uint8_t dest, uint8_t tier, uint32
       acc += TRV_POOL_W[i];
       if (pick < acc) {
         r.item = TRV_POOL_ID[i];
+        if (r.item == TRV_POOL_BERRY) r.item += (uint8_t)(((seed * 2654435761u) >> 20) % TRV_BERRY_COLORS);  // sin tocar la secuencia
         break;
       }
     }

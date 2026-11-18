@@ -33,8 +33,8 @@ inline uint8_t coinsForGoal(uint8_t tier) { return tier >= 1 && tier <= ECO_GOAL
 
 // ---- lo que cuesta ----
 // Objetos de la mochila, por su id de pet.h (IT_GOLDEN=0, PROTEIN, IRON, CARBOS, CHARM, RARECANDY, EGG, CAKE, REVIVE,
-// BALL). 0 = no se vende (el huevo y el amuleto shiny).
-#define ECO_ITEMS 10
+// BALL, y (v3.2) las seis bayas de colores BERRY_R..O). 0 = no se vende (el huevo y el amuleto shiny).
+#define ECO_ITEMS 16
 static const uint16_t ECO_ITEM_PRICE[ECO_ITEMS] = {
   PRICE_GOLDEN,     // IT_GOLDEN  baya dorada
   PRICE_PROTEIN,    // IT_PROTEIN
@@ -46,6 +46,12 @@ static const uint16_t ECO_ITEM_PRICE[ECO_ITEMS] = {
   PRICE_CAKE,       // IT_CAKE
   PRICE_REVIVE,     // IT_REVIVE
   PRICE_BALL,       // IT_BALL    Poke Ball (v2.2): captura a un salvaje vencido
+  PRICE_BERRY,      // IT_BERRY_R  (v3.2) las seis bayas de colores
+  PRICE_BERRY,      // IT_BERRY_B
+  PRICE_BERRY,      // IT_BERRY_G
+  PRICE_BERRY,      // IT_BERRY_Y
+  PRICE_BERRY,      // IT_BERRY_P
+  PRICE_BERRY,      // IT_BERRY_O
 };
 inline uint16_t priceOfItem(uint8_t itemId) { return itemId < ECO_ITEMS ? ECO_ITEM_PRICE[itemId] : 0; }
 

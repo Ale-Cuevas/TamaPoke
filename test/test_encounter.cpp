@@ -412,10 +412,16 @@ TEST(encounter, el_objeto_sale_la_mitad_de_las_veces_y_nunca_monedas_ni_bolas) {
   int n[IT_COUNT] = { 0 };
   for (int i = 0; i < N; i++) n[p.rollWildItem()]++;
   CHECK_EQ(n[IT_BALL] + n[IT_EGG], 0);
-  CHECK_RANGE(n[IT_CAKE] * 100.0 / N, 28.0, 32.0);
-  CHECK_RANGE(n[IT_RARECANDY] * 100.0 / N, 7.0, 9.0);
-  CHECK_RANGE(n[IT_REVIVE] * 100.0 / N, 6.0, 8.0);
-  CHECK_RANGE(n[IT_CHARM] * 100.0 / N, 3.0, 5.0);
+  CHECK_RANGE(n[IT_CAKE] * 100.0 / N, WDROP_CAKE - 2.0, WDROP_CAKE + 2.0);
+  CHECK_RANGE(n[IT_RARECANDY] * 100.0 / N, WDROP_RARECANDY - 1.0, WDROP_RARECANDY + 1.0);
+  CHECK_RANGE(n[IT_REVIVE] * 100.0 / N, WDROP_REVIVE - 1.0, WDROP_REVIVE + 1.0);
+  CHECK_RANGE(n[IT_CHARM] * 100.0 / N, WDROP_CHARM - 1.0, WDROP_CHARM + 1.0);
+  int colored = 0;  // v3.2: una baya de color al azar, de los seis
+  for (int c = 0; c < BERRY_COLORS; c++) {
+    colored += n[IT_BERRY_R + c];
+    CHECK(n[IT_BERRY_R + c] > 0);
+  }
+  CHECK_RANGE(colored * 100.0 / N, WDROP_COLORED - 1.5, WDROP_COLORED + 1.5);
   int drops = 0;
   uint16_t coins = p.coins;
   for (int i = 0; i < 400; i++) {

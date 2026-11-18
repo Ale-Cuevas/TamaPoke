@@ -12,7 +12,8 @@
 enum : uint8_t { PANEL_NONE = 0, PANEL_CARE, PANEL_PLAY, PANEL_TRAVEL };
 
 // ---- Cuidar ----
-enum : uint8_t { CP_RED = 0, CP_BLUE, CP_GREEN, CP_CAKE, CP_LIGHT, CP_PET, CP_COUNT };
+// v3.2: cuatro tarjetas de comida: la baya normal y las 3 primeras comidas que se tienen (bayas de colores, tarta, dorada)
+enum : uint8_t { CP_FOOD0 = 0, CP_FOOD1, CP_FOOD2, CP_FOOD3, CP_LIGHT, CP_PET, CP_COUNT };
 #define CP_FOOD_W 80   // tarjetas de comida, cuadradas, icono a 3x (48 px)
 #define CP_FOOD_GAP 10
 #define CP_FOOD_Y 128

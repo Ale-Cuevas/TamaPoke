@@ -41,7 +41,7 @@ The repo already separates pure logic (host-tested) from hardware glue
 | Kind | New files | Same pattern as |
 |---|---|---|
 | Pure logic, header-only, tested on the PC | `steps.h`, `motion.h`, `battle.h`, `link_proto.h`, `friends.h` | `power.h`, `button.h` (`test/test_*.cpp`, listed in `test/Makefile`) |
-| Game rules | `pet.cpp` / `pet.h` (new `Pet` methods) | `feedBerry()`, `playResult()` (`test/test_pet.cpp`) |
+| Game rules | `pet.cpp` / `pet.h` (new `Pet` methods) | `feedFood()` (`feedBerry()` until v3.1), `playResult()` (`test/test_pet.cpp`) |
 | Hardware glue | `imu.cpp` / `imu.h`, `link.cpp` / `link.h` | `rtcbat.cpp` (stubbed in `tools/render/stubs.cpp`) |
 | UI | `TamaPoke.ino` | every existing screen |
 
@@ -273,7 +273,7 @@ already does. The extra current must be measured; the device test compares an
 | `RARE_CANDY_LEVELS` | 1 | Levels from a Rare Candy |
 | `FIND_MIN_STEPS` / `FIND_MAX_STEPS` | 800 / 1200 | Distance between finds |
 | `FINDS_PER_DAY` | 5 | Random find cap (goal gifts on top) |
-| `ODDS_BERRY` / `ODDS_CAKE` / `ODDS_VITAMIN` / `ODDS_CHARM` / `ODDS_REVIVE` | 35 / 20 / 30 / 10 / 5 (v1.59; 55 / – / 35 / 10 / – at first) | Item odds (%) |
+| `ODDS_GOLDEN` / `ODDS_CAKE` / `ODDS_VITAMIN` / `ODDS_CHARM` / `ODDS_REVIVE` / `ODDS_COLORED` | 28 / 17 / 30 / 10 / 5 / 10 (v3.2; 35 / 20 / 30 / 10 / 5 / – in v1.59) | Item odds (%) |
 | `ITEM_MAX` | 9 | Backpack cap per item |
 | `GOLDEN_FOOD` / `GOLDEN_JOY` | 50 / 15 | Golden Berry |
 | `VITAMIN_TRAIN` | 3 | Vitamin effect |

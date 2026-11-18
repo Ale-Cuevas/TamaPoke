@@ -32,8 +32,8 @@ TEST(yard_panels, cuidar_tarjetas_tocables_y_dentro) { checkPanel(PANEL_CARE); }
 // v2.3: la fila de cuidados (luz | mimo, v3.1 sin bano) mide lo mismo que la de comida y no la pisa
 TEST(yard_panels, cuidar_fila_de_cuidados_alineada) {
   int fx0, fy, fw, fh, fx3, lx, ly, lw, lh, px, py, pw, ph;
-  carePanelCard(CP_RED, fx0, fy, fw, fh);
-  carePanelCard(CP_CAKE, fx3, fy, fw, fh);
+  carePanelCard(CP_FOOD0, fx0, fy, fw, fh);
+  carePanelCard(CP_FOOD3, fx3, fy, fw, fh);
   carePanelCard(CP_LIGHT, lx, ly, lw, lh);
   carePanelCard(CP_PET, px, py, pw, ph);
   CHECK_EQ(lx, fx0);

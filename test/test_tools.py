@@ -381,8 +381,8 @@ class TestBuffersDeTexto(unittest.TestCase):
             elif arg == 'fecha':
                 total += 5
             elif arg == 'baya':
-                total += max(self.bytes_literal(self.LIT[b][li]) for b in
-                             ('S_BERRY_UNK', 'S_BERRY_RED', 'S_BERRY_BLUE', 'S_BERRY_GREEN'))
+                total += max(self.bytes_literal(self.LIT[b][li]) for b in self.LIT
+                             if b == 'S_BERRY_UNK' or b.startswith('S_IT_BERRY_'))
             elif arg == 'objeto':  # nombre de un objeto de la mochila
                 total += max(self.bytes_literal(self.LIT[o][li]) for o in self.LIT if o.startswith('S_IT_'))
         return total

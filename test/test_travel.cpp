@@ -104,14 +104,35 @@ TEST(travel, sin_raros_en_1h_y_el_resto_de_reglas) {
   CHECK_EQ(souv[2], N);
   CHECK_RANGE(rare[1] * 100.0 / souv[1], 6.0, 10.0);   // 8 % de los recuerdos de 3 h
   CHECK_RANGE(rare[2] * 100.0 / souv[2], 22.0, 28.0);  // 25 % de los de 8 h
-  // el reparto de objetos de 3 h: baya 30, tarta 15, vitaminas 10, caramelo 10, revivir 5, Poke Ball 10 (v2.2)
-  CHECK_RANGE(itemId[IT_GOLDEN] * 100.0 / item[1], 27.0, 33.0);
-  CHECK_RANGE(itemId[IT_BALL] * 100.0 / item[1], 8.0, 12.0);
-  CHECK_RANGE(itemId[IT_CAKE] * 100.0 / item[1], 12.0, 18.0);
-  CHECK_RANGE(itemId[IT_PROTEIN] * 100.0 / item[1], 8.0, 12.0);
-  CHECK_RANGE(itemId[IT_RARECANDY] * 100.0 / item[1], 8.0, 12.0);
-  CHECK_RANGE(itemId[IT_REVIVE] * 100.0 / item[1], 3.0, 7.0);
+  // el reparto de objetos de 3 h: el peso de cada uno sale de TRV_POOL_W (tuning.h; la baya de color, repartida en 6)
+  for (int i = 0; i < TRV_POOL_N; i++)
+    if (TRV_POOL_ID[i] != TRV_POOL_BERRY)
+      CHECK_RANGE(itemId[TRV_POOL_ID[i]] * 100.0 / item[1], TRV_POOL_W[i] - 3.0, TRV_POOL_W[i] + 3.0);
+  int colored = 0;
+  for (int c = 0; c < TRV_BERRY_COLORS; c++) {
+    colored += itemId[IT_BERRY_R + c];
+    CHECK(itemId[IT_BERRY_R + c] > 0);  // los seis colores salen
+  }
+  CHECK_RANGE(colored * 100.0 / item[1], TRV_POOL_W[TRV_POOL_N - 1] - 3.0, TRV_POOL_W[TRV_POOL_N - 1] + 3.0);
   CHECK_EQ(itemId[IT_CHARM] + itemId[IT_EGG], 0);
+}
+
+// v3.2: la baya de color que trae un viaje sale de la semilla: siempre una de las seis, y la misma semilla, la misma
+TEST(travel, la_baya_de_color_sale_de_la_semilla) {
+  bool seen[TRV_BERRY_COLORS] = { false };
+  for (uint32_t i = 0; i < 20000; i++) {
+    uint32_t seed = i * 2654435761u + 5;
+    TravelResult r = travelRoll(seed, 1 + i % TRV_DESTS, 2, 0);  // 8 h: siempre trae objeto
+    CHECK(r.item != TRV_NONE);
+    CHECK(r.item < IT_COUNT);
+    if (r.item >= IT_BERRY_R) {
+      CHECK(r.item <= IT_BERRY_O);
+      seen[r.item - IT_BERRY_R] = true;
+    }
+    TravelResult again = travelRoll(seed, 1 + i % TRV_DESTS, 2, 0);
+    CHECK_EQ(again.item, r.item);
+  }
+  for (int c = 0; c < TRV_BERRY_COLORS; c++) CHECK(seen[c]);
 }
 
 TEST(travel, prefiere_los_que_no_tiene_y_el_repetido_da_monedas) {
@@ -315,7 +336,7 @@ TEST(travel, vuelve_con_la_placa_apagada) {
   CHECK(q.hasSouvenir(want.souvenir));
   CHECK_EQ(q.souvenirCount(), (uint8_t)1);
   CHECK_EQ(q.souvenirFoundEpoch(want.souvenir), TT + 3 * 86400);
-  CHECK_EQ(q.items[want.item], (uint8_t)((want.item == IT_REVIVE ? REVIVE_START : 0) + 1));
+  CHECK_EQ(q.items[want.item], (uint8_t)((want.item == IT_REVIVE ? REVIVE_START : want.item == IT_BALL ? BALL_START : 0) + 1));
   // el aviso sin ver
   TravelResult res;
   CHECK(q.travelResultPending());
