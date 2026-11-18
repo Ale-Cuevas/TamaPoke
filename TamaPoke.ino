@@ -59,7 +59,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "3.2"
+#define FW_VERSION "3.3"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -99,8 +99,9 @@ bool yardBoxShiny = false;
 uint32_t yardBoxEpoch = 0;      // sdEpoch con que se cargo
 uint32_t yardLastStep = 0;      // ultimo paso del planificador (0 = ninguno aun)
 uint32_t gYardPetsUs = 0, gYardPetsMaxUs = 0;  // PERF: los bichos, sus cosas y el HUD
-// fase Y3 (acciones en el mundo): la comida que cae al patio (una a la vez; yard.h) y el huevo del patio
-YardFood yardFood;
+// fase Y3 (acciones en el mundo): la comida del patio (yard.h) y el huevo del patio. v3.3: una por hueco de casa,
+// la que se elige en el menu del bicho y que aparece delante de el
+YardFood yardFood[HOME_SLOTS];
 uint32_t yardHeartPopAt = 0;          // al acabarse la comida sale un corazon
 // v3.0: uno por hueco de casa
 int16_t yardEggX[HOME_SLOTS] = { -1, -1 }, yardEggY[HOME_SLOTS] = { 0, 0 };  // donde esta el huevo (los pies; solo RAM, -1 = sin sitio aun)
@@ -109,7 +110,7 @@ uint32_t yardEggInfoUntil[HOME_SLOTS] = { 0, 0 };  // el globo del huevo (tras u
 uint8_t yardHeartSlot = 0;                         // el que se comio la comida (su corazon)
 #define YARD_EGG_S 3                  // el huevo del patio, a escala 3 (~51x69 px de tinta)
 #define YARD_EGG_MID (13 * YARD_EGG_S)  // de sus pies al centro del sprite
-int yardDropFood(uint8_t kind);       // (en la seccion del patio) 1 cae, 0 ya hay una, -1 sin patio
+int yardFeedFront(uint8_t s, uint8_t kind);  // (en la seccion del patio) 1 come, 0 ya tiene una, -1 sin patio
 const uint8_t *yardWalkNow();         // la mascara de paso con el huevo (seccion del patio)
 // como se dibuja cada bicho del patio (aqui arriba: el conversor .ino pone los prototipos antes que
 // el resto): el PMD a escala fija, el sprite B/N, el de flash o la miniatura de la caja
@@ -187,10 +188,11 @@ uint8_t cardPage = 0;         // 0 perfil, 1 combate, 2 medallas, 3 progreso, 4 
 #define CARD_PAGES 5
 bool bagOpen = false;         // mochila (v1.53): su boton en la fila de abajo, antes la pagina de paseo de la ficha
 uint8_t itemConfirm = 0;      // mochila: objeto a confirmar + 1 (0 = ninguno)
+int8_t itemConfirmSlot = -1;  // v3.3: el bicho de casa en el que se usara (el que podia al tocarlo; -1 = ninguno)
 uint32_t itemConfirmUntil = 0;
 // la tienda de la mochila y el selector de fondos (v2.0, Y4b)
 uint8_t bagPage = 0;          // v3.2: Objetos y Tienda tienen 2 paginas (la 2.a, las bayas de colores)
-uint8_t bagTab = 0;           // 0 = Objetos, 1 = Tienda, 2 = Coleccion (v2.0, Y5b)
+uint8_t bagTab = 0;           // 0 = Objetos, 1 = Tienda, 2 = Coleccion (v2.0, Y5b). v3.3: la Tienda es su pantalla (dock)
 uint8_t souvTip = 0;          // coleccion: recuerdo con la tarjeta abierta + 1 (0 = ninguna)
 uint8_t shopBuyId = 0;        // tienda: objeto a comprar + 1 (0 = ninguno)
 uint32_t shopBuyUntil = 0;
@@ -211,8 +213,8 @@ bool yardDemoOpen = false;    // el patio (v2.0, Y0): muestra del kit de interfa
 uint8_t yardDemoPage = 0;     // 0 panel (tienda), 1 mundo (casa), 2 fase
 int clockH = 12, clockM = 0;  // hora en edicion
 
-// paneles Cuidar y Jugar (v2.0, fase Y2; yard_panels.h): sustituyen a los menus emergentes de
-// COMER / JUGAR / CUIDADOS. Son pantallas: no se cierran solos; se sale con volver o con USER
+// el panel Jugar (v2.0, fase Y2; yard_panels.h; v3.3 sin el de Cuidar). Es una pantalla: no se cierra sola;
+// se sale con volver o con USER
 uint8_t panelKind = PANEL_NONE;
 int8_t panelShakeIdx = -1;     // la tarjeta que tiembla al negarse (como las casillas de las fases)
 uint32_t panelShakeUntil = 0;
@@ -227,11 +229,25 @@ bool returnBannerShown = false;  // el ultimo frame enseno el aviso de vuelta: u
 bool returnOpen = false;         // el jugador toco al viajero del patio (el del "!"): el aviso se ve
 uint32_t returnOpenAt = 0;       // cuando se abrio el aviso: los toques de justo despues no lo cierran
 #define RETURN_TAP_LOCK_MS 700
+// el menu de un bicho (v3.3, yard_panels.h): tocar a un bicho del patio abre a la derecha, encima del patio,
+// sus acciones (dormir, comida, mimo, ficha y evolucionar / despedirse) y la lista de comida
+uint8_t petMenuOpen = 0;        // hueco de casa + 1 (0 = cerrado)
+uint8_t petMenuView = 0;        // 0 las acciones, 1 la lista de comida
+uint8_t petFoodPage = 0;        // pagina de la lista de comida
+YardAside yardAside[HOME_SLOTS];  // con el menu abierto, el bicho que quede debajo se aparta (yard.h, yardMenuHold)
+int8_t pmShakeIdx = -1;         // la fila que tiembla al negarse (como las tarjetas de los paneles)
+uint32_t pmShakeUntil = 0;
+#define PET_MENU_IDLE_MS 30000UL  // sin tocar nada, el menu se cierra solo (y el bicho vuelve a pasear)
+// el selector de bicho (v3.3): quien juega un minijuego, o a quien se le da un objeto de la mochila, cuando
+// los dos de casa pueden
+enum : uint8_t { PICK_NONE = 0, PICK_GAME, PICK_ITEM };
+uint8_t petPick = PICK_NONE;
+uint8_t petPickArg = 0;         // el juego (PP_*) o el objeto (IT_*)
 void openTravel();
 void travelTap(int16_t x, int16_t y);
 void renderTravel();
-void openCarePanel();
 void openPlayPanel();
+void closePetMenu();
 void panelTap(int16_t x, int16_t y);
 void renderPanel();
 void yardShowFull();
@@ -311,8 +327,8 @@ int flashIdxForDex(int16_t dex) {
 
 static const uint16_t INK_K = 0x18C4;  // spriteColor('k')
 
-// indices de los botones del dock del patio para los efectos (fx.h): Comer/Cuidar, Jugar, Mochila
-#define BTN_CARE 2  // Cuidar (el dock lo usa para el temblor del boton)
+// indices de los botones del dock del patio para los efectos (fx.h): Jugar 1, Tienda 2 (v3.3, era Cuidar), Mochila 3
+#define BTN_SHOP 2
 #define BTN_BAG 3
 
 // grietas del huevo (pixeles 'k' sobre el sprite)
@@ -330,16 +346,6 @@ static const int16_t STARTER_DEX[3] = { 1, 4, 7 };
 #define STARTER_ROW_Y 110
 #define STARTER_ROW_H 70
 #define STARTER_ROW_GAP 8
-// boton-CTA de evolucion (centrado, mitad de pantalla)
-#define EVO_BTN_W 256
-#define EVO_BTN_H 64
-#define EVO_BTN_X (CX - EVO_BTN_W / 2)
-#define EVO_BTN_Y 172
-// boton-CTA de despedida (mas ancho: lleva el nombre + frase)
-#define FAR_BTN_W 408
-#define FAR_BTN_H 58
-#define FAR_BTN_X (CX - FAR_BTN_W / 2)
-#define FAR_BTN_Y 176
 // boton "Abrir un huevo (N)" de la casa vacia con huevos en la mochila (v1.40), bajo el huevo gris
 #define VAC_BTN_W 260
 #define VAC_BTN_H 46
@@ -506,11 +512,12 @@ void setup() {
 void monReset() { monFor[0] = monFor[1] = monBwFor = -2; }
 
 // v3.0: hay algo abierto que trabaja con el bicho del foco: no se le cambia (un juego, un combate, la ficha,
-// un menu, el teclado, un dialogo, un movimiento de la caja, el Revivir o una despedida)
+// un menu, el teclado, un dialogo, un movimiento de la caja, el Revivir o una despedida; v3.3: el menu del
+// bicho y el selector de bicho)
 bool uiModalOpen() {
   return gameOpen || sackOpen || zenOpen || dashOpen || battleOpen() || encOpen() || teamOpen || stagesOpen ||
          cardOpen || kbOpen || clockOpen || bagOpen || panelKind || boxOpen || boxMove != BOXMV_NONE || galleryOpen ||
-         confirmUntil || choiceKind || itemConfirm || pet.isDying() || pet.ceremony || pet.evolving() ||
+         confirmUntil || choiceKind || itemConfirm || petMenuOpen || petPick || pet.isDying() || pet.ceremony || pet.evolving() ||
          pet.home(0).isDying() || pet.home(1).isDying() || pet.home(0).ceremony || pet.home(1).ceremony;
 }
 
@@ -615,6 +622,7 @@ void loop() {
     if (pet.takeDiedNow(s)) sfxPlay(SFX_BYE);  // v1.64: paso la hora sin Revivir (el dialogo pasa a decir que murio)
   }
   homeFocusTick();
+  petMenuCheck();  // v3.3: el menu del bicho se cierra si su bicho ya no puede usarlo (o si se dejo abierto)
 
   handleTouch();
   zenTick(millis());  // cascada: fisica con el dedo de ahora, en cada vuelta
@@ -1426,6 +1434,33 @@ void handleSerial() {
       wakeUI();
     }
     Serial.println("DONE");
+  } else if (line == "MENU" || line.startsWith("MENU ")) {  // MENU [s] (v3.3): abre el menu del bicho s, como tocarlo
+    if (line.length() > 5) {
+      int ms = line.substring(5).toInt();
+      wakeUI();
+      if (ms < 0 || ms >= HOME_SLOTS) Serial.println("menu: 0-1");
+      else if (petMenuOpen == ms + 1) Serial.printf("MENU %d already open\n", ms);
+      else {
+        if (petMenuOpen) closePetMenu();
+        if (!openPetMenu((uint8_t)ms)) Serial.printf("MENU %d refused (egg, vacant, ending or something open)\n", ms);
+      }
+    }
+    petMenuReport();  // filas y sus centros (para TAP)
+    Serial.println("DONE");
+  } else if (line == "PICK" || line.startsWith("PICK ")) {  // PICK [s] (v3.3): en el selector de bicho, elige al s
+    if (line.length() > 5) {
+      int ps = line.substring(5).toInt();
+      wakeUI();
+      if (!petPick) Serial.println("pick: no picker open");
+      else if (ps < 0 || ps >= HOME_SLOTS) Serial.println("pick: 0-1");
+      else {
+        int x, y, w, h;
+        petPickCard((uint8_t)ps, x, y, w, h);
+        petPickTap((int16_t)(x + w / 2), (int16_t)(y + h / 2));
+      }
+    }
+    Serial.printf("pick=%u arg=%u\n", petPick, petPickArg);
+    Serial.println("DONE");
   } else if (line == "FOCUS" || line.startsWith("FOCUS ")) {  // FOCUS <0|1> (v3.0): el bicho de casa que es "pet"
     if (line.length() > 6) {
       int fs = line.substring(6).toInt();
@@ -1606,7 +1641,7 @@ void handleTouch() {
     // pulsacion larga sin moverse sobre un bicho de casa -> dialogo de soltar (v3.0: el que esta bajo el
     // dedo, que pasa a tener el foco)
     int hs = -1;
-    if (!holdFired && !swallowGesture && !yardDemoOpen && !galleryOpen && !boxOpen && !stagesOpen && !teamOpen && !cardOpen && !bagOpen && !kbOpen && !clockOpen && !panelKind && !encOpen() && millis() - tStart > 3000 &&
+    if (!holdFired && !swallowGesture && !yardDemoOpen && !galleryOpen && !boxOpen && !stagesOpen && !teamOpen && !cardOpen && !bagOpen && !kbOpen && !clockOpen && !panelKind && !petMenuOpen && !petPick && !encOpen() && millis() - tStart > 3000 &&
         abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && (hs = holdOnPet(tX0, tY0)) >= 0 &&
         !pet.home((uint8_t)hs).isEgg() && !confirmUntil && !pet.home((uint8_t)hs).busyEnding() && uiFocus((uint8_t)hs)) {
       confirmUntil = millis() + 10000;
@@ -1630,6 +1665,8 @@ void openClock();  // prototipo
 
 void onSwipeV(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
+  if (petPick) return;                // v3.3: el selector de bicho se cierra con volver o USER
+  if (petMenuOpen) closePetMenu();    // v3.3: deslizar cierra el menu del bicho (y sigue con lo suyo)
   if (gameOpen || galleryOpen || boxOpen || stagesOpen || teamOpen || bagOpen || panelKind || kbOpen || sackOpen || zenOpen || dashOpen || battleOpen() || encOpen() || pet.busyEnding()) return;
   if (clockOpen) { clockOpen = false; return; }
   if (cardOpen) {
@@ -1651,10 +1688,12 @@ void onSwipe(int dir) {
     yardDemoPage = (uint8_t)((yardDemoPage + YDEMO_PAGES + (dir > 0 ? -1 : 1)) % YDEMO_PAGES);
     return;
   }
-  if (bagOpen) {  // v2.0 (Y4b): Objetos <-> Tienda, las paginas de la tienda y los mapas del selector
+  if (petPick) return;  // v3.3: el selector de bicho se cierra con volver o USER
+  if (bagOpen) {  // v2.0 (Y4b): las paginas de Objetos y de la Tienda, la Coleccion y los mapas del selector
     bagSwipe(dir);
     return;
   }
+  if (petMenuOpen) closePetMenu();  // v3.3: deslizar cierra el menu del bicho (y sigue con lo suyo)
   if (gameOpen || sackOpen || zenOpen || dashOpen || panelKind || kbOpen || clockOpen || battleOpen() || encOpen()) return;
   if (pet.isDying()) return;  // v1.60: el dialogo del Revivir no se esquiva
   if (cardOpen) {  // dentro de la ficha: cambiar entre las CARD_PAGES paginas
@@ -1791,6 +1830,7 @@ void onBack() {
   if (kbOpen) { kbOpen = false; return; }        // descarta el nombre y vuelve a la ficha
   if (clockOpen) { clockOpen = false; return; }  // sin aplicar la hora, como al deslizar
   if (pet.ceremony) return;                      // durante la despedida no hay vuelta atras
+  if (petPick) { closePetPick(); return; }       // v3.3: el selector de bicho -> el panel Jugar o la mochila
   if (bagOpen && yardMapPreview) { yardMapPreview = 0; return; }  // selector de fondos -> tienda
   if (bagOpen && souvTip) { souvTip = 0; return; }                 // tarjeta de un recuerdo -> coleccion
   if (bagOpen && shopBuyId) { shopBuyId = 0; return; }             // "comprar?": NO
@@ -1800,8 +1840,13 @@ void onBack() {
   if (gameOpen) { gameOpen = false; return; }    // abandona sin premio, como tocar la cabecera
   if (choiceKind) { choiceKind = 0; return; }    // ni evoluciona ni rechaza: el boton sigue ahi
   if (confirmUntil) { confirmUntil = 0; return; }  // "soltar?": NO
+  if (petMenuOpen) {  // v3.3: la lista de comida -> las acciones -> cerrado
+    if (petMenuView) petMenuBackToActions();
+    else closePetMenu();
+    return;
+  }
   if (panelKind == PANEL_TRAVEL) { panelKind = PANEL_PLAY; return; }  // viajes: un nivel atras, al panel Jugar
-  if (panelKind) { panelKind = PANEL_NONE; return; }  // panel Cuidar / Jugar: a casa
+  if (panelKind) { panelKind = PANEL_NONE; return; }  // panel Jugar: a casa
   if (foundShown) { pet.popFound(); foundShown = false; return; }  // cierra el hallazgo
 }
 
@@ -1850,11 +1895,15 @@ void onTap(int16_t x, int16_t y) {
     clockTap(x, y);
     return;
   }
+  if (petPick) {  // v3.3: el selector de bicho (encima del panel Jugar o de la mochila)
+    petPickTap(x, y);
+    return;
+  }
   if (bagOpen) {
     bagTap(x, y);
     return;
   }
-  if (panelKind) {  // paneles Cuidar / Jugar (v2.0, Y2)
+  if (panelKind) {  // el panel Jugar (v2.0, Y2)
     panelTap(x, y);
     return;
   }
@@ -1922,21 +1971,8 @@ void onTap(int16_t x, int16_t y) {
     sfxPlay(SFX_DENY);  // nada mas que tocar: el mensaje dice que hay que caminar
     return;
   }
-  // boton de evolucion: abre el dialogo evolucionar/mantener (v3.0: el de cualquiera de los dos de casa,
-  // que pasa a tener el foco; el boton de despedida solo sale si no hay de evolucion)
-  int8_t evs = homeButtonSlot(1), fas = homeButtonSlot(2);
-  if (evs >= 0 && x >= EVO_BTN_X && x <= EVO_BTN_X + EVO_BTN_W &&
-      y >= EVO_BTN_Y && y <= EVO_BTN_Y + EVO_BTN_H && uiFocus((uint8_t)evs)) {
-    choiceKind = 1; choiceUntil = millis() + 12000;
-    return;
-  }
-  // boton de la despedida: abre su dialogo
-  if (evs < 0 && fas >= 0 && x >= FAR_BTN_X && x <= FAR_BTN_X + FAR_BTN_W &&
-      y >= FAR_BTN_Y && y <= FAR_BTN_Y + FAR_BTN_H && uiFocus((uint8_t)fas)) {
-    choiceKind = 2; choiceUntil = millis() + 12000;
-    return;
-  }
-  // el patio: el dock, las cacas, los regalos y los bichos
+  // el patio: el menu del bicho (v3.3; evolucionar y despedirse estan en el), el dock, las cacas, los regalos y
+  // los bichos
   yardTap(x, y);
 }
 
@@ -2494,7 +2530,8 @@ static bool staticScreen() {
   if (pet.awaitingStarter()) return true;
   if (galleryOpen || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen() || encOpen()) return false;  // la galeria gestiona su propio repintado
   if (stagesOpen || teamOpen) return !timeLeft(stShakeUntil);  // menus quietos, salvo la casilla que tiembla
-  if (panelKind) return !timeLeft(panelShakeUntil);  // paneles Cuidar / Jugar (v2.0, Y2): quietos salvo una tarjeta que tiembla
+  if (petPick) return true;  // v3.3: el selector de bicho (miniaturas quietas)
+  if (panelKind) return !timeLeft(panelShakeUntil);  // el panel Jugar (v2.0, Y2): quieto salvo una tarjeta que tiembla
   if (boxOpen) return !boxMove && !timeLeft(boxShakeUntil);  // la caja, quieta salvo la luz o un hueco que tiembla
   if (yardDemoOpen || kbOpen || clockOpen || bagOpen) return true;
   return cardOpen && cardPage != 0;  // la pagina 0 tiene el retrato animado
@@ -2503,14 +2540,21 @@ uint32_t walkStepsToday();
 static uint32_t mixKey(uint32_t h, uint32_t v) { return (h ^ v) * 16777619u; }
 static uint32_t screenKey() {
   uint32_t h = 2166136261u;
-  h = mixKey(h, pet.awaitingStarter() ? 1 : teamOpen ? 23 : stagesOpen ? 22 : boxOpen ? 20 : kbOpen ? 2 : clockOpen ? 3 : bagOpen ? 21 : 4 + cardPage);
+  h = mixKey(h, pet.awaitingStarter() ? 1 : petPick ? 24 : teamOpen ? 23 : stagesOpen ? 22 : boxOpen ? 20 : kbOpen ? 2 : clockOpen ? 3 : bagOpen ? 21 : 4 + cardPage);
   h = mixKey(h, sdEpoch);
   h = mixKey(h, gBright);                      // el aviso de brillo va encima de todo
   h = mixKey(h, timeLeft(briToastUntil) > 0);  // y al irse tiene que repintarse
   h = mixKey(h, gOrbitStep);                   // la orbita la mueve: hay que volver a mandarla
   h = mixKey(h, yardDemoOpen ? 100u + yardDemoPage : 0u);
   h = mixKey(h, gLang);
-  if (stagesOpen || teamOpen) {
+  if (petPick) {  // v3.3: el selector de bicho: que elige y los dos de casa (especie, nombre, nivel)
+    h = mixKey(h, (uint32_t)petPick | ((uint32_t)petPickArg << 8));
+    for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+      const PetLife &l = pet.home(s);
+      h = mixKey(h, (uint32_t)(uint16_t)l.speciesId | ((uint32_t)l.shiny << 16) | ((uint32_t)l.level() << 17));
+      for (const char *c = l.nick; *c; c++) h = mixKey(h, (uint8_t)*c);
+    }
+  } else if (stagesOpen || teamOpen) {
     mixStageKey(h);
   } else if (panelKind) {
     mixPanelKey(h);
@@ -2653,12 +2697,17 @@ bool render() {
     renderCard();
     return true;
   }
+  if (petPick && (pet.ceremony || pet.isDying())) petPick = PICK_NONE;  // (como los paneles, abajo)
+  if (petPick) {  // v3.3: el selector de bicho (encima del panel Jugar o de la mochila)
+    renderPetPick();
+    return true;
+  }
   if (bagOpen) {
     renderBag();
     return true;
   }
   if (panelKind && (pet.ceremony || pet.isDying())) panelKind = PANEL_NONE;  // la despedida o el Revivir se ven en casa
-  if (panelKind) {  // paneles Cuidar / Jugar (v2.0, Y2)
+  if (panelKind) {  // el panel Jugar (v2.0, Y2)
     renderPanel();
     return true;
   }
@@ -2696,8 +2745,7 @@ bool render() {
     return true;
   }
 
-  // efectos (fx.h): la cola avanza antes de dibujar, para saber si hay celebracion en este
-  // frame (fija la pose y oculta los botones de evolucion o despedida mientras se ve)
+  // efectos (fx.h): la cola avanza antes de dibujar, para saber si hay celebracion en este frame (fija la pose)
   uint32_t fxT0 = micros();
   fxFrame(millis());
   uint32_t fxUs = micros() - fxT0;
@@ -2709,10 +2757,7 @@ bool render() {
     drawFxOverlays(millis());
     uint32_t ov = micros() - fxT0;
     fxUs += ov;
-    if (!fxBan) {  // con una celebracion encima, los botones grandes esperan a que acabe
-      if (homeButtonSlot(1) >= 0) drawEvolveButton();  // v3.0: el de cualquiera de los dos
-      else if (homeButtonSlot(2) >= 0) drawFarewellButton();
-    }
+    if (petMenuOpen) drawPetMenu(millis());  // v3.3: el menu del bicho, encima del patio a la derecha
     gYardPetsUs = micros() - yT0 - ov;
     if (gYardPetsUs > gYardPetsMaxUs) gYardPetsMaxUs = gYardPetsUs;
   } else {  // la casa vacia (la despedida y el Revivir ya salieron arriba)
@@ -2727,7 +2772,7 @@ bool render() {
   }
 
   // noticias del paseo (meta y hallazgos), por encima de todo lo de la pantalla
-  // principal (tambien del boton de evolucion: un toque cierra antes el hallazgo)
+  // principal (un toque cierra antes el hallazgo)
   // y por debajo de los dialogos, que las aplazan (drawWalkNews mira si hay alguno)
   fxT0 = micros();
   drawFxBanner(millis());  // celebracion en curso (fx.h): subida, medalla, hito o meta
@@ -2740,7 +2785,7 @@ bool render() {
   if (backNow && !backWas && yard) sfxPlay(SFX_LEVEL);  // ha llegado
   backWas = backNow;
   if (!backNow) returnOpen = false;
-  bool retNow = yard && !fxBan && !foundShown && !confirmUntil && !choiceKind && !pet.evolving() && fxScreenAwake() &&
+  bool retNow = yard && !fxBan && !foundShown && !confirmUntil && !choiceKind && !petMenuOpen && !pet.evolving() && fxScreenAwake() &&
                 backNow && (returnOpen || trvBackSlot() < 0);
   if (retNow) {
     drawReturnBanner();
@@ -4191,7 +4236,7 @@ void fxCollect(uint32_t now) {
 // algo encima (dialogo, menu, evolucion, despedida, eclosion)
 bool fxScreenBusy() {
   return !fxScreenAwake() || pet.homeAsleep() || pet.busyEnding() || pet.evolving() || choiceKind || confirmUntil ||
-         panelKind || pet.travelResultPending() || fxo.find(FXO_HATCH) || fxo.waiting(FXO_HATCH) || fxo.find(FXO_BOX) ||
+         panelKind || petMenuOpen || pet.travelResultPending() || fxo.find(FXO_HATCH) || fxo.waiting(FXO_HATCH) || fxo.find(FXO_BOX) ||
          fxo.waiting(FXO_BOX);
 }
 
@@ -4612,7 +4657,7 @@ void drawFxOverlays(uint32_t now) {
 // que la pantalla este encendida y no haya otro dialogo, celebracion o animacion encima
 // (FR-1.5). El banner de la meta va en la cola de celebraciones (fx.h) desde la v1.30.
 void drawWalkNews() {
-  bool busy = screenOff || dimStage != DIM_AWAKE || choiceKind || confirmUntil || panelKind ||
+  bool busy = screenOff || dimStage != DIM_AWAKE || choiceKind || confirmUntil || panelKind || petMenuOpen ||
               pet.evolving() || fxq.busy() || pet.isDying();
   static bool wasShown = false;
   if (busy || !pet.hasFound()) { wasShown = false; return; }
@@ -4998,9 +5043,11 @@ static void bagAskPills(int &xUse, int &wUse, int &xNo, int &wNo) {
   xNo = xUse + wUse + BAG_ASK_PILL_GAP;
 }
 
-void openBag() {
+// la mochila (dock: Objetos y la pestana de la Coleccion) o, v3.3, la tienda (su propio boton del dock, la
+// misma pantalla con bagTab = 1 y sin pestanas)
+void openBagTab(uint8_t tab) {
   bagOpen = true;
-  bagTab = 0;
+  bagTab = tab;
   bagPage = 0;
   souvTip = 0;
   itemConfirm = 0;
@@ -5009,6 +5056,8 @@ void openBag() {
   yardMapPreview = 0;
   bagReviveHintUntil = 0;
 }
+void openBag() { openBagTab(0); }
+void openShop() { openBagTab(1); }
 
 // cerrar la mochila del todo (el selector de fondos suelta su mapa de prueba: el patio recarga el suyo)
 void closeBag() {
@@ -5028,17 +5077,22 @@ void closeBag() {
 #define PICK_PAGER_Y 322
 #define PICK_PILL_Y 350
 
-// tres pastillas con icono (Y5b): en espanol "OBJETOS / TIENDA / COLECCION" son 330 px y a y 40 el disco
-// deja 214. Objetos = la baya dorada, Tienda = una moneda, Coleccion = una estrella de mar
+// pastillas con icono (Y5b): en espanol "OBJETOS / TIENDA / COLECCION" eran 330 px y a y 40 el disco deja
+// 214. Objetos = la baya dorada, Coleccion = una estrella de mar. v3.3: la Tienda es su propia pantalla (su
+// boton del dock), con su titulo en vez de pestanas
 #define SOUV_TAB_ICON 16  // el recuerdo que hace de icono de la pestana (la estrella de mar)
+static uint8_t bagTabOf(int t) { return t == 0 ? 0 : 2; }  // pestana -> bagTab (la 1, la Tienda, ya no es pestana)
 static void drawBagTabs() {
-  for (int t = 0; t < BAG_TABS; t++) {
-    int x = bagTabX(t);
-    gfx->fillRoundRect(x, BAG_TAB_TOP, BAG_TAB_W, BAG_TAB_H, BAG_TAB_H / 2, bagTab == t ? Y_BACK : Y_CARD);
-    int ix = x + (BAG_TAB_W - 32) / 2, iy = BAG_TAB_TOP + (BAG_TAB_H - 32) / 2;
-    if (t == 0) drawMap(ITEM_ICON[IT_GOLDEN], 16, ix, iy, 2, false);
-    else if (t == 1) yCoin(x + BAG_TAB_W / 2, BAG_TAB_TOP + BAG_TAB_H / 2, 11);
-    else drawMap(SOUV_ICON[SOUV_TAB_ICON], 16, ix, iy, 2, false);
+  if (bagTab == 1) {
+    yTitle(T(S_SHOP), nullptr);
+  } else {
+    for (int t = 0; t < BAG_TABS; t++) {
+      int x = bagTabX(t);
+      gfx->fillRoundRect(x, BAG_TAB_TOP, BAG_TAB_W, BAG_TAB_H, BAG_TAB_H / 2, bagTab == bagTabOf(t) ? Y_BACK : Y_CARD);
+      int ix = x + (BAG_TAB_W - 32) / 2, iy = BAG_TAB_TOP + (BAG_TAB_H - 32) / 2;
+      if (t == 0) drawMap(ITEM_ICON[IT_GOLDEN], 16, ix, iy, 2, false);
+      else drawMap(SOUV_ICON[SOUV_TAB_ICON], 16, ix, iy, 2, false);
+    }
   }
   if (bagTab != 2) yCoinBadge(CX, BAG_COIN_Y, pet.coins, false);
 }
@@ -5293,8 +5347,8 @@ static void shopTap(int16_t x, int16_t y) {
   }
 }
 
-// deslizar dentro de la mochila: en el selector, de mapa en mapa; en la tienda y en Objetos, de pestana a
-// pestana (izquierda = la siguiente)
+// deslizar dentro de la mochila: en el selector, de mapa en mapa; en la tienda, de pagina en pagina; en
+// Objetos, sus paginas y despues la Coleccion (izquierda = la siguiente). v3.3: la tienda ya no es pestana
 void bagSwipe(int dir) {
   if (yardMapPreview) {
     uint8_t m = pickerStep(yardMapPreview, dir > 0 ? -1 : 1);
@@ -5314,10 +5368,14 @@ void bagSwipe(int dir) {
       return;
     }
   }
-  int t = (int)bagTab + d;
-  if (t < 0 || t >= BAG_TABS) return;
-  bagTab = (uint8_t)t;
-  bagPage = (d < 0 && t < 2) ? BAG_PAGES - 1 : 0;  // volviendo, a la ultima pagina de la anterior
+  if (bagTab == 1) return;           // la tienda: solo sus paginas
+  if (bagTab == 0 && d > 0) {        // tras la ultima pagina de Objetos, la Coleccion
+    bagTab = 2;
+    bagPage = 0;
+  } else if (bagTab == 2 && d < 0) { // y de vuelta, a la ultima de Objetos
+    bagTab = 0;
+    bagPage = BAG_PAGES - 1;
+  }
   shopToast = 0;
 }
 
@@ -5438,7 +5496,7 @@ void renderBag() {
   bool reviveHint = timeLeft(bagReviveHintUntil) > 0;
   const char *hint = reviveHint            ? T(bagHintItem == IT_BALL ? S_BALL_HINT : S_REVIVE_HINT)
                      : empty               ? T(S_BACKPACK_EMPTY)
-                     : pet.sleeping        ? T(S_BAG_ASLEEP)
+                     : pet.homeAsleep()    ? T(S_BAG_ASLEEP)
                      : pet.eggsOwned()     ? T(S_EGG_HINT)
                      : pet.items[IT_CHARM] ? T(S_CHARM_HELD)
                                            : T(S_BAG_HINT);
@@ -5468,6 +5526,37 @@ void renderBag() {
   gfx->flush();
 }
 
+// v3.3: los huecos de casa (bit s) cuyo bicho puede usar ahora el objeto it de la mochila (las comidas, las
+// vitaminas y el Caramelo Raro: canUseItem con el foco en cada uno)
+uint8_t itemSlotsMask(uint8_t it) {
+  if (foodOfItem(it) != FOOD_COUNT && it < IT_COUNT && pet.items[it] <= yardFoodReserved(it)) return 0;  // ya elegidas
+  uint8_t m = 0;
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    if (!pet.home(s).hatched()) continue;
+    bool ok = false;
+    pet.onSlot(s, [&] { ok = pet.canUseItem(it); });
+    if (ok) m |= (uint8_t)(1u << s);
+  }
+  return m;
+}
+
+// v3.3: usa el objeto it de la mochila en el bicho del hueco s (sus "+N" salen sobre el). true si se uso
+bool bagUseOn(uint8_t s, uint8_t it) {
+  bool ok = false;
+  if (!(itemSlotsMask(it) & (1u << s))) {  // (ya no puede, o la ultima esta elegida en el patio)
+    Serial.printf("ITEM %u slot=%u refused\n", it, s);
+    return false;
+  }
+  pet.onSlot(s, [&] {
+    FxNeedSnap ns = fxSnap();
+    ok = pet.useItem(it);
+    if (ok) fxNeeds(ns);
+  });
+  Serial.printf("ITEM %u slot=%u %s\n", it, s, ok ? "used" : "refused");
+  if (ok) sfxPlay(foodOfItem(it) != FOOD_COUNT ? SFX_EAT : SFX_LEVEL);
+  return ok;
+}
+
 // toques en la mochila: una casilla pide confirmacion; el boton de volver (o fuera de la rejilla)
 // la cierra
 void bagTap(int16_t x, int16_t y) {
@@ -5490,20 +5579,18 @@ void bagTap(int16_t x, int16_t y) {
     int xu, wu, xn, wn;
     bagAskPills(xu, wu, xn, wn);
     if (timeLeft(itemConfirmUntil) && yPillHit(x, y, xu, BAG_ASK_PILL_Y, wu)) {
-      FxNeedSnap ns = fxSnap();
       int8_t vs = pet.vacantSlot();
       if (it == IT_EGG && vs >= 0) {  // v3.0: un huevo de la mochila al hueco de casa vacio
         bool ok = false;
         pet.onSlot((uint8_t)vs, [&] { ok = pet.hatchFromBag(); });
         sfxPlay(ok ? SFX_TAP : SFX_DENY);
         if (ok) closeBag();
-      } else if (pet.useItem(it)) {
-        fxNeeds(ns);
-        sfxPlay(foodOfItem(it) != FOOD_COUNT ? SFX_EAT : SFX_LEVEL);
-        // a la pantalla principal a verlo: comer, subir de nivel o entrenar (v1.30, "ATK +3")
-        closeBag();
       } else {
-        sfxPlay(SFX_DENY);
+        // v3.3: en el bicho de casa que puede (con los dos se abre antes el selector, petPick); a la pantalla
+        // principal a verlo: comer, subir de nivel o entrenar (v1.30, "ATK +3")
+        // (el que podia al tocarlo: si ya no puede, no se usa en el otro)
+        if (itemConfirmSlot >= 0 && bagUseOn((uint8_t)itemConfirmSlot, it)) closeBag();
+        else sfxPlay(SFX_DENY);
       }
     }
     return;
@@ -5512,10 +5599,10 @@ void bagTap(int16_t x, int16_t y) {
     closeBag();
     return;
   }
-  int tab = bagTabHit(x, y);  // las pestanas
+  int tab = bagTab == 1 ? -1 : bagTabHit(x, y);  // las pestanas (la tienda no tiene)
   if (tab >= 0) {
-    if (bagTab != tab) sfxPlay(SFX_TAP);
-    bagTab = (uint8_t)tab;
+    if (bagTab != bagTabOf(tab)) sfxPlay(SFX_TAP);
+    bagTab = bagTabOf(tab);
     bagPage = 0;
     shopToast = 0;
     souvTip = 0;
@@ -5541,7 +5628,12 @@ void bagTap(int16_t x, int16_t y) {
     bagSlotXY(bagCellOf(k), sx, sy);
     if (x < sx || x >= sx + BAG_SLOT_W || y < sy || y >= sy + BAG_SLOT_H) continue;
     uint8_t i = BAG_ORDER[k];
-    if (pet.canUseItem(i) || (i == IT_EGG && pet.items[IT_EGG] && pet.vacantSlot() >= 0 && !pet.awaitingStarter())) {
+    uint8_t m = itemSlotsMask(i);
+    if (m == 3) {  // v3.3: los dos de casa pueden usarlo: a quien se lo da (sin el "usar?": elegir ya confirma)
+      openPetPick(PICK_ITEM, i);
+      sfxPlay(SFX_TAP);
+    } else if (m || (i == IT_EGG && pet.items[IT_EGG] && pet.vacantSlot() >= 0 && !pet.awaitingStarter())) {
+      itemConfirmSlot = (m & 1) ? 0 : (m & 2) ? 1 : -1;
       // (v3.0: el huevo, con un hueco de casa vacio: "usarlo" lo pone en ese hueco)
       itemConfirm = i + 1;
       itemConfirmUntil = millis() + 10000;
@@ -7122,30 +7214,32 @@ void yHpBar(int x, int y, int w, int cur, int max, uint16_t col) {
   if (fw >= Y_HP_H) gfx->fillRoundRect(x, y, fw, Y_HP_H, Y_HP_H / 2, col);
 }
 
-// =================== paneles Cuidar y Jugar (v2.0, fase Y2; geometria en yard_panels.h) ===================
-// Sustituyen a los menus emergentes de COMER / JUGAR / CUIDADOS con las mismas reglas: tocar una
-// tarjeta hace lo que hacia su hueco y vuelve a casa, como el menu al cerrarse. Dos diferencias: el
-// panel no se cierra solo a los 6 s, y una tarjeta que no se puede usar tiembla en el panel (que
-// sigue abierto) en vez de cerrarlo y hacer temblar el boton de casa.
+// =================== el panel Jugar (v2.0, fase Y2; geometria en yard_panels.h) ===================
+// Sustituye al menu emergente de JUGAR con las mismas reglas: tocar una tarjeta hace lo que hacia su hueco y
+// vuelve a casa. Dos diferencias: el panel no se cierra solo a los 6 s, y una tarjeta que no se puede usar
+// tiembla en el panel (que sigue abierto) en vez de cerrarlo y hacer temblar el boton de casa.
+// v3.3: el panel Cuidar ya no existe (dormir, comida, el mimo y la ficha estan en el menu de cada bicho, mas
+// abajo), y un minijuego lo juega el bicho que se elige (el selector, si pueden los dos de casa).
 
-// Cuidar: la comida (que en la fase Y3 pasara a soltarse en el patio) y luz / mimo
-void openCarePanel() {
-  // v3.0 (provisional): el del foco; si es un huevo o un hueco vacio y el otro es un bicho, el otro
-  if (!pet.hatched() && pet.other.hatched()) uiFocus(pet.focusSlot ^ 1);
-  if (pet.ceremony || pet.isEgg() || pet.isVacant()) return;  // (desde casa: COMER y CUIDADOS no llegan con huevo)
-  panelKind = PANEL_CARE;
-  panelShakeIdx = -1;
-  panelShakeUntil = 0;
+// v3.3: el bicho del hueco s puede jugar a un minijuego: nacido, despierto y sin una despedida en marcha
+static bool homeCanPlay(uint8_t s) {
+  const PetLife &l = pet.home(s);
+  return l.hatched() && !l.sleeping && !l.busyEnding();
+}
+// los huecos (bit s) que pueden jugar al juego i del panel (la carrera, ademas, necesita el IMU)
+static uint8_t playSlotsMask(uint8_t i) {
+  if (i == PP_DASH && !imuPresent()) return 0;
+  uint8_t m = 0;
+  for (uint8_t s = 0; s < HOME_SLOTS; s++)
+    if (homeCanPlay(s)) m |= (uint8_t)(1u << s);
+  return m;
 }
 
-// Jugar: los juegos y las fases. Huevo, dormido o casa vacia: no hay juegos, pero los de la caja si
-// pueden ir a las fases (v1.65)
+// Jugar: los juegos y las fases. Sin nadie despierto en casa no hay juegos, pero los de la caja si pueden ir a
+// las fases (v1.65)
 void openPlayPanel() {
-  // v3.0 (provisional): los juegos, con el del foco; si no puede jugar y el otro si, con el otro
-  auto canPlay = [](const PetLife &l) { return l.hatched() && !l.sleeping && !l.busyEnding(); };
-  if (!canPlay(pet) && canPlay(pet.other)) uiFocus(pet.focusSlot ^ 1);
   if (pet.ceremony) return;
-  if (!pet.isEgg() && !pet.isVacant() && !pet.sleeping) {
+  if (playSlotsMask(PP_BALL)) {
     panelKind = PANEL_PLAY;
     panelShakeIdx = -1;
     panelShakeUntil = 0;
@@ -7156,29 +7250,11 @@ void openPlayPanel() {
   }
 }
 
-// v3.2: la comida de cada una de las 4 tarjetas del panel Cuidar: la baya normal y las 3 primeras comidas que se
-// tienen (bayas de colores en su orden, la tarta, la dorada). FOOD_COUNT = vacia
-static uint8_t careFood(uint8_t i) {
-  if (i == 0) return FOOD_PLAIN;
-  uint8_t n = i;
-  for (uint8_t f = FOOD_BERRY0; f < FOOD_COUNT; f++)
-    if (pet.items[foodItem(f)] && --n == 0) return f;
-  return FOOD_COUNT;
-}
-
 // que tarjeta se puede usar ahora (las que no, con contorno e icono apagado)
 static bool panelItemOn(uint8_t kind, uint8_t i) {
-  bool awake = !pet.sleeping && !pet.isEgg();
-  if (kind == PANEL_CARE) {
-    // Y3: la comida cae al patio, una a la vez: con una en el suelo, las demas esperan
-    if (i < CP_LIGHT) return awake && yardFood.phase == YF_NONE && careFood(i) != FOOD_COUNT;
-    if (i == CP_LIGHT) return true;
-    if (i == CP_PET) return awake;  // v2.3: el mimo, despierto
-    return awake;
-  }
   if (i == PP_BATTLE) return stagesCanOpen();
-  if (i == PP_DASH) return awake && imuPresent();  // sin IMU no se puede inclinar
-  return awake;
+  if (i == PP_TRAVEL) return playSlotsMask(PP_BALL) != 0;  // (como antes: con alguien despierto en casa)
+  return playSlotsMask(i) != 0;
 }
 
 // la tarjeta bajo el dedo (se ve pulsada), o -1
@@ -7200,17 +7276,13 @@ static void panelDeny(int8_t idx) {
   panelShakeUntil = millis() + FX_DENY_MS;
 }
 
-// la clave de repintado: todo lo que dibujan los dos paneles
+// la clave de repintado: todo lo que dibuja el panel
 void mixPanelKey(uint32_t &h) {
   h = mixKey(h, 30u + panelKind);
   if (panelKind == PANEL_TRAVEL) mixTravelKey(h);
   h = mixKey(h, (uint32_t)(panelPressed() + 1));
   for (uint8_t i = 0; i < panelCount(panelKind); i++) h = mixKey(h, panelItemOn(panelKind, i));
-  for (uint8_t i = 0; i < CP_LIGHT; i++) {
-    uint8_t f = careFood(i), it = f == FOOD_COUNT ? FOOD_NO_ITEM : foodItem(f);
-    h = mixKey(h, (uint32_t)f | ((uint32_t)(it == FOOD_NO_ITEM ? 0 : pet.items[it]) << 8));
-  }
-  for (uint32_t v : { (uint32_t)pet.sleeping, (uint32_t)pet.berryKnown, (uint32_t)pet.speciesId, (uint32_t)gLang })
+  for (uint32_t v : { (uint32_t)pet.home(0).sleeping, (uint32_t)pet.home(1).sleeping, (uint32_t)gLang })
     h = mixKey(h, v);
 }
 
@@ -7237,38 +7309,6 @@ static int panelCardDraw(uint8_t i, const char *const *icon, const char *label) 
   return x;
 }
 
-static void renderCarePanel() {
-  yTitle(T(S_DOCK_CARE), nullptr);
-  // v3.2 (interino): la baya normal y las 3 primeras comidas que se tienen; sin ninguna, apagada
-  for (uint8_t c = 0; c < CP_LIGHT; c++) {
-    uint8_t f = careFood(c);
-    int x = panelCardDraw(c, f == FOOD_COUNT ? SPR_ICON_BERRY : FOOD_ICON[f], nullptr);
-    if (f == FOOD_COUNT) continue;
-    int y = CP_FOOD_Y;
-    // la favorita, ya descubierta (v1.57): marco dorado y una estrella en su esquina
-    if (foodIsBerry(f) && pet.berryKnown && pet.lovesBerry(f - FOOD_BERRY0)) {
-      gfx->drawRoundRect(x, y, CP_FOOD_W, CP_FOOD_W, Y_CARD_RAD, UI_BAR_WARN);
-      gfx->drawRoundRect(x + 1, y + 1, CP_FOOD_W - 2, CP_FOOD_W - 2, Y_CARD_RAD - 1, UI_BAR_WARN);
-      drawMap(SPR_STAR, 16, x + 3, y + 3, 1, false);  // (arriba a la izquierda: a la derecha va la chapa de cuantas hay)
-    }
-    // cuantas quedan, en una chapa (la baya normal no se acaba)
-    uint8_t it = foodItem(f), n = it == FOOD_NO_ITEM ? 0 : pet.items[it];
-    if (n) {
-      char cn[4];
-      snprintf(cn, sizeof(cn), "%u", n);
-      int bx = x + CP_FOOD_W - 12, by = y + 12;
-      gfx->fillCircle(bx, by, 10, UI_BAR_BAD);
-      setSize(2);
-      gfx->setTextColor(UI_WHITE);
-      setCur(bx - textW(cn, 2) / 2 + 1, by - 7);
-      printT(cn);
-    }
-  }
-  // dormido: el sol lo despierta
-  panelCardDraw(CP_LIGHT, pet.sleeping ? SPR_ICON_SUN : SPR_ICON_LIGHT, nullptr);
-  panelCardDraw(CP_PET, SPR_ICON_PET, nullptr);
-}
-
 static void renderPlayPanel() {
   yTitle(T(S_DOCK_PLAY), nullptr);
   // bajo cada juego, la estadistica que entrena; el combate lleva a las fases
@@ -7285,57 +7325,25 @@ void renderPanel() {
     renderTravel();  // pinta su propio fondo (la ventana del mapa)
   } else {
     yPanelBg();
-    if (panelKind == PANEL_CARE) renderCarePanel();
-    else renderPlayPanel();
+    renderPlayPanel();
   }
   yBackBtn();
   gfx->flush();
 }
 
-static void carePanelTap(int i) {
-  if (!panelItemOn(PANEL_CARE, i)) {  // dormido: ni comida ni mimo
-    panelDeny(i);
+// v3.3: empieza el juego i del panel con el bicho del hueco s (que pasa a tener el foco)
+static void startPlayFor(uint8_t s, uint8_t i) {
+  panelKind = PANEL_NONE;  // el juego se abre en su lugar; al salir, a casa
+  petPick = PICK_NONE;
+  if (!uiFocus(s)) {
+    sfxPlay(SFX_DENY);
     return;
   }
-  if (i == CP_LIGHT) {
-    sfxPlay(SFX_TAP);
-    pet.toggleLight();
-  } else if (i == CP_PET) {
-    // v2.3: el mimo (el toque al bicho de antes del patio, que ahora abre su ficha): +20 de felicidad,
-    // corazon, sonido y la pose de alegria, de vuelta en casa para verlo
-    FxNeedSnap ns = fxSnap();
-    pet.caress();
-    fxNeeds(ns);  // "+20" de felicidad
-    sfxPlay(SFX_HEART);
-    fxPose(pmd.has(PMD_POSE) ? PMD_POSE : PMD_HOP, millis(), 1200);
-  } else {
-    // Y3: la comida cae al patio y el bicho va a por ella; Pet la aplica (y gasta el objeto) al comersela
-    // (yardFoodEaten). Aqui solo se mira que se pueda
-    uint8_t food = careFood(i);
-    if (food == FOOD_COUNT || !pet.canFeed(food)) {
-      panelDeny(i);
-      return;
-    }
-    int r = yardDropFood(food);
-    if (r == 0) {  // ya hay una en el suelo
-      panelDeny(i);
-      return;
-    }
-    if (r > 0) {
-      sfxPlay(SFX_TAP);
-      panelKind = PANEL_NONE;  // a casa a verlo
-      return;
-    }
-    // -1: sin bicho en el patio (no deberia pasar): como siempre, al momento
-    FxNeedSnap ns = fxSnap();
-    if (!pet.feedFood(food)) {
-      panelDeny(i);
-      return;
-    }
-    fxNeeds(ns);  // "+N" sobre la barra de comida
-    sfxPlay(SFX_EAT);
-  }
-  panelKind = PANEL_NONE;  // como el menu: hecho, a casa a verlo
+  Serial.printf("PLAY %u slot=%u\n", i, s);
+  if (i == PP_BALL) startGame();
+  else if (i == PP_SACK) startSack();
+  else if (i == PP_DASH) startDash();
+  else startZen();
 }
 
 static void playPanelTap(int i) {
@@ -7348,12 +7356,17 @@ static void playPanelTap(int i) {
     openTravel();
     return;
   }
-  panelKind = PANEL_NONE;  // el juego (o las fases) se abre en su lugar; al salir, a casa
-  if (i == PP_BALL) startGame();
-  else if (i == PP_BATTLE) openStages();  // v1.65: las fases (antes un combate suelto)
-  else if (i == PP_SACK) startSack();
-  else if (i == PP_DASH) startDash();
-  else startZen();
+  if (i == PP_BATTLE) {  // v1.65: las fases (antes un combate suelto); el selector de equipo elige
+    panelKind = PANEL_NONE;
+    openStages();
+    return;
+  }
+  uint8_t m = playSlotsMask((uint8_t)i);
+  if (m == 3) {  // v3.3: pueden los dos de casa: quien juega (el panel sigue debajo)
+    openPetPick(PICK_GAME, (uint8_t)i);
+    return;
+  }
+  startPlayFor((m & 1) ? 0 : 1, (uint8_t)i);
 }
 
 void panelTap(int16_t x, int16_t y) {
@@ -7368,8 +7381,501 @@ void panelTap(int16_t x, int16_t y) {
   }
   int i = panelHit(panelKind, x, y);
   if (i < 0) return;  // fuera de las tarjetas: nada (es una pantalla, no un menu que se cierra)
-  if (panelKind == PANEL_CARE) carePanelTap(i);
-  else playPanelTap(i);
+  playPanelTap(i);
+}
+
+// =================== el selector de bicho (v3.3; geometria en yard_panels.h) ===================
+// Una pantalla encima del panel Jugar o de la mochila, con una tarjeta por bicho de casa (miniatura, nombre y
+// nivel): quien juega el minijuego, o a quien se le da el objeto. Solo sale cuando pueden los dos; volver o
+// USER la cierran y se vuelve a lo de debajo.
+void openPetPick(uint8_t mode, uint8_t arg) {
+  petPick = mode;
+  petPickArg = arg;
+  Serial.printf("PICK open %s %u\n", mode == PICK_GAME ? "game" : "item", arg);
+}
+
+void closePetPick() {
+  if (petPick) Serial.println("PICK close");
+  petPick = PICK_NONE;
+}
+
+void renderPetPick() {
+  yPanelBg();
+  bool item = petPick == PICK_ITEM;
+  yTitle(T(item ? S_PICK_ITEM : S_PICK_PLAY), item ? T((StrId)(S_IT_GOLDEN + petPickArg)) : nullptr);
+  if (!item) {  // el juego: su icono bajo el titulo
+    static const char *const *const GAME_ICON[PP_COUNT] = { SPR_ICON_PLAY, SPR_ICON_BATTLE, SPR_ICON_SACK,
+                                                            SPR_ICON_DASH, SPR_ICON_ZEN, SPR_ICON_TRAVEL };
+    drawMap(GAME_ICON[petPickArg < PP_COUNT ? petPickArg : 0], 16, CX - 16, Y_SUB_Y - 4, 2, false);
+  }
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    int x, y, w, h;
+    petPickCard(s, x, y, w, h);
+    const PetLife &l = pet.home(s);
+    yCard(x, y, w, h, false);
+    int cx = x + w / 2;
+    // su sprite del patio (quieto, el primer cuadro), que quepa en 96 px de alto; sin el, su miniatura
+    const uint8_t *t = l.hatched() ? thumbs.get(l.speciesId) : nullptr;
+    if (l.hatched() && homeMon[s].loaded) {
+      YardBody b = yardPmdBody(homeMon[s]);
+      int h10 = b.h * 10 / 11;  // su alto a la escala entera b.s (b.h lleva el 10 % de mas del patio)
+      int s10 = h10 > 0 ? b.s * 10 * 84 / h10 / 10 * 10 : 20;  // la escala entera que lo deja en <= 84 px
+      if (s10 < 10) s10 = 10;
+      if (s10 > 40) s10 = 40;
+      drawPmdActF(homeMon[s], PMD_IDLE, cx, y + 106, 0, true, false, (uint16_t)s10);
+    } else if (t) {
+      drawThumbFit(t, cx, y + 62, w - 20, 100, false, 0);
+    } else if (l.hatched()) {
+      yShadowText(cx - 9, y + 48, "?", 4, Y_TEXT);
+    }
+    const char *nm = l.nick[0] ? l.nick : dexName(l.speciesId);
+    gfx->setTextColor(Y_TEXT);
+    printTight(nm, cx, y + 124, w - 12);
+    char lv[16];
+    snprintf(lv, sizeof(lv), T(S_LVL_FMT), (unsigned)l.level());
+    gfx->setTextColor(Y_TEXT_DIM);
+    setSize(2);
+    setCur(cx - textW(lv, 2) / 2, y + 150);
+    printT(lv);
+  }
+  yBackBtn();
+  gfx->flush();
+}
+
+void petPickTap(int16_t x, int16_t y) {
+  if (yBackHit(x, y)) {
+    sfxPlay(SFX_TAP);
+    closePetPick();
+    return;
+  }
+  int c = petPickHit(x, y);
+  if (c < 0) return;  // fuera de las tarjetas: nada (como los paneles)
+  uint8_t s = (uint8_t)c;
+  Serial.printf("PICK %u\n", s);
+  if (petPick == PICK_GAME) {
+    if (!(playSlotsMask(petPickArg) & (1u << s))) {  // se durmio mientras tanto
+      sfxPlay(SFX_DENY);
+      return;
+    }
+    sfxPlay(SFX_TAP);
+    startPlayFor(s, petPickArg);
+  } else {
+    uint8_t it = petPickArg;
+    petPick = PICK_NONE;
+    if (bagUseOn(s, it)) closeBag();  // a casa a verlo, como al usarlo con el "usar?"
+    else sfxPlay(SFX_DENY);
+  }
+}
+
+// =================== el menu de un bicho (v3.3; geometria en yard_panels.h) ===================
+// Tocar a un bicho del patio le da el foco y abre a la derecha, encima del patio, una columna con lo que se le
+// puede hacer: Dormir / Despertar, Comida, Cuidar (el mimo), Estado (su ficha) y, cuando toca, Evolucionar o
+// Despedirse, resaltada (sustituyen a los botones grandes de antes; un "!" sobre el bicho avisa). El bicho se
+// queda quieto con un anillo a sus pies (si estaba debajo del menu, antes se aparta andando a la izquierda). Lo
+// que no puede hacer ahora sale apagado y tiembla. Comida abre en la misma columna la lista de comida: la baya
+// normal y lo que se tiene, que aparece delante del bicho y se la come al momento (yardFeedFront). Tocar fuera,
+// USER o deslizar lo cierran; tocar al otro bicho pasa el menu a el. Dormir, la comida y el mimo lo dejan
+// abierto (se ve el resultado y se puede repetir); Estado, Evolucionar y Despedirse abren lo suyo y lo cierran.
+static const char *const PM_NAMES[PM_KINDS] = { "sleep", "food", "care", "status", "evolve", "farewell" };
+#define PM_TEXT_X 48  // la etiqueta, a la derecha del icono (8 + 32 + 8)
+
+// las filas del menu del bicho del hueco s (PM_*), y cuantas
+static uint8_t petMenuItems(uint8_t s, uint8_t *out) {
+  const PetLife &l = pet.home(s);
+  uint8_t n = 0;
+  out[n++] = PM_SLEEP;
+  out[n++] = PM_FOOD;
+  out[n++] = PM_CARE;
+  out[n++] = PM_STATUS;
+  if (l.wantEvolveButton()) out[n++] = PM_EVOLVE;
+  else if (l.wantFarewellButton()) out[n++] = PM_FAREWELL;
+  return n;
+}
+
+// la fila k se puede usar ahora: comer y el mimo, despierto; dormir, sin una despedida en marcha
+static bool petMenuItemOn(uint8_t s, uint8_t k) {
+  const PetLife &l = pet.home(s);
+  if (k == PM_FOOD || k == PM_CARE) return l.hatched() && !l.sleeping && !l.busyEnding();
+  if (k == PM_SLEEP) return l.hatched() && !l.busyEnding();
+  return true;
+}
+
+// las comidas de la lista, en el orden de FOOD_*: la baya normal (siempre) y las que se tienen
+static uint8_t petFoods(uint8_t *out) {
+  uint8_t n = 0;
+  out[n++] = FOOD_PLAIN;
+  for (uint8_t f = FOOD_BERRY0; f < FOOD_COUNT; f++)
+    if (pet.items[foodItem(f)]) out[n++] = f;
+  return n;
+}
+
+// la comida f se le puede dar ahora al bicho del hueco s (que tiene el foco): una a la vez, y sin contar las que
+// ya estan elegidas para el otro (aun no gastadas)
+static bool petFoodOn(uint8_t s, uint8_t f) {
+  if (pet.focusSlot != s || !pet.canFeed(f) || yardFood[s].phase != YF_NONE) return false;
+  uint8_t it = foodItem(f);
+  return it == FOOD_NO_ITEM || pet.items[it] > yardFoodReserved(it);
+}
+
+bool openPetMenu(uint8_t s) {
+  if (s >= HOME_SLOTS) return false;
+  const PetLife &l = pet.home(s);
+  if (!l.hatched() || l.busyEnding() || l.evolving() || !yardHomeNow()) return false;  // un huevo o un hueco vacio, no
+  if (!uiFocus(s)) return false;
+  petMenuOpen = (uint8_t)(s + 1);
+  petMenuView = 0;
+  petFoodPage = 0;
+  pmShakeIdx = -1;
+  // debajo de donde sale el menu no se verian: los que esten debajo se apartan a la izquierda en el patio (yardTick,
+  // yardMenuHold; enseguida), y mientras siga abierto nadie pasea hasta alli (yardW.avoidX)
+  for (YardAside &a : yardAside) a = YardAside{};
+  Serial.printf("MENU %u open\n", s);
+  return true;
+}
+
+void closePetMenu() {
+  if (petMenuOpen) Serial.printf("MENU %u close\n", petMenuOpen - 1);
+  petMenuOpen = 0;
+  petMenuView = 0;
+  petFoodPage = 0;
+  pmShakeIdx = -1;
+}
+
+// de la lista de comida a las acciones (la fila de volver o USER)
+void petMenuBackToActions() {
+  petMenuView = 0;
+  petFoodPage = 0;
+  pmShakeIdx = -1;
+  if (petMenuOpen) Serial.printf("MENU %u back\n", petMenuOpen - 1);
+}
+
+// en cada vuelta del loop: el menu se cierra si su bicho ya no lo puede usar (se puso a evolucionar, se
+// despide, se muere, el hueco cambio), si se abrio otra pantalla encima, o si se dejo abierto sin tocar nada
+void petMenuCheck() {
+  if (!petMenuOpen) return;
+  uint8_t s = petMenuOpen - 1;
+  const PetLife &l = pet.home(s);
+  bool other = gameOpen || sackOpen || zenOpen || dashOpen || battleOpen() || encOpen() || teamOpen || stagesOpen ||
+               cardOpen || kbOpen || clockOpen || bagOpen || panelKind || boxOpen || galleryOpen || petPick ||
+               choiceKind || confirmUntil || yardDemoOpen;
+  if (!l.hatched() || l.busyEnding() || l.evolving() || pet.focusSlot != s || !yardHomeNow() || other ||
+      millis() - lastInteract > PET_MENU_IDLE_MS)
+    closePetMenu();
+}
+
+static int pmShakeDx(int8_t idx) {
+  if (idx != pmShakeIdx || !timeLeft(pmShakeUntil)) return 0;
+  float s = 1.0f - (float)timeLeft(pmShakeUntil) / (float)FX_DENY_MS;
+  return (int)(4.0f * (1.0f - s) * sinf(s * 6.0f * (float)PI));
+}
+
+static void pmDeny(uint8_t s, int8_t row, const char *what) {
+  sfxPlay(SFX_DENY);
+  pmShakeIdx = row;
+  pmShakeUntil = millis() + FX_DENY_MS;
+  Serial.printf("MENU %u deny %s\n", s, what);
+}
+
+// la fila bajo el dedo (se ve pulsada), o -1
+static int pmPressedRow(uint8_t n) {
+  if (!wasPressed || holdFired || swallowGesture) return -1;
+  int r = petMenuHit(n, tX0, tY0);
+  return (r >= 0 && petMenuHit(n, tXl, tYl) == r) ? r : -1;
+}
+
+// una fila: sombra y tarjeta (sobre el mapa)
+static void pmRow(int x, int y, int w, int h, uint16_t fill, bool pressed) {
+  gfx->fillRoundRect(x + 2, y + 3, w, h, Y_CARD_RAD, Y_SHADOW);
+  gfx->fillRoundRect(x, y, w, h, Y_CARD_RAD, pressed ? Y_CARD_HI : fill);
+}
+static void pmIcon(const char *const *icon, int x, int y, int h, bool on) {
+  int iy = y + (h - 32) / 2;
+  if (on) drawMap(icon, 16, x + 8, iy, 2, false);
+  else drawMapTint(icon, 16, x + 8, iy, 2, STG_LOCK_INK);
+}
+// la etiqueta, alineada a la izquierda en maxW px (si no cabe, apretada como printTight)
+static void pmLabel(const char *t, int x, int y, int maxW) {
+  setSize(2);
+  int w = textW(t, 2);
+  if (gCjkFont || w <= maxW) {
+    setCur(x, y);
+    printT(t);
+  } else {
+    printTight(t, x + maxW / 2, y, maxW);
+  }
+}
+// el nombre del bicho encima de la columna, alineado con su borde derecho
+static void pmName(uint8_t s, int colX, int top) {
+  const PetLife &l = pet.home(s);
+  const char *nm = l.nick[0] ? l.nick : dexName(l.speciesId);
+  setSize(2);
+  int w = textW(nm, 2), x = colX + PM_W - w;
+  if (x < colX) x = colX;
+  yShadowText(x, top - 22, nm, 2, Y_TEXT);
+}
+
+static void drawFoodList(uint8_t s) {
+  uint8_t foods[FOOD_COUNT], nf = petFoods(foods);
+  uint8_t pages = foodPages(nf);
+  if (petFoodPage >= pages) petFoodPage = 0;
+  uint8_t n = foodListRows(nf, petFoodPage);
+  bool more = pages > 1;
+  int x, y, w, h;
+  petMenuRow(0, n, x, y, w, h);
+  pmName(s, x, y);
+  int pr = pmPressedRow(n);
+  for (uint8_t i = 0; i + 1 < n; i++) {
+    uint8_t f = foods[petFoodPage * FOOD_PER_PAGE + i];
+    petMenuRow(i, n, x, y, w, h);
+    x += pmShakeDx((int8_t)i);
+    bool on = petFoodOn(s, f);
+    pmRow(x, y, w, h, Y_PANEL_BG, pr == i);
+    pmIcon(FOOD_ICON[f], x, y, h, on);
+    // la favorita, ya descubierta (v1.57): marco dorado y una estrella en la esquina del icono
+    if (foodIsBerry(f) && pet.berryKnown && pet.lovesBerry(f - FOOD_BERRY0)) {
+      gfx->drawRoundRect(x, y, w, h, Y_CARD_RAD, UI_BAR_WARN);
+      gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, Y_CARD_RAD - 1, UI_BAR_WARN);
+      drawMap(SPR_STAR, 16, x + 2, y + 2, 1, false);
+    }
+    // cuantas quedan, en una chapa sobre la esquina del icono (la baya normal no se acaba)
+    uint8_t it = foodItem(f);
+    if (it != FOOD_NO_ITEM && pet.items[it]) {
+      char cn[4];
+      snprintf(cn, sizeof(cn), "%u", pet.items[it]);
+      int bx = x + 38, by = y + 10;
+      gfx->fillCircle(bx, by, 9, UI_BAR_BAD);
+      setSize(1);
+      gfx->setTextColor(UI_WHITE);
+      setCur(bx - textW(cn, 1) / 2 + 1, by - 3);
+      printT(cn);
+    }
+    gfx->setTextColor(on ? Y_TEXT : STG_LOCK_INK);
+    pmLabel(T((StrId)(S_FD_PLAIN + f)), x + PM_TEXT_X, y + (h - 14) / 2, w - PM_TEXT_X - 6);
+  }
+  // abajo: volver (y "mas" a su derecha con varias paginas)
+  int bx, by, bw, bh;
+  foodNavCell(n, more, 0, bx, by, bw, bh);
+  pmRow(bx, by, bw, bh, Y_PANEL_BG, false);
+  int ax = more ? bx + bw / 2 : bx + 24, ay = by + bh / 2;
+  gfx->fillTriangle(ax - 8, ay, ax + 6, ay - 9, ax + 6, ay + 9, Y_TEXT);
+  if (!more) {
+    gfx->setTextColor(Y_TEXT);
+    pmLabel(T(S_PM_BACK), bx + PM_TEXT_X, by + (bh - 14) / 2, bw - PM_TEXT_X - 6);
+  } else {
+    foodNavCell(n, more, 1, bx, by, bw, bh);
+    pmRow(bx, by, bw, bh, Y_PANEL_BG, false);
+    char pg[8];
+    snprintf(pg, sizeof(pg), "%u/%u", petFoodPage + 1, pages);
+    setSize(2);
+    int tw = textW(pg, 2), tx = bx + (bw - tw - 12) / 2;
+    gfx->setTextColor(Y_TEXT);
+    setCur(tx, by + (bh - 14) / 2);
+    printT(pg);
+    int cx = tx + tw + 6, cy = by + bh / 2;
+    gfx->fillTriangle(cx + 6, cy, cx - 2, cy - 7, cx - 2, cy + 7, Y_TEXT);
+  }
+}
+
+// el menu (o la lista de comida) del bicho de petMenuOpen, encima del patio
+void drawPetMenu(uint32_t now) {
+  uint8_t s = petMenuOpen - 1;
+  if (petMenuView == 1) {
+    drawFoodList(s);
+    return;
+  }
+  uint8_t items[PM_MAX], n = petMenuItems(s, items);
+  int x, y, w, h;
+  petMenuRow(0, n, x, y, w, h);
+  pmName(s, x, y);
+  int pr = pmPressedRow(n);
+  const PetLife &l = pet.home(s);
+  for (uint8_t i = 0; i < n; i++) {
+    petMenuRow(i, n, x, y, w, h);
+    x += pmShakeDx((int8_t)i);
+    uint8_t k = items[i];
+    bool on = petMenuItemOn(s, k);
+    uint16_t fill = Y_PANEL_BG, ink = on ? Y_TEXT : STG_LOCK_INK;
+    if (k == PM_EVOLVE) {  // resaltadas, como los botones grandes de antes: rojo / dorado
+      fill = UI_BAR_BAD;
+      ink = UI_WHITE;
+    } else if (k == PM_FAREWELL) {
+      fill = UI_BAR_WARN;
+      ink = UI_INK;
+    }
+    pmRow(x, y, w, h, fill, pr == i);
+    if ((k == PM_EVOLVE || k == PM_FAREWELL) && (now / 400) % 2 == 0) {  // y un borde blanco que late
+      gfx->drawRoundRect(x, y, w, h, Y_CARD_RAD, UI_WHITE);
+      gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, Y_CARD_RAD - 1, UI_WHITE);
+    }
+    const char *const *icon = k == PM_SLEEP    ? (l.sleeping ? SPR_ICON_SUN : SPR_ICON_LIGHT)
+                              : k == PM_FOOD   ? SPR_ICON_BERRY
+                              : k == PM_CARE   ? SPR_ICON_PET
+                              : k == PM_STATUS ? SPR_ICON_CARD
+                              : k == PM_EVOLVE ? SPR_STAR
+                                               : SPR_ICON_LETTER;
+    StrId lab = k == PM_SLEEP    ? (l.sleeping ? S_PM_WAKE : S_PM_SLEEP)
+                : k == PM_FOOD   ? S_PM_FOOD
+                : k == PM_CARE   ? S_DOCK_CARE
+                : k == PM_STATUS ? S_PM_STATUS
+                : k == PM_EVOLVE ? S_PM_EVOLVE
+                                 : S_PM_FAREWELL;
+    pmIcon(icon, x, y, h, on);
+    gfx->setTextColor(ink);
+    pmLabel(T(lab), x + PM_TEXT_X, y + (h - 14) / 2, w - PM_TEXT_X - 6);
+  }
+}
+
+// una accion del menu (fila row)
+static void petMenuAct(uint8_t s, uint8_t k, int8_t row) {
+  if (pet.focusSlot != s) {  // (no deberia pasar: petMenuCheck lo cierra antes)
+    closePetMenu();
+    return;
+  }
+  if (!petMenuItemOn(s, k)) {  // dormido: ni comida ni mimo
+    pmDeny(s, row, PM_NAMES[k]);
+    return;
+  }
+  uint32_t now = millis();
+  switch (k) {
+    case PM_SLEEP:
+      Serial.printf("MENU %u %s\n", s, pet.sleeping ? "wake" : "sleep");
+      sfxPlay(SFX_TAP);
+      pet.toggleLight();
+      break;
+    case PM_FOOD:
+      Serial.printf("MENU %u food\n", s);
+      sfxPlay(SFX_TAP);
+      petMenuView = 1;
+      petFoodPage = 0;
+      pmShakeIdx = -1;
+      break;
+    case PM_CARE: {
+      // el mimo (v2.3): +20 de felicidad, corazon, sonido y la pose de alegria
+      Serial.printf("MENU %u care\n", s);
+      FxNeedSnap ns = fxSnap();
+      pet.caress();
+      fxNeeds(ns);  // "+20" de felicidad
+      sfxPlay(SFX_HEART);
+      fxPose(pmd.has(PMD_POSE) ? PMD_POSE : PMD_HOP, now, 1200);
+      break;
+    }
+    case PM_STATUS:
+      Serial.printf("MENU %u status\n", s);
+      sfxPlay(SFX_TAP);
+      closePetMenu();
+      cardOpen = true;
+      cardPage = 0;
+      break;
+    case PM_EVOLVE:
+    case PM_FAREWELL:  // el dialogo de siempre: evolucionar / mantener, despedirse / quedaros
+      Serial.printf("MENU %u %s\n", s, PM_NAMES[k]);
+      sfxPlay(SFX_TAP);
+      closePetMenu();
+      choiceKind = k == PM_EVOLVE ? 1 : 2;
+      choiceUntil = now + 12000;
+      break;
+  }
+}
+
+// una comida de la lista: delante del bicho, y se la come ya (Pet la aplica, y gasta el objeto, al acabar el
+// bocado: yardFoodEaten)
+static void petFoodPick(uint8_t s, uint8_t f, int8_t row) {
+  if (!petFoodOn(s, f)) {  // dormido, sin ese objeto o comiendose ya otra
+    pmDeny(s, row, "eat");
+    return;
+  }
+  int r = yardFeedFront(s, f);
+  if (r > 0) {
+    sfxPlay(SFX_TAP);
+    Serial.printf("MENU %u eat %u\n", s, f);
+    return;
+  }
+  if (r == 0) {
+    pmDeny(s, row, "eat");
+    return;
+  }
+  // -1: sin su bicho en el patio (no deberia pasar): al momento, como antes de la fase Y3
+  FxNeedSnap ns = fxSnap();
+  if (!pet.feedFood(f)) {
+    pmDeny(s, row, "eat");
+    return;
+  }
+  fxNeeds(ns);
+  sfxPlay(SFX_EAT);
+  Serial.printf("MENU %u eat %u (now)\n", s, f);
+}
+
+// un toque con el menu abierto: sus filas; fuera, el otro bicho de casa se queda con el menu y cualquier otro
+// sitio lo cierra (y no hace nada mas: el dock, las cacas y los regalos esperan al siguiente toque)
+void petMenuTap(int16_t x, int16_t y) {
+  uint8_t s = petMenuOpen - 1;
+  if (petMenuView == 1) {
+    uint8_t foods[FOOD_COUNT], nf = petFoods(foods);
+    uint8_t pages = foodPages(nf);
+    if (petFoodPage >= pages) petFoodPage = 0;
+    uint8_t n = foodListRows(nf, petFoodPage);
+    int r = foodListHit(n, pages > 1, x, y);
+    if (r == FL_BACK) {
+      sfxPlay(SFX_TAP);
+      petMenuBackToActions();
+      return;
+    }
+    if (r == FL_MORE) {
+      sfxPlay(SFX_TAP);
+      petFoodPage = (uint8_t)((petFoodPage + 1) % pages);
+      pmShakeIdx = -1;
+      Serial.printf("MENU %u page %u\n", s, petFoodPage);
+      return;
+    }
+    if (r >= 0) {
+      petFoodPick(s, foods[petFoodPage * FOOD_PER_PAGE + r], (int8_t)r);
+      return;
+    }
+  } else {
+    uint8_t items[PM_MAX], n = petMenuItems(s, items);
+    int r = petMenuHit(n, x, y);
+    if (r >= 0) {
+      petMenuAct(s, items[r], (int8_t)r);
+      return;
+    }
+  }
+  int who = yardPetAt(x, y);
+  closePetMenu();
+  if (who >= 0 && who < HOME_SLOTS && who != s && openPetMenu((uint8_t)who)) sfxPlay(SFX_TAP);
+}
+
+// serie (MENU): lo que hay abierto, cada fila y donde tocarla (TAP x y)
+void petMenuReport() {
+  if (!petMenuOpen) {
+    Serial.println("menu=closed");
+    return;
+  }
+  uint8_t s = petMenuOpen - 1;
+  int x, y, w, h;
+  if (petMenuView == 0) {
+    uint8_t items[PM_MAX], n = petMenuItems(s, items);
+    Serial.printf("menu=%u view=actions rows=%u\n", s, n);
+    for (uint8_t i = 0; i < n; i++) {
+      petMenuRow(i, n, x, y, w, h);
+      Serial.printf("  row %u %s %s tap=%d,%d\n", i, PM_NAMES[items[i]], petMenuItemOn(s, items[i]) ? "on" : "off",
+                    x + w / 2, y + h / 2);
+    }
+    return;
+  }
+  uint8_t foods[FOOD_COUNT], nf = petFoods(foods);
+  uint8_t pages = foodPages(nf);
+  if (petFoodPage >= pages) petFoodPage = 0;
+  uint8_t n = foodListRows(nf, petFoodPage);
+  Serial.printf("menu=%u view=food page=%u/%u rows=%u\n", s, petFoodPage + 1, pages, n);
+  for (uint8_t i = 0; i + 1 < n; i++) {
+    uint8_t f = foods[petFoodPage * FOOD_PER_PAGE + i], it = foodItem(f);
+    petMenuRow(i, n, x, y, w, h);
+    Serial.printf("  row %u food=%u have=%d %s tap=%d,%d\n", i, f, it == FOOD_NO_ITEM ? -1 : pet.items[it],
+                  petFoodOn(s, f) ? "on" : "off", x + w / 2, y + h / 2);
+  }
+  foodNavCell(n, pages > 1, 0, x, y, w, h);
+  Serial.printf("  back tap=%d,%d\n", x + w / 2, y + h / 2);
+  if (pages > 1 && foodNavCell(n, true, 1, x, y, w, h)) Serial.printf("  more tap=%d,%d\n", x + w / 2, y + h / 2);
 }
 
 // =================== viajes (v2.0, Y5b; geometria y logica pura en travel_ui.h) ===================
@@ -7854,9 +8360,9 @@ static void yDemoWorld() {
   drawMap(SPR_ICON_EGG, 16, Y_CX - 32, 200, 4, false);
   yBubble(Y_CX, 192, T(S_HUNGRY));
   YDockItem dock[Y_DOCK_N] = {
-    { SPR_ICON_CARE, Y_DOCK_CARE, false },
     { SPR_ICON_PLAY, Y_DOCK_PLAY, false },
     { SPR_ICON_BAG, Y_DOCK_BAG, false },
+    { SPR_ICON_SHOP, Y_DOCK_SHOP, false },
   };
   yDock(dock, -1);
 }
@@ -8238,12 +8744,6 @@ const uint8_t *yardWalkNow() {
   return w;
 }
 
-// de quien es la comida del suelo (el hueco cuyo bicho la pidio), o -1 si ya no esta
-int yardFoodOwner() {
-  if (yardFood.phase == YF_NONE) return -1;
-  return pet.slotOfUid(yardFood.tag);
-}
-
 // la comida (Y3): ya se la ha comido. Ahora Pet la aplica, como antes al tocar la tarjeta: sus "+N", su
 // sonido y, si le encanta o es la tarta, su corazon (si no, sale uno pequeno igual). v3.0: al de su hueco
 void yardFoodEaten(uint8_t kind, int owner) {
@@ -8272,48 +8772,68 @@ uint8_t yardHoldOf(uint8_t s, uint32_t now) {
   return YH_NONE;
 }
 
-// un paso del planificador: lo que pide el juego (dormir, comer, triste...) y la inclinacion
+// un paso del planificador: lo que pide el juego (dormir, comer, triste, el menu del bicho...) y la inclinacion
 void yardTick(uint32_t now) {
   uint32_t dt = yardLastStep ? now - yardLastStep : 100;
   uint32_t cap = frameIntervalMs(powerCtx(now)) + 100;  // otra pantalla de por medio no es un paso largo
   if (dt > cap) {
-    yardFood.t0 += dt - cap;  // fuera del patio la comida espera en el suelo, en la misma fase
+    for (YardFood &f : yardFood) f.t0 += dt - cap;  // fuera del patio la comida espera, en la misma fase
     dt = cap;
   }
   yardLastStep = now;
-  // la comida del suelo (Y3): si ya no puede comer, desaparece sin gastarse nada (aun no se aplico)
-  int fo = yardFoodOwner();
-  if (yardFood.phase != YF_NONE) {
-    const PetLife *l = fo >= 0 ? &pet.home((uint8_t)fo) : nullptr;
-    if (!l || !yardW.p[fo].on || l->sleeping || l->isEgg() || l->busyEnding()) {
-      Serial.println("FOOD cancelled");
-      yardFood.phase = YF_NONE;
-      fo = -1;
+  // la comida (Y3; v3.3 una por hueco, la del menu del bicho): si su bicho ya no puede comer, o el hueco ya es de
+  // otro, desaparece sin gastarse nada (aun no se aplico)
+  bool foodOn[HOME_SLOTS], foodWaits[HOME_SLOTS] = { false, false };
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    YardFood &f = yardFood[s];
+    if (f.phase != YF_NONE) {
+      const PetLife &l = pet.home(s);
+      if (pet.slotOfUid(f.tag) != (int8_t)s || !yardW.p[s].on || l.sleeping || l.isEgg() || l.busyEnding()) {
+        Serial.printf("FOOD cancelled slot=%u\n", s);
+        f.phase = YF_NONE;
+      }
     }
+    foodOn[s] = f.phase != YF_NONE;
   }
+  const uint8_t *walk = yardWalkNow();
+  int colX = petMenuX(5);  // v3.3: la columna mas a la izquierda que puede ocupar el menu del bicho
+  // v3.3: con el menu de un bicho abierto, ni los paseos al azar ni la inclinacion llevan a nadie debajo de el
+  yardW.avoidX = petMenuOpen ? (int16_t)(colX - 32) : (int16_t)32767;
   uint8_t hold[YARD_PETS_MAX] = { YH_NONE, YH_NONE, YH_NONE };
-  bool foodWaits = false;
   for (uint8_t s = 0; s < HOME_SLOTS; s++) {
     hold[s] = yardHoldOf(s, now);
-    if ((int)s == fo) {
-      foodWaits = hold[s] != YH_NONE;  // otra cosa lo tiene quieto: la comida espera
-      if (!foodWaits) hold[s] = yardFoodHold(yardFood);
-    } else if (hold[s] == YH_NONE && pet.home(s).mood() == MOOD_SAD && homeMon[s].has(PMD_HURT)) {
-      // v2.6: triste (una necesidad baja, p. ej. hambre) se queda quieto con su pose de dolor, pero eso no
-      // para la comida: el que tiene comida en el suelo va a por ella
-      hold[s] = YH_STAY;
+    if (yardFood[s].phase == YF_EAT) {
+      foodWaits[s] = hold[s] != YH_NONE;  // otra cosa lo tiene quieto: la comida espera
+      if (!foodWaits[s]) hold[s] = yardFoodHold(yardFood[s]);
+    } else if (hold[s] == YH_NONE) {
+      // v2.6: triste (una necesidad baja, p. ej. hambre) se queda quieto con su pose de dolor, pero eso no para la
+      // comida que espera ni (v3.3) apartarse de debajo del menu: yardMenuHold decide sobre esa base
+      uint8_t base = !foodOn[s] && pet.home(s).mood() == MOOD_SAD && homeMon[s].has(PMD_HURT) ? YH_STAY : YH_NONE;
+      hold[s] = (petMenuOpen && yardW.p[s].on)
+                    ? yardMenuHold(yardW, walk, s, base, petMenuOpen == s + 1, yardBodyOf(s).w, colX, yardAside[s], now)
+                    : base;
     }
   }
   hold[YARD_TRV] = YH_NONE;  // el viajero espera quieto (no pasea)
   bool still = pet.home(0).emote() != EMOTE_NONE || pet.home(1).emote() != EMOTE_NONE;
-  int8_t tilt = (imuPresent() && !still && yardFood.phase == YF_NONE) ? imuTiltSide() : 0;
-  const uint8_t *walk = yardWalkNow();
+  int8_t tilt = (imuPresent() && !still && !foodOn[0] && !foodOn[1]) ? imuTiltSide() : 0;
   yardStep(yardW, walk, now, dt, hold, tilt);
-  if (fo >= 0 && (yardFood.phase == YF_FALL || (!foodWaits && yardFood.phase != YF_NONE))) {  // (la caida no espera)
-    uint8_t kind = yardFood.kind;
-    if (yardFoodStep(yardFood, yardW, walk, fo, now)) yardFoodEaten(kind, fo);
-  } else if (foodWaits) {
-    yardFood.t0 += dt;  // su fase no avanza mientras tanto
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    YardFood &f = yardFood[s];
+    if (!foodOn[s]) continue;
+    if (f.phase == YF_QUEUED) {  // v3.3: la comida elegida espera a que se aparte del menu; despues, delante
+      YardPet &p = yardW.p[s];
+      bool under = petMenuOpen && yardUnderMenu(p.x, yardBodyOf(s).w, colX);
+      if (yardFoodServe(f, p, walk, yardFoodReady(f, p, under, now), now))
+        Serial.printf("FOOD front kind=%u slot=%u at %d,%d\n", f.kind, s, f.x, f.y);
+      continue;  // (el bocado empieza en el paso siguiente)
+    }
+    if (!foodWaits[s]) {
+      uint8_t kind = f.kind;
+      if (yardFoodStep(f, yardW, s, now)) yardFoodEaten(kind, s);
+    } else {
+      f.t0 += dt;  // su fase no avanza mientras tanto
+    }
   }
 }
 
@@ -8351,6 +8871,14 @@ void yardDrawPet(int i, uint32_t now) {
   const PetLife *l = home ? &pet.home((uint8_t)i) : nullptr;
   int x = (int)p.x + (home ? dizzyWobbleOf(*l, now) : 0), y = (int)p.y;
   yardShadow(x, y, b.w);
+  if (home && petMenuOpen == i + 1) {  // v3.3: el que tiene el menu abierto, con un anillo a sus pies
+    int rx = b.w / 2 + 6, ry;
+    if (rx < 24) rx = 24;
+    ry = rx / 3 < 8 ? 8 : rx / 3;
+    gfx->drawEllipse(x, y, rx, ry, Y_TEXT);
+    gfx->drawEllipse(x, y, rx + 1, ry + 1, Y_TEXT);
+    gfx->drawEllipse(x, y, rx + 2, ry + 1, Y_SHADOW);
+  }
   if (b.kind == YB_PMD) {
     PmdMon &m = yardMonOf(i);
     uint8_t act = PMD_IDLE;
@@ -8359,7 +8887,7 @@ void yardDrawPet(int i, uint32_t now) {
     else if (p.mode == YM_STAY && home) {
       PetMood md = l->mood();
       act = md == MOOD_EATING ? PMD_EAT : md == MOOD_SAD ? PMD_HURT : PMD_IDLE;
-      if (yardFood.phase == YF_EAT && yardFoodOwner() == i) act = PMD_EAT;  // Y3: el bocado a la comida del suelo
+      if (yardFood[i].phase == YF_EAT) act = PMD_EAT;  // Y3: el bocado a su comida
     } else if (p.mode == YM_WALK) act = yardWalkAct(m, p);
     else if (p.mode == YM_GESTURE) {
       act = p.act;
@@ -8395,48 +8923,31 @@ void yardDrawPet(int i, uint32_t now) {
   }
   int head = y - b.h;
   if (l->showHeart()) drawMap(SPR_HEART, 32, x + b.w / 2 - 6, head - 18, 1, false);
+  // v3.3: puede evolucionar o quiere despedirse: un "!" sobre la cabeza (lo hace su menu, en una fila resaltada)
+  if ((l->wantEvolveButton() || l->wantFarewellButton()) && !l->showHeart() && petMenuOpen != i + 1)  // (su menu ya lo dice)
+    drawExclaim(x + b.w / 2 + 14, head - 12 + (int)(3 * sinf(now * 0.012f)));
   uint8_t e = l->emote();
   if (e == EMOTE_ANGRY) drawAngerMark(x + b.w / 2 + 6, head + 4);
   else if (e == EMOTE_DIZZY) drawDizzyStars(x, head - 8, now);
 }
 
-// ---- la comida que cae y el huevo (fase Y3) ----
-// la comida en el suelo: cae desde arriba con un bote, espera, y en el bocado se encoge y se va
-void yardDrawFood(uint32_t now) {
-  const YardFood &f = yardFood;
+// ---- la comida y el huevo (fase Y3) ----
+// la comida del hueco s (v3.3, la del menu del bicho): aparece delante de el y en el bocado se encoge y se va
+void yardDrawFood(uint8_t slot, uint32_t now) {
+  const YardFood &f = yardFood[slot];
   if (f.phase == YF_NONE) return;
   uint32_t el = now - f.t0;
-  int lift = 0, s = 2;
-  if (f.phase == YF_FALL) {
-    float t = (float)el / YARD_FOOD_FALL_MS;
-    if (t > 1) t = 1;
-    if (t < 0.7f) {  // la caida (acelera)
-      float k = 1.0f - t / 0.7f;
-      lift = (int)(170 * k * k);
-    } else {  // un bote
-      lift = (int)(16 * sinf((t - 0.7f) / 0.3f * (float)PI));
-    }
-  } else if (f.phase == YF_EAT) {
-    float t = (float)el / YARD_FOOD_EAT_MS;
-    if (t > 0.75f) return;  // ya se la comio
-    if (t > 0.4f) s = 1;     // a bocados: mas pequena
-  }
-  int sw = 26 - lift / 10;  // la sombra crece al acercarse al suelo
-  if (sw > 6) yardShadow(f.x, f.y, sw);
-  drawMap(FOOD_ICON[f.kind < FOOD_COUNT ? f.kind : 0], 16, f.x - 8 * s, f.y - 15 * s - lift, s, false);
+  if (f.phase != YF_EAT) return;  // (la que espera a que se aparte aun no esta en el suelo)
+  int s = 2;
+  float t = (float)el / YARD_FOOD_EAT_MS;
+  if (t > 0.75f) return;  // ya se la comio
+  if (t > 0.4f) s = 1;     // a bocados: mas pequena
+  yardShadow(f.x, f.y, 26);
+  drawMap(FOOD_ICON[f.kind < FOOD_COUNT ? f.kind : 0], 16, f.x - 8 * s, f.y - 15 * s, s, false);
 }
 
-// lo de encima del bicho por la comida: el "!" al verla (el que la pidio), y el corazon que sale al
-// acabarsela (sobre el que se la comio)
+// lo de encima del bicho por la comida: el corazon que sale al acabarsela (sobre el que se la comio)
 void yardDrawFoodFx(uint32_t now) {
-  int fo = yardFoodOwner();
-  if (fo >= 0 && yardW.p[fo].on) {
-    YardPet &p = yardW.p[fo];
-    int head = yardPetHeadY(fo), w = yardBodyOf(fo).w;
-    uint32_t el = now - yardFood.t0;
-    if (yardFood.phase == YF_NOTICE || (yardFood.phase == YF_WALK && el < 450))
-      drawExclaim((int)p.x + w / 2 + 14, head - 12 + (int)(3 * sinf(now * 0.012f)));
-  }
   uint8_t hs = yardHeartSlot & 1;
   uint32_t pop = now - yardHeartPopAt;
   if (yardHeartPopAt && pop < 1000 && yardW.p[hs].on && !pet.home(hs).showHeart()) {  // (le encanta o la tarta: ya sale el suyo)
@@ -8486,19 +8997,20 @@ void yardDrawEggBubble(uint8_t s, uint32_t now) {
   yardBubbleAt(yardEggX[s], tip, opts[yardCycleIndex(n, since, 900)]);
 }
 
-// lo del suelo que se ordena con los bichos (los dos huecos y la comida): su y, o INT32_MAX si no hay
+// lo del suelo que se ordena con los bichos (el huevo y la comida de cada hueco): su y, o INT32_MAX si no hay
 static int32_t yardObjY(int k) {
   if (k < HOME_SLOTS) {
     const PetLife &l = pet.home(k);
     return (l.isEgg() && !l.isVacant() && yardEggX[k] >= 0) ? yardEggY[k] : INT32_MAX;
   }
-  return yardFood.phase != YF_NONE ? yardFood.y : INT32_MAX;
+  const YardFood &f = yardFood[k - HOME_SLOTS];
+  return f.phase != YF_NONE ? f.y : INT32_MAX;
 }
 static void yardDrawObj(int k, uint32_t now) {
   if (k < HOME_SLOTS) yardDrawEgg((uint8_t)k, now);
-  else yardDrawFood(now);
+  else yardDrawFood((uint8_t)(k - HOME_SLOTS), now);
 }
-#define YARD_OBJS (HOME_SLOTS + 1)
+#define YARD_OBJS (2 * HOME_SLOTS)
 
 void yardDrawPets(uint32_t now) {
   uint8_t order[YARD_PETS_MAX];
@@ -8792,24 +9304,26 @@ int yardGiftAt(int16_t x, int16_t y) {
   return -1;
 }
 
-// suelta la comida del panel Cuidar (kind: FOOD_*, food.h) cerca del bicho del foco. 1 cae, 0 ya hay
-// una en el suelo, -1 no hay bicho en el patio
-int yardDropFood(uint8_t kind) {
-  if (yardFood.phase != YF_NONE) return 0;
-  uint8_t f = pet.focusSlot;
-  if (!yardW.p[f].on || !yardHomeNow() || pet.isEgg()) return -1;
-  YardPet &p = yardW.p[f];
-  int16_t ox[YARD_THINGS_MAX + YARD_PETS_MAX], oy[YARD_THINGS_MAX + YARD_PETS_MAX];  // + los otros bichos
-  int n = yardThings(ox, oy, -1);
-  for (int i = 0; i < YARD_PETS_MAX; i++)
-    if (i != f && yardW.p[i].on) {  // tampoco a los pies de los otros
-      ox[n] = (int16_t)yardW.p[i].x;
-      oy[n++] = (int16_t)yardW.p[i].y;
-    }
-  int c = yardFoodCell(yardWalkNow(), p.x, p.y, p.face, ox, oy, n);
-  yardFoodDrop(yardFood, kind, c, p.x, p.y, millis(), pet.uid);
-  Serial.printf("FOOD drop kind=%u slot=%u cell=%d at %d,%d\n", kind, f, c, yardFood.x, yardFood.y);
+// v3.3: la comida de la lista del menu (kind: FOOD_*, food.h) para el bicho del hueco s: aparece delante de el
+// en cuanto termina de apartarse del menu (yardTick; casi siempre en el paso siguiente) y se la come (yard.h,
+// yardFoodQueue / yardFoodServe). 1 servida, 0 ya tiene una, -1 no esta en el patio
+int yardFeedFront(uint8_t s, uint8_t kind) {
+  if (s >= HOME_SLOTS) return -1;
+  if (yardFood[s].phase != YF_NONE) return 0;
+  const PetLife &l = pet.home(s);
+  if (!yardW.p[s].on || !yardHomeNow() || !l.hatched()) return -1;
+  yardFoodQueue(yardFood[s], kind, millis(), l.uid);
+  Serial.printf("FOOD queued kind=%u slot=%u\n", kind, s);
   return 1;
+}
+
+// v3.3: cuantos objeto `it` estan ya elegidos para comer (en la lista del menu de algun bicho) y aun no se han
+// gastado: no se pueden volver a dar (ni en la mochila)
+uint8_t yardFoodReserved(uint8_t it) {
+  uint8_t n = 0;
+  for (const YardFood &f : yardFood)
+    if (f.phase != YF_NONE && f.kind < FOOD_COUNT && foodItem(f.kind) == it) n++;
+  return n;
 }
 
 // ---- el globo sobre cada bicho ----
@@ -8859,6 +9373,8 @@ void yardBubbleAt(int cx, int tipY, const char *text) {
   int x = cx - w / 2;
   if (x < Y_CX - hc) x = Y_CX - hc;
   if (x + w > Y_CX + hc) x = Y_CX + hc - w;
+  if (petMenuOpen && x + w > petMenuX(5) - 6) x = petMenuX(5) - 6 - w;  // v3.3: a la izquierda del menu del bicho
+  if (x < Y_CX - hc) x = Y_CX - hc;
   int tail = cx < x + 14 ? x + 14 : cx > x + w - 14 ? x + w - 14 : cx;
   gfx->fillRoundRect(x + 2, top + 2, w, h, 10, Y_SHADOW);
   gfx->fillRoundRect(x, top, w, h, 10, Y_TEXT);
@@ -8918,6 +9434,7 @@ void yardStatPill(uint8_t slot, uint8_t a, int16_t v, float t) {
   int w = textW(s, 2) + 16;
   int cx = petFootXOf(slot), y = yardPetHeadY(slot & 1) - 70 - (a & 1) * 28 - (int)(t * 26);
   if (y < 44) y = 44;
+  if (petMenuOpen && cx + w / 2 > petMenuX(5) - 6) cx = petMenuX(5) - 6 - w / 2;  // v3.3: sin pisar el menu
   if (cx - w / 2 < 40) cx = 40 + w / 2;
   if (cx + w / 2 > 426) cx = 426 - w / 2;
   gfx->fillRoundRect(cx - w / 2, y - 4, w, 24, 8, v > 0 ? Y_ACCENT_GO : Y_ACCENT_BAD);
@@ -8952,19 +9469,19 @@ void drawBatteryHud(int x, int y) {
   }
 }
 
+// el dock (v3.3): Jugar, Mochila, Tienda. Cuidar se fue al menu de cada bicho (tocarlo en el patio)
+enum : uint8_t { DOCK_PLAY = 0, DOCK_BAG, DOCK_SHOP };
 // boton del dock -> boton de la fila vieja, para los efectos de pulsar y temblar (fx.h)
-static int yardDockFx(int d) { return d == 0 ? BTN_CARE : d == 1 ? 1 : BTN_BAG; }
-// v3.0: con que cualquiera de los dos de casa pueda. Cuidar: algun bicho nacido (dormido tambien: para
-// despertarlo). Jugar: alguno nacido y despierto, o bichos en la caja (las fases). La Mochila, siempre
+static int yardDockFx(int d) { return d == DOCK_PLAY ? 1 : d == DOCK_BAG ? BTN_BAG : BTN_SHOP; }
+// v3.0: con que cualquiera de los dos de casa pueda. Jugar: alguno nacido y despierto, o bichos en la caja
+// (las fases). La Mochila y la Tienda, siempre
 static bool yardDockOff(int d) {
-  bool anyHatched = false, anyAwake = false;
+  bool anyAwake = false;
   for (uint8_t s = 0; s < HOME_SLOTS; s++) {
     const PetLife &l = pet.home(s);
-    anyHatched |= l.hatched();
     anyAwake |= l.hatched() && !l.sleeping;
   }
-  if (d == 0) return !anyHatched;
-  return d == 1 && !anyAwake && !pet.boxHasPets();
+  return d == DOCK_PLAY && !anyAwake && !pet.boxHasPets();
 }
 
 #define YARD_COIN_Y 40   // la cartera, justo debajo de la bateria (v2.1: sin hora, chocaba con el aviso de vuelta)
@@ -8973,9 +9490,9 @@ void yardDrawHud() {
   drawBatteryHud(Y_CX - BAT_ICON_W / 2, YARD_BAT_Y);
   yCoinBadge(Y_CX, YARD_COIN_Y, pet.coins, true);  // la cartera (Y4)
   YDockItem dock[Y_DOCK_N] = {
-    { SPR_ICON_CARE, Y_DOCK_CARE, yardDockOff(0) },
-    { SPR_ICON_PLAY, Y_DOCK_PLAY, yardDockOff(1) },
-    { SPR_ICON_BAG, Y_DOCK_BAG, yardDockOff(2) },
+    { SPR_ICON_PLAY, Y_DOCK_PLAY, yardDockOff(DOCK_PLAY) },
+    { SPR_ICON_BAG, Y_DOCK_BAG, yardDockOff(DOCK_BAG) },
+    { SPR_ICON_SHOP, Y_DOCK_SHOP, yardDockOff(DOCK_SHOP) },
   };
   int pressed = -1;
   for (int d = 0; d < Y_DOCK_N; d++)
@@ -8992,12 +9509,18 @@ void renderYardHome(uint32_t now) {
   yardDrawPets(now);
   drawBoxAppear(now);       // recien guardado o despertado: sale de una luz
   yardDrawBubble(now);
-  yardDrawFoodFx(now);     // Y3: el "!" al ver la comida y el corazon al acabarsela
+  yardDrawFoodFx(now);     // Y3: el corazon al acabarse la comida
   yardDrawHud();
 }
 
 // ---- toques ----
+// v3.3: con el menu de un bicho abierto, el toque es suyo (sus filas, el otro bicho o cerrarlo); si no: el dock,
+// el huevo, lo que se mueve, las cacas, los regalos y los bichos (tocar uno abre su menu)
 void yardTap(int16_t x, int16_t y) {
+  if (petMenuOpen) {
+    petMenuTap(x, y);
+    return;
+  }
   int d = yDockHit(x, y);
   if (d >= 0) {
     Serial.printf("DOCK %d\n", d);
@@ -9008,9 +9531,9 @@ void yardTap(int16_t x, int16_t y) {
       return;
     }
     sfxPlay(SFX_TAP);
-    if (d == 0) openCarePanel();
-    else if (d == 1) openPlayPanel();
-    else openBag();
+    if (d == DOCK_PLAY) openPlayPanel();
+    else if (d == DOCK_BAG) openBag();
+    else openShop();
     return;
   }
   int es = yardEggAt(x, y);
@@ -9068,15 +9591,12 @@ void yardTap(int16_t x, int16_t y) {
     int bx = (int)yardW.p[YARD_TRV].x + bb.w / 2 + 14, by = (int)yardW.p[YARD_TRV].y - bb.h - 12;
     if (abs(x - bx) < 34 && abs(y - by) < 34) who = YARD_TRV;
   }
-  if (who >= 0 && who < HOME_SLOTS) {  // uno de casa: pasa a tener el foco y se abre su ficha
-    if (!uiFocus((uint8_t)who)) {
+  if (who >= 0 && who < HOME_SLOTS) {  // v3.3: uno de casa: pasa a tener el foco y se abre su menu
+    if (!openPetMenu((uint8_t)who)) {
       sfxPlay(SFX_DENY);
       return;
     }
-    Serial.printf("PET card slot=%d\n", who);
     sfxPlay(SFX_TAP);
-    cardOpen = true;
-    cardPage = 0;
   } else if (who == YARD_TRV && yardBoxSlot >= 0 && trvBackSlot() == yardBoxSlot) {  // v2.1: el viajero: lo que trajo
     Serial.println("PET travel result");
     returnOpen = true;
@@ -9185,50 +9705,6 @@ void drawChoiceDialog() {
   printT(o2);
 }
 
-// boton-CTA rojo y grande para evolucionar (pulsa para llamar la atencion)
-// v3.0: el hueco cuyo bicho tiene el boton de evolucion (kind 1) o de despedida (kind 2): el del foco
-// primero; -1 = ninguno. Tocarlo le da el foco y abre su dialogo
-int8_t homeButtonSlot(uint8_t kind) {
-  for (uint8_t k = 0; k < HOME_SLOTS; k++) {
-    uint8_t s = k ? pet.focusSlot ^ 1 : pet.focusSlot;
-    const PetLife &l = pet.home(s);
-    if (kind == 1 ? l.wantEvolveButton() : l.wantFarewellButton()) return (int8_t)s;
-  }
-  return -1;
-}
-
-void drawEvolveButton() {
-  uint32_t now = millis();
-  int p = (int)(5 * sinf(now * 0.006f));  // late: -5..5
-  int x = EVO_BTN_X - p, y = EVO_BTN_Y - p, w = EVO_BTN_W + 2 * p, h = EVO_BTN_H + 2 * p;
-  gfx->fillRoundRect(x, y, w, h, 18, UI_BAR_BAD);
-  gfx->drawRoundRect(x, y, w, h, 18, UI_WHITE);
-  gfx->drawRoundRect(x + 2, y + 2, w - 4, h - 4, 16, UI_WHITE);
-  gfx->setTextColor(UI_WHITE);
-  setSize(3);
-  const char *t = T(S_EVO_TAP);
-  setCur(centerX(t, 3), y + h / 2 - 11);
-  printT(t);
-}
-
-// boton-CTA dorado de despedida: "<nombre> quiere decirte algo..."
-void drawFarewellButton() {
-  uint32_t now = millis();
-  int p = (int)(4 * sinf(now * 0.005f));
-  int x = FAR_BTN_X - p, y = FAR_BTN_Y - p, w = FAR_BTN_W + 2 * p, h = FAR_BTN_H + 2 * p;
-  gfx->fillRoundRect(x, y, w, h, 16, UI_BAR_WARN);
-  gfx->drawRoundRect(x, y, w, h, 16, UI_INK);
-  char buf[52];
-  int8_t fs = homeButtonSlot(2);
-  const PetLife &l = pet.home(fs >= 0 ? (uint8_t)fs : pet.focusSlot);  // v3.0: el que quiere despedirse
-  const char *nm = l.nick[0] ? l.nick : dexName(l.speciesId);
-  snprintf(buf, sizeof(buf), T(S_FAREWELL_BTN), nm);
-  gfx->setTextColor(UI_INK);
-  setSize(2);
-  setCur(centerX(buf, 2), y + h / 2 - 8);
-  printT(buf);
-}
-
 // lluvia de los finales tristes (la muerte por abandono y su dialogo, v1.60; antes la escapada)
 void drawSadRain(uint32_t now) {
   for (int i = 0; i < 46; i++) {
@@ -9260,6 +9736,8 @@ void closeForDying() {
   choiceKind = 0;
   confirmUntil = 0;
   panelKind = PANEL_NONE;
+  closePetMenu();       // v3.3
+  petPick = PICK_NONE;
   trvMapPrev = 0;
   boxAwayUntil = 0;
 }

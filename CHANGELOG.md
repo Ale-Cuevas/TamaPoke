@@ -6,6 +6,21 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.3] - 2026-11-18
+
+### Changed
+
+- **Tap a pet to care for it.** A small menu opens on the right of the yard: Sleep (or Wake), Food, Care (the
+  heart, +20 JOY), Status (its card), and Evolve or Farewell when the pet is ready (a "!" floats over it). The pet
+  steps out from under the menu and waits. Tap the other pet to switch, tap anywhere else to close.
+- **Food appears in front of the pet.** Pick the plain berry or one of your foods from the list (4 per page, with
+  counts and a star on the favourite) and the pet eats it right there, no walking.
+- **New dock: Play, Bag, Shop.** The Care button and panel are gone (care is the pet menu now). The Shop has its own
+  button; the Bag keeps your items and the Collection.
+- **"Who plays?"** With two pets that can play, a minigame first asks which one; Backpack items (vitamins, Rare
+  Candy, foods) ask which pet when both can use them.
+- Serial: `MENU s` opens a pet's menu (and lists its rows with tap points), `PICK s` chooses in the picker.
+
 ## [3.2] - 2026-11-18
 
 ### Added

@@ -820,25 +820,6 @@ static const char* const SPR_ICON_BAG[16] = {  // 16x16
   "...kkkkkkkkkk...",
 };
 
-static const char* const SPR_ICON_CARE[16] = {  // 16x16
-  "................",
-  "................",
-  "...kkk....kkk...",
-  "..kpppk..kpppk..",
-  ".kpwpppkkppppPk.",
-  ".kwppppwwppppPk.",
-  ".kpppppwwpppPPk.",
-  ".kpppwwwwwwppPk.",
-  "..kppwwwwwwpPk..",
-  "...kpppwwppPk...",
-  "....kppwwpPk....",
-  ".....kppPPk.....",
-  "......kPPk......",
-  ".......kk.......",
-  "................",
-  "................",
-};
-
 static const char* const SPR_ICON_SUN[16] = {  // 16x16
   ".......kk.......",
   "......kook......",
@@ -912,6 +893,63 @@ static const char* const SPR_ICON_PET[16] = {  // 16x16: corazon, el mimo del pa
   ".....krrrRk.....",
   "......krRk......",
   ".......kk.......",
+  "................",
+};
+
+static const char* const SPR_ICON_SHOP[16] = {  // 16x16: moneda, el boton Tienda del dock (v3.3)
+  "................",
+  "................",
+  ".....kkkkkk.....",
+  "...kkffffffkk...",
+  "...kfwfOOfffk...",
+  "..kfwffOOffffk..",
+  "..kfwffOOfffYk..",
+  "..kffffOOfffYk..",
+  "..kffffOOfffYk..",
+  "..kffffOOfffYk..",
+  "..kffffOOffYYk..",
+  "...kfffOOfYYk...",
+  "...kkfYYYYYkk...",
+  ".....kkkkkk.....",
+  "................",
+  "................",
+};
+
+static const char* const SPR_ICON_CARD[16] = {  // 16x16: ficha, Estado en el menu del bicho (v3.3)
+  "................",
+  "................",
+  "................",
+  ".kkkkkkkkkkkkkk.",
+  ".kwwwwwwwwwwwwk.",
+  ".kwbbbbwssssswk.",
+  ".kwbbbbwwwwwwwk.",
+  ".kwbbbBwsssswwk.",
+  ".kwbbBBwwwwwwwk.",
+  ".kwwwwwwwwwwwwk.",
+  ".kwgggggggSSSwk.",
+  ".kwooooooSSSSwk.",
+  ".kwwwwwwwwwwwwk.",
+  ".kkkkkkkkkkkkkk.",
+  "................",
+  "................",
+};
+
+static const char* const SPR_ICON_LETTER[16] = {  // 16x16: carta, Despedirse en el menu del bicho (v3.3)
+  "................",
+  "................",
+  "................",
+  "................",
+  ".kkkkkkkkkkkkkk.",
+  ".kYyyyyyyyyyyYk.",
+  ".kyYyyyyyyyyYyk.",
+  ".kyyYyyyyyyYyyk.",
+  ".kyyyYrRRrYyyyk.",
+  ".kyyyyrrrryyyyk.",
+  ".kyyyyyrryyyyyk.",
+  ".kyyyyyyyyyyyyk.",
+  ".kkkkkkkkkkkkkk.",
+  "................",
+  "................",
   "................",
 };
 

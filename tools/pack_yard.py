@@ -38,8 +38,8 @@ FRAME_INSET = 12             # nada se pisa a menos de 12 px del borde redondo
 # zonas del HUD en coordenadas del lienzo (x0, y0, x1, y1): hora + monedas, y el dock
 CLOCK_ZONE = (140, 20, 326, 110)
 DOCK_ZONE = (130, 376, 336, 440)   # = yard.h; el dock va cada 72 px (yard_ui.h)
-# colores del dock (yard_ui.h: Y_DOCK_CARE / PLAY / BAG)
-DOCK_COLS = ((0x2E, 0xC4, 0x8A), (0xF0, 0xA8, 0x30), (0x5E, 0x8F, 0xE0))
+# colores del dock (yard_ui.h, v3.3: Y_DOCK_PLAY / BAG / SHOP)
+DOCK_COLS = ((0xF0, 0xA8, 0x30), (0x5E, 0x8F, 0xE0), (0xD8, 0x60, 0x9A))
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_YARD = HERE / 'yard'
