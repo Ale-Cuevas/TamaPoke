@@ -59,7 +59,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "3.8"
+#define FW_VERSION "3.9"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -7759,8 +7759,8 @@ static void pmLabel(const char *t, int x, int y, int maxW) {
     printTight(t, x + maxW / 2, y, maxW);
   }
 }
-// el nombre del bicho encima de la columna (n filas), alineado con su borde derecho, y debajo (v3.8) sus 3
-// necesidades en barritas: COM, FEL, ENE, con los colores de la ficha
+// el nombre del bicho encima de la columna (n filas), alineado con su borde derecho, y debajo sus 3 necesidades
+// (v3.8; v3.9 en una caja del color de las filas, con su etiqueta delante): COM, FEL, ENE, colores de la ficha
 static void pmName(uint8_t s, uint8_t n) {
   const PetLife &l = pet.home(s);
   const char *nm = l.nick[0] ? l.nick : dexName(l.speciesId);
@@ -7770,14 +7770,21 @@ static void pmName(uint8_t s, uint8_t n) {
   if (x < colX) x = colX;
   yShadowText(x, ny, nm, 2, Y_TEXT);
   int by = petMenuNeedsY(n);
-  int right = petMenuHeadRight(n, by, PM_NEED_H);
-  int bw = right - colX;
+  int bx = petMenuHeadRight(n, by, PM_NEED_BOX_H) - PM_NEED_BOX_W;
+  pmRow(bx, by, PM_NEED_BOX_W, PM_NEED_BOX_H, Y_PANEL_BG, false);
+  const StrId labs[3] = {S_BAR_FOOD, S_BAR_JOY, S_BAR_ENE};
   const uint8_t vals[3] = {l.fullness, l.joy, l.energy};
+  int lx = bx + PM_NEED_PAD, barX = lx + PM_NEED_LABEL_W + 4;
+  setSize(1);
+  gfx->setTextColor(Y_TEXT);
   for (uint8_t i = 0; i < 3; i++) {
-    int y = by + i * (PM_NEED_BAR_H + PM_NEED_GAP);
-    gfx->fillRoundRect(colX, y, bw, PM_NEED_BAR_H, 2, Y_CARD_HI);
-    int fw = bw * vals[i] / 100;
-    if (fw > 0) gfx->fillRoundRect(colX, y, fw, PM_NEED_BAR_H, 2, needBarColor(vals[i], i == 0 && l.sated()));
+    int y = by + PM_NEED_PAD + i * PM_NEED_PITCH;
+    setCur(lx, y);
+    printT(T(labs[i]));
+    int yb = y + (PM_NEED_TXT - PM_NEED_BAR_H) / 2;
+    gfx->fillRoundRect(barX, yb, PM_NEED_BAR_W, PM_NEED_BAR_H, 2, Y_CARD_HI);
+    int fw = PM_NEED_BAR_W * vals[i] / 100;
+    if (fw > 0) gfx->fillRoundRect(barX, yb, fw, PM_NEED_BAR_H, 2, needBarColor(vals[i], i == 0 && l.sated()));
   }
 }
 

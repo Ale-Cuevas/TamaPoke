@@ -51,15 +51,30 @@ inline int panelHit(uint8_t kind, int px, int py) {
 // Despertar), Comida, Mimar, Estado y, cuando toca, Evolucionar o Despedirse (resaltada). Filas de 48 px
 // (lo minimo tocable), PM_W de ancho, la columna centrada en Y_CY; su borde derecho, lo mas a la derecha que
 // deja el circulo util a la altura de su esquina mas alejada del centro (menos PM_EDGE). Va entre la cartera
-// del HUD (arriba) y las zonas de toque del dock (abajo): con 6 filas el hueco entre ellas se encoge y la
-// columna sube (la interfaz usa 5 como mucho: el menu con Evolucionar, o la comida con su fila de volver).
+// del HUD y su cabecera (arriba) y las zonas de toque del dock (abajo): con 5 filas (v3.9) la columna baja
+// hasta PM_TOP y el hueco entre filas se encoge (la interfaz usa 5 como mucho: el menu con Evolucionar, o la
+// comida con su fila de volver).
 enum : uint8_t { PM_SLEEP = 0, PM_FOOD, PM_CARE, PM_STATUS, PM_EVOLVE, PM_FAREWELL, PM_KINDS };
 #define PM_ROW_H Y_HIT_MIN  // 48
 #define PM_GAP 6
 #define PM_W 150
 #define PM_EDGE 4    // px por dentro del circulo util
-#define PM_MAX 6
-#define PM_TOP 64    // la cartera del HUD (y 40: 14 px de texto, la moneda de r 9 y su sombra) acaba en ~58
+#define PM_MAX 5     // v3.9: la interfaz nunca pasa de 5 (Evolucionar o Despedirse; la comida y volver)
+#define PM_HUD_BOTTOM 58  // la cartera del HUD (y 40: 14 px de texto, la moneda de r 9 y su sombra) acaba aqui
+// la cabecera de la columna: el nombre y, debajo, la cajita de necesidades (v3.8 barritas, v3.9 en una caja)
+#define PM_NAME_H 18       // el nombre a tamano 2 y su sombra
+#define PM_NEED_PAD 5      // margen de la caja
+#define PM_NEED_TXT 7      // la etiqueta a tamano 1 (5x7)
+#define PM_NEED_PITCH 11   // de una fila a la siguiente (7 px de texto y 4 de aire)
+#define PM_NEED_BAR_H 5
+#define PM_NEED_BAR_W 64
+#define PM_NEED_LABEL_W 24  // 4 letras a tamano 1 (FOOD, COM, ENE...)
+#define PM_NEED_BOX_W (2 * PM_NEED_PAD + PM_NEED_LABEL_W + 4 + PM_NEED_BAR_W)  // 102
+#define PM_NEED_BOX_H (2 * PM_NEED_PAD + 2 * PM_NEED_PITCH + PM_NEED_TXT)      // 39
+#define PM_NEED_H (PM_NEED_BOX_H + 6)  // la caja, su sombra y aire hasta la columna
+// lo mas alto que empieza la columna: la cabecera entera queda bajo la cartera (con 5 filas la columna baja un
+// poco y su hueco se encoge; hasta 4 sigue centrada)
+#define PM_TOP (PM_HUD_BOTTOM + PM_NAME_H + PM_NEED_H)  // 121
 #define PM_BOTTOM (Y_DOCK_Y - Y_DOCK_HIT_R - 2)  // 374: encima de los circulos tocables del dock
 
 // el hueco entre filas: PM_GAP, o menos si n filas no caben entre PM_TOP y PM_BOTTOM
@@ -85,13 +100,9 @@ inline int petMenuX(uint8_t n) {
   return Y_CX + half - PM_EDGE - PM_W;
 }
 
-// la cabecera de la columna (v3.8): el nombre y, debajo, 3 barritas de necesidades (COM, FEL, ENE, como la
-// ficha) entre el nombre y la primera fila. Su borde derecho, el de la columna o, si el circulo util se
-// estrecha a esa altura, lo que deje el circulo (menos PM_EDGE).
-#define PM_NEED_BAR_H 4
-#define PM_NEED_GAP 2
-#define PM_NEED_H (3 * PM_NEED_BAR_H + 2 * PM_NEED_GAP + 4)  // 20: las 3 barritas y 4 px hasta la columna
-#define PM_NAME_H 18                                          // el nombre a tamano 2 y su sombra
+// la cabecera de la columna: el nombre y, debajo, la caja con las 3 necesidades (COM, FEL, ENE, como la ficha),
+// alineados a la derecha con la columna o, si el circulo util se estrecha a esa altura, con lo que deje el
+// circulo (menos PM_EDGE).
 // lo mas a la derecha que deja el circulo util en la franja [y, y + h) (menos PM_EDGE)
 inline int petMenuSafeRight(int y, int h) {
   int d = Y_CY - y > y + h - Y_CY ? Y_CY - y : y + h - Y_CY;

@@ -55,7 +55,7 @@ TEST(yard_panels, sin_panel_no_hay_tarjetas) {
 
 // ---- el menu de un bicho (v3.3) ----
 
-// n = 1..6 filas: cada una tocable (48 px), dentro del circulo util, sin pisarse, ni el dock ni el boton de
+// n = 1..PM_MAX filas: cada una tocable (48 px), dentro del circulo util, sin pisarse, ni el dock ni el boton de
 // volver, debajo de la cartera del HUD; su centro la devuelve a ella
 TEST(yard_panels, menu_del_bicho_filas_tocables_y_dentro) {
   for (uint8_t n = 1; n <= PM_MAX; n++) {
@@ -82,29 +82,29 @@ TEST(yard_panels, menu_del_bicho_filas_tocables_y_dentro) {
   }
 }
 
-// v3.8: el nombre y las 3 barritas de necesidades, entre la cartera del HUD y la primera fila, dentro del circulo
-// util y sin pisarse, hasta 5 filas (lo que usa la interfaz)
+// v3.8/v3.9: el nombre y la caja de necesidades, entre la cartera del HUD y la primera fila, dentro del circulo
+// util y sin pisarse, con cualquier numero de filas
 TEST(yard_panels, menu_del_bicho_cabecera_con_necesidades) {
-  for (uint8_t n = 1; n <= 5; n++) {
+  for (uint8_t n = 1; n <= PM_MAX; n++) {
     int x, y, w, h;
     CHECK(petMenuRow(0, n, x, y, w, h));
     int ny = petMenuNameY(n), by = petMenuNeedsY(n);
-    CHECK(ny >= 58);                          // debajo de la cartera
-    CHECK(ny + PM_NAME_H <= by);              // el nombre encima de las barritas
-    CHECK(by + PM_NEED_H <= y);               // las barritas encima de la columna
-    int br = petMenuHeadRight(n, by, PM_NEED_H);
+    CHECK(ny >= PM_HUD_BOTTOM);               // debajo de la cartera
+    CHECK(ny + PM_NAME_H <= by);              // el nombre encima de la caja
+    CHECK(by + PM_NEED_BOX_H + 3 <= y);       // la caja (y su sombra) encima de la columna
+    int br = petMenuHeadRight(n, by, PM_NEED_BOX_H);
     CHECK(br <= x + PM_W);
-    CHECK(br - x >= 100);                     // barritas legibles
-    CHECK(rectInside(x, by, br - x, PM_NEED_H));
+    CHECK(br - PM_NEED_BOX_W >= x);           // no sobresale por la izquierda de la columna
+    CHECK(rectInside(br - PM_NEED_BOX_W, by, PM_NEED_BOX_W, PM_NEED_BOX_H));
     int nr = petMenuHeadRight(n, ny, PM_NAME_H);
     CHECK(rectInside(nr - 40, ny, 40, PM_NAME_H));
   }
 }
 
 TEST(yard_panels, menu_del_bicho_a_la_derecha_y_centrado) {
-  // hasta 5 filas (lo que usa la interfaz) la columna queda centrada en Y_CY, con el hueco de siempre, y en la
-  // mitad derecha de la pantalla
-  for (uint8_t n = 1; n <= 5; n++) {
+  // hasta 4 filas la columna queda centrada en Y_CY, con el hueco de siempre, y en la mitad derecha de la
+  // pantalla (con 5, v3.9, baja un poco para dejar sitio a la cabecera; abajo)
+  for (uint8_t n = 1; n <= 4; n++) {
     int x0, y0, w, h, xl, yl;
     CHECK(petMenuRow(0, n, x0, y0, w, h));
     CHECK(petMenuRow((uint8_t)(n - 1), n, xl, yl, w, h));
@@ -115,15 +115,14 @@ TEST(yard_panels, menu_del_bicho_a_la_derecha_y_centrado) {
     // el borde derecho casi toca el circulo: PM_EDGE mas a la derecha ya se saldria por una esquina
     CHECK(!rectInside(x0 + PM_EDGE + 1, y0, w, yl + h - y0));
   }
-  // con 5 filas: la columna de la v3.3 (x ~256..406, y 101..365)
+  // con 5 filas (v3.9): empieza en PM_TOP, bajo la cabecera, y el hueco se encoge para no pisar el dock
   int x, y, w, h;
   CHECK(petMenuRow(0, 5, x, y, w, h));
-  CHECK_EQ(y, 101);
-  CHECK(x >= 250 && x <= 262);
+  CHECK_EQ(y, PM_TOP);
+  CHECK(x > Y_CX);
+  CHECK(petMenuGap(5) < PM_GAP && petMenuGap(5) >= 2);
   CHECK(petMenuRow(4, 5, x, y, w, h));
-  CHECK_EQ(y + h, 365);
-  // con 6 el hueco se encoge, pero las filas siguen sin pisarse (comprobado arriba)
-  CHECK(petMenuGap(6) < PM_GAP);
+  CHECK(y + h <= PM_BOTTOM);
 }
 
 TEST(yard_panels, menu_del_bicho_fuera_no_toca_nada) {

@@ -6,6 +6,15 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.9] - 2026-11-18
+
+### Changed
+
+- **Need bars in a box.** The pet menu's need bars now sit in a small dark box, the same colour as the menu
+  buttons, with a label before each one (FOOD, JOY, ENE / COM, FEL, ENE). The bars are shorter and more spaced
+  out, so they read better over the yard. With a 5-row menu (Evolve or Farewell, or the food list) the buttons sit
+  a little lower and closer together to make room.
+
 ## [3.8] - 2026-11-18
 
 ### Added
