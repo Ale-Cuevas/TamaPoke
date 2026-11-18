@@ -308,8 +308,8 @@ egg: home stays empty".
 ### The Box (v1.37)
 Swipe **right** from the home screen (pet or egg) to open the Box: **6 slots** where pets
 **hibernate** while you raise another. Swipe left, tap the title or press USER to go back.
-Since v1.65 the Box has a **second page** with your 8 battle **badges**: swipe right from the slots to see
-it, swipe left to come back (see [Battles](#battles-stages-v165)). The pets in the Box can also fight in the
+The Box has one page (v3.4: the battle **badges** moved to the [USER page](#the-user-page-v34); until v3.3 they
+were its second page). The pets in the Box can also fight in the
 battle stages as part of your team, and a boss reward gives them growth and bond right in their slot.
 - **Store:** tap an empty slot (it shows a "+" when the current pet fits) and confirm. The
   pet goes in, and an egg takes its place: the egg that was waiting, or one from the
@@ -324,7 +324,8 @@ battle stages as part of your team, and a boss reward gives them growth and bond
   spend the Shiny Charm twice.
 - **Hibernation is total:** a stored pet doesn't age, grow, get hungry or slip up, not even
   while the board is off. Farewell age and evolution levels only count time spent active. The one exception is a battle stage's boss reward (+60 growth minutes, +5 bond).
-- Each pet keeps its own **bond**, daily bond cap and **medals**. Streak, steps, finds,
+- Each pet keeps its own **bond**, daily bond cap and what it already counted for your **medals** (v3.4: a pet
+  counts once, wherever it goes). Streak, steps, finds,
   goals, the Backpack, records and the Pokédex are yours and stay put; the first care of the
   day gives its +4 bond once a day, to whoever is active.
 - Slots show the pet dimmed with a "z", its name, level and a star if it's shiny. A slot
@@ -339,9 +340,43 @@ battle stages as part of your team, and a boss reward gives them growth and bond
 - **Bond** (per pet, resets on hatch): grows with affection (**cap +10/day**, plus +4 for
   the first care of the day; petting counts once per 15 min), so max bond takes about
   8 days of full care. Cools on neglect. Both streak & bond improve egg/shiny odds.
-- **9 medals** (Lv10/25/50, favorite berry found, 7-day streak, max bond, final form, 10000 steps in a day,
-  "fit" = weight 0 & no slip-ups), per-pet + a global counter.
+- **Medals** are the player's (v3.4; until v3.3 each pet had 9 of its own): see [Medals](#medals-v34).
 - **Pokédex:** raising a species registers it; **151 + shinies** to complete.
+
+### Medals (v3.4)
+**19 medals**, each with three tiers: **Bronze**, **Silver** and **Gold**. Each tier pays its coins once, the
+moment you reach it: **Bronze 25, Silver 75, Gold 200**, outside the daily cap. A banner says "MEDAL!", the
+medal, the tier and the coins. They're on the first page of the [USER page](#the-user-page-v34).
+
+| Medal | What counts | Bronze / Silver / Gold |
+|---|---|---|
+| Growing up | pets raised to Lv 10 | 2 / 6 / 15 |
+| Seasoned | pets raised to Lv 25 | 1 / 4 / 10 |
+| Master raiser | pets raised to Lv 50 | 1 / 4 / 8 |
+| Best friends | pets at bond 100 | 1 / 3 / 8 |
+| Full grown | pets in a final form | 2 / 5 / 12 |
+| In shape | pets at Lv 10 with weight 0 and no slip-ups | 1 / 3 / 8 |
+| Gourmet | favourite berries found | 2 / 6 / 15 |
+| Evolution | evolutions | 3 / 10 / 30 |
+| Happy farewell | farewells | 1 / 3 / 8 |
+| Pokédex | species registered | 15 / 50 / 120 |
+| Shiny | shiny species registered | 1 / 3 / 8 |
+| Daily care | best streak (days) | 7 / 30 / 100 |
+| Walker | total steps | 50 000 / 250 000 / 1 000 000 |
+| Marathon | days with 10 000 steps | 1 / 10 / 30 |
+| Stage champion | stages beaten | 3 / 6 / 8 |
+| Wild tamer | wild Pokémon beaten | 3 / 15 / 40 |
+| Catcher | captures | 1 / 5 / 15 |
+| Globetrotter | trips completed | 3 / 15 / 50 |
+| Collector | souvenirs | 5 / 15 / 25 |
+
+- The first seven count **pets**: each pet counts **once** for each of them, the first time it gets there, even
+  if it later goes to the Box, comes back, changes home slot or loses it (bond, weight). A pet that grows in the
+  Box (a boss reward, a wild win, a trip) counts when you wake it.
+- Evolutions, farewells, Marathon days, wild wins, captures and trips count from v3.4 on. The rest (Pokédex,
+  shinies, best streak, steps, badges, souvenirs) read what you already have.
+- **Updating from v3.3:** both home pets and every Box pet count once with what they are now (level, bond, form,
+  in shape, favourite found), and every tier already reached is paid in full at once, with its banners.
 
 ### Battle stats
 ATK / DEF / SPD = real **Gen-1 base** × genes + level + training (STRENGTH ← bag,
@@ -403,8 +438,8 @@ pre-selected. **Start** begins; tap the title to go back to the list.
   under the title; open it to see what it is), or straight into the Backpack when the home is empty. Clearing
   the same stage again the same day pays nothing more; the amber dot goes away. A boxed pet that passes its
   evolution level this way evolves once it's woken; the home pet's level-ups celebrate as usual.
-- **Badge:** the **first clear** of a stage earns its badge (ES: insignia), for good. It's the player's, not a
-  pet's: it is a different thing from the per-pet **Medals** of the stat card.
+- **Badge:** the **first clear** of a stage earns its badge (ES: insignia), for good. It's the player's. The
+  badges count for the **Stage champion** medal (3 / 6 / 8).
 - **Joy:** a finished run, won or lost, gives the home pet **+3 JOY**, at most once an hour.
 - Stage battles aren't counted in any win/loss record.
 
@@ -420,9 +455,9 @@ pre-selected. **Start** begins; tap the title to go back to the list.
   | Shiny Charm | 4 % (a cake if you already hold one) |
   | Egg | 3 %, the rarest |
 
-**Badges page.** The Box has two pages (page dots at the bottom): swipe **right** from the Box's slots for the
-badges page, swipe **left** to go back (and once more to leave the Box). It shows "Badges n/8" and the 8 badges:
-the ones you've earned in colour with the stage's name, the rest as a grey silhouette with "???".
+**Badges page** (v3.4: the 3rd page of the [USER page](#the-user-page-v34); it was the Box's 2nd page). It
+shows "Badges n/8" and the 8 badges: the ones you've earned in colour with the stage's name, the rest as a grey
+silhouette with "???".
 
 Battles between two boards over the air are next (see the roadmap).
 
@@ -515,9 +550,24 @@ waving it around doesn't farm anything.
   use it (foods, vitamins, Rare Candy), it asks **who gets it** instead (v3.3). The Charm, eggs,
   the Revive and the Poké Ball aren't used by hand (a tap on the Revive or the ball says what it's for). It opens while the
   pet sleeps too, just to look.
-- The stat card's 5th page, **WALK** (swipe up, then left four times), shows today's steps with
-  a ring toward the next goal and a flag per goal reached, the total and today's finds (random
-  ones out of 5, "+n" for the goals' gifts).
+- The **WALK** page (v3.4: the 2nd page of the [USER page](#the-user-page-v34): swipe up, then left once; it was
+  the stat card's 5th page) shows today's steps with a ring toward the next goal and a flag per goal reached, the
+  total and today's finds (random ones out of 5, "+n" for the goals' gifts).
+
+### The USER page (v3.4)
+Swipe **up** in the yard: your page, with 4 pages you swipe **left / right** (dots at the bottom). USER, the back
+button or a swipe right from the first page goes back to the yard.
+1. **Medals** "Medals n/57" (tiers reached): 5 medals per sub-page ("1/4" under the title: tap it, or swipe up /
+   down), each with its tier disc (none, bronze, silver, gold), a bar and the progress to the next tier ("3/6");
+   with Gold, just the value. Tap a medal for its card: what it counts, your value and the three tiers with
+   their coins.
+2. **Walk**: today's steps, goals and finds (above).
+3. **Badges**: your 8 stage badges.
+4. **Collection**: the 25 trip souvenirs (tap one for its card).
+
+The **stat card** (Status in the pet menu) has **two pages** since v3.4: **Profile** (level, name, needs,
+streak, bond, favourite berry and age, the evolution line and the slip-ups, which were on the old Progress page)
+and **Stats** (the old Battle page). The Medals, Progress and Walk pages are gone.
 
 <details>
 <summary>Secrets (spoilers)</summary>
@@ -679,8 +729,8 @@ If one bottoms out it counts as a *slip-up*.
 - ⚽ **Play** → the games: the pokeball minigame (SPEED), the battle stages, the training bag (STRENGTH), the
   sled run (SPEED) and the waterfall (DEFENSE). Each result pays a few coins. With both home pets awake a game
   first asks **who plays** (tap a card); battles keep their team picker.
-- 🎒 **Bag** → two tabs: **ITEMS** (your items and eggs; tap one to use it; swipe or tap the "1/2" for page 2,
-  the coloured berries) and the **Collection** of trip souvenirs.
+- 🎒 **Bag** → your items and eggs (tap one to use it; swipe or tap the "1/2" for page 2, the coloured berries).
+  The Collection of trip souvenirs moved to the USER page in v3.4.
 - 🪙 **Shop** → its own screen: buy items and backgrounds with coins (page 2 sells the berries; the Backgrounds card
   opens the map picker).
 
@@ -700,9 +750,9 @@ Backgrounds are yours, not the pet's: you start with the meadow, and a map you b
   and Evolve / Farewell when ready.
 - Swipe left = open the **Pokédex / gallery** · swipe right = open the **Box** (v1.37,
   see [The Box](#the-box-v137)), from the pet or from the egg.
-- Vertical swipe up = open the **stat card** (5 pages: Profile / Battle / Medals /
-  Progress / Walk; swipe between them; tap the name on Profile to rename; the training bag moved
-  to the Play menu in v1.34, the Backpack to its own button in v1.53).
+- Vertical swipe up = open the **USER page** (v3.4: Medals / Walk / Badges / Collection, see
+  [The USER page](#the-user-page-v34)). The **stat card** (Profile / Stats; tap the name on Profile to rename)
+  opens from Status in the pet menu.
 - Swipe down = **set the clock** and pick the **language**, sound on/off and
   **brightness** (the sun pill: 4 levels, tap to cycle).
 - Long press (3 s) on the creature = **release** dialog.
@@ -714,7 +764,8 @@ face-down screen counts as the game. A touch, USER, BOOT or a shake still wakes 
 wakes the screen from off. Eating or a heart doesn't wake a screensaver you put on with PWR.
 
 **Physical USER button:** back. It closes whatever is open on top: gallery
-detail → grid → home, the Box (its store / wake question first), stat card, rename keyboard (without saving the name),
+detail → grid → home, the Box (its store / wake question first), stat card, USER page (an open medal or souvenir
+card first), rename keyboard (without saving the name),
 clock screen (without applying the time), the minigame or the bag (quit, no
 reward), the pet menu (the food list first goes back to the menu), the "who plays?" picker, and the release /
 evolve / farewell dialogs. On a dim or dark
@@ -779,7 +830,7 @@ hatch) + level + **training**:
 - DEFENSE ← sustained good care (12 h with no slip-ups)
 - STRENGTH ← the training bag (whacking)
 
-Shown on the Battle page of the stat card. Weight is extra fat (0 = fit): it goes
+Shown on the Stats page of the stat card (it was the Battle page until v3.3). Weight is extra fat (0 = fit): it goes
 up +12 per cake (the candy before v1.54) and burns off slowly, −1 every 15 min awake (30 asleep), a
 little with training and the minigame, and −1 per 1000 steps. A cake's weight lasts about 3 h.
 
@@ -789,8 +840,8 @@ little with training and the minigame, and −1 per 1000 steps. A cake's weight 
   real day advances the streak; 3/7/30/100 milestones are celebrated; skipping a
   day breaks it. Flame badge on the main screen.
 - **Bond** (the creature's): rises slowly with care and petting, drops with slip-ups.
-- **Medals** for the individual (level, berry, streak, bond, final form, fit) +
-  a global counter. Medals page of the stat card.
+- **Medals** (v3.4): 19 player medals with Bronze / Silver / Gold tiers that pay coins; each pet counts once.
+  See [Medals](#medals-v34) and the USER page.
 - **Name**: touch keyboard; the nickname rules the header and the card.
 
 High streak and bond **improve the egg roll** (rarity and shiny): caring well
@@ -894,7 +945,7 @@ What the firmware does to save power (the policy is in `power.h`, covered by `te
   back whatever was open; the first touch only wakes. A short PWR press shows it at once (v1.32). Face-down
   skips it (nobody is looking). `SAVER` and
   `ORBIT <n>` over serial show them at once.
-- **Static screens are not redrawn.** Keyboard, clock, card pages 2-4 and the starter choice are painted once
+- **Static screens are not redrawn.** Keyboard, clock, the card's Stats page, the USER page and the starter choice are painted once
   and again only when something on them changes.
 - **Light sleep when nobody is looking.** With the screen off, or on the screensaver (2 min), and on battery, the CPU
   sleeps until the next frame or 200 ms; a touch wakes it at once. With USB connected it never sleeps (the
@@ -912,7 +963,10 @@ What the firmware does to save power (the policy is in `power.h`, covered by `te
 
 ## Serial console (115200, debug)
 
-`STATS` (full state) · `SPEC <dex>` (change species) · `LVL <n>` · `HATCH` ·
+`STATS` (full state; v3.4: with a medal summary) · `MEDALS` (every medal: value, tier paid, next threshold, and
+what each home and Box pet counted) · `MEDAL <i> <v>` (set the counter of a pet medal 0–6 or an event medal 7, 8,
+13, 15, 16, 17; pays the tiers it reaches) · `USER [page]` (open the USER page: 0 medals, 1 walk, 2 badges,
+3 collection) · `SPEC <dex>` (change species) · `LVL <n>` · `HATCH` ·
 `SHINY` · `NICK <x>` · `BYE` (farewell) · `ABANDON` (all three needs to 0: the bond starts
 fading) · `NEGLECT <min>` (fast-forward the neglect count, 0–60: up to 30 the bond as if fading that long,
 above it bond 0 and the rest toward death) · `DIE` (dying now: the Revive dialog) · `DYING <min>` (minutes

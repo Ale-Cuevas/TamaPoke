@@ -6,6 +6,25 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.4] - 2026-11-18
+
+### Added
+
+- **Player medals that pay coins.** 19 medals for everything you do across all your pets, each with Bronze,
+  Silver and Gold (25, 75 and 200 coins): raising pets to Lv 10 / 25 / 50, best friends (bond 100), final forms,
+  pets in shape, favourite berries found, evolutions, farewells, the Pokédex, shinies, your best care streak, total
+  steps, 10 000-step days, stage badges, wild wins, captures, trips and souvenirs. A banner shows each new tier and
+  its coins. Medals reached before this update are counted from your pets at home and in the Box and paid at once.
+- **The USER page.** Swipe up in the yard: four pages for Medals (tap one for its tiers and your progress), Walk
+  (your steps), Badges and the Collection.
+- Serial: `MEDALS`, `MEDAL i v`, `USER [page]`.
+
+### Changed
+
+- **The pet card has two pages:** Profile (now with slip-ups and when it can evolve) and Stats. Open it with Status
+  in the pet's menu. The old per-pet medals, Progress and Walk pages are gone.
+- Badges moved from the Box (now one page) and the Collection from the Bag (now just your items) to the USER page.
+
 ## [3.3] - 2026-11-18
 
 ### Changed

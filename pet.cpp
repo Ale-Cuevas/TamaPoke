@@ -62,6 +62,9 @@ bool Pet::homeAsleep() const {
 
 void Pet::begin() {
   if (focusSlot) focus(0);  // (un begin() con el foco movido: el guardado es por huecos)
+  pmMigrated = false;
+  medalNewsN = 0;
+  cnHave = false;
   prefs.begin("tamapoke", false);
   if (!prefs.getBool("init", false)) {
     other = vacantPetLife();  // v3.0: el segundo hueco de una partida nueva empieza vacio
@@ -71,6 +74,8 @@ void Pet::begin() {
     prefs.putBool("init", true);
     items[IT_REVIVE] = REVIVE_START;  // v1.59: una partida nueva trae 3 Revivir (newEgg guarda la mochila)
     items[IT_BALL] = BALL_START;      // v2.2: y 3 Poke Balls
+    pmClear(pm);                      // v3.4: sin medallas que contar (newEgg escribe "pm")
+    pmReady = true;
     newEgg();
     prefs.putBool("rvg", true);       // despues: un corte antes deja la partida sin "rvg" y los da load()
     prefs.putBool("ballg", true);
@@ -91,6 +96,9 @@ void Pet::begin() {
   }
   // v1.40: la casa vacia con huevos en la mochila es un estado normal ("Dejar casa vacia" al soltar):
   // ya no se saca uno al arrancar. La casa vacia lo ofrece con su boton.
+  // v3.4: sin "pm" (la partida de antes, o danado), las medallas del jugador se cuentan ahora. Despues de
+  // boxBoot (la caja ya esta en su sitio) y del uid
+  if (!pmReady) medalsMigrate();
   lastTick = millis();
 }
 
@@ -115,6 +123,7 @@ void Pet::resetHome() {
   careMistakes = 0;
   mistakeCooldown = 0;
   sleeping = false;
+  counted = 0;  // v3.4
   wokeUp();
 }
 
@@ -247,6 +256,7 @@ void Pet::endLife(uint8_t cer) {
   int16_t heir = (cer == CER_DEATH) ? deathEgg : 0;  // antes de que resetHome lo borre
   uint8_t eggsBefore = items[IT_EGG];  // v3.0: si un huevo pasa a la mochila, se escribe antes que el hueco
   if (cer == CER_DEATH) lastEnd = CER_DEATH;  // aqui y no al elegir: un corte a mitad vuelve al dialogo
+  if (cer == CER_FAREWELL) pmBump(pm, MD_FAREWELL);  // v3.4: una despedida completa (medalla del jugador)
   // v1.55: sin bicho no hay quien los abra (un huevo envuelto evita el de regalo). v3.0: solo si en casa
   // no queda otro bicho nacido (si queda, los abre el)
   if (!other.hatched()) unwrapGifts();
@@ -435,6 +445,9 @@ void Pet::tick() {
     if (!g.ok) continue;
     counts |= tickHome();
   }
+  // v3.4: las medallas del jugador (un nivel cruzado, el vinculo a 100...): se pagan en RAM y marcan el
+  // guardado, sin escribir
+  medalsUpdate();
   // autoguardado periodico: NO escribir a flash aqui (corre dentro del loop,
   // mientras se anima); solo marcar y dejar que el loop lo vuelque al atenuar
   if (counts && ++ticksSinceSave >= 5) pendingSave = true;
@@ -480,8 +493,7 @@ bool Pet::tickHome() {
   if (sleeping) {
     sleepMinute(full, h);
     if (weight > 0 && ageMinutes % WEIGHT_BURN_SLEEP_MIN == 0) weight--;
-    checkMedals();  // aun puede cruzar un nivel por edad mientras duerme
-    return true;
+    return true;  // (las medallas, al final de tick(): aun puede cruzar un nivel por edad mientras duerme)
   }
   // la subida de nivel ya no suena aqui: la detecta la UI (fx.h) por cualquier via (minuto,
   // tiempo apagado, Caramelo Raro, LVL) y la anuncia con su propio sonido
@@ -522,7 +534,7 @@ bool Pet::tickHome() {
                            // podia ganar en todo un dia y el vinculo se atascaba
   }
 
-  checkMedals();  // la evolucion la dispara el usuario (canEvolveNow + tap), no el tick
+  // la evolucion la dispara el usuario (canEvolveNow + tap), no el tick. Las medallas, al final de tick()
 
   // abandono (v1.60): con TODO a cero el vinculo se apaga (10 cada 3 min: de 100 a 0 en 30) y, ya a
   // cero, en DEATH_MIN minutos mas se muere. Un solo cuidado para la cuenta; lo perdido no vuelve
@@ -653,7 +665,6 @@ void Pet::registerCare(bool saveNow) {
     changed = true;
   }
   if (!changed) return;
-  checkMedals(saveNow);
   persist(saveNow);
 }
 
@@ -671,24 +682,132 @@ void Pet::addBond(uint8_t amt) {
   bondToday += amt;
 }
 
-void Pet::checkMedals(bool saveNow) {
-  if (isEgg()) return;
-  uint16_t before = medals;
-  medals |= pendingMedals;  // las que da un evento, no un estado (MARATON)
-  pendingMedals = 0;
-  if (level() >= 10) medals |= MED_LV10;
-  if (level() >= 25) medals |= MED_LV25;
-  if (level() >= 50) medals |= MED_LV50;
-  if (berryKnown) medals |= MED_BERRY;
-  if (streak >= 7) medals |= MED_STREAK7;
-  if (bond >= 100) medals |= MED_BOND;
-  if (DEX_TBL[speciesId].evolvesTo == 0) medals |= MED_FINAL;
-  if (weight == 0 && level() >= 5 && careMistakes == 0) medals |= MED_FIT;
-  uint16_t gained = medals & ~before;
-  if (gained) {
-    for (uint16_t m = gained; m; m &= (m - 1)) totalMedals++;
-    newMedal |= gained;  // la UI la celebra (y suena) cuando se pueda ver: fx.h
-    persist(saveNow);
+// ---------- medallas del jugador (v3.4, medals.h) ----------
+
+// a que medallas de bicho llega un individuo ahora
+static uint8_t petReach(const PetLife &l) {
+  if (!l.hatched() || l.speciesId > 151) return 0;
+  return medalPetBits(l.level(), l.bond, DEX_TBL[l.speciesId].evolvesTo == 0, l.weight, l.careMistakes, l.berryKnown);
+}
+static uint8_t recReach(const PetRecord &r) {
+  return medalPetBits(levelFor(r.growMin), r.bond, DEX_TBL[r.speciesId].evolvesTo == 0, r.weight, r.careMistakes,
+                      (r.flags & REC_FAV6) != 0);
+}
+
+uint32_t Pet::medalValue(uint8_t i) const {
+  if (i >= MEDAL_COUNT) return 0;
+  switch (i) {
+    case MD_DEX: return registeredCount();
+    case MD_SHINY: {
+      uint32_t n = 0;
+      for (uint8_t b : dexShinyReg) n += (uint32_t)__builtin_popcount(b);
+      return n;
+    }
+    case MD_STREAK: return bestStreak > streak ? bestStreak : streak;
+    case MD_WALKER: return stepsTotal;
+    case MD_STAGES: return badgeCount();
+    case MD_SOUV: return souvenirCount();
+    default: return pm.cnt[i];  // de bicho y de evento
+  }
+}
+
+uint16_t Pet::medalTiersTotal() const {
+  uint16_t n = 0;
+  for (uint8_t i = 0; i < MEDAL_COUNT; i++) n += pm.tier[i];
+  return n;
+}
+
+bool Pet::takeMedalNews(MedalNews *out) {
+  if (!medalNewsN) return false;
+  if (out) *out = medalNewsQ[0];
+  for (uint8_t i = 1; i < medalNewsN; i++) medalNewsQ[i - 1] = medalNewsQ[i];
+  medalNewsN--;
+  return true;
+}
+
+void Pet::dbgMedalCount(uint8_t i, uint16_t v) {
+  if (i >= MEDAL_COUNT || medalSource(i) == MSRC_DERIVED) return;
+  pm.cnt[i] = v;
+  pendingSave = true;
+  medalsUpdate();
+}
+
+// Cuenta a los dos de casa (lo que aun no tenian contado) y paga cada tramo nuevo, todo en RAM: no escribe
+// nunca (corre en el tick y al principio de save()). Un tramo pagado queda en pm.tier y no se vuelve a pagar;
+// si la cartera esta llena entra lo que quepa (el banner dice lo que entro)
+void Pet::medalsUpdate() {
+  if (!pmReady) return;  // (hasta la migracion del arranque)
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    PetLife &l = slotRef(s);
+    if (!l.hatched() || !l.uid) continue;
+    uint8_t fresh = pmCountPet(pm, l.counted, petReach(l));
+    if (fresh) {
+      Serial.printf("medals: hueco %u cuenta 0x%02X\n", s, fresh);
+      pendingSave = true;
+    }
+  }
+  for (uint8_t i = 0; i < MEDAL_COUNT; i++) {
+    uint8_t t = medalTierOf(i, medalValue(i));
+    if (t <= pm.tier[i]) continue;
+    uint16_t want = medalPayout(pm.tier[i], t);
+    pm.tier[i] = t;
+    uint16_t got = addCoins(want, false);  // fuera del tope diario
+    medalNewsPush(medalNewsQ, medalNewsN, MEDAL_COUNT, i, t, got);
+    Serial.printf("medals: %u -> tramo %u, +%u monedas\n", i, t, got);
+    pendingSave = true;
+  }
+}
+
+// "pm" si cambio. Sin migrar aun no se escribe nada (true: no es un fallo)
+bool Pet::savePm() {
+  if (!pmReady) return true;
+  pmSeal(pm);
+  if (pmHave && memcmp(&pm, &pmSaved, sizeof(pm)) == 0) return true;
+  if (prefs.putBytes("pm", &pm, sizeof(pm)) != sizeof(pm)) return false;
+  pmSaved = pm;
+  pmHave = true;
+  return true;
+}
+
+// Primer arranque de la v3.4 (o "pm" danado): los dos de casa y cada bicho de la caja cuentan con lo que son
+// ahora (nivel, vinculo, forma, en forma, favorita), las derivadas se leen del estado y las de evento empiezan
+// a 0. Los de la caja apuntan sus bits en pm (pmLegacyAdd): al despertarlos no vuelven a contar. Despues, save()
+// paga todos los tramos alcanzados de una vez (y deja sus banners). Un corte antes de "pm" lo repite entero
+// desde cero (las monedas van detras: nunca se pagan dos veces)
+void Pet::medalsMigrate() {
+  pmClear(pm);
+  medalNewsN = 0;
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    PetLife &l = slotRef(s);
+    if (!l.hatched() || !l.uid) continue;
+    uint8_t bits = (uint8_t)((l.counted | petReach(l)) & PMB_ALL);  // (lo que ya trajera de otro intento, tambien)
+    uint8_t none = 0;
+    pmCountPet(pm, none, bits);
+    l.counted = bits;
+  }
+  for (uint8_t k = 0; k < BOX_SLOTS; k++) {
+    if (boxSt[k] != BOX_OK) continue;
+    const PetRecord &r = boxRec[k];
+    uint8_t bits = (uint8_t)((((r.flags & REC_V3) ? r.medals : 0) | recReach(r)) & PMB_ALL);
+    uint8_t none = 0;
+    pmCountPet(pm, none, bits);
+    if (!pmLegacyAdd(pm, r.uid, bits)) Serial.printf("medals: sin sitio para el uid %08lx\n", (unsigned long)r.uid);
+  }
+  pmReady = true;
+  pmMigrated = true;
+  if (pmKeyBad) {
+    // habia un "pm" pero no se pudo leer (danado o de otra version): se recuenta, pero lo ya alcanzado se da por
+    // pagado (sin monedas ni banners). Solo una partida sin "pm" (la de antes de la v3.4) cobra lo atrasado
+    for (uint8_t i = 0; i < MEDAL_COUNT; i++) pm.tier[i] = medalTierOf(i, medalValue(i));
+    Serial.println("medals: pm danado, recontado sin pagar");
+  }
+  Serial.printf("medals: migracion, %u bichos de caja apuntados\n", pm.legN);
+  save();  // medalsUpdate paga (sin "pm" antes); "pm" antes que "cn"
+  // con "pm" ya escrito, las claves de las medallas de cada bicho (hasta la v3.3) sobran: se borran una vez
+  if (pmHave) {
+    pmKeyBad = false;
+    if (prefs.isKey("medal")) prefs.remove("medal");
+    if (prefs.isKey("tmedal")) prefs.remove("tmedal");
   }
 }
 
@@ -831,12 +950,11 @@ void Pet::hatch() {
   bondToday = 0;
   bondDay = today();
   careDay = 0;       // v3.0: su primer cuidado de hoy aun no lo tuvo
-  medals = 0;
-  newMedal = 0;
+  counted = 0;       // v3.4: aun no hizo subir ninguna medalla del jugador
   nick[0] = 0;
   uid = newUid();    // identidad del individuo (caja, v1.37)
   registerSpecies(speciesId, shiny);  // criado = registrado en la pokedex
-  checkMedals();     // por si nace ya en forma final (legendario)
+  // (las medallas del jugador, en save(): por si nace ya en forma final, un legendario)
   // sin sonido aqui: la UI ve la eclosion y suena en el destello de su animacion (fx.h), o
   // al momento si la pantalla no estaba a la vista
   save();
@@ -870,6 +988,7 @@ void Pet::evolve() {
   registerSpecies(speciesId, shiny);
   sfxPlay(SFX_EVOLVE);
   evolveUntil = millis() + EVOLVE_ANIM_MS;
+  pmBump(pm, MD_EVOLVE);  // v3.4: save() escribe la especie nueva antes que "pm" (un corte: no cuenta)
   save();
 }
 
@@ -1241,10 +1360,12 @@ void Pet::addSteps(uint32_t n, uint32_t day) {
       goalTier = tier;
       goalBanner = tier;
       goalBannerCoins += addCoins(coinsForGoal(tier), false);  // fuera del tope diario; con el bicho dormido tambien
+      if (tier == STEP_GOAL_TIERS) pmBump(pm, MD_MARATHON);   // v3.4: un dia de 10000 pasos (del jugador, una vez al dia)
       goalReward(tier, rewarded);
     }
     encCheck();  // v2.2: los ENC_WALK_STEPS pasos del dia dan otra tirada de encuentro
   }
+  medalsUpdate();  // v3.4: los pasos y los niveles de las metas (sin escribir: marca el guardado)
 }
 
 // premio de cada meta. El banner y la racha (la primera) se dan siempre; lo demas, a cada bicho
@@ -1271,9 +1392,7 @@ void Pet::goalReward(uint8_t tier, const bool *rewarded) {
     } else {  // 10000: +2 niveles (arriba) en vez del Caramelo Raro de la v1.25
       joy = clamp100(joy + GOAL3_JOY);
       bond = clamp100(bond + GOAL3_BOND);
-      pendingMedals |= MED_MARATHON;
     }
-    checkMedals(false);  // las de nivel (10, 25, 50) que abran los niveles nuevos, y MARATON
   }
   goalBannerLv = (uint8_t)(goalBannerLv + bestLv);  // el banner: lo del que mas subio
   if (any && tier <= 2) {  // el regalo de la meta, una vez
@@ -1435,10 +1554,9 @@ bool Pet::useItem(uint8_t it) {
   items[it]--;
   if (it == IT_RARECANDY) {
     // +1 nivel (v1.35): salta el crecimiento, no la edad, y la barra conserva lo que llevaba.
-    // Puede abrir la evolucion y las medallas de nivel.
+    // Puede abrir la evolucion y las medallas de nivel (en el save() de abajo).
     growMin = addLevels(growMin, RARE_CANDY_LEVELS);
     heartUntil = millis() + HEART_MS;
-    checkMedals(false);
   } else {
     uint8_t &tr = (it == IT_PROTEIN) ? trAtk : (it == IT_IRON) ? trDef : trSpe;
     tr = clamp100(tr + VITAMIN_TRAIN);
@@ -1753,6 +1871,7 @@ void Pet::travelComplete() {
   }
   trvResult = r;
   trvResPending = true;
+  pmBump(pm, MD_TRIPS);  // v3.4 ("trv" ya se borro en 2: un corte no lo repite)
   save();  // 3.
   encTravelRoll(TRV_MIN[trvTier < TRV_TIERS ? trvTier : 0] / 60);  // v2.2: viajar tambien trae encuentros
 }
@@ -1832,13 +1951,12 @@ StageReward Pet::stageDone(uint8_t stage, bool cleared, const uint32_t *uids, ui
           if (!g.ok) continue;
           if (busyEnding()) continue;  // se esta muriendo o despidiendo: nada que crecer
           growMin += STAGE_GROW_MIN;   // las subidas de nivel las ve la UI (fx.h); la evolucion, el boton
-          bond = clamp100(bond + STAGE_BOND);  // fuera del tope diario de addBond
-          checkMedals(false);  // puede haber cruzado el 10, 25 o 50
+          bond = clamp100(bond + STAGE_BOND);  // fuera del tope diario de addBond (las medallas, en el save())
           res.pets++;
         } else if (k >= 0) {
           // 3. hiberna, pero el premio lo recibe igual: crece y su nivel puede pasar el de su
           // evolucion. Evoluciona al despertar (canEvolveNow mira el nivel; fromRecord borra el
-          // "mantener forma") y sus medallas de nivel las da checkMedals en su primer minuto en casa
+          // "mantener forma") y cuenta para las medallas del jugador al despertar (medalsUpdate)
           PetRecord r = boxRec[k];
           r.growMin += STAGE_GROW_MIN;
           r.bond = clamp100(r.bond + STAGE_BOND);
@@ -2007,7 +2125,6 @@ EncReward Pet::encounterDone(bool won, uint32_t fighter) {
       uint8_t before = joy;
       joy = clamp100(joy + ENC_WIN_JOY);
       r.joy = joy - before;
-      checkMedals(false);
     }
   } else if (k >= 0 && k < BOX_SLOTS) {
     PetRecord rec = boxRec[k];
@@ -2023,6 +2140,12 @@ EncReward Pet::encounterDone(bool won, uint32_t fighter) {
     else r.itemLost = true;
   }
   encFlags |= ENCF_WON;
+  // v3.4: una vez por encuentro (su hora de salida va en "pm"): un corte antes de "enc" deja volver a pelearlo y
+  // repetir el objeto, pero no cuenta otra victoria
+  if (!encSpawnAt || pm.wildId != encSpawnAt) {
+    pmBump(pm, MD_WILD);
+    pm.wildId = encSpawnAt;
+  }
   save();  // 2.
   Serial.printf("enc: #%d vencido, nv %u->%u, objeto %d%s\n", encDexV, r.lvBefore, r.lvAfter,
                 r.item == IT_COUNT ? -1 : r.item, r.itemLost ? " (perdido)" : "");
@@ -2044,6 +2167,10 @@ bool Pet::captureWild() {
   items[IT_BALL]--;
   items[IT_EGG]++;
   capPush(base, encShiny(), false);
+  if (!encSpawnAt || pm.catchId != encSpawnAt) {  // v3.4: una vez por encuentro (como la victoria)
+    pmBump(pm, MD_CATCH);
+    pm.catchId = encSpawnAt;
+  }
   Serial.printf("enc: #%d capturado -> huevo de #%d%s (%u en cola)\n", encDexV, base, encShiny() ? " shiny" : "", capN);
   encEnd();
   save();
@@ -2070,6 +2197,7 @@ void Pet::sleepDeferred() {
 
 // v3.0: el hueco 0 va a las claves de siempre y el 1 a "hm1", tenga quien tenga el foco
 void Pet::save() {
+  medalsUpdate();  // v3.4: cuenta y paga en RAM lo nuevo; "pm" va mas abajo, antes que "cn"
   ticksSinceSave = 0;
   pendingSave = false;
   const PetLife &h = home(0);
@@ -2120,8 +2248,11 @@ void Pet::save() {
   prefs.putUShort("bstrk", bestStreak);
   prefs.putUInt("cday", lastCareDay);
   prefs.putUChar("bond", h.bond);
-  prefs.putUShort("medal", h.medals);
-  prefs.putUShort("tmedal", totalMedals);
+  {  // v3.4: lo que el bicho del hueco 0 ya conto para las medallas del jugador, con su uid (antes que "pm").
+     // ("medal" y "tmedal", las medallas de antes, ya no se escriben)
+    uint32_t pc[2] = { h.uid, h.counted };
+    prefs.putBytes("pmc", pc, sizeof(pc));
+  }
   prefs.putUShort("mstone", lastMilestone);
   prefs.putUShort("ghi", gameHi);
   prefs.putUShort("shi", strHi);
@@ -2151,11 +2282,6 @@ void Pet::save() {
   // estadios (del jugador). Antes del bloque del uid: no tocan nada de los movimientos de la caja, y
   // asi la ventana entre el uid y "eggH" no se alarga. stageDone ya los escribe por su cuenta antes de
   // pagar (aqui solo repiten el mismo valor). "stD" antes que "stM", como en payStageDay
-  prefs.putUShort("cn", coins);  // monedas (Y4)
-  prefs.putUInt("cnD", coinDay);
-  prefs.putUShort("cnT", coinToday);
-  prefs.putUShort("ybgO", yardOwned);
-  prefs.putUChar("ybg", yardChosen);
   prefs.putUInt("souv", souvOwned);  // la coleccion (Y5)
   prefs.putBytes("souvD", souvDate, sizeof(souvDate));
   prefs.putUChar("bdg", badges);
@@ -2182,7 +2308,33 @@ void Pet::save() {
     pendingSave = true;
     return;
   }
+  // v3.4: las medallas del jugador ("pm", una entrada) despues de todo lo que cuentan (los dos huecos de casa,
+  // la Pokedex, la racha, los pasos, las insignias, los recuerdos) y ANTES que las monedas: un corte entre las
+  // dos pierde el pago, nunca lo repite. Si "pm" no llega, tampoco se escriben las monedas (ni lo de despues)
+  if (!savePm()) {
+    Serial.println("save: pm no se pudo escribir");
+    pendingSave = true;
+    return;
+  }
+  // monedas (Y4): aqui desde la v3.4 (antes, entre los del jugador), y solo si cambiaron (asi la ventana entre
+  // el uid / "hm1" y la mochila no se alarga cuando no hay nada que pagar). Antes que la mochila y los mapas:
+  // comprar nunca sale gratis
+  if (!cnHave || coins != cnSaved || coinDay != cnDSaved || coinToday != cnTSaved) {
+    // si alguna no llega, no se apunta como escrita y no se escribe la mochila (comprar nunca sale gratis)
+    if (prefs.putUShort("cn", coins) != 2 || prefs.putUInt("cnD", coinDay) != 4 || prefs.putUShort("cnT", coinToday) != 2) {
+      Serial.println("save: cn no se pudo escribir");
+      cnHave = false;
+      pendingSave = true;
+      return;
+    }
+    cnSaved = coins;
+    cnDSaved = coinDay;
+    cnTSaved = coinToday;
+    cnHave = true;
+  }
   putPack();
+  prefs.putUShort("ybgO", yardOwned);  // los mapas comprados (despues que "cn": un corte pierde el mapa, no las monedas)
+  prefs.putUChar("ybg", yardChosen);
   {  // regalos (v1.55), despues de la mochila: [cuantos, objetos...]
     uint8_t g[GIFT_MAX + 1] = { giftN };
     memcpy(g + 1, gifts, giftN);
@@ -2290,8 +2442,6 @@ void Pet::load() {
   bestStreak = prefs.getUShort("bstrk", 0);
   lastCareDay = prefs.getUInt("cday", 0);
   h.bond = prefs.getUChar("bond", 0);
-  h.medals = prefs.getUShort("medal", 0);
-  totalMedals = prefs.getUShort("tmedal", 0);
   lastMilestone = prefs.getUShort("mstone", 0);
   gameHi = prefs.getUShort("ghi", 0);
   strHi = prefs.getUShort("shi", 0);
@@ -2391,6 +2541,10 @@ void Pet::load() {
   if (coins > COIN_MAX) coins = COIN_MAX;
   coinDay = prefs.getUInt("cnD", 0);
   coinToday = prefs.getUShort("cnT", 0);
+  cnHave = prefs.isKey("cn");  // v3.4: lo que hay en la NVS (save() no lo repite)
+  cnSaved = coins;
+  cnDSaved = coinDay;
+  cnTSaved = coinToday;
   souvOwned = prefs.getUInt("souv", 0) & ((1u << SOUV_COUNT) - 1);  // un guardado anterior: sin recuerdos
   memset(souvDate, 0, sizeof(souvDate));
   if (prefs.isKey("souvD")) prefs.getBytes("souvD", souvDate, sizeof(souvDate));
@@ -2439,6 +2593,29 @@ void Pet::load() {
   h.vacant = prefs.getBool("vac", false) && h.speciesId < 0 && !h.uid;
   // v3.0: el primer cuidado del hueco 0 (sin la clave, el de la racha: hoy ya le dio su vinculo)
   h.careDay = prefs.isKey("pcd") ? prefs.getUInt("pcd", 0) : lastCareDay;
+  // v3.4: lo que el hueco 0 ya conto para las medallas (de su uid; si no, nada: lo cuenta la migracion o
+  // medalsUpdate) y las medallas del jugador. Sin "pm" valido, begin() migra
+  h.counted = 0;
+  if (prefs.isKey("pmc")) {
+    uint32_t pc[2] = { 0, 0 };
+    if (prefs.getBytes("pmc", pc, sizeof(pc)) == sizeof(pc) && pc[0] && pc[0] == h.uid) h.counted = (uint8_t)(pc[1] & PMB_ALL);
+  }
+  pmReady = pmHave = false;
+  pmClear(pm);
+  pmKeyBad = false;
+  if (prefs.isKey("pm")) {
+    pmKeyBad = true;  // (hasta ver que se puede cargar)
+    PlayerMedals m;
+    memset(&m, 0, sizeof(m));
+    if (prefs.getBytes("pm", &m, sizeof(m)) == sizeof(m) && pmValid(m)) {
+      pm = m;
+      pmSaved = m;
+      pmReady = pmHave = true;
+      pmKeyBad = false;
+    } else {
+      Serial.println("pm: danado, se vuelven a contar las medallas");
+    }
+  }
   // v3.0: el hueco 1. Sin "hm1" (un guardado de la v2.x) esta vacio
   PetLife &h1 = slotRef(1);
   h1 = vacantPetLife();
@@ -2569,7 +2746,8 @@ PetRecord PetLife::record(uint32_t epoch) const {
   PetRecord r;
   memset(&r, 0, sizeof(r));
   r.flags = (shiny ? REC_SHINY : 0) | (berryKnown ? REC_FAV6 : 0) | (sleeping ? REC_SLEEP : 0) |
-            (careDay && careDay == bondDay ? REC_CARED : 0);  // v3.0: su primer cuidado de ese dia, ya dado
+            (careDay && careDay == bondDay ? REC_CARED : 0) |  // v3.0: su primer cuidado de ese dia, ya dado
+            REC_V3;  // v3.4: medals = lo que ya conto para las medallas del jugador
   r.uid = uid;
   r.speciesId = speciesId;
   memcpy(r.nick, nick, sizeof(r.nick));
@@ -2592,7 +2770,7 @@ PetRecord PetLife::record(uint32_t epoch) const {
   r.bond = bond;
   r.bondToday = bondToday;
   r.bondDay = bondDay;
-  r.medals = medals;
+  r.medals = counted;
   r.storedEpoch = epoch;
   recordSeal(r);
   return r;
@@ -2635,7 +2813,9 @@ void PetLife::loadRecord(const PetRecord &r) {
   bondToday = r.bondToday;
   bondDay = r.bondDay;
   careDay = (r.flags & REC_CARED) ? r.bondDay : 0;  // v3.0 (un registro de antes: puede darle el suyo hoy)
-  medals = r.medals;
+  // v3.4: lo que ya conto para las medallas del jugador; un registro de antes no lo sabe (Pet::fromRecord mira
+  // lo que se apunto al migrar, y si no, cuenta al despertarlo)
+  counted = (r.flags & REC_V3) ? (uint8_t)(r.medals & PMB_ALL) : 0;
   ceremony = CER_NONE;
   mistakeCooldown = 0;
   neglectMin = deathMin = dyingMin = 0;
@@ -2647,8 +2827,6 @@ void PetLife::loadRecord(const PetRecord &r) {
   farDeclinedAge = 0;
   eatUntil = heartUntil = evolveUntil = 0;
   emoteUntil = 0;
-  newMedal = 0;
-  pendingMedals = 0;
   diedNow = false;
   lastTickHour = -1;
   grumpied = dizzyPenalized = false;
@@ -2713,7 +2891,9 @@ bool Pet::store(uint8_t k, uint8_t s) {
   FocusGuard g(*this, s);  // v3.0: el del hueco de casa s
   if (!g.ok) return false;
   // (v3.0, hueco 1) lo que freeHome puede cambiar, por si "hm1" no llega a escribirse
+  medalsUpdate();  // v3.4: lo pendiente, contado antes de la foto (asi deshacer no pierde nada del otro hueco)
   PetLife before = *this;
+  MedalSnap medB = medalSnap();  // v3.4: y lo que contaron las medallas en ese save()
   uint8_t itemsB[IT_COUNT], giftsB[GIFT_MAX], giftNB = giftN, capNB = capN, capDexB[CAP_EGG_MAX];
   bool capShinyB[CAP_EGG_MAX];
   memcpy(itemsB, items, sizeof(items));
@@ -2728,6 +2908,7 @@ bool Pet::store(uint8_t k, uint8_t s) {
     // "hm1" no se escribio: el bicho sigue en casa (y en el hueco k, que el arranque resuelve: gana la
     // copia de la caja, que es el mismo). Se deshace en RAM y se intenta vaciar k
     static_cast<PetLife &>(*this) = before;
+    medalRestore(medB);
     memcpy(items, itemsB, sizeof(items));
     memcpy(gifts, giftsB, sizeof(gifts));
     giftN = giftNB;
@@ -2745,7 +2926,9 @@ bool Pet::wake(uint8_t k, uint8_t s) {
   FocusGuard g(*this, s);  // v3.0: al hueco de casa s
   if (!g.ok) return false;
   PetRecord b = boxRec[k];
+  medalsUpdate();  // v3.4: lo pendiente, contado antes de la foto (asi deshacer no pierde nada del otro hueco)
   PetLife before = *this;
+  MedalSnap medB = medalSnap();  // v3.4: si se deshace, B tampoco cuenta para las medallas
   bool egg = isEgg() && !vacant;
   // 0. (v3.0) a que hueco de casa va, antes que nada: sin "boxTs" el arranque entiende el 0 (asi un
   // despertar al 0 escribe lo mismo que antes; uno que quedara de otro se borra primero)
@@ -2783,6 +2966,7 @@ bool Pet::wake(uint8_t k, uint8_t s) {
       // "hm1" no llego: en la NVS B sigue en su hueco y "boxT" lo dice. Se deshace en RAM; boxT y boxTs se
       // quedan (el arranque rehace el huevo o deja el hueco vacio)
       static_cast<PetLife &>(*this) = before;
+      medalRestore(medB);
       return false;
     }
     if (!clearSlot(k)) return true;  // 4. su hueco, libre (si falla, boxT se queda y lo hace el arranque)

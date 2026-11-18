@@ -86,9 +86,9 @@ struct PetLife {
   // v3.0: el dia del primer cuidado de ESTE bicho (su +BOND_CARE_DAY); la racha es del jugador
   uint32_t careDay = 0;
   char nick[12] = "";       // apodo (vacio = nombre de especie)
-  uint16_t medals = 0;      // medallas del individuo (bitmask MED_*)
-  uint16_t newMedal = 0;    // recien conseguida(s), sin celebrar aun (Pet::takeMedal)
-  uint16_t pendingMedals = 0;  // ganadas por un evento (MARATON) que checkMedals celebra
+  // v3.4: medallas del jugador que este bicho ya hizo subir (bits PMB_*, medals.h): cada uno cuenta una vez
+  // aunque vaya y vuelva de la caja (va en PetRecord::medals con REC_V3, y en "pmc" el del hueco 0)
+  uint8_t counted = 0;
   uint32_t satedUntil = 0;  // tarta (v1.54): lleno hasta esta edad en minutos
   // identidad del individuo (v1.37): se sortea al nacer, nunca 0; el huevo tiene 0
   uint32_t uid = 0;
@@ -183,7 +183,6 @@ struct PetLife {
     if (lowestStat() < NEED_LOW) return MOOD_SAD;
     return MOOD_HAPPY;
   }
-  bool hasMedal(uint16_t m) const { return medals & m; }
   uint8_t bondGainedToday() const { return bondToday; }  // diagnostico (STATS)
   bool nightSlept() const { return nightSleep; }        // se durmio de noche: se despierta a las WAKE_HOUR
   uint8_t nightAwakeMinutes() const { return nightAwakeMin; }

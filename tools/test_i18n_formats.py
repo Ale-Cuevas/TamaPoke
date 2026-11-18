@@ -11,7 +11,7 @@ source (no build step needed) and checks:
 
   - every language row has the same number of entries as every other
     row, and that count matches the number of enumerators in StrId
-    (STR_COUNT) resp. MED_COUNT for the medal tables. STRINGS is
+    (STR_COUNT) resp. MEDAL_COUNT (medals.h) for the medal tables. STRINGS is
     declared with both array dimensions fixed
     ([LANG_COUNT][STR_COUNT]), so a row with too FEW strings does not
     fail to compile -- the remaining slots are silently
@@ -139,20 +139,22 @@ def main():
     i18n_hpp = os.path.join(HERE, '..', 'i18n.h')
 
     str_count = count_enumerators(i18n_hpp, 'StrId', 'STR_COUNT')
-    # MED_COUNT is #define'd in pet.h; it was hard-coded here as 8 and went
-    # stale when the Marathon medal (v1.25) made it 9
-    pet_h = open(os.path.join(HERE, '..', 'pet.h'), encoding='utf-8').read()
-    med_count = int(re.search(r'#define\s+MED_COUNT\s+(\d+)', pet_h).group(1))
+    # v3.4: the player medals. MEDAL_COUNT is the last enumerator of the MD_*
+    # enum in medals.h (two tables: name and what it measures)
+    medals_h = os.path.join(HERE, '..', 'medals.h')
+    med_src = open(medals_h, encoding='utf-8').read()
+    m = re.search(r'enum\s*:\s*uint8_t\s*\{([^}]*MEDAL_COUNT[^}]*)\}', med_src)
+    body = re.sub(r'//[^\n]*', '', m.group(1))
+    names = [n.strip().split('=')[0].strip() for n in body.split(',') if n.strip()]
+    med_count = names.index('MEDAL_COUNT')
 
     errors = []
     errors += check_table(
         source, 'STRINGS', str_count, lambda i: f'StrId {i}')
     errors += check_table(
-        source, 'MED_NAME', med_count, lambda i: f'medal {i}')
+        source, 'MEDAL_NAME', med_count, lambda i: f'medal {i}')
     errors += check_table(
-        source, 'MED_LBL', med_count, lambda i: f'medal {i}')
-    errors += check_table(
-        source, 'MED_DSC', med_count, lambda i: f'medal {i}')
+        source, 'MEDAL_DESC', med_count, lambda i: f'medal {i}')
     stage_count = int(re.search(
         r'#define\s+STAGE_NAME_COUNT\s+(\d+)', open(i18n_hpp, encoding='utf-8').read()).group(1))
     errors += check_table(
@@ -165,7 +167,7 @@ def main():
         return 1
 
     print(
-        f'OK: STRINGS ({str_count} ids), the 3 medal tables '
+        f'OK: STRINGS ({str_count} ids), the 2 medal tables '
         f'({med_count} medals) and STAGE_NAME ({stage_count} stages) are consistent across all '
         f'{len(LANGS)} languages.')
     return 0

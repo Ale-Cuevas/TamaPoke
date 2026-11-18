@@ -52,9 +52,10 @@ static void dress(Pet &p, uint8_t seed) {
   p.bond = 30 + seed;
   p.ageMinutes = 1000 + seed * 100u;
   p.growMin = 500 + seed * 37u;
-  p.medals = MED_LV10 | ((seed & 1) ? MED_BERRY : 0);
+  p.counted = PMB_LV10 | ((seed & 1) ? PMB_FAV : 0);
   p.berryKnown = seed & 1;
   p.shiny = (seed & 2) != 0;
+  if (p.shiny) p.dbgRegister(p.speciesId, true);  // (como al nacer shiny: v3.4, la medalla Shiny lo cuenta)
   char nm[12];
   snprintf(nm, sizeof(nm), "PET%u", seed);
   p.rename(nm);
@@ -209,7 +210,7 @@ TEST(box, el_registro_conserva_todo_el_individuo) {
   CHECK_EQ(q.sleeping, true);
   CHECK_EQ(q.bond, p.bond);
   CHECK_EQ(q.bondGainedToday(), p.bondGainedToday());
-  CHECK_EQ(q.medals, p.medals);
+  CHECK_EQ(q.counted, p.counted);
   CHECK_EQ(q.atkStat(), p.atkStat());
 }
 
@@ -486,7 +487,6 @@ TEST(box, un_intercambio_no_toca_nada_del_jugador) {
   p.streak = 12;
   p.bestStreak = 20;
   p.lastCareDay = 19999;
-  p.totalMedals = 7;
   p.gameHi = 31;
   p.strHi = 44;
   p.items[IT_GOLDEN] = 3;
@@ -494,7 +494,9 @@ TEST(box, un_intercambio_no_toca_nada_del_jugador) {
   p.lastEnd = CER_FAREWELL;
   p.addSteps(4321, p.dayNumber());  // pasa la meta de 3000: la racha y una medalla suben
   p.rename("A");
-  uint16_t streak = p.streak, best = p.bestStreak, totalMed = p.totalMedals;
+  uint16_t streak = p.streak, best = p.bestStreak;
+  uint8_t medTiers[MEDAL_COUNT];
+  for (uint8_t i = 0; i < MEDAL_COUNT; i++) medTiers[i] = p.medalTierPaid(i);
   uint32_t careDay = p.lastCareDay;
   uint8_t dex[19], dexS[19];
   memcpy(dex, p.dexReg, sizeof(dex));
@@ -510,7 +512,7 @@ TEST(box, un_intercambio_no_toca_nada_del_jugador) {
     CHECK_EQ(x->streak, streak);
     CHECK_EQ(x->bestStreak, best);
     CHECK_EQ(x->lastCareDay, careDay);
-    CHECK_EQ(x->totalMedals, totalMed);
+    for (uint8_t i = 0; i < MEDAL_COUNT; i++) CHECK_EQ(x->medalTierPaid(i), medTiers[i]);  // v3.4: del jugador
     CHECK_EQ(x->gameHi, (uint16_t)31);
     CHECK_EQ(x->strHi, (uint16_t)44);
     CHECK_EQ(x->lastEnd, (uint8_t)CER_FAREWELL);
@@ -525,21 +527,23 @@ TEST(box, un_intercambio_no_toca_nada_del_jugador) {
   }
 }
 
-TEST(box, las_medallas_son_del_individuo) {
+// v3.4: lo que un bicho ya conto para las medallas del jugador va con el (y no vuelve a contar)
+TEST(box, lo_contado_para_las_medallas_es_del_individuo) {
   Pet p;
   freshPet(p, 1);
   p.setLevel(10);
-  advance(p, 1);  // checkMedals: Nv.10
-  CHECK(p.hasMedal(MED_LV10));
-  uint16_t total = p.totalMedals;
+  advance(p, 1);  // el tick lo cuenta: Nv.10
+  CHECK(p.counted & PMB_LV10);
+  uint32_t n = p.medalValue(MD_LV10);
   CHECK(p.store(0));
-  hatchNow(p);  // otro bicho: sin medallas, el total del jugador sigue
-  CHECK(!p.hasMedal(MED_LV10));
-  CHECK(p.totalMedals >= total);
-  uint16_t total2 = p.totalMedals;
+  CHECK_EQ(p.boxRecord(0).medals & PMB_LV10, (int)PMB_LV10);
+  CHECK(p.boxRecord(0).flags & REC_V3);
+  hatchNow(p);  // otro bicho: sin nada contado, el total del jugador sigue
+  CHECK(!(p.counted & PMB_LV10));
+  CHECK_EQ(p.medalValue(MD_LV10), n);
   CHECK(p.wake(0));
-  CHECK(p.hasMedal(MED_LV10));
-  CHECK_EQ(p.totalMedals, total2);  // volver con su medalla no la cuenta otra vez
+  CHECK(p.counted & PMB_LV10);
+  CHECK_EQ(p.medalValue(MD_LV10), n);  // volver no lo cuenta otra vez
 }
 
 // ---------------------------------------------------------------- huecos danados y guardados viejos

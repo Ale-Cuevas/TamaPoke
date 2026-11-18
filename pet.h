@@ -9,6 +9,7 @@
 #include "tuning.h"  // los numeros del equilibrio (necesidades, huevos, premios...): se afinan alli
 #include "petlife.h" // v3.0: la vida de cada bicho de casa (dos huecos); Pet es el jugador + el del foco
 #include "homerec.h" // v3.0: el segundo hueco de casa en la NVS ("hm1")
+#include "medals.h"  // v3.4: las medallas del jugador ("pm")
 
 // Los niveles ya no son las horas de edad (v1.35): ver growth.h. Con la curva nueva
 // CHARMANDER llega al nivel 16 a las ~8 h de juego con cuidado perfecto.
@@ -99,15 +100,6 @@ struct StageReward {
   uint16_t coins; // monedas que entraron (50 la primera vez, 10 las repeticiones del dia; 0 si no hubo)
 };
 
-// medallas del individuo (bitmask)
-enum : uint16_t {
-  MED_LV10 = 1 << 0, MED_LV25 = 1 << 1, MED_LV50 = 1 << 2,
-  MED_BERRY = 1 << 3, MED_STREAK7 = 1 << 4, MED_BOND = 1 << 5,
-  MED_FINAL = 1 << 6, MED_FIT = 1 << 7,
-  MED_MARATHON = 1 << 8,  // 10000 pasos en un dia, con el bicho despierto (v1.25)
-};
-#define MED_COUNT 9
-
 // Pet (v3.0) = el jugador + el bicho de casa que tiene el FOCO. Lo heredado de PetLife (pet.fullness,
 // pet.uid...) es siempre el hueco focusSlot; el otro hueco esta en `other`. focus(s) intercambia los dos
 // bloques enteros. Reglas:
@@ -162,8 +154,6 @@ public:
   // racha de cuidado diario (del jugador: persiste entre crianzas)
   uint16_t streak = 0, bestStreak = 0;
   uint32_t lastCareDay = 0;
-  // medallas: las del individuo estan en PetLife; aqui el contador acumulado entre todas las crianzas
-  uint16_t totalMedals = 0;
   uint16_t lastMilestone = 0;  // hito de racha ya celebrado
   uint16_t gameHi = 0;     // record del minijuego (del jugador)
   uint16_t strHi = 0;      // record de golpes al saco
@@ -291,16 +281,38 @@ public:
   bool lineHasUnregistered(int16_t base) const;
   int16_t pickEggSpecies();        // publica para poder simular tiradas (EGGS)
 
-  // racha / vinculo / medallas / nombre
+  // racha / vinculo / nombre
   void rename(const char *name);
   // celebraciones pendientes (v1.30, fx.h): las recoge la UI, que decide cuando se ven y
-  // cuanto duran. takeMedal = bits de las medallas nuevas (del hueco s); takeMilestone = dias del hito.
-  uint16_t takeMedal(uint8_t s) { PetLife &l = slotRef(s); uint16_t m = l.newMedal; l.newMedal = 0; return m; }
-  uint16_t takeMedal() { return takeMedal(focusSlot); }
+  // cuanto duran. takeMilestone = dias del hito; las medallas (v3.4), takeMedalNews
   uint16_t takeMilestone() { uint16_t d = milestoneNew; milestoneNew = 0; return d; }
   bool takeDiedNow(uint8_t s) { PetLife &l = slotRef(s); bool d = l.diedNow; l.diedNow = false; return d; }
   int careBonus() const;  // mejora del huevo por racha + vinculo
   int shinyOdds(bool charm) const;  // denominador de la tirada shiny del huevo
+
+  // --- medallas del jugador (v3.4, medals.h). 19 medallas con Bronce / Plata / Oro; cada tramo paga sus
+  // monedas (MEDAL_COINS) una vez, fuera del tope diario. Los bichos cuentan una vez cada uno (PetLife::counted).
+  // Se miran en cada tick y al principio de cada save(), que escribe "pm" antes que "cn": un corte puede
+  // perder un pago, nunca pagarlo dos veces
+  uint32_t medalValue(uint8_t i) const;    // lo que mide la medalla i ahora (contador o estado)
+  uint8_t medalTierPaid(uint8_t i) const { return i < MEDAL_COUNT ? pm.tier[i] : 0; }  // tramo pagado (0..3)
+  uint16_t medalTiersTotal() const;        // tramos conseguidos entre todas (0..57)
+  // los banners que esperan (uno por medalla, fundidos); la UI los recoge con la pantalla a la vista
+  bool takeMedalNews(MedalNews *out);
+  uint8_t medalNewsPending() const { return medalNewsN; }
+  bool medalsReady() const { return pmReady; }
+  bool medalsMigratedNow() const { return pmMigrated; }  // este arranque conto la partida de antes (serie)
+  void dbgMedalCount(uint8_t i, uint16_t v);  // serie MEDAL i v: el contador de una de bicho o de evento
+  void dbgRegister(int16_t dex, bool sh = false) { registerSpecies(dex, sh); }  // renderizador y pruebas
+  void dbgClearMedalNews() { medalNewsN = 0; }  // renderizador: cada escena sin banners pendientes
+  // renderizador: contadores a 0 y cada tramo ya alcanzado, ya pagado (una escena no cobra lo de la anterior)
+  void dbgMedalsQuiet() {
+    pmClear(pm);
+    for (uint8_t i = 0; i < MEDAL_COUNT; i++) pm.tier[i] = medalTierOf(i, medalValue(i));
+    medalNewsN = 0;
+  }
+  void medalsUpdate();                     // cuenta a los de casa y paga los tramos nuevos (sin escribir)
+  uint8_t legacyBitsOf(uint32_t id) const { return pmLegacyBits(pm, id); }
 
   // --- monedas (v2.0, Y4; economy.h). Las claves de la NVS que faltan valen 0 (partidas de antes)
   uint16_t coins = 0;          // "cn": la cartera, 0..COIN_MAX
@@ -509,7 +521,12 @@ public:
   bool boxPut(uint8_t k, PetRecord r);     // BOXFILL: un bicho inventado en un hueco vacio (uid nuevo)
   void boxReload() { for (uint8_t k = 0; k < BOX_SLOTS; k++) readSlot(k); }  // relee la NVS (renderizador)
   PetRecord toRecord() const { return record(lastSeenEpoch); }  // el del foco, sellado (storedEpoch = ahora)
-  void fromRecord(const PetRecord &r) { loadRecord(r); }       // el del foco pasa a ser el bicho de r
+  // el del foco pasa a ser el bicho de r. v3.4: un registro de antes (sin REC_V3) trae los bits con que se
+  // conto al migrar ("pm"), asi al despertarlo no vuelve a contar
+  void fromRecord(const PetRecord &r) {
+    loadRecord(r);
+    counted |= pmLegacyBits(pm, r.uid);
+  }
 
 private:
   Preferences prefs;
@@ -530,6 +547,10 @@ private:
   uint8_t ticksSinceSave = 0;
   bool pendingSave = false;     // guardado periodico pendiente de volcar
   bool starterPick = false;     // primera partida: esperando que el jugador elija inicial
+  // v3.4: lo ultimo escrito en "cn" / "cnD" / "cnT" (save() no los repite si no cambiaron)
+  bool cnHave = false;
+  uint16_t cnSaved = 0, cnTSaved = 0;
+  uint32_t cnDSaved = 0;
   uint32_t coinDay = 0;        // "cnD": dia del contador del tope diario
   uint16_t coinToday = 0;      // "cnT": monedas con tope ganadas ese dia
   void nightMinute(int h, bool live);  // un minuto de la noche del foco: dormirse o despertarse solo
@@ -588,7 +609,6 @@ private:
   // cuidado de ESTE bicho (careDay), que le da BOND_CARE_DAY de vinculo
   void registerCare(bool saveNow = true);
   void addBond(uint8_t amt);
-  void checkMedals(bool saveNow = true);
   void persist(bool now) { if (now) save(); else pendingSave = true; }
   void rollStepDay(uint32_t day);
   void findItem();
@@ -621,6 +641,42 @@ private:
   void putPack();                   // "bpack" (10 objetos de antes) + "bpk2" (las 6 bayas), v3.2
   void saveBag();                   // "bpack" y "cegg" ya (endLife: un huevo de casa a la mochila)
   void saveCapEggs();               // "cegg"
+  // medallas del jugador (v3.4): "pm" (medals.h) y la copia de lo ultimo escrito; pmReady = cargado o creado
+  // (sin el, aun falta migrar). Los banners esperan en medalNewsQ
+  PlayerMedals pm = {};
+  PlayerMedals pmSaved = {};
+  bool pmHave = false;
+  bool pmReady = false;
+  bool pmMigrated = false;
+  bool pmKeyBad = false;            // habia "pm" pero no se pudo cargar: se recuenta sin pagar
+  MedalNews medalNewsQ[MEDAL_COUNT] = {};
+  uint8_t medalNewsN = 0;
+  // lo que medalsUpdate puede cambiar, para deshacerlo con el bicho cuando "hm1" no llega (store / wake)
+  struct MedalSnap {
+    PlayerMedals pm;
+    uint16_t coins;
+    MedalNews q[MEDAL_COUNT];
+    uint8_t n;
+    uint8_t otherCounted;  // lo contado del otro hueco (el que no se mueve)
+  };
+  MedalSnap medalSnap() const {
+    MedalSnap m;
+    m.pm = pm;
+    m.otherCounted = other.counted;
+    m.coins = coins;
+    memcpy(m.q, medalNewsQ, sizeof(m.q));
+    m.n = medalNewsN;
+    return m;
+  }
+  void medalRestore(const MedalSnap &m) {
+    pm = m.pm;
+    coins = m.coins;
+    memcpy(medalNewsQ, m.q, sizeof(medalNewsQ));
+    medalNewsN = m.n;
+    other.counted = m.otherCounted;
+  }
+  bool savePm();                    // "pm" (si cambio); false si no se pudo escribir
+  void medalsMigrate();             // primer arranque de la v3.4: cuenta la partida de antes y paga
   HomeRec hm1Saved;                 // lo ultimo escrito en "hm1" (para no repetirlo)
   bool hm1Have = false;             // ...si lo hay
   void save();

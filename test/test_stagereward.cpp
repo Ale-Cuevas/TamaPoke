@@ -31,13 +31,6 @@ static void sBorn(Pet &p, int16_t dex = 4) {
   p.setClock(ST);  // guarda
 }
 
-static void sAdvance(Pet &p, uint32_t minutes) {
-  for (uint32_t i = 0; i < minutes; i++) {
-    mockAdvanceMillis(PET_TICK_MS);
-    p.update(millis());
-  }
-}
-
 // un bicho inventado en el hueco k (vacio) de la caja; devuelve su uid
 static uint32_t boxed(Pet &p, uint8_t k, int16_t dex, uint32_t grow, uint8_t bond) {
   PetRecord r;
@@ -482,20 +475,18 @@ TEST(stage, el_de_casa_dormido_o_en_un_final_no_puede_combatir) {
 }
 
 // ---------------------------------------------------------------- niveles y evolucion
-TEST(stage, el_de_casa_sube_de_nivel_gana_la_medalla_y_puede_evolucionar) {
+TEST(stage, el_de_casa_sube_de_nivel_cuenta_para_la_medalla_y_puede_evolucionar) {
   Pet p;
   sBorn(p, 4);  // Charmander: evoluciona en el 16
   CHECK_EQ(p.speciesId, (int16_t)4);
   p.setLevel(9);
-  p.takeMedal();
-  CHECK(!p.hasMedal(MED_LV10));
-  uint16_t tm = p.totalMedals;
+  CHECK(!(p.counted & PMB_LV10));
+  uint32_t before = p.medalValue(MD_LV10);
   uint32_t t[1] = { p.uid };
   p.stageDone(0, true, t, 1);
   CHECK_EQ(p.level(), (uint16_t)12);  // 60 min = 3 niveles de 20
-  CHECK(p.hasMedal(MED_LV10));
-  CHECK(p.takeMedal() & MED_LV10);  // la UI la celebra
-  CHECK(p.totalMedals > tm);  // (y la de EN FORMA, que llega en el 5)
+  CHECK(p.counted & PMB_LV10);  // v3.4: cuenta para la medalla del jugador (en el save() de stageDone)
+  CHECK_EQ(p.medalValue(MD_LV10), before + 1);
   // del 15 al 16 de golpe: listo para evolucionar
   p.setLevel(15);
   p.fullness = p.joy = p.energy = 80;
@@ -521,7 +512,7 @@ TEST(stage, uno_de_la_caja_que_pasa_su_nivel_de_evolucion_evoluciona_al_desperta
   CHECK_EQ(rec.speciesId, (int16_t)4);
   CHECK_EQ(levelFor(rec.growMin), (uint16_t)16);
   CHECK(recordValid(rec));
-  CHECK_EQ(rec.medals, (uint16_t)0);  // las de nivel llegan en casa (checkMedals)
+  CHECK_EQ(rec.medals, (uint16_t)0);  // v3.4: aun sin contar (cuenta al despertarlo)
   // hiberna: horas apagada no lo cambian
   Pet q;
   q.begin();
@@ -537,9 +528,7 @@ TEST(stage, uno_de_la_caja_que_pasa_su_nivel_de_evolucion_evoluciona_al_desperta
   CHECK_EQ(q.level(), (uint16_t)16);
   CHECK(q.canEvolveNow());
   CHECK(q.wantEvolveButton());
-  sAdvance(q, 1);  // su primer minuto en casa: la medalla del 10
-  CHECK(q.hasMedal(MED_LV10));
-  CHECK(q.takeMedal() & MED_LV10);
+  CHECK(q.counted & PMB_LV10);  // v3.4: al despertarlo cuenta para la medalla del jugador (el save() de wake)
   q.evolve();
   CHECK_EQ(q.speciesId, (int16_t)5);
   CHECK(q.evolving());

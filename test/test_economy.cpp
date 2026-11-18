@@ -136,11 +136,13 @@ TEST(economy, las_metas_de_pasos_pagan_fuera_del_tope) {
   CHECK_EQ(p.takeGoalBanner(nullptr, &got), (uint8_t)1);
   CHECK_EQ(got, (uint16_t)10);
   p.addSteps(STEP_GOALS[2] - STEP_GOALS[0], EDAY);  // cruza la 2 y la 3 de golpe
-  CHECK_EQ(p.coins, (uint16_t)(c0 + 10 + 20 + 40));
+  // v3.4: el primer dia de 10000 pasos es tambien la medalla Maraton (del jugador, fuera del tope)
+  uint16_t med = medalPayout(0, medalTierOf(MD_MARATHON, 1));
+  CHECK_EQ(p.coins, (uint16_t)(c0 + 10 + 20 + 40 + med));
   CHECK_EQ(p.takeGoalBanner(nullptr, &got), (uint8_t)3);
   CHECK_EQ(got, (uint16_t)60);
   p.addSteps(500, EDAY);  // ya cobradas hoy
-  CHECK_EQ(p.coins, (uint16_t)(c0 + 70));
+  CHECK_EQ(p.coins, (uint16_t)(c0 + 70 + med));
 }
 
 TEST(economy, estadio_primera_vez_y_repeticion_diaria) {

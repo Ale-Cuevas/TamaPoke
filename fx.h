@@ -5,7 +5,8 @@
 // probada en el PC (test/test_fx.cpp). El dibujo y los sonidos viven en TamaPoke.ino.
 //
 // Dos familias:
-// - Celebraciones (FxQueue): subida de nivel, medalla, hito de racha y meta de pasos. Salen
+// - Celebraciones (FxQueue): subida de nivel, medalla (v3.4: del jugador, con sus monedas), hito de racha
+//   y meta de pasos. Salen
 //   de una en una y por prioridad, y el temporizador de cada una empieza AL MOSTRARSE, no
 //   al ganarse: una medalla ganada con la pantalla apagada ya no caduca sin verse, y la de
 //   Nv.10 (que llega en el mismo minuto que el nivel 10) espera a que acabe la subida.
@@ -31,8 +32,9 @@ enum : uint8_t { FXB_LEVELUP = 0, FXB_MEDAL, FXB_MILESTONE, FXB_GOAL, FXB_KINDS 
 
 struct FxEvent {
   uint8_t kind = FXB_LEVELUP;
-  uint16_t a = 0, b = 0;  // subida: a = nivel de antes, b = nivel nuevo. Medalla: a = bit.
-                          // Hito: a = dias de racha. Meta: a = tier (1..3)
+  uint16_t a = 0, b = 0;  // subida: a = nivel de antes, b = nivel nuevo. Medalla (v3.4, del jugador): a = MD_*,
+                          // b = tramo (1..3). Hito: a = dias de racha. Meta: a = tier (1..3)
+  uint16_t c = 0;         // medalla (v3.4): monedas que pago
   bool chimed = false;    // subida: el sonido ya sono al llegar al nivel (no repetirlo)
   uint32_t start = 0;     // millis() en que empezo a verse
   uint32_t dur = 0;       // ms en pantalla
@@ -59,8 +61,9 @@ struct FxQueue {
 
   // Encola una celebracion. Una subida pendiente se funde con la nueva (12->13 y 13->14 son
   // una sola 12->14, como tras horas apagada o un Caramelo Raro), y una repetida exacta
-  // (misma medalla, mismo hito, misma meta) se descarta. false = cola llena.
-  bool push(uint8_t kind, uint16_t a, uint16_t b = 0, bool chimed = false, uint8_t slot = 0) {
+  // (mismo hito, misma meta) se descarta. v3.4: la misma medalla que ya espera se funde (el tramo mas
+  // alto y la suma de monedas: Bronce y Plata de golpe son un solo banner). false = cola llena.
+  bool push(uint8_t kind, uint16_t a, uint16_t b = 0, bool chimed = false, uint8_t slot = 0, uint16_t c = 0) {
     if (kind >= FXB_KINDS) return false;
     for (uint8_t i = 0; i < n; i++) {
       if (q[i].kind != kind || q[i].slot != slot) continue;
@@ -69,7 +72,14 @@ struct FxQueue {
         q[i].chimed = q[i].chimed && chimed;  // si una parte no sono, suena al mostrarse
         return true;
       }
-      if (q[i].a == a) return true;
+      if (q[i].a == a) {
+        if (kind == FXB_MEDAL) {
+          if (b > q[i].b) q[i].b = b;
+          uint32_t sum = (uint32_t)q[i].c + c;
+          q[i].c = sum > 0xFFFF ? 0xFFFF : (uint16_t)sum;
+        }
+        return true;
+      }
     }
     if (n >= FX_QUEUE) return false;
     uint8_t at = n;
@@ -83,6 +93,7 @@ struct FxQueue {
     e.b = b;
     e.chimed = chimed;
     e.slot = slot;
+    e.c = c;
     e.dur = fxBannerMs(kind, a);
     q[at] = e;
     n++;
@@ -107,7 +118,7 @@ struct FxQueue {
   }
 
   // Quita las de un tipo, tambien la que se ve. Tras un cambio de bicho en la caja (v1.37), la
-  // subida de nivel y la medalla que esperaban eran del otro; el hito y la meta son del jugador.
+  // subida de nivel que esperaba era del otro; el hito, la meta y (v3.4) las medallas son del jugador.
   void drop(uint8_t kind) {
     uint8_t j = 0;
     for (uint8_t i = 0; i < n; i++)

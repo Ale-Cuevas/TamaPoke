@@ -1,5 +1,5 @@
 #include "i18n.h"
-#include "pet.h"        // MED_COUNT
+#include "medals.h"     // MEDAL_COUNT (v3.4)
 #include <Preferences.h>
 
 Lang gLang = LANG_DEFAULT;
@@ -108,6 +108,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Dormir", "Despertar", "Comida", "Estado", "Evoluci\242n", "Despedida", "Volver",
     "Baya", "Roja", "Azul", "Verde", "Amarilla", "Rosa", "Naranja", "Tarta", "Dorada",
     "\250Qui\202n juega?", "\250Para qui\202n?",
+    // las medallas del jugador (v3.4): los tres tramos, y la 2.a pagina de la ficha
+    "Bronce", "Plata", "Oro", "ESTADISTICAS",
   },
   // ---------------- EN ----------------
   {
@@ -210,6 +212,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Sleep", "Wake", "Food", "Status", "Evolve", "Farewell", "Back",
     "Berry", "Red", "Blue", "Green", "Yellow", "Pink", "Orange", "Cake", "Golden",
     "Who plays?", "Who gets it?",
+    // las medallas del jugador (v3.4): los tres tramos, y la 2.a pagina de la ficha
+    "Bronze", "Silver", "Gold", "STATS",
   },
   // ---------------- FR ----------------
   {
@@ -312,6 +316,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Dormir", "Reveil", "Manger", "Etat", "Evoluer", "Adieu", "Retour",
     "Baie", "Rouge", "Bleue", "Verte", "Jaune", "Rose", "Orange", "Gateau", "Doree",
     "Qui joue?", "Pour qui?",
+    // las medallas del jugador (v3.4): los tres tramos, y la 2.a pagina de la ficha
+    "Bronze", "Argent", "Or", "STATS",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -419,6 +425,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Schlafen", "Wecken", "Essen", "Status", "Entwickeln", "Abschied", "Zurueck",
     "Beere", "Rot", "Blau", "Gruen", "Gelb", "Rosa", "Orange", "Kuchen", "Gold",
     "Wer spielt?", "Fuer wen?",
+    // las medallas del jugador (v3.4): los tres tramos, y la 2.a pagina de la ficha
+    "Bronze", "Silber", "Gold", "WERTE",
   },
   // ---------------- IT ----------------
   {
@@ -521,6 +529,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Dormi", "Sveglia", "Cibo", "Stato", "Evolvi", "Addio", "Indietro",
     "Bacca", "Rossa", "Blu", "Verde", "Gialla", "Rosa", "Arancio", "Torta", "Dorata",
     "Chi gioca?", "Per chi?",
+    // las medallas del jugador (v3.4): los tres tramos, y la 2.a pagina de la ficha
+    "Bronzo", "Argento", "Oro", "STATISTICHE",
   },
   // ---------------- PT ----------------
   {
@@ -623,6 +633,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Dormir", "Acordar", "Comida", "Estado", "Evoluir", "Adeus", "Voltar",
     "Baga", "Vermelha", "Azul", "Verde", "Amarela", "Rosa", "Laranja", "Bolo", "Dourada",
     "Quem joga?", "Para quem?",
+    // las medallas del jugador (v3.4): los tres tramos, y la 2.a pagina de la ficha
+    "Bronze", "Prata", "Ouro", "ATRIBUTOS",
   },
   // ---------------- JA ----------------
   {
@@ -747,6 +759,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "ねる", "おこす", "ごはん", "ようす", "しんか", "おわかれ", "もどる",
     "きのみ", "あか", "あお", "みどり", "きいろ", "ピンク", "オレンジ", "ケーキ", "きんいろ",
     "だれが あそぶ?", "だれに あげる?",
+    // las medallas del jugador (v3.4): los tres tramos, y la 2.a pagina de la ficha
+    "ブロンズ", "シルバー", "ゴールド", "のうりょく",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -854,47 +868,34 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "재우기", "깨우기", "먹이", "상태", "진화", "작별", "뒤로",
     "열매", "빨강", "파랑", "초록", "노랑", "분홍", "주황", "케이크", "황금",
     "누가 놀까?", "누구에게?",
+    // las medallas del jugador (v3.4): los tres tramos, y la 2.a pagina de la ficha
+    "브론즈", "실버", "골드", "능력치",
   },
 };
 
-// Nombres de medalla en sus tres longitudes [idioma][medalla].
-static const char *const MED_NAME[LANG_COUNT][MED_COUNT] = {
-  { "Nv.10", "Nv.25", "Nv.50", "BAYA", "RACHA 7", "VINCULO", "FORMA TOPE", "EN FORMA", "MARATON" },
-  { "Lv.10", "Lv.25", "Lv.50", "BERRY", "7 STREAK", "BOND", "TOP FORM", "IN SHAPE", "MARATHON" },
-  { "Niv.10", "Niv.25", "Niv.50", "BAIE", "SERIE 7", "LIEN", "FORME MAX", "EN FORME", "MARATHON" },
-  { "Lv.10", "Lv.25", "Lv.50", "BEERE", "7 SERIE", "BINDUNG", "ENDFORM", "FIT", "MARATHON" },
-  { "Lv.10", "Lv.25", "Lv.50", "BACCA", "SERIE 7", "LEGAME", "FORMA MAX", "IN FORMA", "MARATONA" },
-  { "Niv.10", "Niv.25", "Niv.50", "BAGA", "SEQ 7", "LACO", "FORMA MAX", "EM FORMA", "MARATONA" },
-  { "Lv.10", "Lv.25", "Lv.50", "きのみ", "7にち", "なかよし", "さいしゅう", "げんき", "マラソン" },
-  { "Lv.10", "Lv.25", "Lv.50", "열매", "연속 7일", "유대", "최고 컨디션", "건강함", "마라톤" },
+// Las medallas del jugador (v3.4, medals.h) [idioma][MD_*]: el nombre (filas de la pagina de medallas y
+// el banner) y lo que mide (su tarjeta). Sin acentos (como las de antes).
+static const char *const MEDAL_NAME[LANG_COUNT][MEDAL_COUNT] = {
+  { "Creciendo", "Veterano", "Gran criador", "Mejores amigos", "Adulto", "En forma", "Gourmet", "Evolucion", "Feliz adios", "Pokedex", "Shiny", "Cuidado diario", "Caminante", "Maraton", "Campeon", "Domador", "Cazador", "Trotamundos", "Coleccionista" },  // ES
+  { "Growing up", "Seasoned", "Master raiser", "Best friends", "Full grown", "In shape", "Gourmet", "Evolution", "Happy farewell", "Pokedex", "Shiny", "Daily care", "Walker", "Marathon", "Stage champion", "Wild tamer", "Catcher", "Globetrotter", "Collector" },  // EN
+  { "Grandir", "Aguerri", "Grand eleveur", "Meilleurs amis", "Adulte", "En forme", "Gourmet", "Evolution", "Doux adieu", "Pokedex", "Chromatique", "Soins du jour", "Marcheur", "Marathon", "Champion", "Dompteur", "Attrapeur", "Globe-trotter", "Collection" },  // FR
+  { "Aufwachsen", "Erfahren", "Meisterzucht", "Beste Freunde", "Ausgewachsen", "Fit", "Feinschmecker", "Entwicklung", "Abschied", "Pokedex", "Schillernd", "Pflege", "Wanderer", "Marathon", "Champion", "Wildbaendiger", "Faenger", "Weltenbummler", "Sammler" },  // DE
+  { "Crescere", "Esperto", "Allevatore", "Migliori amici", "Adulto", "In forma", "Buongustaio", "Evoluzione", "Addio felice", "Pokedex", "Cromatico", "Cura diaria", "Camminatore", "Maratona", "Campione", "Domatore", "Catturatore", "Giramondo", "Collezionista" },  // IT
+  { "Crescendo", "Veterano", "Grande criador", "Grandes amigos", "Adulto", "Em forma", "Gourmet", "Evolucao", "Adeus feliz", "Pokedex", "Brilhante", "Cuidado diario", "Caminhante", "Maratona", "Campeao", "Domador", "Cacador", "Viajante", "Colecionador" },  // PT
+  { "せいちょう", "ベテラン", "マスター", "なかよし", "おとな", "げんき", "グルメ", "しんか", "おわかれ", "ずかん", "いろちがい", "まいにち", "さんぽ", "マラソン", "チャンピオン", "やせいハンター", "ゲット", "たびびと", "コレクター" },  // JA
+  { "성장", "베테랑", "마스터", "단짝", "어른", "건강", "미식가", "진화", "작별", "도감", "이로치", "매일 돌봄", "산책", "마라톤", "챔피언", "야생 조련사", "포획", "여행가", "수집가" },  // KO
 };
-static const char *const MED_LBL[LANG_COUNT][MED_COUNT] = {
-  { "Nv10", "Nv25", "Nv50", "BAYA", "7DIAS", "VINC", "TOPE", "SANO", "10K" },
-  { "Lv10", "Lv25", "Lv50", "BERRY", "7DAYS", "BOND", "TOP", "FIT", "10K" },
-  { "Niv10", "Niv25", "Niv50", "BAIE", "7JRS", "LIEN", "MAX", "FORME", "10K" },
-  { "Lv10", "Lv25", "Lv50", "BEERE", "7TAGE", "BND", "END", "FIT", "10K" },
-  { "Lv10", "Lv25", "Lv50", "BACCA", "7GG", "LEG", "MAX", "FIT", "10K" },
-  { "Niv10", "Niv25", "Niv50", "BAGA", "7DIAS", "LACO", "MAX", "FIT", "10K" },
-  { "Lv10", "Lv25", "Lv50", "きのみ", "7にち", "なかよし", "しんか", "げんき", "10K" },
-  { "Lv10", "Lv25", "Lv50", "열매", "7일", "유대", "최고", "건강", "10K" },
-};
-static const char *const MED_DSC[LANG_COUNT][MED_COUNT] = {
-  { "NIVEL 10", "NIVEL 25", "NIVEL 50", "BAYA HALLADA",
-    "RACHA 7 DIAS", "VINCULO MAX", "FORMA FINAL", "EN FORMA", "10000 PASOS" },
-  { "LEVEL 10", "LEVEL 25", "LEVEL 50", "BERRY FOUND",
-    "7 DAY STREAK", "MAX BOND", "FINAL FORM", "IN SHAPE", "10000 STEPS" },
-  { "NIVEAU 10", "NIVEAU 25", "NIVEAU 50", "BAIE TROUVEE",
-    "SERIE 7 JOURS", "LIEN MAX", "FORME FINALE", "EN FORME", "10000 PAS" },
-  { "LEVEL 10", "LEVEL 25", "LEVEL 50", "BEERE GEFUNDEN",
-    "7 TAGE SERIE", "MAX BINDUNG", "ENDFORM", "FIT", "10000 SCHRITTE" },
-  { "LIVELLO 10", "LIVELLO 25", "LIVELLO 50", "BACCA TROVATA",
-    "SERIE 7 GIORNI", "LEGAME MAX", "FORMA FINALE", "IN FORMA", "10000 PASSI" },
-  { "NIVEL 10", "NIVEL 25", "NIVEL 50", "BAGA ACHADA",
-    "SEQ 7 DIAS", "LACO MAX", "FORMA FINAL", "EM FORMA", "10000 PASSOS" },
-  { "レベル 10", "レベル 25", "レベル 50", "きのみ はっけん",
-    "7にち れんぞく", "なかよし MAX", "さいしゅうしんか", "げんきいっぱい", "10000ぽ あるいた" },
-  { "레벨 10", "레벨 25", "레벨 50", "열매 발견",
-    "연속 7일", "유대감 최대", "최종 진화", "건강함", "10000걸음" },
+
+
+static const char *const MEDAL_DESC[LANG_COUNT][MEDAL_COUNT] = {
+  { "Bichos al Nv.10", "Bichos al Nv.25", "Bichos al Nv.50", "Bichos con vinculo 100", "Bichos en forma final", "Nv.10 sin peso ni fallos", "Bayas favoritas halladas", "Evoluciones", "Despedidas", "Especies registradas", "Especies shiny", "Mejor racha (dias)", "Pasos en total", "Dias de 10000 pasos", "Estadios vencidos", "Salvajes vencidos", "Capturas", "Viajes completados", "Recuerdos" },  // ES
+  { "Pets to Lv.10", "Pets to Lv.25", "Pets to Lv.50", "Pets at bond 100", "Pets in a final form", "Fit at Lv.10, no slips", "Favourite berries found", "Evolutions", "Farewells", "Species registered", "Shiny species", "Best streak (days)", "Total steps", "10000-step days", "Stages beaten", "Wild wins", "Captures", "Trips completed", "Souvenirs" },  // EN
+  { "Pokemon au Niv.10", "Pokemon au Niv.25", "Pokemon au Niv.50", "Lien a 100", "Forme finale", "Niv.10, poids 0, 0 faute", "Baies favorites", "Evolutions", "Adieux", "Especes vues", "Especes chromatiques", "Meilleure serie (j)", "Pas au total", "Jours a 10000 pas", "Arenes battues", "Sauvages battus", "Captures", "Voyages finis", "Souvenirs" },  // FR
+  { "Pokemon auf Lv.10", "Pokemon auf Lv.25", "Pokemon auf Lv.50", "Bindung 100", "Endform", "Fit auf Lv.10", "Lieblingsbeeren", "Entwicklungen", "Abschiede", "Arten registriert", "Schillernde Arten", "Beste Serie (Tage)", "Schritte gesamt", "Tage mit 10000", "Arenen besiegt", "Wilde besiegt", "Faenge", "Reisen beendet", "Andenken" },  // DE
+  { "Pokemon al Lv.10", "Pokemon al Lv.25", "Pokemon al Lv.50", "Legame a 100", "Forma finale", "In forma al Lv.10", "Bacche preferite", "Evoluzioni", "Addii", "Specie registrate", "Specie cromatiche", "Serie migliore (gg)", "Passi totali", "Giorni da 10000 passi", "Palestre vinte", "Selvatici battuti", "Catture", "Viaggi completati", "Souvenir" },  // IT
+  { "Pokemon ao Nv.10", "Pokemon ao Nv.25", "Pokemon ao Nv.50", "Laco a 100", "Forma final", "Em forma no Nv.10", "Bagas favoritas", "Evolucoes", "Despedidas", "Especies registradas", "Especies brilhantes", "Melhor sequencia (d)", "Passos no total", "Dias de 10000 passos", "Ginasios vencidos", "Selvagens vencidos", "Capturas", "Viagens feitas", "Lembrancas" },  // PT
+  { "Lv.10 にした数", "Lv.25 にした数", "Lv.50 にした数", "なかよし 100", "さいしゅうしんか", "Lv.10 で げんき", "すきな きのみ", "しんか かいすう", "おわかれ かいすう", "とうろく した数", "いろちがい の数", "さいこう れんぞく", "ぜんぶの ほすう", "10000ぽ の日", "かった ステージ", "やせいに かった数", "ゲット した数", "りょこう かいすう", "おみやげ" },  // JA
+  { "Lv.10 달성 수", "Lv.25 달성 수", "Lv.50 달성 수", "유대 100", "최종 진화", "Lv.10 건강", "좋아하는 열매", "진화 횟수", "작별 횟수", "등록한 종", "이로치 종", "최고 연속 일수", "총 걸음", "10000걸음 날", "이긴 스테이지", "이긴 야생", "포획 수", "여행 횟수", "기념품" },  // KO
 };
 
 // Nombres de las 8 fases (v1.65) [idioma][fase]: planta, agua, roca, fuego, electrico, fantasma, veneno, dragon.
@@ -910,9 +911,8 @@ static const char *const STAGE_NAME[LANG_COUNT][STAGE_NAME_COUNT] = {
 };
 
 const char *T(StrId id) { return STRINGS[gLang][id]; }
-const char *medalName(int i)  { return MED_NAME[gLang][i]; }
-const char *medalLabel(int i) { return MED_LBL[gLang][i]; }
-const char *medalDesc(int i)  { return MED_DSC[gLang][i]; }
+const char *medalName(int i) { return MEDAL_NAME[gLang][i >= 0 && i < MEDAL_COUNT ? i : 0]; }
+const char *medalDesc(int i) { return MEDAL_DESC[gLang][i >= 0 && i < MEDAL_COUNT ? i : 0]; }
 const char *stageName(uint8_t i) { return STAGE_NAME[gLang][i < STAGE_NAME_COUNT ? i : 0]; }
 
 void loadLang() {
