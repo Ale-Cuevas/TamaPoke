@@ -70,8 +70,9 @@ Home has two places (slots 0 and 1); each is a pet, an egg or empty. The pet com
 them from `yard_ui.h` and `yard_panels.h` if the layouts have changed. At v3.3:
 - Dock (y 404), since v3.3: Play 161, Bag 233, Shop 305. (v3.0-v3.2: Care 161, Play 233, Bag 305.)
 - Pet menu (v3.3): open it with `MENU s` (pets walk, so don't tap them); `MENU` alone prints every row with its tap
-  point. 4 rows (x 348): Sleep 152, Food 206, Care 260, Status 314. 5 rows with Evolve/Farewell last (x 331):
-  y 125, 179, 233, 287, 341. Food list: same rows as the 5-row menu; Back (292,341), more (370,341).
+  point. 4 rows (x 348): Sleep 152, Food 206, Care 260, Status 314. 5 rows with Evolve/Farewell last (v3.9, x 325):
+  y 145, 196, 247, 298, 349. Food list: same rows as the 5-row menu; Back (286,349), more (364,349). If in doubt,
+  trust `MENU`'s printed tap points over this list.
 - Pet picker (v3.3): card 0 (150,208), card 1 (316,208), back (233,418); or `PICK s`.
 - `FEED f` (v3.2) feeds the focused pet directly (0 plain, 1-6 berries R B G Y P O, 7 cake, 8 golden); `BUY id`
   (berries are items 10-15); `STATS` prints `berries=` and `fav0/fav1` with `known`.
