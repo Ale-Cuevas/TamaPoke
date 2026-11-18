@@ -15,6 +15,41 @@ TEST(fx, dos_subidas_pendientes_son_una_sola) {
   CHECK(q.q[0].chimed);
 }
 
+// v3.0: dos bichos en casa. La subida de uno no se junta con la del otro: cada una con su banner
+TEST(fx, las_subidas_de_dos_huecos_no_se_juntan) {
+  FxQueue q;
+  CHECK(q.push(FXB_LEVELUP, 12, 13, true, 0));
+  CHECK(q.push(FXB_LEVELUP, 5, 6, true, 1));
+  CHECK(q.push(FXB_LEVELUP, 13, 14, true, 0));  // la del 0 si se junta con la suya
+  CHECK_EQ((int)q.n, 2);
+  CHECK_EQ((int)q.q[0].slot, 0);
+  CHECK_EQ((int)q.q[0].a, 12);
+  CHECK_EQ((int)q.q[0].b, 14);
+  CHECK_EQ((int)q.q[1].slot, 1);
+  CHECK_EQ((int)q.q[1].a, 5);
+  CHECK_EQ((int)q.q[1].b, 6);
+  CHECK(q.push(FXB_MEDAL, 3, 0, false, 0));
+  CHECK(q.push(FXB_MEDAL, 3, 0, false, 1));  // la misma medalla del otro: tambien aparte
+  CHECK_EQ((int)q.n, 4);
+}
+
+TEST(fx, los_efectos_pequenos_de_dos_huecos_van_aparte) {
+  FxOverlays o;
+  o.push(FXO_STAT, 0, 10, 0, 0);
+  o.push(FXO_STAT, 0, 20, 0, 1);
+  int n = 0;
+  for (auto &x : o.o) n += x.on;
+  CHECK_EQ(n, 2);
+  o.step(0, true);
+  const FxOverlay *a = o.find(FXO_STAT, 0, 0), *b = o.find(FXO_STAT, 0, 1);
+  CHECK(a && b && a != b);
+  if (a && b) {
+    CHECK_EQ((int)a->v, 10);
+    CHECK_EQ((int)b->v, 20);
+  }
+  CHECK(o.find(FXO_STAT, 0) != nullptr);  // sin hueco: cualquiera
+}
+
 TEST(fx, si_una_parte_no_sono_la_subida_suena_al_verse) {
   FxQueue q;
   q.push(FXB_LEVELUP, 3, 4, true);    // con el bicho despierto: ya sono

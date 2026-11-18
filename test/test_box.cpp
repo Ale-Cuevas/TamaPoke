@@ -76,6 +76,7 @@ struct World {
 static World worldOf(Pet &p) {
   World w;
   if (!p.isEgg()) w.pets.push_back(p.toRecord());
+  if (p.home(1).hatched()) w.pets.push_back(p.home(1).record(p.lastSeenEpoch));  // v3.0: el del hueco 2 ("hm1")
   for (uint8_t k = 0; k < BOX_SLOTS; k++) {
     if (p.boxState(k) == BOX_OK) w.pets.push_back(p.boxRecord(k));
     else if (p.boxState(k) == BOX_DAMAGED) w.damaged++;
@@ -130,6 +131,7 @@ static void cutEveryWrite(const std::function<void(Pet &)> &move, const std::vec
     World w = worldOf(q);
     CHECK_MSG(samePets(pets, w, &why), "corte tras " + std::to_string(n) + " de " + std::to_string(total) + ": " + why);
     CHECK_MSG(!(q.isEgg() && q.eggHeld()), "corte tras " + std::to_string(n) + ": un huevo activo no espera a otro");
+    CHECK_MSG(!(q.home(1).isEgg() && q.home(1).eggHeld()), "corte tras " + std::to_string(n) + ": un huevo del hueco 2 no espera a otro");
     check(q, n);
     Pet r;
     r.begin();
@@ -427,23 +429,33 @@ TEST(box, la_caja_hiberna_durante_el_tiempo_apagado) {
   CHECK_EQ(q.careMistakes, b.careMistakes);
 }
 
-TEST(box, el_primer_cuidado_del_dia_da_vinculo_una_vez_aunque_se_cambie) {
+// v3.0: el primer cuidado del dia da su vinculo a CADA bicho (la racha cuenta una vez, del jugador), y
+// guardarlo y despertarlo el mismo dia no se lo da otra vez (REC_CARED)
+TEST(box, el_primer_cuidado_del_dia_da_vinculo_a_cada_bicho_una_vez) {
   Pet p;
   freshPet(p, 1);
   p.setClock(DAY0 + 10 * 3600);
   CHECK(p.store(0));
-  hatchNow(p);  // A activo, B en la caja
+  hatchNow(p);  // A activo, B en la caja (sin cuidar hoy)
   uint8_t a0 = p.bond;
+  uint16_t st0 = p.streak;
   p.caress();  // primer cuidado del dia: +4, y +1 del mimo
   CHECK_EQ(p.bond, (uint8_t)(a0 + BOND_CARE_DAY + 1));
-  CHECK(p.wake(0));  // B
+  CHECK_EQ(p.streak, (uint16_t)(st0 + 1));
+  CHECK(p.wake(0));  // B: su primer cuidado de hoy aun no lo tuvo
   uint8_t b0 = p.bond;
-  p.caress();  // el dia ya conto: solo el mimo
-  CHECK_EQ(p.bond, (uint8_t)(b0 + 1));
-  p.setClock(DAY0 + 34 * 3600);  // al dia siguiente, a B le toca a el
+  p.caress();
+  CHECK_EQ(p.bond, (uint8_t)(b0 + BOND_CARE_DAY + 1));
+  CHECK_EQ(p.streak, (uint16_t)(st0 + 1));  // la racha, una vez
+  CHECK(p.wake(0));  // A otra vez: hoy ya lo tuvo, solo el mimo
+  uint8_t a1 = p.bond;
   mockAdvanceMillis(PET_BOND_COOLDOWN_MS + 1);
   p.caress();
-  CHECK_EQ(p.bond, (uint8_t)(b0 + 1 + BOND_CARE_DAY + 1));
+  CHECK_EQ(p.bond, (uint8_t)(a1 + 1));
+  p.setClock(DAY0 + 34 * 3600);  // al dia siguiente, otra vez el suyo
+  mockAdvanceMillis(PET_BOND_COOLDOWN_MS + 1);
+  p.caress();
+  CHECK_EQ(p.bond, (uint8_t)(a1 + 1 + BOND_CARE_DAY + 1));
 }
 
 TEST(box, el_tope_diario_de_vinculo_es_de_cada_bicho) {
@@ -458,8 +470,8 @@ TEST(box, el_tope_diario_de_vinculo_es_de_cada_bicho) {
   CHECK(p.wake(0));  // B no ha ganado nada hoy
   CHECK_EQ(p.bondGainedToday(), (uint8_t)0);
   uint8_t b0 = p.bond;
-  p.play();
-  CHECK_EQ(p.bond, (uint8_t)(b0 + 2));
+  p.play();  // v3.0: tambien su primer cuidado del dia (fuera del tope)
+  CHECK_EQ(p.bond, (uint8_t)(b0 + BOND_CARE_DAY + 2));
   CHECK(p.wake(0));  // otra vez A: sigue en su tope
   CHECK_EQ(p.bond, a1);
   CHECK_EQ(p.bondGainedToday(), (uint8_t)BOND_DAY_CAP);
@@ -747,4 +759,325 @@ TEST(box, corte_de_luz_en_cada_escritura_de_despertar_con_la_casa_vacia) {
     CHECK_MSG(!(q.isEgg() && !q.isVacant()), at + "aparecio un huevo");
     CHECK_MSG(!q.eggHeld(), at + "un huevo espera sin haberlo");
   });
+}
+
+// ---------------------------------------------------------------- el hueco 2 de casa (v3.0)
+// B en el hueco 0 de casa, A en el 1 (despertado desde la caja), la caja vacia
+static void twoHome(Pet &p) {
+  freshPet(p, 1);
+  dress(p, 1);  // A
+  CHECK(p.store(0, 0));
+  hatchNow(p);
+  dress(p, 2);  // B en el 0
+  CHECK(p.wake(0, 1));  // A al hueco 1 (vacio)
+  CHECK(p.home(1).hatched());
+  CHECK_EQ(p.boxUsed(), (uint8_t)0);
+}
+
+TEST(box, guardar_y_despertar_con_el_hueco_2) {
+  Pet p;
+  twoHome(p);
+  PetRecord a = p.home(1).record(0), b = p.toRecord();
+  CHECK(p.store(3, 1));
+  CHECK_EQ(p.focusSlot, (uint8_t)0);
+  CHECK(p.home(1).isEgg());  // un huevo de la mochila
+  CHECK(sameIndividual(p.boxRecord(3), a));
+  CHECK(sameIndividual(p.toRecord(), b));  // el del 0, ni se entero
+  Pet q;
+  q.begin();
+  CHECK(q.home(1).isEgg());
+  CHECK(sameIndividual(q.boxRecord(3), a));
+  CHECK(q.wake(3, 1));  // vuelve al 1: el huevo espera en su incubadora
+  CHECK(sameIndividual(q.home(1).record(0), a));
+  CHECK(q.home(1).eggHeld());
+  CHECK(!q.eggHeld());  // la del 0, no
+  CHECK_EQ(q.boxState(3), (uint8_t)BOX_EMPTY);
+  Pet r;
+  r.begin();
+  CHECK(sameIndividual(r.home(1).record(0), a));
+  CHECK(r.home(1).eggHeld());
+  CHECK(!r.home(1).isVacant());
+}
+
+TEST(box, corte_de_luz_en_cada_escritura_de_guardar_el_del_hueco_2) {
+  Pet p;
+  twoHome(p);
+  uint32_t a = p.home(1).uid;
+  std::vector<PetRecord> pets = { p.toRecord(), p.home(1).record(0) };
+  cutEveryWrite([](Pet &x) { x.store(4, 1); }, pets, [&](Pet &q, long n) {
+    std::string at = "corte " + std::to_string(n) + ": ";
+    CHECK_MSG(q.home(1).uid == a || q.home(1).isEgg(), at + "ni A ni un huevo en el hueco 2");
+    CHECK_MSG(!q.home(1).isVacant(), at + "el hueco 2 vacio con huevos en la mochila");
+  });
+}
+
+TEST(box, corte_de_luz_en_cada_escritura_de_un_intercambio_con_el_hueco_2) {
+  Pet p;
+  twoHome(p);
+  CHECK(p.store(2, 0));  // B a la caja (2)
+  hatchNow(p);
+  dress(p, 3);  // C en el 0
+  PetRecord a = p.home(1).record(0), b = p.boxRecord(2);
+  std::vector<PetRecord> pets = { p.toRecord(), a, b };
+  cutEveryWrite([](Pet &x) { x.wake(2, 1); }, pets, [&](Pet &q, long n) {
+    std::string at = "corte " + std::to_string(n) + ": ";
+    bool before = q.home(1).uid == a.uid && q.boxRecord(2).uid == b.uid;
+    bool after = q.home(1).uid == b.uid && q.boxRecord(2).uid == a.uid;
+    CHECK_MSG(before || after, at + "ni antes ni despues del cambio en el hueco 2");
+    Preferences raw;
+    raw.begin("tamapoke");
+    CHECK_MSG(!raw.isKey("boxT") && !raw.isKey("boxTs"), at + "quedo la copia de transferencia");
+  });
+}
+
+TEST(box, corte_de_luz_en_cada_escritura_de_despertar_al_hueco_2_con_un_huevo) {
+  Pet p;
+  twoHome(p);
+  CHECK(p.store(1, 1));  // A a la caja (1); en el hueco 2, un huevo de la mochila
+  p.onSlot(1, [&] { p.eggTap(); });  // con una grieta
+  int16_t eggT = p.home(1).eggSpecies();
+  bool eggS = p.home(1).eggIsShiny();
+  PetRecord a = p.boxRecord(1);
+  std::vector<PetRecord> pets = { p.toRecord(), a };
+  cutEveryWrite([](Pet &x) { x.wake(1, 1); }, pets, [&](Pet &q, long n) {
+    std::string at = "corte " + std::to_string(n) + ": ";
+    const PetLife &h = q.home(1);
+    CHECK_MSG(h.isEgg() || h.uid == a.uid, at + "el hueco 2 no es ni el huevo ni A");
+    CHECK_MSG(!h.isVacant(), at + "el huevo se perdio");
+    CHECK_MSG(h.isEgg() || h.eggHeld(), at + "A despierto pero el huevo no espera");
+    CHECK_MSG(h.eggSpecies() == eggT && h.eggIsShiny() == eggS, at + "el huevo cambio");
+    CHECK_MSG(h.eggTaps == 1, at + "el huevo perdio su grieta");
+    CHECK_MSG(!q.eggHeld(), at + "el huevo paso a la incubadora del hueco 1");
+  });
+}
+
+TEST(box, corte_de_luz_en_cada_escritura_de_despertar_al_hueco_2_vacio) {
+  Pet p;
+  freshPet(p, 7);
+  dress(p, 4);
+  PetRecord a = p.toRecord();
+  CHECK(p.store(1, 0));  // A a la caja; en el 0 un huevo
+  hatchNow(p);
+  dress(p, 5);  // B en el 0, el hueco 2 vacio
+  CHECK(p.home(1).isVacant());
+  std::vector<PetRecord> pets = { p.toRecord(), a };
+  cutEveryWrite([](Pet &x) { x.wake(1, 1); }, pets, [&](Pet &q, long n) {
+    std::string at = "corte " + std::to_string(n) + ": ";
+    bool before = q.home(1).isVacant() && q.boxState(1) == BOX_OK && q.boxRecord(1).uid == a.uid;
+    bool after = q.home(1).uid == a.uid && q.boxState(1) == BOX_EMPTY;
+    CHECK_MSG(before || after, at + "ni antes ni despues del despertar al hueco 2");
+    CHECK_MSG(!q.home(1).eggHeld(), at + "un huevo espera sin haberlo");
+  });
+}
+
+// un corte justo entre "boxTs" y "boxT": el arranque no toca nada y borra la marca
+TEST(box, un_corte_entre_boxTs_y_boxT_no_cambia_nada) {
+  Pet p;
+  twoHome(p);
+  CHECK(p.store(2, 1));  // A a la caja (2); en el hueco 2 un huevo
+  PetRecord a = p.boxRecord(2);
+  int16_t eggT = p.home(1).eggSpecies();
+  mockNvsSnapshot();
+  {
+    Pet x;
+    x.begin();
+    mockNvsCutAfter(1);  // solo llega "boxTs"
+    x.wake(2, 1);
+    mockNvsCutAfter(-1);
+  }
+  {
+    Preferences raw;
+    raw.begin("tamapoke");
+    CHECK(raw.isKey("boxTs"));
+    CHECK(!raw.isKey("boxT"));
+  }
+  Pet q;
+  q.begin();
+  CHECK(q.home(1).isEgg());
+  CHECK_EQ(q.home(1).eggSpecies(), eggT);
+  CHECK(!q.home(1).eggHeld());
+  CHECK(sameIndividual(q.boxRecord(2), a));
+  Preferences raw;
+  raw.begin("tamapoke");
+  CHECK(!raw.isKey("boxTs"));
+}
+
+// un despertar al hueco 0 despues de uno al 2: "boxTs" no queda y no confunde al siguiente arranque
+TEST(box, un_despertar_al_hueco_1_no_deja_boxTs) {
+  Pet p;
+  twoHome(p);
+  CHECK(p.store(2, 1));
+  CHECK(p.wake(2, 1));
+  CHECK(p.store(3, 0));
+  CHECK(p.wake(3, 0));
+  Preferences raw;
+  raw.begin("tamapoke");
+  CHECK(!raw.isKey("boxTs"));
+  CHECK(!raw.isKey("boxT"));
+}
+
+// boxBoot: el mismo uid en la caja y en el hueco 2 (un guardar cortado): gana la copia de la caja
+TEST(box, el_arranque_arregla_un_repetido_del_hueco_2) {
+  Pet p;
+  twoHome(p);
+  PetRecord a = p.home(1).record(0);
+  {
+    Preferences raw;
+    raw.begin("tamapoke");
+    PetRecord r = a;
+    r.joy = 11;  // la copia de la caja, distinta
+    recordSeal(r);
+    raw.putBytes("box5", &r, sizeof(r));
+  }
+  Pet q;
+  q.begin();
+  CHECK_EQ(q.home(1).uid, a.uid);
+  CHECK_EQ(q.home(1).joy, (uint8_t)11);
+  CHECK_EQ(q.boxState(5), (uint8_t)BOX_EMPTY);
+}
+
+// ---------------------------------------------------------------- finales con cortes de luz (v3.0)
+// los huevos de alguien: la mochila, los que esperan en las incubadoras y los de casa
+static int eggsOf(Pet &q) {
+  int n = q.items[IT_EGG];
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    const PetLife &l = q.home(s);
+    n += l.eggHeldFlag ? 1 : 0;
+    if (l.isEgg() && !l.isVacant()) n += 1;
+  }
+  return n;
+}
+
+// el final del bicho del hueco s (start lo empieza con el foco en el), cortando la luz tras cada
+// escritura: ningun huevo se pierde (los de antes siguen) y, si el hueco ya quedo libre, el que trae el
+// final (la despedida) tambien esta
+// maxExtra: los huevos de mas que puede dejar un corte. El hueco 1 (claves sueltas) puede quedar a medias
+// entre "dexn" y "uid" y cargar como un huevo (pasaba igual antes de la v3.0): uno de mas; "hm1" no
+static void cutEveryWriteEnd(uint8_t s, const std::function<void(Pet &)> &start, int gained, int maxExtra = 1) {
+  Pet p0;
+  p0.begin();
+  int eggs0 = eggsOf(p0);
+  uint32_t uid0 = p0.home(s).uid;
+  auto run = [&](Pet &p) {
+    p.onSlot(s, [&] { start(p); });
+    advance(p, 1);
+    mockAdvanceMillis(CEREMONY_MS + 10);
+    p.update(millis());
+  };
+  mockNvsSnapshot();
+  long total = 0;
+  {
+    Pet p;
+    p.begin();
+    long w0 = mockNvsWrites();
+    run(p);
+    total = mockNvsWrites() - w0;
+    CHECK(p.home(s).uid != uid0);
+    CHECK_EQ(eggsOf(p), eggs0 + gained);
+  }
+  CHECK_MSG(total > 3, "el final escribe en la NVS");
+  for (long n = 0; n <= total; n++) {
+    mockNvsRestore();
+    {
+      Pet p;
+      p.begin();
+      mockNvsCutAfter(n);
+      run(p);
+      mockNvsCutAfter(-1);
+    }
+    Pet q;
+    q.begin();
+    std::string at = "corte tras " + std::to_string(n) + " de " + std::to_string(total) + ": ";
+    bool gone = q.home(s).uid != uid0;
+    int want = eggs0 + (gone ? gained : 0);
+    CHECK_MSG(eggsOf(q) >= want, at + "se perdio un huevo (" + std::to_string(eggsOf(q)) + " de " + std::to_string(want) + ")");
+    CHECK_MSG(eggsOf(q) <= want + maxExtra, at + "demasiados huevos de mas");
+  }
+}
+
+TEST(box, corte_de_luz_al_soltar_al_del_hueco_2_con_su_huevo_esperando) {
+  Pet p;
+  twoHome(p);
+  p.items[IT_EGG] = 0;
+  CHECK(p.store(3, 1));  // A a la caja: el hueco 2 vacio (sin huevos)
+  p.items[IT_EGG] = 1;
+  p.onSlot(1, [&] { CHECK(p.hatchFromBag()); });  // un huevo en el hueco 2...
+  CHECK(p.wake(3, 1));                               // ...que espera mientras A esta despierto
+  CHECK(p.home(1).eggHeld());
+  CHECK(p.boxClear(0));
+  p.rename("B");
+  cutEveryWriteEnd(1, [](Pet &x) { x.release(); }, 0);
+}
+
+TEST(box, corte_de_luz_al_morir_el_del_hueco_2_con_heredero_y_huevo_esperando) {
+  Pet p;
+  twoHome(p);
+  p.items[IT_EGG] = 0;
+  CHECK(p.store(3, 1));
+  p.items[IT_EGG] = 1;
+  p.onSlot(1, [&] { CHECK(p.hatchFromBag()); });
+  CHECK(p.wake(3, 1));
+  p.onSlot(1, [&] {
+    p.setLevel(DEATH_EGG_LEVEL);
+    mockForceRandom(0);  // deja huevo
+    p.startDying();
+    mockClearForcedRandom();
+    CHECK(p.deathEggSpecies() > 0);
+  });
+  // el del heredero entra en casa y el que esperaba va a la mochila: uno mas en total
+  cutEveryWriteEnd(1, [](Pet &x) { x.letGo(); }, 1);
+}
+
+TEST(box, corte_de_luz_en_la_despedida_del_hueco_1_y_del_2) {
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    Pet p;
+    twoHome(p);
+    p.items[IT_EGG] = 2;
+    p.rename("B");
+    // el huevo de premio, a la mochila (hueco 1: mas el huevo del hueco a medias, ver cutEveryWriteEnd)
+    cutEveryWriteEnd(s, [](Pet &x) { x.startFarewell(); }, 1, s == 0 ? 2 : 1);
+  }
+}
+
+// "hm1" que no llega (un corte en cualquier escritura): guardar o despertar con el hueco 2 solo dice que
+// si cuando el hueco 2 quedo escrito, y nunca se pierde nadie
+TEST(box, guardar_y_despertar_con_el_hueco_2_solo_dicen_que_si_si_quedo_escrito) {
+  for (int mv = 0; mv < 2; mv++) {
+    Pet p;
+    twoHome(p);
+    if (mv) {
+      CHECK(p.store(2, 0));  // B a la caja (2): despertar al hueco 2 es un cambio
+      hatchNow(p);
+    }
+    PetRecord a = p.home(1).record(0);
+    uint32_t b = mv ? p.boxRecord(2).uid : 0;
+    mockNvsSnapshot();
+    long total = 0;
+    {
+      Pet x;
+      x.begin();
+      long w0 = mockNvsWrites();
+      CHECK(mv ? x.wake(2, 1) : x.store(4, 1));
+      total = mockNvsWrites() - w0;
+    }
+    for (long n = 0; n <= total; n++) {
+      mockNvsRestore();
+      bool ok;
+      {
+        Pet x;
+        x.begin();
+        mockNvsCutAfter(n);
+        ok = mv ? x.wake(2, 1) : x.store(4, 1);
+        mockNvsCutAfter(-1);
+      }
+      Pet q;
+      q.begin();
+      std::string at = (mv ? "despertar" : "guardar") + std::string(", corte tras ") + std::to_string(n) + ": ";
+      if (ok && mv) CHECK_MSG(q.home(1).uid == b, at + "dijo que si y B no esta en el hueco 2");
+      if (ok && !mv) CHECK_MSG(q.home(1).uid != a.uid && q.boxRecord(4).uid == a.uid, at + "dijo que si y A no esta en la caja");
+      int seen = (q.home(1).uid == a.uid) + (q.boxState(4) == BOX_OK && q.boxRecord(4).uid == a.uid) +
+                 (q.boxState(2) == BOX_OK && q.boxRecord(2).uid == a.uid);
+      CHECK_MSG(seen == 1, at + "A esta " + std::to_string(seen) + " veces");
+    }
+  }
 }

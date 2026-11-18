@@ -36,6 +36,7 @@ struct FxEvent {
   bool chimed = false;    // subida: el sonido ya sono al llegar al nivel (no repetirlo)
   uint32_t start = 0;     // millis() en que empezo a verse
   uint32_t dur = 0;       // ms en pantalla
+  uint8_t slot = 0;       // v3.0: el hueco de casa del bicho (0 o 1); dos bichos no se mezclan
 };
 
 inline uint32_t fxBannerMs(uint8_t kind, uint16_t a) {
@@ -59,10 +60,10 @@ struct FxQueue {
   // Encola una celebracion. Una subida pendiente se funde con la nueva (12->13 y 13->14 son
   // una sola 12->14, como tras horas apagada o un Caramelo Raro), y una repetida exacta
   // (misma medalla, mismo hito, misma meta) se descarta. false = cola llena.
-  bool push(uint8_t kind, uint16_t a, uint16_t b = 0, bool chimed = false) {
+  bool push(uint8_t kind, uint16_t a, uint16_t b = 0, bool chimed = false, uint8_t slot = 0) {
     if (kind >= FXB_KINDS) return false;
     for (uint8_t i = 0; i < n; i++) {
-      if (q[i].kind != kind) continue;
+      if (q[i].kind != kind || q[i].slot != slot) continue;
       if (kind == FXB_LEVELUP) {
         if (b > q[i].b) q[i].b = b;
         q[i].chimed = q[i].chimed && chimed;  // si una parte no sono, suena al mostrarse
@@ -81,6 +82,7 @@ struct FxQueue {
     e.a = a;
     e.b = b;
     e.chimed = chimed;
+    e.slot = slot;
     e.dur = fxBannerMs(kind, a);
     q[at] = e;
     n++;
@@ -162,6 +164,7 @@ struct FxOverlay {
   bool on = false;
   bool started = false;
   uint8_t kind = 0, a = 0;
+  uint8_t slot = 0;  // v3.0: sobre que bicho de casa sale (0 o 1)
   int16_t v = 0;
   uint32_t queued = 0, start = 0;
 };
@@ -175,10 +178,10 @@ struct FxOverlays {
 
   // Lanza un efecto. El mismo efecto sobre lo mismo (misma barra, mismo boton) vuelve a
   // empezar en vez de duplicarse; sin hueco libre se reemplaza el mas antiguo.
-  void push(uint8_t kind, uint8_t a, int16_t v, uint32_t now) {
+  void push(uint8_t kind, uint8_t a, int16_t v, uint32_t now, uint8_t petSlot = 0) {
     FxOverlay *slot = nullptr;
     for (auto &x : o)
-      if (x.on && x.kind == kind && x.a == a) { slot = &x; break; }
+      if (x.on && x.kind == kind && x.a == a && x.slot == petSlot) { slot = &x; break; }
     if (!slot)
       for (auto &x : o)
         if (!x.on) { slot = &x; break; }
@@ -191,6 +194,7 @@ struct FxOverlays {
     slot->started = false;
     slot->kind = kind;
     slot->a = a;
+    slot->slot = petSlot;
     slot->v = v;
     slot->queued = now;
     slot->start = 0;
@@ -215,9 +219,9 @@ struct FxOverlays {
   }
 
   // el efecto en marcha de ese tipo (y objetivo, si a >= 0), o nullptr
-  const FxOverlay *find(uint8_t kind, int a = -1) const {
+  const FxOverlay *find(uint8_t kind, int a = -1, int petSlot = -1) const {
     for (auto &x : o)
-      if (x.on && x.started && x.kind == kind && (a < 0 || x.a == a)) return &x;
+      if (x.on && x.started && x.kind == kind && (a < 0 || x.a == a) && (petSlot < 0 || x.slot == petSlot)) return &x;
     return nullptr;
   }
   bool waiting(uint8_t kind) const {

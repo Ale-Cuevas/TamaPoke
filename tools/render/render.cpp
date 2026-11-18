@@ -147,12 +147,14 @@ static void resetUi() {
   // el patio (v2.0, Y2): bichos sin colocar, sin cosas en el suelo y el mapa del bioma
   yardW = YardWorld{};
   yardLastStep = 0;
-  yardPoopHave = 0;
+  yardPoopHave[0] = yardPoopHave[1] = 0;
   yardPoopBooted = false;
   yardGiftN = 0;
   yardGiftTapped = -1;
-  yardBubblePrev = yardBubbleLatched = nullptr;
-  yardBubbleUntil = 0;
+  for (int s = 0; s < HOME_SLOTS; s++) {
+    yardBubblePrev[s] = yardBubbleLatched[s] = nullptr;
+    yardBubbleUntil[s] = 0;
+  }
   if (yardMapForced) yardForceMap(0);
   // fase Y3: sin comida en el suelo ni huevo en el patio
   yardFood = YardFood{};
@@ -160,9 +162,18 @@ static void resetUi() {
   bathPending = false;
   fxo = FxOverlays{};  // ni "+N" ni otros efectos de la escena anterior
   yardHeartPopAt = 0;
-  yardEggX = -1;
-  yardEggTapAt = 0;
-  yardEggInfoUntil = 0;
+  for (int s = 0; s < HOME_SLOTS; s++) {
+    yardEggX[s] = -1;
+    yardEggTapAt[s] = 0;
+    yardEggInfoUntil[s] = 0;
+  }
+  // v3.0: cada escena empieza con el foco en el hueco 0 y el 1 vacio (secondPet() pone a otro)
+  pet.focus(0);
+  pet.other = vacantPetLife();
+  yardHeartSlot = 0;
+  poopPuffHome = 0;
+  boxHome = boxMoveHome = 0;
+  boxAskPick = false;
   pet.dbgEggClear();
   pet.dbgClearAnims();  // no eating, heart or emote left over from the scene before (the clock goes back)
   zenSerialHold = -1;
@@ -226,7 +237,7 @@ static void resetUi() {
   fxq.clear();
   fxo.clear();
   fxBan = nullptr;
-  fxBondGate = FxGate{};
+  for (auto &g : fxBondGate) g = FxGate{};
   memset(pet.items, 0, sizeof(pet.items));
   gStubImuPresent = true;
   gStubTiltSide = 0;
@@ -374,6 +385,34 @@ static void boxPet(uint8_t k, int16_t dex, uint16_t lv, bool shiny = false, cons
   r.hygiene = 90;
   r.geneAtk = r.geneDef = r.geneSpe = 100;
   pet.boxPut(k, r);
+}
+
+// v3.0: a second home pet in slot 1 (hatched, healthy), or an egg in the yard there
+static void secondPet(int16_t dex, uint16_t lv, bool shiny = false, const char *nick = "") {
+  PetLife &l = pet.slotRef(1);
+  l = PetLife{};
+  l.speciesId = dex;
+  l.prevSpeciesId = dex;
+  l.shiny = shiny;
+  l.uid = 0x5EC0D000u + (uint32_t)dex;
+  l.setLevel(lv);
+  l.growMin += 7;
+  l.ageMinutes = l.growMin + 30;
+  l.fullness = 66;
+  l.joy = 74;
+  l.energy = 70;
+  l.hygiene = 85;
+  l.bond = 20;
+  l.geneAtk = l.geneDef = l.geneSpe = 100;
+  strncpy(l.nick, nick, sizeof(l.nick) - 1);
+  ensureMon();
+}
+static void secondEgg(int16_t dex, uint32_t mins) {
+  PetLife &l = pet.slotRef(1);
+  l = PetLife{};
+  l.eggTarget = dex;
+  l.eggPlaced = eggPlacedFor(pet.lastSeenEpoch, mins);
+  ensureMon();
 }
 
 // three pets in the box, one of them shiny and one with a nickname
@@ -596,11 +635,11 @@ static void travelBack(uint8_t dest, uint32_t souvMask, bool fullBag) {
 }
 // tap the pet back from its trip (in the yard as p[1]): on its body, or on its "!" bubble
 static void tapTraveller(bool bubble) {
-  YardBody b = yardBodyOf(1);
-  int x = (int)yardW.p[1].x, y = (int)yardW.p[1].y - b.h / 2;
+  YardBody b = yardBodyOf(YARD_TRV);  // v3.0: el viajero es p[2]
+  int x = (int)yardW.p[YARD_TRV].x, y = (int)yardW.p[YARD_TRV].y - b.h / 2;
   if (bubble) {
     x += b.w / 2 + 14;
-    y = (int)yardW.p[1].y - b.h - 12;
+    y = (int)yardW.p[YARD_TRV].y - b.h - 12;
   }
   onTap(x, y);
 }
@@ -689,11 +728,21 @@ static const std::vector<Scene> &scenes() {
     { "yard-home-quarry", [] { pokemon(74, 11); } },
     { "yard-home-fallback", [] { pokemon(25, 13); yardForceMap(YARD_MAP_NONE); } },
     { "yard-home-fallback-night", [] { pokemon(7, 23); pet.sleeping = true; yardForceMap(YARD_MAP_NONE); } },
-    { "yard-home-two", [] { pokemon(25, 13); yardForceMap(1); boxPet(0, 7, 12); }, 60 },
-    { "yard-home-two-quarry", [] { pokemon(74, 15); boxPet(0, 133, 20, true); }, 120 },
+    { "yard-home-two", [] { pokemon(25, 13); yardForceMap(1); secondPet(7, 12); }, 60 },
+    { "yard-home-two-quarry", [] { pokemon(74, 15); secondPet(133, 20, true); }, 120 },
+    // v3.0: two home pets, two eggs, one pet and an egg, a pet and the vacant slot
+    { "yard-two-pets", [] { pokemon(25, 13); yardForceMap(1); secondPet(4, 14); pet.slotRef(1).fullness = 12; }, 30 },
+    { "yard-two-pets-es", [] { pokemon(25, 13); yardForceMap(1); secondPet(4, 14); pet.slotRef(1).fullness = 12; es(); }, 30 },
+    { "yard-two-eggs", [] { yardEggScene(40, 0, false); secondEgg(114, 90); }, 20 },
+    { "yard-pet-and-egg", [] { pokemon(25, 13); yardForceMap(1); secondEgg(145, 60); }, 20 },
+    { "yard-pet-and-vacant", [] { pokemon(7, 13); yardForceMap(1); }, 20 },
+    { "yard-two-poops", [] { pokemon(1, 10); yardForceMap(1); secondPet(7, 9); pet.dbgSetPoops(2); pet.slotRef(1).dbgSetPoops(2); }, 20 },
+    { "yard-two-asleep", [] { pokemon(25, 23); pet.sleeping = true; yardForceMap(1); secondPet(133, 20); pet.slotRef(1).sleeping = true; } },
+    { "yard-tap-pet2", [] { pokemon(25, 13); yardForceMap(1); secondPet(4, 14); render(); render();
+                            onTap((int)yardW.p[1].x, (int)yardW.p[1].y - 20); } },
     { "yard-home-poop", [] { pokemon(1, 10); pet.dbgSetPoops(3); pet.hygiene = 40; } },
     { "yard-poop-tap", [] { pokemon(1, 10); pet.dbgSetPoops(3); pet.hygiene = 40; render();
-                            onTap(yardPoopX[1], yardPoopY[1] - 20); }, 3 },
+                            onTap(yardPoopX[0][1], yardPoopY[0][1] - 20); }, 3 },
     { "yard-home-gifts", [] { pokemon(25, 13); yardForceMap(1); for (int i = 0; i < 5; i++) pet.addGift(IT_CAKE); } },
     { "yard-bubble-cycle-0", [] { pokemon(25, 13); yardForceMap(1); pet.fullness = 10; pet.hygiene = 12; gHostMillis = 200000 - 85; } },
     { "yard-bubble-cycle-1", [] { pokemon(25, 13); yardForceMap(1); pet.fullness = 10; pet.hygiene = 12; gHostMillis = 201000 - 85; } },
@@ -732,10 +781,10 @@ static const std::vector<Scene> &scenes() {
     { "yard-egg-zapdos", [] { yardEggScene(40, 0); pet.dbgEggSpecies(145); }, 40 },
     { "yard-egg-night", [] { yardEggScene(150, 30); pet.lastSeenEpoch = epochAt(22); }, 20 },
     { "yard-egg-shake", [] { yardEggScene(40, 0); render(); pet.shaken(); yardEggInfo(); }, 3 },
-    { "yard-egg-tap", [] { yardEggScene(160, 0); render(); onTap(yardEggX, yardEggY - YARD_EGG_MID); }, 3 },
-    { "yard-egg-tap-hint", [] { yardEggScene(160, 0); render(); onTap(yardEggX, yardEggY - YARD_EGG_MID); }, 12 },
-    { "yard-egg-tap-es", [] { yardEggScene(160, 0); lang(LANG_ES); render(); onTap(yardEggX, yardEggY - YARD_EGG_MID); }, 3 },
-    { "yard-egg-tap-hint-es", [] { yardEggScene(160, 0); lang(LANG_ES); render(); onTap(yardEggX, yardEggY - YARD_EGG_MID); }, 12 },
+    { "yard-egg-tap", [] { yardEggScene(160, 0); render(); onTap(yardEggX[0], yardEggY[0] - YARD_EGG_MID); }, 3 },
+    { "yard-egg-tap-hint", [] { yardEggScene(160, 0); render(); onTap(yardEggX[0], yardEggY[0] - YARD_EGG_MID); }, 12 },
+    { "yard-egg-tap-es", [] { yardEggScene(160, 0); lang(LANG_ES); render(); onTap(yardEggX[0], yardEggY[0] - YARD_EGG_MID); }, 3 },
+    { "yard-egg-tap-hint-es", [] { yardEggScene(160, 0); lang(LANG_ES); render(); onTap(yardEggX[0], yardEggY[0] - YARD_EGG_MID); }, 12 },
     { "yard-egg-hatch-shake", [] { yardEggScene(239, 0); render(); pet.hatchNow(); ensureMon(); fxo.push(FXO_HATCH, 0, 0, millis()); }, 6 },
     { "yard-egg-hatch-flash", [] { yardEggScene(239, 0); render(); pet.hatchNow(); ensureMon(); fxo.push(FXO_HATCH, 0, 0, millis()); }, 9 },
     { "yard-egg-hatch-reveal", [] { yardEggScene(239, 0); render(); pet.hatchNow(); ensureMon(); fxo.push(FXO_HATCH, 0, 0, millis()); }, 12 },
@@ -959,8 +1008,8 @@ static const std::vector<Scene> &scenes() {
     // an egg found while the home is empty: straight home, with the find popup
     { "found-egg", [] { vacantNow(10); pet.addSteps(EGG_MAX_STEPS, 0); }, 2 },
     { "box-vacant", [] { vacantNow(10); boxThree(); openBox(); } },
-    { "box-wake-vacant-end", [] { vacantNow(10); boxThree(); openBox(); boxStartMove(4); }, 8 },
-    { "box-store-vacant-end", [] { pokemon(25, 13); boxThree(); openBox(); boxStartMove(2); }, 8 },
+    { "box-wake-vacant-end", [] { vacantNow(10); boxThree(); openBox(); boxStartMove(4, 0); }, 8 },
+    { "box-store-vacant-end", [] { pokemon(25, 13); boxThree(); openBox(); boxStartMove(2, 0); }, 8 },
     { "walk-eggs", [] {
        pokemon(25, 13);
        walker(6420, 88100, 4, { 3, 1, 0, 2, 1, 1, 2 }, 2);
@@ -1249,6 +1298,11 @@ static const std::vector<Scene> &scenes() {
        openBox();
      } },
     { "box-store-ask", [] { pokemon(25, 13); boxThree(); openBox(); boxAsk = 3; boxAskUntil = millis() + 10000; } },
+    // v3.0: with two home pets the Box asks which one goes in, or which one the woken pet swaps with
+    { "box-which-store", [] { pokemon(25, 13); secondPet(4, 14); boxThree(); openBox(); boxTap(boxCellX(2) + BOX_CW / 2, boxCellY(2) + BOX_CH / 2); } },
+    { "box-which-store-es", [] { pokemon(25, 13); secondPet(4, 14); boxThree(); es(); openBox(); boxTap(boxCellX(2) + BOX_CW / 2, boxCellY(2) + BOX_CH / 2); } },
+    { "box-which-swap", [] { pokemon(25, 13); secondPet(4, 14); boxThree(); openBox(); boxTap(boxCellX(4) + BOX_CW / 2, boxCellY(4) + BOX_CH / 2); } },
+    { "box-which-swap-es", [] { pokemon(25, 13); secondPet(4, 14); boxThree(); es(); openBox(); boxTap(boxCellX(4) + BOX_CW / 2, boxCellY(4) + BOX_CH / 2); } },
     { "box-store-ask-egg", [] {  // an egg in the Backpack takes its place: no note (v1.39)
        pokemon(25, 13);
        pet.items[IT_EGG] = 1;
@@ -1276,9 +1330,9 @@ static const std::vector<Scene> &scenes() {
        ensureMon();
        openBox();
      } },
-    { "box-store-fx", [] { pokemon(25, 13); boxThree(); openBox(); boxStartMove(2); }, 4 },
-    { "box-swap-fx", [] { pokemon(25, 13); boxThree(); openBox(); boxStartMove(4); }, 4 },
-    { "box-store-end", [] { pokemon(25, 13); boxThree(); openBox(); boxStartMove(2); }, 8 },
+    { "box-store-fx", [] { pokemon(25, 13); boxThree(); openBox(); boxStartMove(2, 0); }, 4 },
+    { "box-swap-fx", [] { pokemon(25, 13); boxThree(); openBox(); boxStartMove(4, 0); }, 4 },
+    { "box-store-end", [] { pokemon(25, 13); boxThree(); openBox(); boxStartMove(2, 0); }, 8 },
     // wild encounters (v2.2): the object in the yard on each map (rustling, still, shining), the intro, the
     // one-fighter picker, the fight, the result, the Poke Ball question, the throw and the end
     { "enc-yard-meadow", [] { encScene(16, 1); encRustleAt(350); } },
@@ -1340,6 +1394,7 @@ static const std::vector<Scene> &scenes() {
     { "stages-all", [] { pokemon(25, 13); stageSetup(0xFF, 0x1F, false); openStages(); } },
     { "stages-all-es", [] { pokemon(25, 13); stageSetup(0xFF, 0x1F, true); openStages(); } },
     { "team-home", [] { pokemon(25, 13); teamSetup({}, 1, false); } },
+    { "team-two-home", [] { pokemon(25, 13); secondPet(4, 14); boxThree(); teamSetup({}, 1, false); } },
     { "team-home-es", [] { pokemon(25, 13); teamSetup({}, 4, true); } },
     { "team-full", [] { pokemon(25, 13); boxSix(); teamSetup({ 2, -1, 5, 0 }, 2, false); } },
     { "team-full-es", [] { pokemon(25, 13); boxSix(); teamSetup({ 2, -1, 5, 0 }, 4, true); } },

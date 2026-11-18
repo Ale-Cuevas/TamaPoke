@@ -59,7 +59,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "2.6"
+#define FW_VERSION "3.0"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -79,11 +79,15 @@ bool gCjkFont = false;
 Pet pet;
 
 // sprite animado de la SD para la especie actual (si existe el archivo)
-SdMon mon;          // sprite B/N (respaldo y minijuego si no hay PMD)
-PmdMon pmd;         // sprite PMD multi-accion (pantalla principal)
+SdMon mon;          // sprite B/N del bicho del foco (respaldo y minijuego si no hay PMD)
+// v3.0: el sprite PMD multi-accion de cada hueco de casa; `pmd` es el del bicho del foco (pet.focusSlot)
+PmdMon homeMon[HOME_SLOTS];
+#define pmd (homeMon[pet.focusSlot])
 PmdMon evoPmd;      // forma anterior, solo durante el parpadeo de evolucion
-int16_t monFor = -2;
-bool monShinyFor = false;
+int16_t monFor[HOME_SLOTS] = { -2, -2 };  // especie y shiny con que se cargo cada homeMon
+bool monShinyFor[HOME_SLOTS] = { false, false };
+int16_t monBwFor = -2;                    // ...y el B/N (mon), del foco
+bool monBwShiny = false;
 
 #define PET_GROUND 304  // linea de suelo de la mascota (las pantallas de la despedida y el Revivir)
 // el patio (v2.0, Y2): el bicho de casa (p[0]) y el primero de la caja (p[1], hibernando: solo pasea)
@@ -98,9 +102,11 @@ uint32_t gYardPetsUs = 0, gYardPetsMaxUs = 0;  // PERF: los bichos, sus cosas y 
 // fase Y3 (acciones en el mundo): la comida que cae al patio (una a la vez; yard.h) y el huevo del patio
 YardFood yardFood;
 uint32_t yardHeartPopAt = 0;          // al acabarse la comida sale un corazon
-int16_t yardEggX = -1, yardEggY = 0;  // donde esta el huevo (los pies; solo RAM, -1 = sin sitio aun)
-uint32_t yardEggTapAt = 0;            // tocado: se tambalea y dice lo que falta
-uint32_t yardEggInfoUntil = 0;        // el globo del huevo (tras un toque o una sacudida que conto)
+// v3.0: uno por hueco de casa
+int16_t yardEggX[HOME_SLOTS] = { -1, -1 }, yardEggY[HOME_SLOTS] = { 0, 0 };  // donde esta el huevo (los pies; solo RAM, -1 = sin sitio aun)
+uint32_t yardEggTapAt[HOME_SLOTS] = { 0, 0 };      // tocado: se tambalea y dice lo que falta
+uint32_t yardEggInfoUntil[HOME_SLOTS] = { 0, 0 };  // el globo del huevo (tras un toque o una sacudida que conto)
+uint8_t yardHeartSlot = 0;                         // el que se comio la comida (su corazon)
 #define YARD_EGG_S 3                  // el huevo del patio, a escala 3 (~51x69 px de tinta)
 #define YARD_EGG_MID (13 * YARD_EGG_S)  // de sus pies al centro del sprite
 int yardDropFood(uint8_t kind);       // (en la seccion del patio) 1 cae, 0 ya hay una, -1 sin patio
@@ -129,9 +135,13 @@ uint32_t boxAskUntil = 0;     // se cierra solo, como "soltar?"
 enum : uint8_t { BOXMV_NONE = 0, BOXMV_STORE, BOXMV_WAKE, BOXMV_SWAP };
 uint8_t boxMove = BOXMV_NONE; // movimiento en marcha: la luz vuela, despues se escribe en flash
 uint8_t boxMoveSlot = 0;
+uint8_t boxMoveHome = 0;      // v3.0: el hueco de casa del movimiento (0 o 1)
+uint8_t boxHome = 0;          // v3.0: el hueco de casa que ensena la fila "Ahora" (al abrir, el del foco)
+bool boxAskPick = false;      // v3.0: el dialogo pregunta CUAL de los dos de casa (guardar o cambiar)
 uint32_t boxMoveStart = 0;
 bool boxMoveDrawnEnd = false; // ya se vio el ultimo cuadro (como quedara): se puede escribir
 int8_t poopPuffSlot = -1;      // caca recien limpiada (v1.58): destellos en su hueco...
+uint8_t poopPuffHome = 0;      // ...de las del bicho de este hueco de casa (v3.0)...
 uint32_t poopPuffUntil = 0;    // ...hasta aqui
 #define POOP_PUFF_MS 450
 int8_t boxShakeSlot = -1;     // hueco que no se puede usar: tiembla (como un boton, fx.h)
@@ -374,14 +384,15 @@ bool gFaceDown = false;
 // sin tocar cada sitio que los cambia.
 FxQueue fxq;
 FxOverlays fxo;
-FxWatch fxLevelW, fxBondW, fxMistakeW, fxTrainW[3];
+// v3.0: uno por hueco de casa (los efectos salen sobre su bicho: FxEvent/FxOverlay llevan el hueco)
+FxWatch fxLevelW[HOME_SLOTS], fxBondW[HOME_SLOTS], fxMistakeW[HOME_SLOTS], fxTrainW[HOME_SLOTS][3];
 // avisos sonoros (v1.50): una caca nueva y una necesidad que se vacia (comida, higiene, felicidad,
 // energia, en el orden de fxNeedW). Suenan tambien con la pantalla atenuada, en el salvapantallas o
 // apagada: son para enterarse sin mirar
-FxWatch fxPoopW;
-FxZeroWatch fxNeedW[4];
-FxGate fxBondGate;
-bool fxWasEgg = false;            // para ver la eclosion
+FxWatch fxPoopW[HOME_SLOTS];
+FxZeroWatch fxNeedW[HOME_SLOTS][4];
+FxGate fxBondGate[HOME_SLOTS];
+bool fxWasEgg[HOME_SLOTS] = { false, false };  // para ver la eclosion
 const FxEvent *fxBan = nullptr;   // celebracion en pantalla este frame (la fija fxFrame)
 int16_t fxGain[3] = { 0, 0, 0 };  // ATK/DEF/VEL que gano la subida que se ve
 uint32_t gFxUs = 0, gFxMaxUs = 0; // PERF: lo que tardan los efectos en dibujarse
@@ -495,20 +506,72 @@ void setup() {
   lastInteract = millis();
 }
 
-// carga/descarga el sprite de SD cuando cambia la especie
+// los sprites se recargan aunque sea la misma especie (v3.0: los de los dos huecos y el B/N). (Aqui y no
+// junto a sus variables: el conversor del .ino pone los prototipos antes de la primera funcion)
+void monReset() { monFor[0] = monFor[1] = monBwFor = -2; }
+
+// v3.0: hay algo abierto que trabaja con el bicho del foco: no se le cambia (un juego, un combate, la ficha,
+// un menu, el teclado, un dialogo, un movimiento de la caja, el Revivir o una despedida)
+bool uiModalOpen() {
+  return gameOpen || sackOpen || zenOpen || dashOpen || battleOpen() || encOpen() || teamOpen || stagesOpen ||
+         cardOpen || kbOpen || clockOpen || bagOpen || panelKind || boxOpen || boxMove != BOXMV_NONE || galleryOpen ||
+         confirmUntil || choiceKind || itemConfirm || pet.isDying() || pet.ceremony || pet.evolving() ||
+         pet.home(0).isDying() || pet.home(1).isDying() || pet.home(0).ceremony || pet.home(1).ceremony;
+}
+
+// la UI cambia el foco solo por aqui: false si hay algo abierto (o el hueco no existe)
+bool uiFocus(uint8_t s) {
+  if (s >= HOME_SLOTS) return false;
+  if (s == pet.focusSlot) return true;
+  if (uiModalOpen()) return false;
+  pet.focus(s);
+  Serial.printf("FOCUS %u\n", s);
+  return true;
+}
+
+// en cada vuelta del loop: el foco va al que se muere (el dialogo del Revivir es del foco) y, con el
+// del foco en un hueco vacio, al otro si tiene a alguien
+void homeFocusTick() {
+  if (pet.isDying() || pet.ceremony) return;
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    const PetLife &l = pet.home(s);
+    if (s != pet.focusSlot && (l.isDying() || l.ceremony)) {
+      closeForDying();
+      pet.focus(s);
+      return;
+    }
+  }
+  if (pet.isVacant() && !pet.other.isVacant() && !uiModalOpen()) {
+    pet.focus(pet.focusSlot ^ 1);
+  }
+}
+
+// carga/descarga los sprites de SD cuando cambia la especie (v3.0: el de cada hueco de casa, y el B/N de
+// respaldo solo para el del foco)
 void ensureMon() {
-  if (pet.speciesId == monFor && monShinyFor == pet.shiny && !sdDirty) return;
   // los ficheros recien recibidos pueden incluir un thumbs.bin nuevo, que se
   // cargaba solo en setup(): sin esto no se veia en la galeria hasta reiniciar
-  if (sdDirty) { thumbs.unload(); thumbs.load(); sdEpoch++; }
+  if (sdDirty) {
+    thumbs.unload();
+    thumbs.load();
+    sdEpoch++;
+    monReset();
+  }
   sdDirty = false;
-  monFor = pet.speciesId;
-  monShinyFor = pet.shiny;
-  mon.unload();
-  pmd.unload();
-  if (pet.speciesId >= 1 && pet.speciesId <= DEX_COUNT) {
-    pmd.load(pet.speciesId, pet.shiny);          // principal: PMD
-    if (!pmd.loaded) mon.load(pet.speciesId, pet.shiny);  // respaldo: B/N
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    const PetLife &l = pet.home(s);
+    if (l.speciesId == monFor[s] && l.shiny == monShinyFor[s]) continue;
+    monFor[s] = l.speciesId;
+    monShinyFor[s] = l.shiny;
+    homeMon[s].unload();
+    if (l.speciesId >= 1 && l.speciesId <= DEX_COUNT) homeMon[s].load((uint8_t)l.speciesId, l.shiny);  // principal: PMD
+  }
+  int16_t bw = (!pmd.loaded && pet.speciesId >= 1 && pet.speciesId <= DEX_COUNT) ? pet.speciesId : -1;
+  if (bw != monBwFor || (bw >= 0 && pet.shiny != monBwShiny)) {
+    monBwFor = bw;
+    monBwShiny = pet.shiny;
+    mon.unload();
+    if (bw >= 0) mon.load((uint8_t)bw, pet.shiny);  // respaldo: B/N
   }
 }
 
@@ -516,14 +579,14 @@ void loop() {
   uint32_t now = millis();
   // la noche (v1.63): con un juego, combate, evolucion o movimiento de la caja en marcha no se duerme
   // solo a las 23 (lo hace al acabar)
-  pet.nightHold = pet.evolving() || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen() ||
-                  boxMove != BOXMV_NONE || encOpen() || teamWild;
+  pet.nightHold = pet.home(0).evolving() || pet.home(1).evolving() || gameOpen || sackOpen || zenOpen || dashOpen ||
+                  battleOpen() || boxMove != BOXMV_NONE || encOpen() || teamWild;
   pet.update(now);
 
   // el amplificador sigue al estado de sueno (la llamada sale sola si no cambia).
   // Aqui cubre todas las vias: el boton de luz, el sueno nocturno y el que llega
-  // aplicado desde la progresion offline.
-  audioSetSleeping(pet.sleeping);
+  // aplicado desde la progresion offline. v3.0: con los dos de casa dormidos
+  audioSetSleeping(pet.homeAsleep());
   // se desperto solo a las 8: suena, tambien con la pantalla apagada (despues de audioSetSleeping,
   // que dormido tiene el amplificador apagado)
   if (pet.morningWake) {
@@ -532,7 +595,7 @@ void loop() {
   }
   // v2.2: algo se mueve en el patio. Suena una vez, tambien con la pantalla apagada; dormido espera a que se
   // despierte (el amplificador esta apagado), y en pleno combate, a que acabe
-  if (pet.encSoundPending() && !pet.sleeping && !battleOpen()) {
+  if (pet.encSoundPending() && !pet.homeAsleep() && !battleOpen()) {
     pet.takeEncSound();
     sfxPlay(SFX_WILD);
   }
@@ -540,21 +603,23 @@ void loop() {
 
   // avisa con un sonido cuando el bicho pasa a estar listo para evolucionar
   // (incluye el caso de cumplir al despertar). canEvolveNow es false durmiendo.
-  static bool wasEvoReady = false;
-  bool evoReady = pet.wantEvolveButton();
-  if (evoReady && !wasEvoReady) sfxPlay(SFX_MEDAL);
-  wasEvoReady = evoReady;
-  // se muere de abandono (v1.60): se cierra lo que hubiera abierto para que el dialogo se vea (el
-  // sonido lo pone el bicho al empezar a morirse)
-  static bool wasDying = false;
-  bool dyingNow = pet.isDying();
-  if (dyingNow && !wasDying) closeForDying();
-  if (dyingNow && boxOpen && boxMove == BOXMV_NONE) closeBox();  // empezo a morirse en mitad de un movimiento
-  wasDying = dyingNow;
-  if (pet.diedNow) {  // v1.64: paso la hora sin Revivir (el dialogo pasa a decir que murio)
-    pet.diedNow = false;
-    sfxPlay(SFX_BYE);
+  static bool wasEvoReady[HOME_SLOTS] = { false, false };
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {  // v3.0: cada bicho de casa, el suyo
+    bool evoReady = pet.home(s).wantEvolveButton();
+    if (evoReady && !wasEvoReady[s]) sfxPlay(SFX_MEDAL);
+    wasEvoReady[s] = evoReady;
   }
+  // se muere de abandono (v1.60): se cierra lo que hubiera abierto para que el dialogo se vea (el
+  // sonido lo pone el bicho al empezar a morirse). v3.0: cualquiera de los dos; el foco va a el
+  static bool wasDying[HOME_SLOTS] = { false, false };
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    bool dyingNow = pet.home(s).isDying();
+    if (dyingNow && !wasDying[s]) closeForDying();
+    if (dyingNow && boxOpen && boxMove == BOXMV_NONE) closeBox();  // empezo a morirse en mitad de un movimiento
+    wasDying[s] = dyingNow;
+    if (pet.takeDiedNow(s)) sfxPlay(SFX_BYE);  // v1.64: paso la hora sin Revivir (el dialogo pasa a decir que murio)
+  }
+  homeFocusTick();
 
   handleTouch();
   zenTick(millis());  // cascada: fisica con el dedo de ahora, en cada vuelta
@@ -591,7 +656,7 @@ void loop() {
   // y aqui no hay animacion que se corte ni dedo esperando respuesta. Con 90s
   // de inactividad la pantalla ya atenua, asi que se vuelca enseguida; el uso
   // activo persiste igual por los guardados de cada accion (comer/jugar/...).
-  if (pet.savePending() && (screenOff || dimStage >= 1 || pet.sleeping)) {
+  if (pet.savePending() && (screenOff || dimStage >= 1 || pet.homeAsleep())) {
     pet.flushSave();
   }
 
@@ -671,8 +736,10 @@ void onShake() {
   wakeUI();
   if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen()) return;
   if (galleryOpen || boxOpen || stagesOpen || teamOpen || cardOpen || bagOpen || kbOpen || clockOpen || panelKind || encOpen()) return;  // el bicho no esta en pantalla
-  if (pet.sleeping) pet.wakeGrumpy();
-  else if (pet.shaken()) yardEggInfo();  // tambien el huevo: se tambalea (el del patio dice lo que le queda)
+  // v3.0: a los dos de casa: los despiertos se marean (y los huevos se tambalean; el del patio dice lo que le
+  // queda) y despues los dormidos se despiertan de mal humor
+  if (pet.shaken()) yardEggInfo();
+  pet.wakeGrumpy();
 }
 
 // Boca abajo y quieta 3 s (FR-2.2): de noche el bicho se va a dormir; de dia solo
@@ -682,7 +749,7 @@ void onFaceDown(bool down) {
   if (!down) { wakeUI(); return; }
   if (pet.awaitingStarter() || pet.ceremony || pet.evolving() || gameOpen || sackOpen || zenOpen || dashOpen || battleOpen()) return;
   int h = sceneHour();
-  if ((h >= 20 || h < 6) && !pet.isEgg() && !pet.sleeping) pet.sleepDeferred();
+  if (h >= 20 || h < 6) pet.sleepDeferred();  // v3.0: los dos de casa (los que esten despiertos)
   lastInteract = millis() - POWER_DIM2_MS - 1;  // casi apagada, como tras 2 min sin tocar
   gFaceDown = true;  // y sin salvapantallas: nadie la mira
 }
@@ -692,7 +759,7 @@ PowerCtx powerCtx(uint32_t now) {
   PowerCtx c;
   c.idleMs = idleSince(now, lastInteract);
   c.screenOff = screenOff;
-  c.sleeping = pet.sleeping;
+  c.sleeping = pet.homeAsleep();  // v3.0: los dos de casa
   c.gameOpen = gameOpen || sackOpen || zenOpen || dashOpen || battleOpen() || boxMove || encOpen();  // combate, luz de la caja y encuentro (v2.2), a 85 ms
   c.usb = usbPresent();
   c.charging = batCharging();
@@ -1209,14 +1276,21 @@ void handleSerial() {
   } else if (line == "BOX") {  // la caja (v1.37): cada hueco con uid, especie, nivel y CRC
     boxReport();
     Serial.println("DONE");
-  } else if (line.startsWith("STORE ") || line.startsWith("WAKE ")) {  // STORE <k> / WAKE <k>, k = 0-5
+  } else if (line.startsWith("STORE ") || line.startsWith("WAKE ")) {  // STORE <k> [s] / WAKE <k> [s], k = 0-5, s = hueco de casa
+    // v3.0: sin s, STORE guarda el del foco y WAKE despierta al primer hueco vacio (o con huevo), si no al del foco
     bool toStore = line.startsWith("STORE ");
     String a = line.substring(toStore ? 6 : 5);
     a.trim();
     const char *c = a.c_str();
-    int k = (a.length() == 1 && c[0] >= '0' && c[0] <= '9') ? c[0] - '0' : -1;
-    bool ok = k >= 0 && k < BOX_SLOTS && (toStore ? pet.store((uint8_t)k) : pet.wake((uint8_t)k));
-    if (ok) boxAfterMove();  // como al tocar SI, sin la luz
+    int k = (a.length() >= 1 && c[0] >= '0' && c[0] <= '9' && (a.length() == 1 || c[1] == ' ')) ? c[0] - '0' : -1;
+    int hs = (a.length() == 3 && (c[2] == '0' || c[2] == '1')) ? c[2] - '0' : -1;
+    if (hs < 0 && k >= 0 && k < BOX_SLOTS) hs = toStore ? pet.focusSlot : (boxWakeTarget((uint8_t)k) >= 0 ? boxWakeTarget((uint8_t)k) : pet.focusSlot);
+    bool ok = k >= 0 && k < BOX_SLOTS && hs >= 0 &&
+              (toStore ? pet.store((uint8_t)k, (uint8_t)hs) : pet.wake((uint8_t)k, (uint8_t)hs));
+    if (ok) {
+      boxMoveHome = (uint8_t)hs;
+      boxAfterMove();  // como al tocar SI, sin la luz
+    }
     else Serial.printf("%s: no se puede (hueco 0-%u %s; sin despedida, evolucion ni eleccion de inicial)\n",
                        toStore ? "store" : "wake", BOX_SLOTS - 1, toStore ? "vacio y un bicho nacido" : "con un bicho");
     boxReport();
@@ -1341,7 +1415,24 @@ void handleSerial() {
       Serial.printf("  map %u %s price=%u owned=%d chosen=%d wanted=%d%s\n", n, T((StrId)(S_MAP_1 + n - 1)), priceOfMap(n),
                     pet.ownsMap(n), pet.yardChosen == n, pet.yardMapWanted() == n, n == YARD_MAP_START ? " (start)" : "");
     Serial.println("DONE");
+  } else if (line == "FOCUS" || line.startsWith("FOCUS ")) {  // FOCUS <0|1> (v3.0): el bicho de casa que es "pet"
+    if (line.length() > 6) {
+      int fs = line.substring(6).toInt();
+      if (fs < 0 || fs >= HOME_SLOTS || !uiFocus((uint8_t)fs)) Serial.println("focus: 0-1, y sin nada abierto");
+    }
+    Serial.printf("focus=%u\n", pet.focusSlot);
+    Serial.println("DONE");
   } else if (line == "STATS") {
+    // v3.0: los dos huecos de casa en una linea cada uno; lo de debajo es el del foco
+    for (uint8_t hs = 0; hs < HOME_SLOTS; hs++) {
+      const PetLife &l = pet.home(hs);
+      Serial.printf("home%u%s %s spec=%d nv=%u com=%u fel=%u ene=%u lim=%u poop=%u bond=%u sleep=%d dying=%d cer=%u uid=%08lX egg=%d eggH=%d grow=%lu\n",
+                    hs, hs == pet.focusSlot ? "*" : " ", l.isVacant() ? "vacant" : (l.isEgg() ? "egg" : "pet"), l.speciesId,
+                    l.isEgg() ? 0 : l.level(), l.fullness, l.joy, l.energy, l.hygiene, l.poops, l.bond, l.sleeping ? 1 : 0,
+                    l.isDying() ? 1 : 0, l.ceremony, (unsigned long)l.uid, l.eggSpecies(), l.eggHeld() ? 1 : 0,
+                    (unsigned long)l.growMin);
+    }
+    Serial.printf("focus=%u focusErrors=%u\n", pet.focusSlot, pet.focusErrors);
     Serial.printf("spec=%d nv=%u com=%u fel=%u ene=%u lim=%u desc=%u sd=%d mon=%d bat=%d usb=%d rtc=%u\n",
                   pet.speciesId, pet.level(), pet.fullness, pet.joy, pet.energy,
                   pet.hygiene, pet.careMistakes, sdReady, mon.loaded,
@@ -1388,8 +1479,11 @@ void handleSerial() {
 // ---------- entrada tactil ----------
 
 // pulsacion larga: sobre el bicho de casa y no sobre una caca (el patio: el que pasea, fuera del dock)
-bool holdOnPet(int16_t x, int16_t y) {
-  return yardPetAt(x, y) == 0 && yardPoopAt(x, y) < 0 && yDockHit(x, y) < 0;
+// v3.0: el hueco de casa del bicho bajo el dedo, o -1
+int holdOnPet(int16_t x, int16_t y) {
+  if (yardPoopAt(x, y) >= 0 || yDockHit(x, y) >= 0) return -1;
+  int i = yardPetAt(x, y);
+  return (i >= 0 && i < HOME_SLOTS) ? i : -1;
 }
 
 // el toque se resuelve al LEVANTAR el dedo para distinguir tap de deslizar
@@ -1492,10 +1586,12 @@ void handleTouch() {
   } else if (pressed) {  // sigue apoyado
     tXl = x;
     tYl = y;
-    // pulsacion larga sin moverse sobre el bicho -> dialogo de soltar
+    // pulsacion larga sin moverse sobre un bicho de casa -> dialogo de soltar (v3.0: el que esta bajo el
+    // dedo, que pasa a tener el foco)
+    int hs = -1;
     if (!holdFired && !swallowGesture && !yardDemoOpen && !galleryOpen && !boxOpen && !stagesOpen && !teamOpen && !cardOpen && !bagOpen && !kbOpen && !clockOpen && !panelKind && !encOpen() && millis() - tStart > 3000 &&
-        abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && holdOnPet(tX0, tY0) &&
-        !pet.isEgg() && !confirmUntil && !pet.busyEnding()) {
+        abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && (hs = holdOnPet(tX0, tY0)) >= 0 &&
+        !pet.home((uint8_t)hs).isEgg() && !confirmUntil && !pet.home((uint8_t)hs).busyEnding() && uiFocus((uint8_t)hs)) {
       confirmUntil = millis() + 10000;
       holdFired = true;
     }
@@ -1805,27 +1901,26 @@ void onTap(int16_t x, int16_t y) {
     if (pet.items[IT_EGG] && x >= VAC_BTN_X && x <= VAC_BTN_X + VAC_BTN_W && y >= VAC_BTN_Y &&
         y <= VAC_BTN_Y + VAC_BTN_H && pet.hatchFromBag()) {
       sfxPlay(SFX_TAP);
-      monFor = -2;  // el huevo que llega se dibuja ya
+      monReset();  // el huevo que llega se dibuja ya
       ensureMon();
       return;
     }
     sfxPlay(SFX_DENY);  // nada mas que tocar: el mensaje dice que hay que caminar
     return;
   }
-  if (pet.isEgg()) {  // el huevo en el patio (Y3): el dock, el huevo y el de la caja
-    yardTap(x, y);
-    return;
-  }
-  // boton de evolucion: abre el dialogo evolucionar/mantener
-  if (pet.wantEvolveButton() && x >= EVO_BTN_X && x <= EVO_BTN_X + EVO_BTN_W &&
-      y >= EVO_BTN_Y && y <= EVO_BTN_Y + EVO_BTN_H) {
+  // boton de evolucion: abre el dialogo evolucionar/mantener (v3.0: el de cualquiera de los dos de casa,
+  // que pasa a tener el foco; el boton de despedida solo sale si no hay de evolucion)
+  int8_t evs = homeButtonSlot(1), fas = homeButtonSlot(2);
+  if (evs >= 0 && x >= EVO_BTN_X && x <= EVO_BTN_X + EVO_BTN_W &&
+      y >= EVO_BTN_Y && y <= EVO_BTN_Y + EVO_BTN_H && uiFocus((uint8_t)evs)) {
     choiceKind = 1; choiceUntil = millis() + 12000;
     return;
   }
   // boton de la despedida: abre su dialogo
-  if (x >= FAR_BTN_X && x <= FAR_BTN_X + FAR_BTN_W &&
-      y >= FAR_BTN_Y && y <= FAR_BTN_Y + FAR_BTN_H) {
-    if (pet.wantFarewellButton()) { choiceKind = 2; choiceUntil = millis() + 12000; return; }
+  if (evs < 0 && fas >= 0 && x >= FAR_BTN_X && x <= FAR_BTN_X + FAR_BTN_W &&
+      y >= FAR_BTN_Y && y <= FAR_BTN_Y + FAR_BTN_H && uiFocus((uint8_t)fas)) {
+    choiceKind = 2; choiceUntil = millis() + 12000;
+    return;
   }
   // el patio: el dock, las cacas, los regalos y los bichos
   yardTap(x, y);
@@ -2558,7 +2653,7 @@ bool render() {
   // el patio (v2.0): la casa con un bicho o un huevo (Y3) es el mapa; la casa vacia, la despedida y el
   // Revivir tienen su propia pantalla sobre el paisaje de lado
   bool yard = yardHomeNow();
-  if (!yard) yardW.p[0].on = yardW.p[1].on = false;
+  if (!yard) yardW.p[0].on = yardW.p[1].on = yardW.p[2].on = false;
   // drawScene cubre los 466x466 completos: sin fillScreen(NEGRO) previo para
   // que un flush DMA solapado nunca capture negro a medias (anti-parpadeo)
   uint32_t sceneT0 = micros();
@@ -2601,8 +2696,8 @@ bool render() {
     uint32_t ov = micros() - fxT0;
     fxUs += ov;
     if (!fxBan) {  // con una celebracion encima, los botones grandes esperan a que acabe
-      if (pet.wantEvolveButton()) drawEvolveButton();
-      else if (pet.wantFarewellButton()) drawFarewellButton();
+      if (homeButtonSlot(1) >= 0) drawEvolveButton();  // v3.0: el de cualquiera de los dos
+      else if (homeButtonSlot(2) >= 0) drawFarewellButton();
     }
     gYardPetsUs = micros() - yT0 - ov;
     if (gYardPetsUs > gYardPetsMaxUs) gYardPetsMaxUs = gYardPetsUs;
@@ -3988,18 +4083,21 @@ void drawStreakBadge(int x, int y) {
 // los vigilantes apuntan los valores de ahora (sin evento): al arrancar, antes del tiempo
 // apagado, y en el renderizador del PC entre escenas
 void fxArmWatches() {
-  if (pet.isEgg()) fxLevelW.disarm();
-  else fxLevelW.reset(pet.level());
-  fxBondW.reset(pet.bond);
-  fxMistakeW.reset(pet.careMistakes);
-  fxTrainW[0].reset(pet.trAtk);
-  fxTrainW[1].reset(pet.trDef);
-  fxTrainW[2].reset(pet.trSpe);
-  // los avisos sonoros se desarman en vez de apuntar el valor: la primera vuelta del loop solo lo
-  // apunta, asi las cacas y los vacios del tiempo apagado (o del bicho que sale de la caja) no suenan
-  fxPoopW.disarm();
-  for (auto &w : fxNeedW) w.disarm();
-  fxWasEgg = pet.isEgg();
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {  // v3.0: los dos huecos de casa
+    const PetLife &l = pet.home(s);
+    if (l.isEgg()) fxLevelW[s].disarm();
+    else fxLevelW[s].reset(l.level());
+    fxBondW[s].reset(l.bond);
+    fxMistakeW[s].reset(l.careMistakes);
+    fxTrainW[s][0].reset(l.trAtk);
+    fxTrainW[s][1].reset(l.trDef);
+    fxTrainW[s][2].reset(l.trSpe);
+    // los avisos sonoros se desarman en vez de apuntar el valor: la primera vuelta del loop solo lo
+    // apunta, asi las cacas y los vacios del tiempo apagado (o del bicho que sale de la caja) no suenan
+    fxPoopW[s].disarm();
+    for (auto &w : fxNeedW[s]) w.disarm();
+    fxWasEgg[s] = l.isEgg();
+  }
 }
 
 // alguien puede estar mirando: pantalla encendida, sin atenuar y sin salvapantallas
@@ -4010,49 +4108,55 @@ bool fxScreenAwake() { return !screenOff && dimStage == DIM_AWAKE && !saverOn();
 // tambien a oscuras, sin encender la pantalla (decidido el 2026-11-05); su animacion espera.
 void fxCollect(uint32_t now) {
   bool awake = fxScreenAwake();
-  if (fxWasEgg && !pet.isEgg()) {  // eclosion: con la pantalla a la vista, animacion y sonido en su destello
-    if (awake) fxo.push(FXO_HATCH, 0, 0, now);
-    else sfxPlay(SFX_HATCH);
+  bool poopSfx = false, emptySfx = false;
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {  // v3.0: cada hueco con sus vigilantes
+    const PetLife &l = pet.home(s);
+    if (fxWasEgg[s] && !l.isEgg()) {  // eclosion: con la pantalla a la vista, animacion y sonido en su destello
+      if (awake) fxo.push(FXO_HATCH, 0, 0, now, s);
+      else sfxPlay(SFX_HATCH);
+    }
+    fxWasEgg[s] = l.isEgg();
+    if (l.isEgg() || l.ceremony) {  // ni nivel ni vinculo que vigilar
+      fxLevelW[s].disarm();
+      fxBondW[s].disarm();
+      fxMistakeW[s].disarm();
+      for (auto &w : fxTrainW[s]) w.disarm();
+      fxPoopW[s].disarm();
+      for (auto &w : fxNeedW[s]) w.disarm();
+    } else {
+      uint32_t from = 0;
+      if (fxLevelW[s].rose(l.level(), &from)) {
+        bool chime = !l.sleeping;  // dormido no suena (como todo): sonara al verse, cuando despierte
+        if (chime) sfxPlay(SFX_LEVELUP);
+        fxq.push(FXB_LEVELUP, (uint16_t)from, l.level(), chime, s);
+      }
+      if (fxBondW[s].rose(l.bond, &from) && awake && fxBondGate[s].allow(now, FX_BOND_GAP_MS))
+        fxo.push(FXO_BOND, 0, (int16_t)(l.bond - from), now, s);
+      if (fxMistakeW[s].rose(l.careMistakes) && awake && !l.sleeping) {
+        fxo.push(FXO_OOPS, 0, 0, now, s);
+        sfxPlay(SFX_OOPS);
+      }
+      const uint8_t tr[3] = { l.trAtk, l.trDef, l.trSpe };
+      for (uint8_t i = 0; i < 3; i++)
+        if (fxTrainW[s][i].rose(tr[i], &from)) fxo.push(FXO_TRAIN, i, (int16_t)(tr[i] - from), now, s);
+      // avisos sonoros (v1.50), sin mirar `awake`: tambien a oscuras. Dormido no suena nada (y ni
+      // ensucia ni se vacia: las necesidades tienen suelo), pero los vigilantes siguen al dia
+      bool poop = fxPoopW[s].rose(l.poops);
+      const uint8_t need[4] = { l.fullness, l.hygiene, l.joy, l.energy };
+      bool empty = false;
+      for (uint8_t i = 0; i < 4; i++)
+        if (fxNeedW[s][i].hitZero(need[i])) empty = true;  // sin cortar: los cuatro se apuntan
+      if (!l.sleeping) {
+        poopSfx |= poop;
+        emptySfx |= empty;
+      }
+    }
+    uint16_t m = pet.takeMedal(s);
+    for (uint8_t i = 0; i < MED_COUNT; i++)
+      if (m & (1 << i)) fxq.push(FXB_MEDAL, i, 0, false, s);
   }
-  fxWasEgg = pet.isEgg();
-  if (pet.isEgg() || pet.ceremony) {  // ni nivel ni vinculo que vigilar
-    fxLevelW.disarm();
-    fxBondW.disarm();
-    fxMistakeW.disarm();
-    for (auto &w : fxTrainW) w.disarm();
-    fxPoopW.disarm();
-    for (auto &w : fxNeedW) w.disarm();
-  } else {
-    uint32_t from = 0;
-    if (fxLevelW.rose(pet.level(), &from)) {
-      bool chime = !pet.sleeping;  // dormido no suena (como todo): sonara al verse, cuando despierte
-      if (chime) sfxPlay(SFX_LEVELUP);
-      fxq.push(FXB_LEVELUP, (uint16_t)from, pet.level(), chime);
-    }
-    if (fxBondW.rose(pet.bond, &from) && awake && fxBondGate.allow(now, FX_BOND_GAP_MS))
-      fxo.push(FXO_BOND, 0, (int16_t)(pet.bond - from), now);
-    if (fxMistakeW.rose(pet.careMistakes) && awake && !pet.sleeping) {
-      fxo.push(FXO_OOPS, 0, 0, now);
-      sfxPlay(SFX_OOPS);
-    }
-    const uint8_t tr[3] = { pet.trAtk, pet.trDef, pet.trSpe };
-    for (uint8_t i = 0; i < 3; i++)
-      if (fxTrainW[i].rose(tr[i], &from)) fxo.push(FXO_TRAIN, i, (int16_t)(tr[i] - from), now);
-    // avisos sonoros (v1.50), sin mirar `awake`: tambien a oscuras. Dormido no suena nada (y ni
-    // ensucia ni se vacia: las necesidades tienen suelo), pero los vigilantes siguen al dia
-    bool poop = fxPoopW.rose(pet.poops);
-    const uint8_t need[4] = { pet.fullness, pet.hygiene, pet.joy, pet.energy };
-    bool empty = false;
-    for (uint8_t i = 0; i < 4; i++)
-      if (fxNeedW[i].hitZero(need[i])) empty = true;  // sin cortar: los cuatro se apuntan
-    if (!pet.sleeping) {
-      if (poop) sfxPlay(SFX_POOP);
-      if (empty) sfxPlay(SFX_ALERT);  // uno solo aunque se vacien varias a la vez
-    }
-  }
-  uint16_t m = pet.takeMedal();
-  for (uint8_t i = 0; i < MED_COUNT; i++)
-    if (m & (1 << i)) fxq.push(FXB_MEDAL, i);
+  if (poopSfx) sfxPlay(SFX_POOP);
+  if (emptySfx) sfxPlay(SFX_ALERT);  // uno solo aunque se vacien varias a la vez (o en los dos)
   uint16_t days = pet.takeMilestone();
   if (days) fxq.push(FXB_MILESTONE, days);
   uint8_t goalLv = 0;
@@ -4066,17 +4170,20 @@ void fxCollect(uint32_t now) {
 // la pantalla principal no puede empezar una celebracion: nadie la ve, el bicho duerme o hay
 // algo encima (dialogo, menu, bano, evolucion, despedida, eclosion)
 bool fxScreenBusy() {
-  return !fxScreenAwake() || pet.sleeping || pet.busyEnding() || pet.evolving() || choiceKind || confirmUntil ||
+  return !fxScreenAwake() || pet.homeAsleep() || pet.busyEnding() || pet.evolving() || choiceKind || confirmUntil ||
          panelKind || bathUntil || pet.travelResultPending() || fxo.find(FXO_HATCH) || fxo.waiting(FXO_HATCH) || fxo.find(FXO_BOX) ||
          fxo.waiting(FXO_BOX);
 }
 
-// pose de un gesto del bicho (PMD): una vez, sosteniendo el ultimo frame hasta minMs
-void fxPose(uint8_t act, uint32_t now, uint32_t minMs) {
-  if (!pmd.has(act)) return;
-  uint32_t ms = pmdActTotalMs(pmd.acts[act]);
-  yardGesture(yardW, 0, act, ms < minMs ? minMs : ms, now);  // el del patio, igual
+// pose de un gesto del bicho (PMD): una vez, sosteniendo el ultimo frame hasta minMs. v3.0: el del
+// hueco s (fxPose: el del foco); en el patio, su paseante es p[s]
+void fxPoseSlot(uint8_t s, uint8_t act, uint32_t now, uint32_t minMs) {
+  PmdMon &m = homeMon[s & 1];
+  if (!m.has(act)) return;
+  uint32_t ms = pmdActTotalMs(m.acts[act]);
+  yardGesture(yardW, s & 1, act, ms < minMs ? minMs : ms, now);  // el del patio, igual
 }
+void fxPose(uint8_t act, uint32_t now, uint32_t minMs) { fxPoseSlot(pet.focusSlot, act, now, minMs); }
 
 // cada frame de la pantalla principal, antes de dibujar: avanza la cola y los efectos
 void fxFrame(uint32_t now) {
@@ -4086,10 +4193,11 @@ void fxFrame(uint32_t now) {
   if (!started || !fxBan) return;
   if (fxBan->kind == FXB_LEVELUP) {
     if (!fxBan->chimed) sfxPlay(SFX_LEVELUP);
+    const PetLife &l = pet.home(fxBan->slot);  // v3.0: el bicho de esa subida
     for (uint8_t w = 0; w < 3; w++)
-      fxGain[w] = (int16_t)pet.statAt(w, fxBan->b) - (int16_t)pet.statAt(w, fxBan->a);
+      fxGain[w] = (int16_t)l.statAt(w, fxBan->b) - (int16_t)l.statAt(w, fxBan->a);
     // la pose de alegria; el salto (Hop) solo si no tiene: sube tanto que pisa la cabecera
-    fxPose(pmd.has(PMD_POSE) ? PMD_POSE : PMD_HOP, now, 1200);
+    fxPoseSlot(fxBan->slot, homeMon[fxBan->slot & 1].has(PMD_POSE) ? PMD_POSE : PMD_HOP, now, 1200);
   } else {
     sfxPlay(SFX_MEDAL);
   }
@@ -4100,27 +4208,28 @@ void fxFrame(uint32_t now) {
 bool fxDebug(const String &k) {
   uint32_t now = millis();
   uint16_t lv = pet.level();
-  if (k == "levelup") fxq.push(FXB_LEVELUP, lv, lv + 1, false);
-  else if (k == "levelup6") fxq.push(FXB_LEVELUP, lv, lv + 6, false);
-  else if (k == "medal") fxq.push(FXB_MEDAL, 0);
+  uint8_t fs = pet.focusSlot;  // v3.0: sobre el bicho del foco
+  if (k == "levelup") fxq.push(FXB_LEVELUP, lv, lv + 1, false, fs);
+  else if (k == "levelup6") fxq.push(FXB_LEVELUP, lv, lv + 6, false, fs);
+  else if (k == "medal") fxq.push(FXB_MEDAL, 0, 0, false, fs);
   else if (k == "streak") fxq.push(FXB_MILESTONE, 7);
   else if (k == "goal") fxq.push(FXB_GOAL, 1, STEP_GOAL_LEVELS[0] | (coinsForGoal(1) << 4));
   else if (k == "goal3") fxq.push(FXB_GOAL, STEP_GOAL_TIERS, STEP_GOAL_LEVELS[STEP_GOAL_TIERS - 1] | (coinsForGoal(STEP_GOAL_TIERS) << 4));
   else if (k == "stat") {
-    fxo.push(FXO_STAT, 0, 25, now);
-    fxo.push(FXO_STAT, 1, 10, now);
-    fxo.push(FXO_STAT, 2, -12, now);
-  } else if (k == "bond") fxo.push(FXO_BOND, 0, 2, now);
-  else if (k == "train") fxo.push(FXO_TRAIN, 0, 3, now);
+    fxo.push(FXO_STAT, 0, 25, now, fs);
+    fxo.push(FXO_STAT, 1, 10, now, fs);
+    fxo.push(FXO_STAT, 2, -12, now, fs);
+  } else if (k == "bond") fxo.push(FXO_BOND, 0, 2, now, fs);
+  else if (k == "train") fxo.push(FXO_TRAIN, 0, 3, now, fs);
   else if (k == "deny") {
     fxo.push(FXO_DENY, 0, 0, now);
     sfxPlay(SFX_DENY);
   } else if (k == "press") fxo.push(FXO_PRESS, 1, 0, now);
   else if (k == "oops") {
-    fxo.push(FXO_OOPS, 0, 0, now);
+    fxo.push(FXO_OOPS, 0, 0, now, fs);
     sfxPlay(SFX_OOPS);
-  } else if (k == "hatch" && !pet.isEgg()) fxo.push(FXO_HATCH, 0, 0, now);
-  else if (k == "box") fxo.push(FXO_BOX, 0, 0, now);  // el activo sale de una luz (caja, v1.37)
+  } else if (k == "hatch" && !pet.isEgg()) fxo.push(FXO_HATCH, 0, 0, now, fs);
+  else if (k == "box") fxo.push(FXO_BOX, 0, 0, now, fs);  // el activo sale de una luz (caja, v1.37)
   else return false;
   wakeUI();
   return true;
@@ -4131,33 +4240,38 @@ void fxPerfNote(uint32_t us) {
   if (us > gFxMaxUs) gFxMaxUs = us;
 }
 
-// cabeza del bicho en pantalla, aproximada (donde van el "!", el entrenamiento y la pildora)
-int fxHeadY() {
-  if (yardW.p[0].on) return yardPetHeadY(0) - 14;  // por encima del globo del estado
-  if (!pmd.loaded) return PET_CY - 60;
+// cabeza del bicho en pantalla, aproximada (donde van el "!", el entrenamiento y la pildora). v3.0: los "Of"
+// son los del hueco s (su paseante es p[s]); sin "Of", el del foco
+int fxHeadYOf(uint8_t s) {
+  if (yardW.p[s & 1].on) return yardPetHeadY(s & 1) - 14;  // por encima del globo del estado
+  if (!homeMon[s & 1].loaded) return PET_CY - 60;
   int head = PET_GROUND - pmdIdleHeight() + 24;
   return head < 130 ? 130 : head;
 }
+int fxHeadY() { return fxHeadYOf(pet.focusSlot); }
 
 // el bicho de casa esta en el patio (v2.0): los efectos salen de donde pasea
 bool petInYard() {
-  return yardW.p[0].on;
+  return yardW.p[pet.focusSlot].on;
 }
 
 // los pies del bicho de casa en pantalla: en el patio, donde pasea; si no, el centro
-int petFootX() {
-  if (yardW.p[0].on) return (int)yardW.p[0].x;
+int petFootXOf(uint8_t s) {
+  if (yardW.p[s & 1].on) return (int)yardW.p[s & 1].x;
   return CX;
 }
-int petFootY() {
-  if (yardW.p[0].on) return (int)yardW.p[0].y;
+int petFootYOf(uint8_t s) {
+  if (yardW.p[s & 1].on) return (int)yardW.p[s & 1].y;
   return PET_GROUND;
 }
+int petFootX() { return petFootXOf(pet.focusSlot); }
+int petFootY() { return petFootYOf(pet.focusSlot); }
 // alto del bicho de casa sobre sus pies (para los efectos que salen de el)
-int petBodyH() {
-  if (yardW.p[0].on) return petFootY() - yardPetHeadY(0);
-  return pmd.loaded ? pmdIdleHeight() : 140;
+int petBodyHOf(uint8_t s) {
+  if (yardW.p[s & 1].on) return petFootYOf(s) - yardPetHeadY(s & 1);
+  return homeMon[s & 1].loaded ? pmdIdleHeight() : 140;
 }
+int petBodyH() { return petBodyHOf(pet.focusSlot); }
 
 // desplazamiento de un banner que entra desde arriba (0 al llegar a su sitio)
 int fxSlide(uint32_t e) {
@@ -4330,24 +4444,31 @@ void fxNeeds(const FxNeedSnap &before) {
   uint32_t now = millis();
   for (uint8_t i = 0; i < 4; i++) {
     int d = (int)v[i] - (int)before.v[i];
-    if (d >= FX_STAT_MIN || d <= -FX_STAT_MIN) fxo.push(FXO_STAT, i, (int16_t)d, now);
+    if (d >= FX_STAT_MIN || d <= -FX_STAT_MIN) fxo.push(FXO_STAT, i, (int16_t)d, now, pet.focusSlot);
   }
 }
 
 // eclosion: mientras se rompe el huevo (las primeras tres cuartas partes) el bicho aun no se ve
-bool fxHatchHidesPet(uint32_t now) {
+// v3.0: la del hueco s (fxHatchHidesPet: la del foco)
+bool fxHatchHidesPetSlot(uint8_t s, uint32_t now) {
   for (auto &x : fxo.o)
-    if (x.on && x.kind == FXO_HATCH && (!x.started || FxOverlays::t(x, now) < 0.75f)) return true;
+    if (x.on && x.kind == FXO_HATCH && x.slot == (s & 1) && (!x.started || FxOverlays::t(x, now) < 0.75f)) return true;
   return false;
 }
+bool fxHatchHidesPet(uint32_t now) { return fxHatchHidesPetSlot(pet.focusSlot, now); }
 
 // donde se rompe el huevo (drawHatchFx): el centro del sprite y su escala. La pantalla del huevo, en el
 // centro a escala 5; el patio (Y3) lo pone donde esta su huevo, a escala 3 (hatchAt)
-int gHatchX = CX, gHatchY = PET_CY, gHatchS = 5;
+// v3.0: uno por hueco de casa (hatchAt: los dos, para la pantalla sin patio)
+int gHatchX[HOME_SLOTS] = { CX, CX }, gHatchY[HOME_SLOTS] = { PET_CY, PET_CY }, gHatchS[HOME_SLOTS] = { 5, 5 };
+void hatchAtSlot(uint8_t slot, int cx, int cy, int s) {
+  gHatchX[slot & 1] = cx;
+  gHatchY[slot & 1] = cy;
+  gHatchS[slot & 1] = s;
+}
 void hatchAt(int cx, int cy, int s) {
-  gHatchX = cx;
-  gHatchY = cy;
-  gHatchS = s;
+  hatchAtSlot(0, cx, cy, s);
+  hatchAtSlot(1, cx, cy, s);
 }
 
 // el huevo con el centro del sprite en (cx, cy), a escala s y con sus grietas. v2.4: pintado con el color
@@ -4375,20 +4496,22 @@ void drawEggAt(int cx, int cy, int s, uint8_t cracks, int16_t dex) {
 
 // eclosion (FX_HATCH_MS): el huevo tiembla cada vez mas, salta la cascara con un destello
 // blanco y aparece el bicho haciendo su pose. true = esta parte ocupa el sitio del bicho.
-bool drawHatchFx(uint32_t now) {
-  const FxOverlay *h = fxo.find(FXO_HATCH);
+// v3.0: la del hueco slot (drawHatchFx: la del foco)
+bool drawHatchFxSlot(uint8_t slot, uint32_t now) {
+  slot &= 1;
+  const FxOverlay *h = fxo.find(FXO_HATCH, -1, slot);
   if (!h) return false;
   float t = FxOverlays::t(*h, now);
-  static uint32_t soundFor = 0, poseFor = 0;
+  static uint32_t soundFor[HOME_SLOTS] = { 0, 0 }, poseFor[HOME_SLOTS] = { 0, 0 };
   // escala del sitio (5 en la pantalla del huevo): el destello y la cascara, en proporcion
-  const int S = gHatchS, HX = gHatchX, HY = gHatchY;
+  const int S = gHatchS[slot], HX = gHatchX[slot], HY = gHatchY[slot];
   if (t < 0.55f) {
     float k = t / 0.55f;
-    drawEggAt(HX + (int)(k * 2 * S * sinf(now * 0.06f)), HY, S, 2, pet.speciesId);
+    drawEggAt(HX + (int)(k * 2 * S * sinf(now * 0.06f)), HY, S, 2, pet.home(slot).speciesId);
     return true;
   }
-  if (soundFor != h->start) {
-    soundFor = h->start;
+  if (soundFor[slot] != h->start) {
+    soundFor[slot] = h->start;
     sfxPlay(SFX_HATCH);
   }
   if (t < 0.75f) {
@@ -4408,12 +4531,13 @@ bool drawHatchFx(uint32_t now) {
     }
     return true;
   }
-  if (poseFor != h->start) {
-    poseFor = h->start;
-    fxPose(PMD_POSE, now, 0);
+  if (poseFor[slot] != h->start) {
+    poseFor[slot] = h->start;
+    fxPoseSlot(slot, PMD_POSE, now, 0);
   }
   return false;
 }
+bool drawHatchFx(uint32_t now) { return drawHatchFxSlot(pet.focusSlot, now); }
 
 // "!" en un bocadillo blanco (el del descuido, FXO_OOPS, y el de ver la comida del patio), con la punta hacia (bx - 22, by + 26)
 void drawExclaim(int bx, int by) {
@@ -4428,22 +4552,23 @@ void drawExclaim(int bx, int by) {
 
 // efectos pequenos de la pantalla principal (la casa del patio)
 void drawFxOverlays(uint32_t now) {
-  int head = fxHeadY();
   for (auto &x : fxo.o) {
     if (!x.on || !x.started) continue;
+    uint8_t ps = x.slot & 1;  // v3.0: sobre el bicho de su hueco
+    int head = fxHeadYOf(ps);
     float t = FxOverlays::t(x, now);
     if (x.kind == FXO_STAT) {  // "LIM +10" sube sobre el bicho, una fila por necesidad
-      if (yardW.p[0].on) yardStatPill(x.a, x.v, t);
+      if (yardW.p[ps].on) yardStatPill(ps, x.a, x.v, t);
       continue;
     } else if (x.kind == FXO_BOND) {  // corazon pequeno con "+N", a la izquierda del bicho
-      int cx = petFootX() - 78, y = petFootY() - petBodyH() * 150 / 140 - (int)(t * 40);
+      int cx = petFootXOf(ps) - 78, y = petFootYOf(ps) - petBodyHOf(ps) * 150 / 140 - (int)(t * 40);
       drawMap(SPR_HEART, 32, cx - 34, y, 1, false);
       fxNumber(cx + 18, y + 6, x.v, UI_BAR_BAD);
     } else if (x.kind == FXO_TRAIN) {  // "ATK +3" sobre la cabeza, y un ataque
       static uint32_t poseFor = 0;
       if (poseFor != x.start) {
         poseFor = x.start;
-        fxPose(PMD_ATTACK, now, 0);
+        fxPoseSlot(ps, PMD_ATTACK, now, 0);
       }
       char s[24];
       snprintf(s, sizeof(s), "%s +%d", T((StrId)(S_STAT_ATK + x.a)), x.v);
@@ -4455,10 +4580,10 @@ void drawFxOverlays(uint32_t now) {
       setCur(CX - w / 2, y);
       printT(s);
     } else if (x.kind == FXO_OOPS) {  // "!" en un bocadillo junto a la cabeza
-      drawExclaim(petFootX() + 58, head - 40 + (int)(3 * sinf(now * 0.012f)));
+      drawExclaim(petFootXOf(ps) + 58, head - 40 + (int)(3 * sinf(now * 0.012f)));
     } else if (x.kind == FXO_HATCH && t >= 0.75f) {  // aro de luz que se abre al nacer
       float k = (t - 0.75f) / 0.25f;
-      for (int r = 0; r < 3; r++) gfx->drawCircle(gHatchX, gHatchY, (120 + (int)(k * 110)) * gHatchS / 5 + r * 3, UI_WHITE);
+      for (int r = 0; r < 3; r++) gfx->drawCircle(gHatchX[ps], gHatchY[ps], (120 + (int)(k * 110)) * gHatchS[ps] / 5 + r * 3, UI_WHITE);
     }
   }
 }
@@ -5315,7 +5440,13 @@ void bagTap(int16_t x, int16_t y) {
     bagAskPills(xu, wu, xn, wn);
     if (timeLeft(itemConfirmUntil) && yPillHit(x, y, xu, BAG_ASK_PILL_Y, wu)) {
       FxNeedSnap ns = fxSnap();
-      if (pet.useItem(it)) {
+      int8_t vs = pet.vacantSlot();
+      if (it == IT_EGG && vs >= 0) {  // v3.0: un huevo de la mochila al hueco de casa vacio
+        bool ok = false;
+        pet.onSlot((uint8_t)vs, [&] { ok = pet.hatchFromBag(); });
+        sfxPlay(ok ? SFX_TAP : SFX_DENY);
+        if (ok) closeBag();
+      } else if (pet.useItem(it)) {
         fxNeeds(ns);
         sfxPlay(it == IT_GOLDEN || it == IT_CAKE ? SFX_EAT : SFX_LEVEL);
         // a la pantalla principal a verlo: comer, subir de nivel o entrenar (v1.30, "ATK +3")
@@ -5351,7 +5482,8 @@ void bagTap(int16_t x, int16_t y) {
     bagSlotXY(k, sx, sy);
     if (x < sx || x >= sx + BAG_SLOT_W || y < sy || y >= sy + BAG_SLOT_H) continue;
     uint8_t i = BAG_ORDER[k];
-    if (pet.canUseItem(i)) {
+    if (pet.canUseItem(i) || (i == IT_EGG && pet.items[IT_EGG] && pet.vacantSlot() >= 0 && !pet.awaitingStarter())) {
+      // (v3.0: el huevo, con un hueco de casa vacio: "usarlo" lo pone en ese hueco)
       itemConfirm = i + 1;
       itemConfirmUntil = millis() + 10000;
       sfxPlay(SFX_TAP);
@@ -5675,6 +5807,8 @@ void openBox() {
   boxOpen = true;
   boxPage = 0;
   boxAsk = 0;
+  boxAskPick = false;
+  boxHome = pet.focusSlot;
   boxMove = BOXMV_NONE;
   boxShakeUntil = 0;
 }
@@ -5683,6 +5817,31 @@ void closeBox() {
   boxOpen = false;
   boxPage = 0;
   boxAsk = 0;
+  boxAskPick = false;
+}
+
+// v3.0: el nombre del bicho del hueco de casa s (o "Huevo" / "Vacio")
+const char *homeName(uint8_t s) {
+  const PetLife &l = pet.home(s);
+  if (l.isVacant()) return T(S_BOX_EMPTY);
+  if (l.isEgg()) return T(S_EGG_HDR);
+  return l.nick[0] ? l.nick : dexName(l.speciesId);
+}
+// el hueco de casa que ve la caja: el del movimiento en marcha, o el elegido
+uint8_t boxView() { return boxMove ? boxMoveHome : boxHome; }
+// a que hueco de casa va un despertar del hueco k: el primero vacio, si no uno con un huevo (que espera);
+// -1 = los dos tienen un bicho (hay que preguntar con cual se cambia) o no se puede
+int8_t boxWakeTarget(uint8_t k) {
+  for (uint8_t s = 0; s < HOME_SLOTS; s++)
+    if (pet.home(s).isVacant() && pet.canWake(k, s)) return (int8_t)s;
+  for (uint8_t s = 0; s < HOME_SLOTS; s++)
+    if (pet.home(s).isEgg() && pet.canWake(k, s)) return (int8_t)s;
+  return -1;
+}
+// a la caja (hueco k vacio): el unico de casa que se puede guardar, o -1 si son los dos (o ninguno)
+int8_t boxStoreSource(uint8_t k) {
+  bool a = pet.canStore(k, 0), b = pet.canStore(k, 1);
+  return a && !b ? 0 : (b && !a ? 1 : -1);
 }
 
 // Texto centrado en cx a tamano 2 sin pasar de maxW: si no cabe, junta las letras (1 px, o 2) en
@@ -5810,7 +5969,7 @@ void drawBoxSlot(uint8_t k, uint8_t st, const PetRecord *r, bool hide, int dx) {
   if (sel) yCard(x, y, w, h, true);
   gfx->drawRoundRect(x, y, w, h, Y_CARD_RAD, Y_CARD_HI);
   gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, Y_CARD_RAD - 1, Y_CARD_HI);
-  if (pet.canStore(k)) {  // aqui cabe el activo
+  if (pet.canStore(k, 0) || pet.canStore(k, 1)) {  // aqui cabe uno de casa
     gfx->fillRoundRect(cx - 14, y + 32, 28, 6, 3, Y_TEXT_DIM);
     gfx->fillRoundRect(cx - 3, y + 21, 6, 28, 3, Y_TEXT_DIM);
   }
@@ -5838,7 +5997,7 @@ void drawBoxNow(const PetRecord *r, bool hide, bool held, bool vacant) {
     } else if (vacant) {
       drawMapTint(SPR_EGG, SPRITE_H, boxNowCx - 16, BOX_NOW_Y - 16, 1, Y_TEXT_DIM);
     } else {
-      drawEggAt(boxNowCx, BOX_NOW_Y, 1, 0, pet.eggSpecies());
+      drawEggAt(boxNowCx, BOX_NOW_Y, 1, 0, pet.home(boxView()).eggSpecies());
     }
   }
   gfx->setTextColor(Y_TEXT);
@@ -5902,17 +6061,41 @@ void drawBoxLanding(int x, int y, float t) {
 void drawBoxAsk() {
   uint8_t k = boxAsk - 1;
   bool wake = pet.boxState(k) == BOX_OK;
+  if (boxAskPick) {  // v3.0: cual de los dos de casa (guardar uno, o cambiarlo por el de la caja)
+    char q[64];
+    if (wake) snprintf(q, sizeof(q), T(S_WAKE_Q_FMT), recName(pet.boxRecord(k)));
+    gfx->fillRoundRect(77, 166, 320, 160, 16, Y_SHADOW);
+    gfx->fillRoundRect(73, 160, 320, 160, 16, Y_CARD);
+    gfx->drawRoundRect(73, 160, 320, 160, 16, BOX_DLG_LINE);
+    gfx->setTextColor(Y_TEXT);
+    if (wake) {
+      printTight(q, CX, 182, 296);
+      gfx->setTextColor(Y_TEXT_DIM);
+      printTight(T(S_BOX_WHICH_SWAP), CX, 214, 296);
+    } else {
+      printTight(T(S_BOX_WHICH_STORE), CX, 198, 296);
+    }
+    for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+      int bx = s ? 238 : 88;
+      bool can = wake ? pet.canWake(k, s) : pet.canStore(k, s);
+      gfx->fillRoundRect(bx, 252, 140, 52, 12, can ? Y_ACCENT_GO : Y_CARD_HI);
+      gfx->setTextColor(Y_TEXT);
+      printTight(homeName(s), bx + 70, 270, 128);
+    }
+    return;
+  }
+  const char *nm = homeName(boxHome);
   char q[64];
   char note[64];
   note[0] = 0;
   if (wake) {
     snprintf(q, sizeof(q), T(S_WAKE_Q_FMT), recName(pet.boxRecord(k)));
-    if (!pet.isEgg()) snprintf(note, sizeof(note), T(S_SWAP_NOTE_FMT), petName());
+    if (!pet.home(boxHome).isEgg()) snprintf(note, sizeof(note), T(S_SWAP_NOTE_FMT), nm);
   } else {
-    snprintf(q, sizeof(q), T(S_STORE_Q_FMT), petName());
+    snprintf(q, sizeof(q), T(S_STORE_Q_FMT), nm);
     // v1.39: sin huevo que esperaba ni en la mochila, la casa se queda vacia
     // (v1.55: un huevo envuelto tambien: freeHome lo desenvuelve y llega a casa)
-    if (!pet.eggHeld() && !pet.items[IT_EGG] && !pet.giftEggs()) snprintf(note, sizeof(note), "%s", T(S_NO_EGG_NOTE));
+    if (!pet.home(boxHome).eggHeld() && !pet.items[IT_EGG] && !pet.giftEggs()) snprintf(note, sizeof(note), "%s", T(S_NO_EGG_NOTE));
   }
   // panel del patio: tarjeta oscura con borde, sombra debajo; SI verde y NO rojo en el mismo sitio
   gfx->fillRoundRect(77, 166, 320, 160, 16, Y_SHADOW);
@@ -5960,10 +6143,11 @@ void renderBox() {
   char head[32];
   snprintf(head, sizeof(head), T(S_BOX_FMT), used, (unsigned)BOX_SLOTS);
   yTitle(head, nullptr);
-  bool hatched = !pet.isEgg();
+  const PetLife &hv = pet.home(boxView());  // v3.0: el hueco de casa que se ve (o el del movimiento)
+  bool hatched = !hv.isEgg();
   PetRecord act;
   memset(&act, 0, sizeof(act));
-  if (hatched) act = pet.toRecord();
+  if (hatched) act = hv.record(pet.lastSeenEpoch);
   uint8_t mk = boxMoveSlot;
 
   for (uint8_t k = 0; k < BOX_SLOTS; k++) {
@@ -5988,15 +6172,15 @@ void renderBox() {
 
   // la fila del activo, tambien como quedara al final
   const PetRecord *nowRec = hatched ? &act : nullptr;
-  bool held = pet.eggHeld();
-  bool vacant = pet.isVacant();
+  bool held = hv.eggHeld();
+  bool vacant = hv.isVacant();
   if (outcome) {
     nowRec = boxMove == BOXMV_STORE ? nullptr : &pet.boxRecord(mk);
     // despertar: con un huevo, el huevo espera; con la casa vacia, nada. Guardar: el huevo que
     // esperaba o uno de la mochila; si no hay, la casa queda vacia (v1.39)
     if (boxMove == BOXMV_WAKE) held = !vacant;
     else if (boxMove == BOXMV_STORE) held = false;
-    if (boxMove == BOXMV_STORE) vacant = !pet.eggHeld() && !pet.items[IT_EGG] && !pet.giftEggs();
+    if (boxMove == BOXMV_STORE) vacant = !hv.eggHeld() && !pet.items[IT_EGG] && !pet.giftEggs();
     else vacant = false;
   }
   bool hideNow = boxMove && !outcome && boxMove != BOXMV_WAKE && t >= 0.3f;
@@ -6040,25 +6224,43 @@ void boxDeny(int k) {
   boxShakeUntil = millis() + FX_DENY_MS;
 }
 
-void boxStartMove(uint8_t k) {
+// v3.0: con el hueco de casa s
+void boxStartMove(uint8_t k, uint8_t s) {
   bool toStore = pet.boxState(k) == BOX_EMPTY;
-  if (toStore ? !pet.canStore(k) : !pet.canWake(k)) {
+  if (toStore ? !pet.canStore(k, s) : !pet.canWake(k, s)) {
     boxDeny(k);
     return;
   }
-  boxMove = toStore ? BOXMV_STORE : (pet.isEgg() ? BOXMV_WAKE : BOXMV_SWAP);
+  boxMoveHome = s;
+  boxMove = toStore ? BOXMV_STORE : (pet.home(s).isEgg() ? BOXMV_WAKE : BOXMV_SWAP);
   boxMoveSlot = k;
   boxMoveStart = millis();
   boxMoveDrawnEnd = false;
   sfxPlay(toStore ? SFX_STORE : SFX_WAKE);
 }
 
+// los botones del dialogo "cual de los dos" (v3.0): el de la izquierda es el hueco 0
+static int boxPickHit(int16_t x, int16_t y) {
+  if (y < 252 || y > 304) return -1;
+  if (x >= 88 && x <= 228) return 0;
+  if (x >= 238 && x <= 378) return 1;
+  return -1;
+}
+
 void boxTap(int16_t x, int16_t y) {
   if (boxMove) return;  // la luz vuela: un momento
-  if (boxAsk) {         // dialogo: SI / NO (o fuera = NO)
+  if (boxAsk) {         // dialogo: SI / NO (o fuera = NO); v3.0: o cual de los dos
     uint8_t k = boxAsk - 1;
+    bool pick = boxAskPick;
     boxAsk = 0;
-    if (timeLeft(boxAskUntil) && x >= 118 && x <= 218 && y >= 252 && y <= 304) boxStartMove(k);
+    boxAskPick = false;
+    if (!timeLeft(boxAskUntil)) return;
+    if (pick) {
+      int s = boxPickHit(x, y);
+      if (s >= 0) boxStartMove(k, (uint8_t)s);
+    } else if (x >= 118 && x <= 218 && y >= 252 && y <= 304) {
+      boxStartMove(k, boxHome);
+    }
     return;
   }
   if (y < 72 || yBackHit(x, y)) {  // la cabecera o el boton de volver = salir, como en la Pokedex
@@ -6083,11 +6285,18 @@ void boxTap(int16_t x, int16_t y) {
     sfxPlay(SFX_TAP);
     return;
   }
-  bool ok = pet.boxState(k) == BOX_EMPTY ? pet.canStore(k) : pet.canWake(k);
-  if (!ok) {  // vacio con un huevo activo (nada que guardar), o un hueco danado
+  // v3.0: guardar uno de los de casa (si son dos, cual) o despertar al hueco vacio / con huevo (si los dos
+  // tienen un bicho, con cual se cambia)
+  bool store = pet.boxState(k) == BOX_EMPTY;
+  bool ok = store ? (pet.canStore(k, 0) || pet.canStore(k, 1)) : (pet.canWake(k, 0) || pet.canWake(k, 1));
+  if (!ok) {  // vacio sin nadie que guardar, o un hueco danado
     boxDeny(k);
     return;
   }
+  int8_t s = store ? boxStoreSource((uint8_t)k) : boxWakeTarget((uint8_t)k);
+  if (!store && s < 0 && !(pet.canWake(k, 0) && pet.canWake(k, 1))) s = pet.canWake(k, 0) ? 0 : 1;
+  boxAskPick = s < 0;
+  if (s >= 0) boxHome = (uint8_t)s;
   boxAsk = (uint8_t)(k + 1);
   boxAskUntil = millis() + 10000;
   sfxPlay(SFX_TAP);
@@ -6101,13 +6310,13 @@ void boxAfterMove() {
   boxOpen = false;
   boxAsk = 0;
   boxMove = BOXMV_NONE;
-  monFor = -2;  // recarga aunque sea la misma especie: ensureMon tambien vuelve a centrar el paseo
+  monReset();  // recarga aunque sea la misma especie: ensureMon tambien vuelve a centrar el paseo
   ensureMon();
   fxq.drop(FXB_LEVELUP);
   fxq.drop(FXB_MEDAL);
   fxo.clear();
   fxArmWatches();
-  if (!pet.isVacant()) fxo.push(FXO_BOX, 0, 0, millis());  // casa vacia (v1.39): nadie sale de la luz
+  if (!pet.home(boxMoveHome).isVacant()) fxo.push(FXO_BOX, 0, 0, millis(), boxMoveHome);  // hueco vacio (v1.39): nadie sale de la luz
   wakeUI();  // la escritura tardo ~1 s: el siguiente cuadro, ya
 }
 
@@ -6119,7 +6328,7 @@ void boxTick(uint32_t now) {
   if (!boxMoveDrawnEnd && e < BOX_FX_MS + 400) return;  // a oscuras no se dibuja: no se espera mas
   uint8_t mv = boxMove, k = boxMoveSlot;
   boxMove = BOXMV_NONE;
-  bool ok = (mv == BOXMV_STORE) ? pet.store(k) : pet.wake(k);  // ~1 s con la pantalla quieta
+  bool ok = (mv == BOXMV_STORE) ? pet.store(k, boxMoveHome) : pet.wake(k, boxMoveHome);  // ~1 s con la pantalla quieta
   if (!ok) {  // no cambio nada (p. ej. la NVS llena): se queda en la caja
     boxDeny(k);
     wakeUI();
@@ -6134,11 +6343,13 @@ void drawBoxAppear(uint32_t now) {
   const FxOverlay *o = fxo.find(FXO_BOX);
   if (!o) return;
   float t = FxOverlays::t(*o, now);
-  int cx = pet.isEgg() ? CX : petFootX();
-  int cy = (pet.isEgg() || (!pmd.loaded && petFootY() == PET_GROUND)) ? PET_CY : petFootY() - petBodyH() / 2;
-  if (pet.isEgg() && yardHomeNow() && yardEggX >= 0) {  // el huevo del patio (Y3): donde esta
-    cx = yardEggX;
-    cy = yardEggY - YARD_EGG_MID;
+  uint8_t s = o->slot & 1;  // v3.0: el hueco de casa del movimiento
+  const PetLife &l = pet.home(s);
+  int cx = l.isEgg() ? CX : petFootXOf(s);
+  int cy = (l.isEgg() || (!homeMon[s].loaded && petFootYOf(s) == PET_GROUND)) ? PET_CY : petFootYOf(s) - petBodyHOf(s) / 2;
+  if (l.isEgg() && yardHomeNow() && yardEggX[s] >= 0) {  // el huevo del patio (Y3): donde esta
+    cx = yardEggX[s];
+    cy = yardEggY[s] - YARD_EGG_MID;
   }
   float k = 1.0f - t;
   int r = (int)(118 * k * k);
@@ -6160,10 +6371,11 @@ void drawBoxAppear(uint32_t now) {
 
 // huevos limitados (v1.39): los de la mochila, cuantos pasos faltan para el siguiente y si la casa esta vacia
 void eggReport() {
-  Serial.printf("eggs bag=%u held=%d owned=%u next=%lu/%u vacant=%d home=%s boxPets=%d\n", pet.items[IT_EGG],
-                pet.eggHeld() ? 1 : 0, pet.eggsOwned(), (unsigned long)pet.eggStepsLeft(), pet.eggStepsAt(),
-                pet.isVacant() ? 1 : 0, pet.isVacant() ? "empty" : (pet.isEgg() ? "egg" : "pet"),
-                pet.boxHasPets() ? 1 : 0);
+  Serial.printf("eggs bag=%u held=%d/%d owned=%u next=%lu/%u vacant=%d home=%s/%s boxPets=%d\n", pet.items[IT_EGG],
+                pet.home(0).eggHeld() ? 1 : 0, pet.home(1).eggHeld() ? 1 : 0, pet.eggsOwned(),
+                (unsigned long)pet.eggStepsLeft(), pet.eggStepsAt(), pet.homeVacant(),
+                pet.home(0).isVacant() ? "empty" : (pet.home(0).isEgg() ? "egg" : "pet"),
+                pet.home(1).isVacant() ? "empty" : (pet.home(1).isEgg() ? "egg" : "pet"), pet.boxHasPets() ? 1 : 0);
 }
 
 // comando BOX: la caja por serie (uid, especie, nivel, CRC) y el huevo de la incubadora
@@ -6209,10 +6421,13 @@ void travelReport() {
 }
 
 void boxReport() {
-  Serial.printf("active uid=%08lX spec=%d lv=%u egg=%d vacant=%d eggHeld=%d eggT=%d eggShiny=%d box=%u/%u bagEggs=%u\n",
-                (unsigned long)pet.uid, pet.speciesId, pet.isEgg() ? 0 : pet.level(),
-                (pet.isEgg() && !pet.isVacant()) ? 1 : 0, pet.isVacant() ? 1 : 0, pet.eggHeld() ? 1 : 0,
-                pet.eggSpecies(), pet.eggIsShiny() ? 1 : 0, pet.boxUsed(), BOX_SLOTS, pet.items[IT_EGG]);
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {  // v3.0: los dos de casa ("active" = el del foco)
+    const PetLife &l = pet.home(s);
+    Serial.printf("%s home%u uid=%08lX spec=%d lv=%u egg=%d vacant=%d eggHeld=%d eggT=%d eggShiny=%d box=%u/%u bagEggs=%u\n",
+                  s == pet.focusSlot ? "active" : "other", s, (unsigned long)l.uid, l.speciesId, l.isEgg() ? 0 : l.level(),
+                  (l.isEgg() && !l.isVacant()) ? 1 : 0, l.isVacant() ? 1 : 0, l.eggHeld() ? 1 : 0, l.eggSpecies(),
+                  l.eggIsShiny() ? 1 : 0, pet.boxUsed(), BOX_SLOTS, pet.items[IT_EGG]);
+  }
   for (uint8_t k = 0; k < BOX_SLOTS; k++) {
     uint8_t st = pet.boxState(k);
     if (st == BOX_EMPTY) {
@@ -6294,17 +6509,18 @@ void boxFill() {
 #define BADGE_ROW_H 128
 #define BADGE_PLATE C565(0xe8, 0xea, 0xf2)  // placa de una insignia ganada (panel del patio, Y1)
 
-// un bicho que puede ir al equipo: el de casa (slot TEAM_HOME) o uno de la caja
+// un bicho que puede ir al equipo: uno de casa (slot TEAM_HOME0 + su hueco, v3.0) o uno de la caja
 struct TeamCand {
   uint32_t uid;
   int8_t slot;
 };
-static TeamCand teamCand[1 + BOX_SLOTS];
+static TeamCand teamCand[HOME_SLOTS + BOX_SLOTS];
 static uint8_t teamCandN = 0;
 
 static void teamBuildCands() {
   teamCandN = 0;
-  if (!pet.isEgg()) teamCand[teamCandN++] = { pet.uid, (int8_t)TEAM_HOME };
+  for (uint8_t s = 0; s < HOME_SLOTS; s++)  // v3.0: los dos de casa
+    if (pet.home(s).hatched()) teamCand[teamCandN++] = { pet.home(s).uid, (int8_t)(TEAM_HOME0 + s) };
   for (uint8_t k = 0; k < BOX_SLOTS; k++)
     if (pet.boxState(k) == BOX_OK && !pet.slotTravelling(k)) teamCand[teamCandN++] = { pet.boxRecord(k).uid, (int8_t)k };
 }
@@ -6323,8 +6539,8 @@ static void teamPrune() {
   teamPickN = n;
 }
 
-// hay alguien que pueda pelear: el de casa despierto o cualquiera de la caja
-bool stagesCanOpen() { return pet.canBattle() || pet.boxHasPets(); }
+// hay alguien que pueda pelear: uno de casa despierto o cualquiera de la caja
+bool stagesCanOpen() { return pet.home(0).canBattle() || pet.home(1).canBattle() || pet.boxHasPets(); }
 
 void closeStages() {
   stagesOpen = false;
@@ -6369,6 +6585,8 @@ void openTeamWild() {
   teamPickN = 0;
   if (pet.canBattle() && !pet.isEgg()) {
     teamPick[teamPickN++] = pet.uid;
+  } else if (pet.other.canBattle()) {  // v3.0: el otro de casa
+    teamPick[teamPickN++] = pet.other.uid;
   } else {
     const uint32_t *last = pet.teamUids();
     for (uint8_t i = 0; i < TEAM_MAX && !teamPickN; i++)
@@ -6388,16 +6606,18 @@ void mixStageKey(uint32_t &h) {
   h = mixKey(h, teamWild);
   h = mixKey(h, teamPickN);
   for (uint8_t i = 0; i < teamPickN; i++) h = mixKey(h, teamPick[i]);
-  h = mixKey(h, pet.canBattle());
+  h = mixKey(h, pet.home(0).canBattle());
+  h = mixKey(h, pet.home(1).canBattle());
   if (teamOpen) {
     teamBuildCands();
     for (uint8_t i = 0; i < teamCandN; i++) {
       h = mixKey(h, teamCand[i].uid);
       h = mixKey(h, pet.teamCanFight(teamCand[i].uid));
-      if (teamCand[i].slot == TEAM_HOME) {
-        h = mixKey(h, pet.speciesId);
-        h = mixKey(h, pet.growMin);
-        for (const char *c = pet.nick; *c; c++) h = mixKey(h, (uint8_t)*c);
+      if (teamIsHome(teamCand[i].slot)) {
+        const PetLife &l = pet.home(teamHomeSlot(teamCand[i].slot));
+        h = mixKey(h, l.speciesId);
+        h = mixKey(h, l.growMin);
+        for (const char *c = l.nick; *c; c++) h = mixKey(h, (uint8_t)*c);
       } else {
         h = mixKey(h, pet.boxRecord(teamCand[i].slot).crc);
       }
@@ -6514,9 +6734,11 @@ static void drawTeamCard(uint8_t idx, uint8_t n) {
     gfx->drawRoundRect(x, y, TEAM_CW, TEAM_CH, Y_CARD_RAD, edge);
     gfx->drawRoundRect(x + 1, y + 1, TEAM_CW - 2, TEAM_CH - 2, Y_CARD_RAD - 1, edge);
   }
-  int16_t dex = c.slot == TEAM_HOME ? pet.speciesId : pet.boxRecord(c.slot).speciesId;
-  const char *nm = c.slot == TEAM_HOME ? petName() : recName(pet.boxRecord(c.slot));
-  uint16_t lv = c.slot == TEAM_HOME ? pet.level() : levelFor(pet.boxRecord(c.slot).growMin);
+  bool atHome = teamIsHome(c.slot);  // v3.0: uno de los dos de casa
+  const PetLife &hl = pet.home(atHome ? teamHomeSlot(c.slot) : 0);
+  int16_t dex = atHome ? hl.speciesId : pet.boxRecord(c.slot).speciesId;
+  const char *nm = atHome ? (hl.nick[0] ? hl.nick : dexName(hl.speciesId)) : recName(pet.boxRecord(c.slot));
+  uint16_t lv = atHome ? hl.level() : levelFor(pet.boxRecord(c.slot).growMin);
   int cx = x + TEAM_CW / 2;
   const uint8_t *t = thumbs.get(dex);
   if (t) drawThumbFit(t, cx, y + 32, TEAM_CW - 14, 48, !fight, bg);
@@ -6849,6 +7071,8 @@ void yHpBar(int x, int y, int w, int cur, int max, uint16_t col) {
 
 // Cuidar: la comida (que en la fase Y3 pasara a soltarse en el patio) y luz / bano
 void openCarePanel() {
+  // v3.0 (provisional): el del foco; si es un huevo o un hueco vacio y el otro es un bicho, el otro
+  if (!pet.hatched() && pet.other.hatched()) uiFocus(pet.focusSlot ^ 1);
   if (pet.ceremony || pet.isEgg() || pet.isVacant()) return;  // (desde casa: COMER y CUIDADOS no llegan con huevo)
   panelKind = PANEL_CARE;
   panelShakeIdx = -1;
@@ -6858,6 +7082,9 @@ void openCarePanel() {
 // Jugar: los juegos y las fases. Huevo, dormido o casa vacia: no hay juegos, pero los de la caja si
 // pueden ir a las fases (v1.65)
 void openPlayPanel() {
+  // v3.0 (provisional): los juegos, con el del foco; si no puede jugar y el otro si, con el otro
+  auto canPlay = [](const PetLife &l) { return l.hatched() && !l.sleeping && !l.busyEnding(); };
+  if (!canPlay(pet) && canPlay(pet.other)) uiFocus(pet.focusSlot ^ 1);
   if (pet.ceremony) return;
   if (!pet.isEgg() && !pet.isVacant() && !pet.sleeping) {
     panelKind = PANEL_PLAY;
@@ -7630,13 +7857,14 @@ void yardDemoTap(int16_t x, int16_t y) {
 //   que falta. El inicial (y uno a medias del sistema de antes) tambien se ve aqui, pero se abre con 3
 //   toques como siempre.
 
+// v3.0: el patio se ve con alguien en casa (bicho o huevo) en cualquiera de los dos huecos
 bool yardHomeNow() {
-  return !pet.awaitingStarter() && !pet.ceremony && !pet.isDying() && !pet.isVacant();
+  return !pet.awaitingStarter() && !pet.ceremony && !pet.isDying() && pet.homeVacant() < HOME_SLOTS;
 }
 
-// el globo del huevo del patio, un rato (tras un toque, una sacudida que conto o EGGT)
+// el globo del huevo del patio, un rato (tras un toque, una sacudida que conto o EGGT): los dos huecos
 void yardEggInfo() {
-  yardEggInfoUntil = millis() + 2600;
+  yardEggInfoUntil[0] = yardEggInfoUntil[1] = millis() + 2600;
 }
 
 static_assert(YBG_CANVAS == UI_SIZE, "el lienzo es la ventana (YBG_CROP, YBG_CROP) del mapa");
@@ -7824,19 +8052,26 @@ YardBody yardPmdBody(PmdMon &m) {
   return b;
 }
 
+// v3.0: p[0] y p[1] son los dos huecos de casa (su sprite, homeMon[i]; el B/N de respaldo, solo el del foco)
+// y p[2] el que vuelve de viaje (yardBoxPmd o su miniatura). Los de la caja ya no pasean (hibernan)
+#define YARD_TRV 2  // el paseante del viajero
 YardBody yardBodyOf(int i) {
   YardBody b = { YB_NONE, 2, 40, 48 };
-  if (i == 0) {
-    if (pmd.loaded) return yardPmdBody(pmd);
-    if (mon.loaded) {
+  if (i < HOME_SLOTS) {
+    if (homeMon[i].loaded) return yardPmdBody(homeMon[i]);
+    if (i == pet.focusSlot && mon.loaded) {
       b.kind = YB_TPK1;
       b.s = mon.h * 2 <= 110 ? 2 : 1;
       b.w = (int16_t)(mon.w * b.s * 3 / 4);
       b.h = (int16_t)(mon.h * b.s);
-    } else if (flashIdxForDex(pet.speciesId) >= 0) {
+    } else if (flashIdxForDex(pet.home(i).speciesId) >= 0) {
       b.kind = YB_FLASH;
       b.w = 52;
       b.h = 58;
+    } else if (thumbs.get(pet.home(i).speciesId)) {
+      b.kind = YB_THUMB;
+      b.w = 56;
+      b.h = 60;
     }
   } else {
     if (yardBoxPmd.loaded) return yardPmdBody(yardBoxPmd);
@@ -7857,9 +8092,11 @@ uint8_t yardPetsShown() {
   return n;
 }
 
+PmdMon &yardMonOf(int i) { return i < HOME_SLOTS ? homeMon[i] : yardBoxPmd; }
+
 // gesto al azar (los de la casa de lado: Pose, Nod, Breath; Hop salta mucho y Sit mira atras)
 bool yardPickGesture(uint8_t i, uint8_t *act, uint32_t *ms) {
-  PmdMon &m = i == 0 ? pmd : yardBoxPmd;
+  PmdMon &m = yardMonOf(i);
   static const uint8_t flair[] = { PMD_POSE, PMD_NOD, PMD_BREATH };
   uint8_t pick[3], n = 0;
   for (uint8_t f : flair)
@@ -7870,34 +8107,35 @@ bool yardPickGesture(uint8_t i, uint8_t *act, uint32_t *ms) {
   return true;
 }
 
-// quien esta en el patio: el de casa, y el primero de la caja (cargando su sprite si cambio)
+// quien esta en el patio: los dos de casa (los nacidos) y el que vuelve de viaje (cargando su sprite si cambio)
 void yardSyncPets() {
-  yardW.n = 2;
+  yardW.n = 3;
   yardW.pickGesture = yardPickGesture;
-  YardPet &h = yardW.p[0];
   if (yardW.rng.s == 1) yardW.rng.s = (uint32_t)random(1, 0x7fffffff);
-  if (pet.isEgg()) {  // el huevo (Y3): en casa aun no hay nadie que pasee
-    h.on = false;
-  } else if (!h.on) {
-    h = YardPet{};
-    h.on = true;
-    // donde se veia el bicho en la casa de lado, abajo del centro; recien nacido, donde estaba su huevo
-    int c = yardEggX >= 0 ? yardNearestFreeCell(yardWalk, yardEggX, yardEggY)
-                          : yardNearestFreeCell(yardWalk, CX, PET_GROUND);
-    if (c >= 0) {
-      h.x = (float)yardCellCenter(yardCellCX(c));
-      h.y = (float)yardCellCenter(yardCellCY(c));
-    } else {
-      yardPlace(yardW, yardWalk, 0);
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    YardPet &h = yardW.p[s];
+    if (pet.home(s).isEgg()) {  // el huevo (Y3) o el hueco vacio: aun no hay nadie que pasee
+      h.on = false;
+      continue;
     }
-    yardLastStep = 0;
+    if (!h.on) {
+      h = YardPet{};
+      h.on = true;
+      // recien nacido, donde estaba su huevo; si no, abajo del centro (el segundo, a un lado)
+      int c = yardEggX[s] >= 0 ? yardNearestFreeCell(yardWalk, yardEggX[s], yardEggY[s])
+                               : yardNearestFreeCell(yardWalk, CX + (s ? 90 : 0), PET_GROUND);
+      if (c >= 0 && yardSpotAway(yardW, s, (float)yardCellCenter(yardCellCX(c)), (float)yardCellCenter(yardCellCY(c)))) {
+        h.x = (float)yardCellCenter(yardCellCX(c));
+        h.y = (float)yardCellCenter(yardCellCY(c));
+      } else {
+        yardPlace(yardW, yardWalkNow(), s);
+      }
+      yardLastStep = 0;
+    }
+    h.walks = homeMon[s].has(PMD_WALKL) || homeMon[s].has(PMD_WALKR);
   }
-  h.walks = pmd.has(PMD_WALKL) || pmd.has(PMD_WALKR);
   int8_t slot = trvBackSlot();  // v2.1: el que vuelve de viaje sale al patio a esperar que lo toquen
-  bool back = slot >= 0;
-  for (uint8_t k = 0; k < BOX_SLOTS && slot < 0; k++)
-    if (pet.boxState(k) == BOX_OK && !pet.slotTravelling(k)) slot = (int8_t)k;  // el que esta de viaje (Y5) no se ve
-  YardPet &b = yardW.p[1];
+  YardPet &b = yardW.p[YARD_TRV];
   if (slot < 0) {
     b.on = false;
     if (yardBoxPmd.loaded) yardBoxPmd.unload();
@@ -7919,41 +8157,67 @@ void yardSyncPets() {
   if (!b.on) {
     b = YardPet{};
     b.on = true;
-    yardPlace(yardW, yardWalkNow(), 1);
+    yardPlace(yardW, yardWalkNow(), YARD_TRV);
   }
-  b.walks = !back && (yardBoxPmd.has(PMD_WALKL) || yardBoxPmd.has(PMD_WALKR));  // el viajero espera quieto
+  b.walks = false;  // el viajero espera quieto
 }
 
-// la mascara de paso de ahora: la del mapa y, con el huevo en el suelo (Y3), su celda bloqueada (el de
-// la caja pasea a su alrededor, no por encima)
+// la mascara de paso de ahora: la del mapa y, con huevos en el suelo (Y3), sus celdas bloqueadas (los
+// bichos pasean a su alrededor, no por encima)
 const uint8_t *yardWalkNow() {
-  bool egg = pet.isEgg() && yardEggX >= 0, enc = yardEncX >= 0;  // v2.2: lo que se mueve, tambien
+  bool egg = false, enc = yardEncX >= 0;  // v2.2: lo que se mueve, tambien
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) egg |= pet.home(s).isEgg() && !pet.home(s).isVacant() && yardEggX[s] >= 0;
   if (!egg && !enc) return yardWalk;
   static uint8_t w[YBG_WALK_BYTES];
   memcpy(w, yardWalk, sizeof(w));
-  int c = egg ? yardCellAt(yardEggX, yardEggY - YBG_CELL / 2) : -1;
-  if (c >= 0) w[c >> 3] |= (uint8_t)(1 << (c & 7));
-  c = enc ? yardCellAt(yardEncX, yardEncY - YBG_CELL / 2) : -1;
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    if (!pet.home(s).isEgg() || pet.home(s).isVacant() || yardEggX[s] < 0) continue;
+    int c = yardCellAt(yardEggX[s], yardEggY[s] - YBG_CELL / 2);
+    if (c >= 0) w[c >> 3] |= (uint8_t)(1 << (c & 7));
+  }
+  int c = enc ? yardCellAt(yardEncX, yardEncY - YBG_CELL / 2) : -1;
   if (c >= 0) w[c >> 3] |= (uint8_t)(1 << (c & 7));
   return w;
 }
 
+// de quien es la comida del suelo (el hueco cuyo bicho la pidio), o -1 si ya no esta
+int yardFoodOwner() {
+  if (yardFood.phase == YF_NONE) return -1;
+  return pet.slotOfUid(yardFood.tag);
+}
+
 // la comida (Y3): ya se la ha comido. Ahora Pet la aplica, como antes al tocar la tarjeta: sus "+N", su
-// sonido y, si le encanta o es la tarta, su corazon (si no, sale uno pequeno igual)
-void yardFoodEaten(uint8_t kind) {
-  FxNeedSnap ns = fxSnap();
-  bool ok;
-  if (kind == 3) {
-    ok = pet.eatCake();  // (sin tartas ya, p. ej. gastada desde la mochila: no se gasta nada)
-  } else {
-    pet.feedBerry(kind);
-    ok = pet.eating();
-  }
-  Serial.printf("FOOD eaten kind=%u ok=%d\n", kind, ok ? 1 : 0);
+// sonido y, si le encanta o es la tarta, su corazon (si no, sale uno pequeno igual). v3.0: al de su hueco
+void yardFoodEaten(uint8_t kind, int owner) {
+  if (owner < 0) return;
+  bool ok = false;
+  pet.onSlot((uint8_t)owner, [&] {
+    FxNeedSnap ns = fxSnap();
+    if (kind == 3) {
+      ok = pet.eatCake();  // (sin tartas ya, p. ej. gastada desde la mochila: no se gasta nada)
+    } else {
+      pet.feedBerry(kind);
+      ok = pet.eating();
+    }
+    if (ok) fxNeeds(ns);
+  });
+  Serial.printf("FOOD eaten kind=%u slot=%d ok=%d\n", kind, owner, ok ? 1 : 0);
   if (!ok) return;
-  fxNeeds(ns);
   sfxPlay(SFX_EAT);
   yardHeartPopAt = millis();
+  yardHeartSlot = (uint8_t)owner;
+}
+
+// lo que tiene quieto al bicho del hueco s (YH_*), sin contar la comida
+uint8_t yardHoldOf(uint8_t s, uint32_t now) {
+  const PetLife &l = pet.home(s);
+  bool focus = s == pet.focusSlot;
+  PetMood m = l.mood();
+  if (l.sleeping) return YH_SLEEP;
+  if (l.evolving() || fxHatchHidesPetSlot(s, now) || (focus && bathUntil) || l.emote() != EMOTE_NONE ||
+      (m == MOOD_EATING && homeMon[s].has(PMD_EAT)))
+    return YH_STAY;
+  return YH_NONE;
 }
 
 // un paso del planificador: lo que pide el juego (dormir, comer, triste...) y la inclinacion
@@ -7966,32 +8230,36 @@ void yardTick(uint32_t now) {
   }
   yardLastStep = now;
   // la comida del suelo (Y3): si ya no puede comer, desaparece sin gastarse nada (aun no se aplico)
-  if (yardFood.phase != YF_NONE &&
-      (!yardW.p[0].on || pet.sleeping || pet.isEgg() || pet.busyEnding() || pet.uid != yardFood.tag)) {
-    Serial.println("FOOD cancelled");
-    yardFood.phase = YF_NONE;
+  int fo = yardFoodOwner();
+  if (yardFood.phase != YF_NONE) {
+    const PetLife *l = fo >= 0 ? &pet.home((uint8_t)fo) : nullptr;
+    if (!l || !yardW.p[fo].on || l->sleeping || l->isEgg() || l->busyEnding()) {
+      Serial.println("FOOD cancelled");
+      yardFood.phase = YF_NONE;
+      fo = -1;
+    }
   }
   uint8_t hold[YARD_PETS_MAX] = { YH_NONE, YH_NONE, YH_NONE };
-  PetMood m = pet.mood();
-  if (pet.sleeping) hold[0] = YH_SLEEP;
-  else if (pet.evolving() || fxHatchHidesPet(now) || bathUntil || pet.emote() != EMOTE_NONE ||
-           (m == MOOD_EATING && pmd.has(PMD_EAT)))
-    hold[0] = YH_STAY;
-  bool foodWaits = hold[0] != YH_NONE;  // otra cosa lo tiene quieto: la comida espera
-  // v2.6: triste (una necesidad baja, p. ej. hambre) se queda quieto con su pose de dolor, pero eso no
-  // para la comida: antes la comida esperaba en el suelo para siempre y solo una baya de la mochila lo sacaba
-  if (yardFood.phase != YF_NONE) {
-    if (!foodWaits) hold[0] = yardFoodHold(yardFood);
-  } else if (hold[0] == YH_NONE && m == MOOD_SAD && pmd.has(PMD_HURT)) {
-    hold[0] = YH_STAY;
+  bool foodWaits = false;
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    hold[s] = yardHoldOf(s, now);
+    if ((int)s == fo) {
+      foodWaits = hold[s] != YH_NONE;  // otra cosa lo tiene quieto: la comida espera
+      if (!foodWaits) hold[s] = yardFoodHold(yardFood);
+    } else if (hold[s] == YH_NONE && pet.home(s).mood() == MOOD_SAD && homeMon[s].has(PMD_HURT)) {
+      // v2.6: triste (una necesidad baja, p. ej. hambre) se queda quieto con su pose de dolor, pero eso no
+      // para la comida: el que tiene comida en el suelo va a por ella
+      hold[s] = YH_STAY;
+    }
   }
-  hold[1] = pet.sleeping ? YH_SLEEP : YH_NONE;  // el de la caja se duerme con el de casa
-  int8_t tilt = (imuPresent() && !bathUntil && pet.emote() == EMOTE_NONE && yardFood.phase == YF_NONE) ? imuTiltSide() : 0;
+  hold[YARD_TRV] = YH_NONE;  // el viajero espera quieto (no pasea)
+  bool still = bathUntil || pet.home(0).emote() != EMOTE_NONE || pet.home(1).emote() != EMOTE_NONE;
+  int8_t tilt = (imuPresent() && !still && yardFood.phase == YF_NONE) ? imuTiltSide() : 0;
   const uint8_t *walk = yardWalkNow();
   yardStep(yardW, walk, now, dt, hold, tilt);
-  if (yardFood.phase == YF_FALL || (!foodWaits && yardFood.phase != YF_NONE)) {  // (la caida no espera)
+  if (fo >= 0 && (yardFood.phase == YF_FALL || (!foodWaits && yardFood.phase != YF_NONE))) {  // (la caida no espera)
     uint8_t kind = yardFood.kind;
-    if (yardFoodStep(yardFood, yardW, walk, 0, now)) yardFoodEaten(kind);
+    if (yardFoodStep(yardFood, yardW, walk, fo, now)) yardFoodEaten(kind, fo);
   } else if (foodWaits) {
     yardFood.t0 += dt;  // su fase no avanza mientras tanto
   }
@@ -8027,17 +8295,19 @@ uint8_t yardWalkAct(const PmdMon &m, const YardPet &p) {
 void yardDrawPet(int i, uint32_t now) {
   YardPet &p = yardW.p[i];
   YardBody b = yardBodyOf(i);
-  int x = (int)p.x + (i == 0 ? dizzyWobble(now) : 0), y = (int)p.y;
+  bool home = i < HOME_SLOTS;
+  const PetLife *l = home ? &pet.home((uint8_t)i) : nullptr;
+  int x = (int)p.x + (home ? dizzyWobbleOf(*l, now) : 0), y = (int)p.y;
   yardShadow(x, y, b.w);
   if (b.kind == YB_PMD) {
-    PmdMon &m = i == 0 ? pmd : yardBoxPmd;
+    PmdMon &m = yardMonOf(i);
     uint8_t act = PMD_IDLE;
     bool loop = true;
     if (p.mode == YM_SLEEP) act = PMD_SLEEP;
-    else if (p.mode == YM_STAY && i == 0) {
-      PetMood md = pet.mood();
+    else if (p.mode == YM_STAY && home) {
+      PetMood md = l->mood();
       act = md == MOOD_EATING ? PMD_EAT : md == MOOD_SAD ? PMD_HURT : PMD_IDLE;
-      if (yardFood.phase == YF_EAT) act = PMD_EAT;  // Y3: el bocado a la comida del suelo
+      if (yardFood.phase == YF_EAT && yardFoodOwner() == i) act = PMD_EAT;  // Y3: el bocado a la comida del suelo
     } else if (p.mode == YM_WALK) act = yardWalkAct(m, p);
     else if (p.mode == YM_GESTURE) {
       act = p.act;
@@ -8057,14 +8327,14 @@ void yardDrawPet(int i, uint32_t now) {
               [&](int c0, int len, int k) { gfx->fillRect(x0 + c0 * s, y0 + r * s, len * s, s, mon.pal[k]); });
     }
   } else if (b.kind == YB_FLASH) {
-    const Species &sp = SPECIES[flashIdxForDex(pet.speciesId)];
+    const Species &sp = SPECIES[flashIdxForDex(l ? l->speciesId : yardBoxDex)];
     drawMap(sp.sprite, SPRITE_H, x - 32, y - 62, 2, false);
   } else if (b.kind == YB_THUMB) {
-    drawThumbFit(thumbs.get(yardBoxDex), x, y - b.h / 2, 80, 80, false, 0);
+    drawThumbFit(thumbs.get(home ? l->speciesId : yardBoxDex), x, y - b.h / 2, 80, 80, false, 0);
   } else {  // sin sprite ninguno
     yShadowText(x - 9, y - 40, "?", 4, Y_TEXT);
   }
-  if (i != 0) {
+  if (!home) {
     if (yardBoxSlot >= 0 && trvBackSlot() == yardBoxSlot) {  // v2.1: de vuelta del viaje: su maleta y un "!"
       drawMap(SPR_ICON_TRAVEL, 16, x + b.w / 2 - 4, y - 30, 2, false);
       drawExclaim(x + b.w / 2 + 14, y - b.h - 12 + (int)(3 * sinf(now * 0.012f)));
@@ -8072,8 +8342,8 @@ void yardDrawPet(int i, uint32_t now) {
     return;
   }
   int head = y - b.h;
-  if (pet.showHeart()) drawMap(SPR_HEART, 32, x + b.w / 2 - 6, head - 18, 1, false);
-  uint8_t e = pet.emote();
+  if (l->showHeart()) drawMap(SPR_HEART, 32, x + b.w / 2 - 6, head - 18, 1, false);
+  uint8_t e = l->emote();
   if (e == EMOTE_ANGRY) drawAngerMark(x + b.w / 2 + 6, head + 4);
   else if (e == EMOTE_DIZZY) drawDizzyStars(x, head - 8, now);
 }
@@ -8106,99 +8376,119 @@ void yardDrawFood(uint32_t now) {
   drawMap(YARD_FOOD_ICON[f.kind & 3], 16, f.x - 8 * s, f.y - 15 * s - lift, s, false);
 }
 
-// lo de encima del bicho de casa por la comida: el "!" al verla, y el corazon que sale al acabarsela
+// lo de encima del bicho por la comida: el "!" al verla (el que la pidio), y el corazon que sale al
+// acabarsela (sobre el que se la comio)
 void yardDrawFoodFx(uint32_t now) {
-  if (!yardW.p[0].on) return;
-  YardPet &p = yardW.p[0];
-  int head = yardPetHeadY(0), w = yardBodyOf(0).w;
-  uint32_t el = now - yardFood.t0;
-  if (yardFood.phase == YF_NOTICE || (yardFood.phase == YF_WALK && el < 450))
-    drawExclaim((int)p.x + w / 2 + 14, head - 12 + (int)(3 * sinf(now * 0.012f)));
+  int fo = yardFoodOwner();
+  if (fo >= 0 && yardW.p[fo].on) {
+    YardPet &p = yardW.p[fo];
+    int head = yardPetHeadY(fo), w = yardBodyOf(fo).w;
+    uint32_t el = now - yardFood.t0;
+    if (yardFood.phase == YF_NOTICE || (yardFood.phase == YF_WALK && el < 450))
+      drawExclaim((int)p.x + w / 2 + 14, head - 12 + (int)(3 * sinf(now * 0.012f)));
+  }
+  uint8_t hs = yardHeartSlot & 1;
   uint32_t pop = now - yardHeartPopAt;
-  if (yardHeartPopAt && pop < 1000 && !pet.showHeart()) {  // (le encanta o la tarta: ya sale el suyo)
+  if (yardHeartPopAt && pop < 1000 && yardW.p[hs].on && !pet.home(hs).showHeart()) {  // (le encanta o la tarta: ya sale el suyo)
+    YardPet &p = yardW.p[hs];
+    int head = yardPetHeadY(hs), w = yardBodyOf(hs).w;
     int y = head + 4 - (int)(pop * 30 / 1000);  // al lado de la cabeza (encima va el globo "Nam nam!")
     drawMap(SPR_HEART, 32, (int)p.x + w / 2 + 2, y, 1, false);
   }
 }
 
-// el huevo en el patio: tambalea al sacudir la placa (como en su pantalla) o al tocarlo; un destello si
-// es raro. Mientras se rompe lo dibuja drawHatchFx
-void yardDrawEgg(uint32_t now) {
-  if (!pet.isEgg() || yardEggX < 0) return;
+// el huevo del hueco s en el patio: tambalea al sacudir la placa (como en su pantalla) o al tocarlo; un
+// destello si es raro. Mientras se rompe lo dibuja drawHatchFx
+void yardDrawEgg(uint8_t s, uint32_t now) {
+  const PetLife &l = pet.home(s);
+  if (!l.isEgg() || l.isVacant() || yardEggX[s] < 0) return;
   int dx = 0;
-  if (pet.emote() == EMOTE_WOBBLE) dx = (int)(10.0f * (1.0f - pet.emoteT()) * sinf(now * 0.035f));
-  uint32_t te = now - yardEggTapAt;
-  if (yardEggTapAt && te < 600) dx += (int)(6.0f * (1.0f - te / 600.0f) * sinf(te * 0.05f));
-  yardShadow(yardEggX, yardEggY, 54);
-  drawEggAt(yardEggX + dx, yardEggY - YARD_EGG_MID, YARD_EGG_S, pet.eggCracks(), pet.eggSpecies());
-  if (pet.eggRarity() >= R_RARO && (now / 400) % 3 != 0) {  // raro o legendario: brilla
+  if (l.emote() == EMOTE_WOBBLE) dx = (int)(10.0f * (1.0f - l.emoteT()) * sinf(now * 0.035f));
+  uint32_t te = now - yardEggTapAt[s];
+  if (yardEggTapAt[s] && te < 600) dx += (int)(6.0f * (1.0f - te / 600.0f) * sinf(te * 0.05f));
+  yardShadow(yardEggX[s], yardEggY[s], 54);
+  drawEggAt(yardEggX[s] + dx, yardEggY[s] - YARD_EGG_MID, YARD_EGG_S, pet.eggCracksOf(l), l.eggSpecies());
+  if (l.eggRarity() >= R_RARO && (now / 400) % 3 != 0) {  // raro o legendario: brilla
     int k = (int)((now / 1200) % 2);
-    drawMap(SPR_STAR, 16, yardEggX + 22 + dx - k * 50, yardEggY - 80 + k * 26, 1, false);
+    drawMap(SPR_STAR, 16, yardEggX[s] + 22 + dx - k * 50, yardEggY[s] - 80 + k * 26, 1, false);
   }
 }
 
-// el globo del huevo: el inicial (a toques) dice lo de siempre; el del patio, lo que falta un rato tras
-// un toque o una sacudida, alternando con la pista de agitarlo (mientras las sacudidas aun cuenten)
-void yardDrawEggBubble(uint32_t now) {
-  if (!pet.isEgg() || yardEggX < 0 || fxHatchHidesPet(now)) return;
-  int tip = yardEggY - YARD_EGG_MID * 2 - 8;
-  if (!pet.yardEgg()) {
-    yardBubbleAt(yardEggX, tip, eggMsg());
+// el globo del huevo del hueco s: el inicial (a toques) dice lo de siempre; el del patio, lo que falta un
+// rato tras un toque o una sacudida, alternando con la pista de agitarlo (mientras las sacudidas aun cuenten)
+void yardDrawEggBubble(uint8_t s, uint32_t now) {
+  const PetLife &l = pet.home(s);
+  if (!l.isEgg() || l.isVacant() || yardEggX[s] < 0 || fxHatchHidesPetSlot(s, now)) return;
+  int tip = yardEggY[s] - YARD_EGG_MID * 2 - 8;
+  if (!pet.yardEggOf(l)) {
+    yardBubbleAt(yardEggX[s], tip, eggMsg());
     return;
   }
-  if (!timeLeft(yardEggInfoUntil)) return;
+  if (!timeLeft(yardEggInfoUntil[s])) return;
   char left[12];
-  eggLeftText(left, sizeof(left), pet.eggMinutesLeft());
+  eggLeftText(left, sizeof(left), pet.eggMinutesLeftOf(l));
   const char *opts[3] = { left, nullptr, nullptr };
   int n = 1;
-  if (pet.eggSavedMinutes() < EGG_SHAKE_CAP) opts[n++] = T(S_EGG_SHAKE);
-  if (pet.eggIsCaptured()) opts[n++] = T(S_EGG_CAPTURED);  // v2.2: el de una captura (ya se sabe que es)
-  else if (pet.eggRarity() >= R_RARO) opts[n++] = T(pet.eggRarity() == R_LEGENDARIO ? S_EGG_LEGEND : S_EGG_RARE);
-  uint32_t since = 2600 - timeLeft(yardEggInfoUntil);
-  yardBubbleAt(yardEggX, tip, opts[yardCycleIndex(n, since, 900)]);
+  if (l.eggSavedMinutes() < EGG_SHAKE_CAP) opts[n++] = T(S_EGG_SHAKE);
+  if (l.eggIsCaptured()) opts[n++] = T(S_EGG_CAPTURED);  // v2.2: el de una captura (ya se sabe que es)
+  else if (l.eggRarity() >= R_RARO) opts[n++] = T(l.eggRarity() == R_LEGENDARIO ? S_EGG_LEGEND : S_EGG_RARE);
+  uint32_t since = 2600 - timeLeft(yardEggInfoUntil[s]);
+  yardBubbleAt(yardEggX[s], tip, opts[yardCycleIndex(n, since, 900)]);
 }
 
-// el huevo o la comida (lo que este en el suelo) en su sitio del orden de dibujo; INT32_MAX: nada
-static int32_t yardObjY() {
-  if (pet.isEgg() && yardEggX >= 0) return yardEggY;
-  if (yardFood.phase != YF_NONE) return yardFood.y;
-  return INT32_MAX;
+// lo del suelo que se ordena con los bichos (los dos huecos y la comida): su y, o INT32_MAX si no hay
+static int32_t yardObjY(int k) {
+  if (k < HOME_SLOTS) {
+    const PetLife &l = pet.home(k);
+    return (l.isEgg() && !l.isVacant() && yardEggX[k] >= 0) ? yardEggY[k] : INT32_MAX;
+  }
+  return yardFood.phase != YF_NONE ? yardFood.y : INT32_MAX;
 }
-static void yardDrawObj(uint32_t now) {
-  yardDrawEgg(now);
-  yardDrawFood(now);
+static void yardDrawObj(int k, uint32_t now) {
+  if (k < HOME_SLOTS) yardDrawEgg((uint8_t)k, now);
+  else yardDrawFood(now);
 }
+#define YARD_OBJS (HOME_SLOTS + 1)
 
 void yardDrawPets(uint32_t now) {
   uint8_t order[YARD_PETS_MAX];
   int n = yardDrawOrder(yardW, order);
-  // el huevo se rompe donde estaba (Y3); sin sitio, donde el bicho de casa
-  if (yardEggX >= 0) hatchAt(yardEggX, yardEggY - YARD_EGG_MID, YARD_EGG_S);
-  else if (yardW.p[0].on) hatchAt((int)yardW.p[0].x, (int)yardW.p[0].y - YARD_EGG_MID, YARD_EGG_S);
-  else hatchAt(CX, PET_CY, 5);
-  bool hatching = drawHatchFx(now);  // el huevo aun se rompe: el de casa no se ve
-  int32_t objY = yardObjY();
-  bool objDone = objY == INT32_MAX;
+  bool hatching[HOME_SLOTS];
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    // el huevo se rompe donde estaba (Y3); sin sitio, donde su bicho
+    if (yardEggX[s] >= 0) hatchAtSlot(s, yardEggX[s], yardEggY[s] - YARD_EGG_MID, YARD_EGG_S);
+    else if (yardW.p[s].on) hatchAtSlot(s, (int)yardW.p[s].x, (int)yardW.p[s].y - YARD_EGG_MID, YARD_EGG_S);
+    else hatchAtSlot(s, CX, PET_CY, 5);
+    hatching[s] = drawHatchFxSlot(s, now);  // el huevo aun se rompe: su bicho no se ve
+  }
+  bool objDone[YARD_OBJS];
+  int32_t objY[YARD_OBJS];
+  for (int k = 0; k < YARD_OBJS; k++) {
+    objY[k] = yardObjY(k);
+    objDone[k] = objY[k] == INT32_MAX;
+  }
   bool encDone = yardEncX < 0;  // v2.2: lo que se mueve tambien se ordena con los bichos
-  for (int k = 0; k < n; k++) {
-    int i = order[k];
-    if (!objDone && yardW.p[i].y > objY) {  // lo del suelo que queda detras de este bicho
-      yardDrawObj(now);
-      objDone = true;
-    }
+  for (int j = 0; j < n; j++) {
+    int i = order[j];
+    for (int k = 0; k < YARD_OBJS; k++)
+      if (!objDone[k] && yardW.p[i].y > objY[k]) {  // lo del suelo que queda detras de este bicho
+        yardDrawObj(k, now);
+        objDone[k] = true;
+      }
     if (!encDone && yardW.p[i].y > yardEncY) {
       yardDrawEnc(now);
       encDone = true;
     }
-    if (i == 0 && (hatching || pet.evolving())) continue;
+    if (i < HOME_SLOTS && (hatching[i] || pet.home(i).evolving())) continue;
     yardDrawPet(i, now);
   }
-  if (!objDone) yardDrawObj(now);
+  for (int k = 0; k < YARD_OBJS; k++)
+    if (!objDone[k]) yardDrawObj(k, now);
   if (!encDone) yardDrawEnc(now);
-  if (pet.evolving()) drawEvolveFX(now);  // la evolucion, grande en el centro como siempre
+  if (pet.evolving()) drawEvolveFX(now);  // la evolucion (siempre la del foco), grande en el centro como siempre
 }
 
-// bicho bajo el dedo (el de encima primero): 0 el de casa, 1 el de la caja, -1 ninguno
+// bicho bajo el dedo (el de encima primero): 0 / 1 los de casa, YARD_TRV el viajero, -1 ninguno
 int yardPetAt(int16_t x, int16_t y) {
   uint8_t order[YARD_PETS_MAX];
   int n = yardDrawOrder(yardW, order);
@@ -8211,24 +8501,25 @@ int yardPetAt(int16_t x, int16_t y) {
 }
 
 // ---- las cosas del suelo: cacas y regalos ----
-// Las cacas guardadas siguen siendo un numero (y sus huecos, pet.poopSlots); su sitio en el patio
-// solo vive en RAM: una nueva cae junto a los pies del bicho, y al arrancar se reparten al azar
-int16_t yardPoopX[POOP_MAX], yardPoopY[POOP_MAX];
-uint8_t yardPoopHave = 0;   // huecos con sitio
+// Las cacas guardadas siguen siendo un numero (y sus huecos, poopSlots) de cada bicho; su sitio en el
+// patio solo vive en RAM: una nueva cae junto a los pies de su bicho, y al arrancar se reparten al azar
+int16_t yardPoopX[HOME_SLOTS][POOP_MAX], yardPoopY[HOME_SLOTS][POOP_MAX];
+uint8_t yardPoopHave[HOME_SLOTS] = { 0, 0 };  // huecos con sitio
 bool yardPoopBooted = false;
 #define YARD_GIFTS_SHOWN 3
 int16_t yardGiftX[YARD_GIFTS_SHOWN], yardGiftY[YARD_GIFTS_SHOWN];
 uint8_t yardGiftN = 0;
 int8_t yardGiftTapped = -1;  // el que se toco: es el que desaparece al abrirse
 
-// lo que ya hay en el suelo (para no amontonar)
-static int yardThings(int16_t *ox, int16_t *oy, int skipPoop) {
+// lo que ya hay en el suelo (para no amontonar); skip = la caca (hueco * POOP_MAX + i) que se esta colocando
+static int yardThings(int16_t *ox, int16_t *oy, int skip) {
   int n = 0;
-  for (int i = 0; i < POOP_MAX; i++)
-    if ((yardPoopHave & (1 << i)) && i != skipPoop) {
-      ox[n] = yardPoopX[i];
-      oy[n++] = yardPoopY[i];
-    }
+  for (int s = 0; s < HOME_SLOTS; s++)
+    for (int i = 0; i < POOP_MAX; i++)
+      if ((yardPoopHave[s] & (1 << i)) && s * POOP_MAX + i != skip) {
+        ox[n] = yardPoopX[s][i];
+        oy[n++] = yardPoopY[s][i];
+      }
   for (int i = 0; i < yardGiftN; i++) {
     ox[n] = yardGiftX[i];
     oy[n++] = yardGiftY[i];
@@ -8239,42 +8530,50 @@ static int yardThings(int16_t *ox, int16_t *oy, int skipPoop) {
   }
   return n;
 }
-#define YARD_THINGS_MAX (POOP_MAX + YARD_GIFTS_SHOWN + 1)
+#define YARD_THINGS_MAX (HOME_SLOTS * POOP_MAX + YARD_GIFTS_SHOWN + 1)
 
 void yardSyncThings() {
-  int16_t ox[YARD_THINGS_MAX], oy[YARD_THINGS_MAX];
-  uint8_t m = pet.poopSlots();
-  for (int i = 0; i < POOP_MAX; i++) {
-    uint8_t bit = 1 << i;
-    if (!(m & bit)) {
-      yardPoopHave &= ~bit;
-      continue;
+  int16_t ox[YARD_THINGS_MAX + HOME_SLOTS], oy[YARD_THINGS_MAX + HOME_SLOTS];
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    uint8_t m = pet.home(s).poopSlots();
+    for (int i = 0; i < POOP_MAX; i++) {
+      uint8_t bit = 1 << i;
+      if (!(m & bit)) {
+        yardPoopHave[s] &= ~bit;
+        continue;
+      }
+      bool have = yardPoopHave[s] & bit;
+      if (have && yardSpotOk(yardWalk, yardPoopX[s][i], yardPoopY[s][i])) continue;
+      yardPoopHave[s] &= ~bit;
+      int n = yardThings(ox, oy, s * POOP_MAX + i), x, y;
+      bool ok = (yardPoopBooted && !have && yardW.p[s].on)
+                    ? yardDropSpot(yardWalk, yardW.p[s].x, yardW.p[s].y, ox, oy, n, &x, &y)  // recien hecha: a sus pies
+                    : yardFreeSpot(yardW, yardWalk, yardW.rng, ox, oy, n, &x, &y);        // al arrancar o con otro mapa
+      if (!ok) continue;
+      yardPoopX[s][i] = (int16_t)x;
+      yardPoopY[s][i] = (int16_t)y;
+      yardPoopHave[s] |= bit;
     }
-    bool have = yardPoopHave & bit;
-    if (have && yardSpotOk(yardWalk, yardPoopX[i], yardPoopY[i])) continue;
-    yardPoopHave &= ~bit;
-    int n = yardThings(ox, oy, i), x, y;
-    bool ok = (yardPoopBooted && !have && yardW.p[0].on)
-                  ? yardDropSpot(yardWalk, yardW.p[0].x, yardW.p[0].y, ox, oy, n, &x, &y)  // recien hecha: a sus pies
-                  : yardFreeSpot(yardW, yardWalk, yardW.rng, ox, oy, n, &x, &y);        // al arrancar o con otro mapa
-    if (!ok) continue;
-    yardPoopX[i] = (int16_t)x;
-    yardPoopY[i] = (int16_t)y;
-    yardPoopHave |= bit;
   }
   yardPoopBooted = true;
-  // el huevo (Y3): en una celda libre cerca del centro (donde nacera el bicho). Su sitio se queda hasta
-  // que acaba de romperse: el bicho de casa sale de ahi
-  if (pet.isEgg()) {
-    if (yardEggX < 0 || !yardSpotOk(yardWalk, yardEggX, yardEggY - YBG_CELL / 2)) {
-      int c = yardNearestFreeCell(yardWalk, CX, 250);
-      if (c >= 0) {
-        yardEggX = (int16_t)yardCellCenter(yardCellCX(c));
-        yardEggY = (int16_t)(yardCellCenter(yardCellCY(c)) + 10);
+  // el huevo de cada hueco (Y3): en una celda libre cerca del centro (donde nacera el bicho), el segundo a
+  // un lado. Su sitio se queda hasta que acaba de romperse: el bicho sale de ahi
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    const PetLife &l = pet.home(s);
+    if (l.isEgg() && !l.isVacant()) {
+      if (yardEggX[s] < 0 || !yardSpotOk(yardWalk, yardEggX[s], yardEggY[s] - YBG_CELL / 2)) {
+        int c = yardNearestFreeCell(yardWalk, CX + (s ? 110 : 0), 250);
+        int o = s ^ 1;  // que no caiga en la celda del otro huevo
+        if (c >= 0 && yardEggX[o] >= 0 && yardCellAt(yardEggX[o], yardEggY[o] - 10) == c)
+          c = yardNearestFreeCell(yardWalk, CX + (s ? 170 : -60), 250);
+        if (c >= 0) {
+          yardEggX[s] = (int16_t)yardCellCenter(yardCellCX(c));
+          yardEggY[s] = (int16_t)(yardCellCenter(yardCellCY(c)) + 10);
+        }
       }
+    } else if (!fxo.find(FXO_HATCH, -1, s) && yardEggX[s] >= 0) {
+      yardEggX[s] = -1;
     }
-  } else if (!fxo.find(FXO_HATCH) && yardEggX >= 0) {
-    yardEggX = -1;
   }
   uint8_t want = pet.giftCount() < YARD_GIFTS_SHOWN ? pet.giftCount() : YARD_GIFTS_SHOWN;
   while (yardGiftN > want) {  // se abrio uno: se va el tocado
@@ -8301,16 +8600,17 @@ void yardSyncThings() {
     yardGiftX[yardGiftN] = (int16_t)x;
     yardGiftY[yardGiftN++] = (int16_t)y;
   }
-  // v2.2: el encuentro salvaje, en un sitio libre (lejos del huevo, que esta cerca del centro); se va con el
+  // v2.2: el encuentro salvaje, en un sitio libre (lejos de los huevos, que estan cerca del centro); se va con el
   if (!pet.encShown()) {
     yardEncX = -1;
   } else if (yardEncX < 0 || !yardSpotOk(yardWalk, yardEncX, yardEncY)) {
     yardEncX = -1;
     int n = yardThings(ox, oy, -1), x, y;
-    if (pet.isEgg() && yardEggX >= 0 && n < YARD_THINGS_MAX) {
-      ox[n] = yardEggX;
-      oy[n++] = yardEggY;
-    }
+    for (uint8_t s = 0; s < HOME_SLOTS; s++)
+      if (pet.home(s).isEgg() && yardEggX[s] >= 0) {
+        ox[n] = yardEggX[s];
+        oy[n++] = yardEggY[s];
+      }
     // es ancho (64 px): que tampoco pise agua ni rocas a los lados ni detras (si no hay sitio asi, donde sea)
     for (int tries = 0; tries < 16; tries++) {
       if (!yardFreeSpot(yardW, yardWalk, yardW.rng, ox, oy, n, &x, &y)) break;
@@ -8386,11 +8686,12 @@ bool yardEncAt(int16_t x, int16_t y) {
 
 void yardDrawThings(uint32_t now) {
   // SPR_POOP (32x32) a escala 2, como en la casa de lado: la tinta ~32x40 con los pies del monton en y
-  for (int i = 0; i < POOP_MAX; i++)
-    if (yardPoopHave & (1 << i)) drawMap(SPR_POOP, 32, yardPoopX[i] - 34, yardPoopY[i] - 58, 2, false);
+  for (int s = 0; s < HOME_SLOTS; s++)
+    for (int i = 0; i < POOP_MAX; i++)
+      if (yardPoopHave[s] & (1 << i)) drawMap(SPR_POOP, 32, yardPoopX[s][i] - 34, yardPoopY[s][i] - 58, 2, false);
   uint32_t left = timeLeft(poopPuffUntil);
   if (left && poopPuffSlot >= 0) {  // la que se acaba de limpiar: destellos donde estaba
-    int cx = yardPoopX[poopPuffSlot], cy = yardPoopY[poopPuffSlot] - 20;
+    int cx = yardPoopX[poopPuffHome & 1][poopPuffSlot], cy = yardPoopY[poopPuffHome & 1][poopPuffSlot] - 20;
     int r = 4 + (int)((POOP_PUFF_MS - left) / 30);
     for (int k = 0; k < 4; k++) {
       int sx = cx + ((k & 1) ? r : -r), sy = cy + ((k & 2) ? r : -r);
@@ -8413,18 +8714,25 @@ void yardDrawThings(uint32_t now) {
 }
 
 #define YARD_THING_HIT_R 28
+// la caca bajo el dedo: hueco de casa * POOP_MAX + su sitio, o -1
 int yardPoopAt(int16_t x, int16_t y) {
-  for (int i = 0; i < POOP_MAX; i++) {
-    if (!(yardPoopHave & (1 << i))) continue;
-    int dx = x - yardPoopX[i], dy = y - (yardPoopY[i] - 20);
-    if (dx * dx + dy * dy <= YARD_THING_HIT_R * YARD_THING_HIT_R) return i;
-  }
+  for (int s = 0; s < HOME_SLOTS; s++)
+    for (int i = 0; i < POOP_MAX; i++) {
+      if (!(yardPoopHave[s] & (1 << i))) continue;
+      int dx = x - yardPoopX[s][i], dy = y - (yardPoopY[s][i] - 20);
+      if (dx * dx + dy * dy <= YARD_THING_HIT_R * YARD_THING_HIT_R) return s * POOP_MAX + i;
+    }
   return -1;
 }
-bool yardEggAt(int16_t x, int16_t y) {
-  if (!pet.isEgg() || yardEggX < 0) return false;
-  int dx = x - yardEggX, dy = y - (yardEggY - YARD_EGG_MID);
-  return dx * dx + dy * dy <= 46 * 46;
+// el huevo bajo el dedo: su hueco de casa, o -1
+int yardEggAt(int16_t x, int16_t y) {
+  for (int s = 0; s < HOME_SLOTS; s++) {
+    const PetLife &l = pet.home(s);
+    if (!l.isEgg() || l.isVacant() || yardEggX[s] < 0) continue;
+    int dx = x - yardEggX[s], dy = y - (yardEggY[s] - YARD_EGG_MID);
+    if (dx * dx + dy * dy <= 46 * 46) return s;
+  }
+  return -1;
 }
 int yardGiftAt(int16_t x, int16_t y) {
   for (int i = 0; i < yardGiftN; i++) {
@@ -8434,51 +8742,57 @@ int yardGiftAt(int16_t x, int16_t y) {
   return -1;
 }
 
-// suelta la comida del panel Cuidar (kind: baya 0-2, tarta 3) cerca del bicho de casa. 1 cae, 0 ya hay
+// suelta la comida del panel Cuidar (kind: baya 0-2, tarta 3) cerca del bicho del foco. 1 cae, 0 ya hay
 // una en el suelo, -1 no hay bicho en el patio
 int yardDropFood(uint8_t kind) {
   if (yardFood.phase != YF_NONE) return 0;
-  if (!yardW.p[0].on || !yardHomeNow() || pet.isEgg()) return -1;
-  YardPet &p = yardW.p[0];
-  int16_t ox[YARD_THINGS_MAX + 1], oy[YARD_THINGS_MAX + 1];  // + el de la caja
+  uint8_t f = pet.focusSlot;
+  if (!yardW.p[f].on || !yardHomeNow() || pet.isEgg()) return -1;
+  YardPet &p = yardW.p[f];
+  int16_t ox[YARD_THINGS_MAX + YARD_PETS_MAX], oy[YARD_THINGS_MAX + YARD_PETS_MAX];  // + los otros bichos
   int n = yardThings(ox, oy, -1);
-  if (yardW.p[1].on) {  // tampoco a los pies del de la caja
-    ox[n] = (int16_t)yardW.p[1].x;
-    oy[n++] = (int16_t)yardW.p[1].y;
-  }
+  for (int i = 0; i < YARD_PETS_MAX; i++)
+    if (i != f && yardW.p[i].on) {  // tampoco a los pies de los otros
+      ox[n] = (int16_t)yardW.p[i].x;
+      oy[n++] = (int16_t)yardW.p[i].y;
+    }
   int c = yardFoodCell(yardWalkNow(), p.x, p.y, p.face, ox, oy, n);
   yardFoodDrop(yardFood, kind, c, p.x, p.y, millis(), pet.uid);
-  Serial.printf("FOOD drop kind=%u cell=%d at %d,%d\n", kind, c, yardFood.x, yardFood.y);
+  Serial.printf("FOOD drop kind=%u slot=%u cell=%d at %d,%d\n", kind, f, c, yardFood.x, yardFood.y);
   return 1;
 }
 
-// ---- el globo sobre el bicho ----
-// lo que pasa ahora mismo (uno solo, por orden de importancia), o nullptr
-const char *yardEventMsg() {
-  if (timeLeft(cakeHintUntil)) return T(S_NO_CAKE);
-  if (timeLeft(tastesMsgUntil) && !pet.sleeping) return T(S_TASTES);
-  if (bathUntil) return "Splish splash!";
-  if (pet.emote() == EMOTE_ANGRY) return T(S_GRUMPY);
-  if (pet.emote() == EMOTE_DIZZY) return T(S_DIZZY);
-  if (pet.sleeping) return "Zzz...";
-  if (timeLeft(revivedMsgUntil)) return T(S_REVIVED);
-  if (pet.eating()) return T(S_EATING);
-  if (pet.showHeart()) return T(S_LIKES);
+// ---- el globo sobre cada bicho ----
+// lo que pasa ahora mismo (uno solo, por orden de importancia), o nullptr. Los avisos de la UI (sin tarta,
+// le gusta, el bano, revivido) son del foco
+const char *yardEventMsg(uint8_t s) {
+  const PetLife &l = pet.home(s);
+  bool focus = s == pet.focusSlot;
+  if (focus && timeLeft(cakeHintUntil)) return T(S_NO_CAKE);
+  if (focus && timeLeft(tastesMsgUntil) && !l.sleeping) return T(S_TASTES);
+  if (focus && bathUntil) return "Splish splash!";
+  if (l.emote() == EMOTE_ANGRY) return T(S_GRUMPY);
+  if (l.emote() == EMOTE_DIZZY) return T(S_DIZZY);
+  if (l.sleeping) return "Zzz...";
+  if (focus && timeLeft(revivedMsgUntil)) return T(S_REVIVED);
+  if (l.eating()) return T(S_EATING);
+  if (l.showHeart()) return T(S_LIKES);
   return nullptr;
 }
 
-// las necesidades bajas, todas (el globo pasa de una a otra cada segundo)
-int yardNeedList(const char **out) {
+// las necesidades bajas del hueco s, todas (el globo pasa de una a otra cada segundo)
+int yardNeedList(uint8_t s, const char **out) {
+  const PetLife &l = pet.home(s);
   int n = 0;
-  if (pet.neglected()) {  // abandono (v1.60): solo eso
-    out[n++] = T(pet.bond > 0 ? S_ABANDONED : S_WEAK);
+  if (l.neglected()) {  // abandono (v1.60): solo eso
+    out[n++] = T(l.bond > 0 ? S_ABANDONED : S_WEAK);
     return n;
   }
-  if (pet.sleepy()) out[n++] = T(S_SLEEPY);
-  if (pet.fullness < NEED_LOW) out[n++] = T(S_HUNGRY);
-  if (pet.hygiene < NEED_LOW) out[n++] = T(S_NEEDS_BATH);
-  if (pet.energy < NEED_LOW) out[n++] = T(S_EXHAUSTED);
-  if (pet.joy < NEED_LOW) out[n++] = T(S_SAD);
+  if (pet.sleepyOf(l)) out[n++] = T(S_SLEEPY);
+  if (l.fullness < NEED_LOW) out[n++] = T(S_HUNGRY);
+  if (l.hygiene < NEED_LOW) out[n++] = T(S_NEEDS_BATH);
+  if (l.energy < NEED_LOW) out[n++] = T(S_EXHAUSTED);
+  if (l.joy < NEED_LOW) out[n++] = T(S_SAD);
   return n;
 }
 
@@ -8508,38 +8822,53 @@ void yardBubbleAt(int cx, int tipY, const char *text) {
   printT(text);
 }
 
-const char *yardBubblePrev = nullptr, *yardBubbleLatched = nullptr;
-uint32_t yardBubbleUntil = 0;
-void yardDrawBubble(uint32_t now) {
-  if (pet.isEgg()) {  // Y3: el huevo en el patio
-    yardDrawEggBubble(now);
-    return;
+const char *yardBubblePrev[HOME_SLOTS] = { nullptr, nullptr }, *yardBubbleLatched[HOME_SLOTS] = { nullptr, nullptr };
+uint32_t yardBubbleUntil[HOME_SLOTS] = { 0, 0 };
+// lo que dice el globo del hueco s ahora (nullptr: nada)
+const char *yardBubbleText(uint8_t s, uint32_t now) {
+  const char *ev = yardEventMsg(s);
+  if (ev && ev != yardBubblePrev[s]) {  // un suceso nuevo: se queda al menos Y_BUBBLE_MS aunque acabe antes
+    yardBubbleLatched[s] = ev;
+    yardBubbleUntil[s] = now + Y_BUBBLE_MS;
   }
-  if (pet.evolving() || fxHatchHidesPet(now)) return;
-  const char *ev = yardEventMsg();
-  if (ev && ev != yardBubblePrev) {  // un suceso nuevo: se queda al menos Y_BUBBLE_MS aunque acabe antes
-    yardBubbleLatched = ev;
-    yardBubbleUntil = now + Y_BUBBLE_MS;
-  }
-  yardBubblePrev = ev;
-  const char *txt = ev ? ev : (timeLeft(yardBubbleUntil) ? yardBubbleLatched : nullptr);
+  yardBubblePrev[s] = ev;
+  const char *txt = ev ? ev : (timeLeft(yardBubbleUntil[s]) ? yardBubbleLatched[s] : nullptr);
   if (!txt) {
     const char *needs[6];
-    int n = yardNeedList(needs);
+    int n = yardNeedList(s, needs);
     int k = yardCycleIndex(n, now, Y_BUBBLE_CYCLE_MS);
     if (k >= 0) txt = needs[k];
   }
-  if (!txt) return;
-  yardBubbleAt((int)yardW.p[0].x, yardPetHeadY(0) - 4, txt);
+  return txt;
+}
+
+// v3.0: cada bicho (o huevo) con su globo. Si los dos tienen algo que decir y estan cerca, se turnan
+void yardDrawBubble(uint32_t now) {
+  const char *txt[HOME_SLOTS] = { nullptr, nullptr };
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    const PetLife &l = pet.home(s);
+    if (l.isEgg() || !yardW.p[s].on || l.evolving() || fxHatchHidesPetSlot(s, now)) continue;
+    txt[s] = yardBubbleText(s, now);
+  }
+  bool both = txt[0] && txt[1] && fabsf(yardW.p[0].x - yardW.p[1].x) < 200 && fabsf(yardW.p[0].y - yardW.p[1].y) < 90;
+  int turn = both ? (int)((now / (Y_BUBBLE_CYCLE_MS * 2)) % 2) : -1;
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    if (pet.home(s).isEgg()) {  // Y3: el huevo en el patio
+      yardDrawEggBubble(s, now);
+      continue;
+    }
+    if (!txt[s] || (turn >= 0 && turn != s)) continue;
+    yardBubbleAt((int)yardW.p[s].x, yardPetHeadY(s) - 4, txt[s]);
+  }
 }
 
 // "LIM +10": lo que cambio una necesidad, subiendo sobre el bicho (el patio no tiene barras)
-void yardStatPill(uint8_t a, int16_t v, float t) {
+void yardStatPill(uint8_t slot, uint8_t a, int16_t v, float t) {
   char s[24];
   snprintf(s, sizeof(s), v > 0 ? "%s +%d" : "%s %d", T((StrId)(S_BAR_FOOD + (a & 3))), v);
   setSize(2);
   int w = textW(s, 2) + 16;
-  int cx = petFootX(), y = yardPetHeadY(0) - 70 - (a & 1) * 28 - (int)(t * 26);
+  int cx = petFootXOf(slot), y = yardPetHeadY(slot & 1) - 70 - (a & 1) * 28 - (int)(t * 26);
   if (y < 44) y = 44;
   if (cx - w / 2 < 40) cx = 40 + w / 2;
   if (cx + w / 2 > 426) cx = 426 - w / 2;
@@ -8577,11 +8906,17 @@ void drawBatteryHud(int x, int y) {
 
 // boton del dock -> boton de la fila vieja, para los efectos de pulsar y temblar (fx.h)
 static int yardDockFx(int d) { return d == 0 ? BTN_CARE : d == 1 ? 1 : BTN_BAG; }
-// dormido: Cuidar (despertarlo) y la Mochila (mirar) siguen; Jugar solo con bichos en la caja (fases)
-// con el huevo (Y3): Cuidar no (no hay a quien), Jugar solo con bichos en la caja
+// v3.0: con que cualquiera de los dos de casa pueda. Cuidar: algun bicho nacido (dormido tambien: para
+// despertarlo). Jugar: alguno nacido y despierto, o bichos en la caja (las fases). La Mochila, siempre
 static bool yardDockOff(int d) {
-  if (pet.isEgg()) return d == 0 || (d == 1 && !pet.boxHasPets());
-  return d == 1 && pet.sleeping && !pet.boxHasPets();
+  bool anyHatched = false, anyAwake = false;
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    const PetLife &l = pet.home(s);
+    anyHatched |= l.hatched();
+    anyAwake |= l.hatched() && !l.sleeping;
+  }
+  if (d == 0) return !anyHatched;
+  return d == 1 && !anyAwake && !pet.boxHasPets();
 }
 
 #define YARD_COIN_Y 40   // la cartera, justo debajo de la bateria (v2.1: sin hora, chocaba con el aviso de vuelta)
@@ -8631,14 +8966,16 @@ void yardTap(int16_t x, int16_t y) {
     else openBag();
     return;
   }
-  if (yardEggAt(x, y)) {  // Y3: el huevo se tambalea; el del patio dice lo que falta, el inicial se abre a toques
-    yardEggTapAt = millis();
+  int es = yardEggAt(x, y);
+  if (es >= 0) {  // Y3: el huevo se tambalea; el del patio dice lo que falta, el inicial se abre a toques
+    yardEggTapAt[es] = millis();
     sfxPlay(SFX_TAP);
-    if (pet.yardEgg()) {
-      yardEggInfo();
-      Serial.printf("EGG tap left=%u\n", pet.eggMinutesLeft());
+    const PetLife &l = pet.home((uint8_t)es);
+    if (pet.yardEggOf(l)) {
+      yardEggInfoUntil[es] = millis() + 2600;
+      Serial.printf("EGG tap slot=%d left=%u\n", es, pet.eggMinutesLeftOf(l));
     } else {
-      pet.eggTap();
+      pet.onSlot((uint8_t)es, [] { pet.eggTap(); });
     }
     return;
   }
@@ -8647,14 +8984,20 @@ void yardTap(int16_t x, int16_t y) {
     openEncounter();
     return;
   }
-  int pp = yardPoopAt(x, y);  // una caca: fuera con un toque (como en la casa de lado)
+  int pp = yardPoopAt(x, y);  // una caca: fuera con un toque (como en la casa de lado). v3.0: la de su bicho
   if (pp >= 0) {
-    FxNeedSnap ns = fxSnap();
-    if (pet.cleanPoop(pp)) {
-      Serial.printf("POOP clean %d\n", pp);
+    uint8_t ps = (uint8_t)(pp / POOP_MAX), pi = (uint8_t)(pp % POOP_MAX);
+    bool ok = false;
+    pet.onSlot(ps, [&] {
+      FxNeedSnap ns = fxSnap();
+      ok = pet.cleanPoop(pi);
+      if (ok) fxNeeds(ns);
+    });
+    if (ok) {
+      Serial.printf("POOP clean slot=%u %u\n", ps, pi);
       sfxPlay(SFX_TAP);
-      fxNeeds(ns);
-      poopPuffSlot = pp;
+      poopPuffHome = ps;
+      poopPuffSlot = (int8_t)pi;
       poopPuffUntil = millis() + POOP_PUFF_MS;
     } else {
       sfxPlay(SFX_DENY);
@@ -8664,32 +9007,33 @@ void yardTap(int16_t x, int16_t y) {
   int g = yardGiftAt(x, y);
   if (g >= 0) {
     yardGiftTapped = (int8_t)g;
+    // v3.0: lo abre un bicho de casa despierto (el del foco, o si no el otro: el que salta de alegria)
+    if (!pet.canOpenGift()) {
+      const PetLife &o = pet.other;
+      if (o.hatched() && !o.sleeping && !o.busyEnding()) uiFocus(pet.focusSlot ^ 1);
+    }
     openGiftTap();
     return;
   }
   int who = yardPetAt(x, y);
-  if (who != 1 && yardBoxSlot >= 0 && yardW.p[1].on && trvBackSlot() == yardBoxSlot) {  // el "!" del viajero tambien vale
-    YardBody bb = yardBodyOf(1);
-    int bx = (int)yardW.p[1].x + bb.w / 2 + 14, by = (int)yardW.p[1].y - bb.h - 12;
-    if (abs(x - bx) < 34 && abs(y - by) < 34) who = 1;
+  if (who != YARD_TRV && yardBoxSlot >= 0 && yardW.p[YARD_TRV].on && trvBackSlot() == yardBoxSlot) {  // el "!" del viajero tambien vale
+    YardBody bb = yardBodyOf(YARD_TRV);
+    int bx = (int)yardW.p[YARD_TRV].x + bb.w / 2 + 14, by = (int)yardW.p[YARD_TRV].y - bb.h - 12;
+    if (abs(x - bx) < 34 && abs(y - by) < 34) who = YARD_TRV;
   }
-  if (who == 0) {  // el de casa: su ficha
-    Serial.println("PET card");
+  if (who >= 0 && who < HOME_SLOTS) {  // uno de casa: pasa a tener el foco y se abre su ficha
+    if (!uiFocus((uint8_t)who)) {
+      sfxPlay(SFX_DENY);
+      return;
+    }
+    Serial.printf("PET card slot=%d\n", who);
     sfxPlay(SFX_TAP);
     cardOpen = true;
     cardPage = 0;
-  } else if (who == 1 && yardBoxSlot >= 0 && trvBackSlot() == yardBoxSlot) {  // v2.1: el viajero: lo que trajo
+  } else if (who == YARD_TRV && yardBoxSlot >= 0 && trvBackSlot() == yardBoxSlot) {  // v2.1: el viajero: lo que trajo
     Serial.println("PET travel result");
     returnOpen = true;
     returnOpenAt = millis();
-  } else if (who == 1) {  // el de la caja: la caja (su ficha esta ahi)
-    Serial.println("PET box");
-    if (boxCanOpen()) {
-      sfxPlay(SFX_TAP);
-      openBox();
-    } else {
-      sfxPlay(SFX_DENY);
-    }
   }
 }
 
@@ -8795,6 +9139,17 @@ void drawChoiceDialog() {
 }
 
 // boton-CTA rojo y grande para evolucionar (pulsa para llamar la atencion)
+// v3.0: el hueco cuyo bicho tiene el boton de evolucion (kind 1) o de despedida (kind 2): el del foco
+// primero; -1 = ninguno. Tocarlo le da el foco y abre su dialogo
+int8_t homeButtonSlot(uint8_t kind) {
+  for (uint8_t k = 0; k < HOME_SLOTS; k++) {
+    uint8_t s = k ? pet.focusSlot ^ 1 : pet.focusSlot;
+    const PetLife &l = pet.home(s);
+    if (kind == 1 ? l.wantEvolveButton() : l.wantFarewellButton()) return (int8_t)s;
+  }
+  return -1;
+}
+
 void drawEvolveButton() {
   uint32_t now = millis();
   int p = (int)(5 * sinf(now * 0.006f));  // late: -5..5
@@ -8817,7 +9172,9 @@ void drawFarewellButton() {
   gfx->fillRoundRect(x, y, w, h, 16, UI_BAR_WARN);
   gfx->drawRoundRect(x, y, w, h, 16, UI_INK);
   char buf[52];
-  const char *nm = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
+  int8_t fs = homeButtonSlot(2);
+  const PetLife &l = pet.home(fs >= 0 ? (uint8_t)fs : pet.focusSlot);  // v3.0: el que quiere despedirse
+  const char *nm = l.nick[0] ? l.nick : dexName(l.speciesId);
   snprintf(buf, sizeof(buf), T(S_FAREWELL_BTN), nm);
   gfx->setTextColor(UI_INK);
   setSize(2);
@@ -8935,7 +9292,7 @@ void dyingTap(int16_t x, int16_t y) {
       if (pet.revive()) {
         Serial.printf("REVIVE ok, left=%u\n", pet.items[IT_REVIVE]);
         fxNeeds(ns);  // "+50" en cada barra
-        fxMistakeW.reset(pet.careMistakes);  // el descuido que cuenta revivir no salta como "!"
+        fxMistakeW[pet.focusSlot].reset(pet.careMistakes);  // el descuido que cuenta revivir no salta como "!"
         sfxPlay(SFX_HATCH);
         revivedMsgUntil = millis() + 5000;
         fxPose(PMD_POSE, millis(), 1500);
@@ -9235,10 +9592,11 @@ int pmdIdleHeight() {
 }
 
 // desplazamiento del vaiven del mareo, que se va calmando
-int dizzyWobble(uint32_t now) {
-  if (pet.emote() != EMOTE_DIZZY) return 0;
-  return (int)(7.0f * (1.0f - pet.emoteT()) * sinf(now * 0.03f));
+int dizzyWobbleOf(const PetLife &l, uint32_t now) {
+  if (l.emote() != EMOTE_DIZZY) return 0;
+  return (int)(7.0f * (1.0f - l.emoteT()) * sinf(now * 0.03f));
 }
+int dizzyWobble(uint32_t now) { return dizzyWobbleOf(pet, now); }
 
 // sprite animado desde la SD: zoom entero por pixel, frames a su ritmo
 void drawPetSD() {
@@ -9466,7 +9824,7 @@ struct {
   uint32_t uid[TEAM_MAX] = { 0 };
   int16_t dex[TEAM_MAX] = { 0 };
   bool shiny[TEAM_MAX] = { false };
-  bool home[TEAM_MAX] = { false };  // el de casa: su sprite es pmd
+  uint8_t home[TEAM_MAX] = { 0 };  // uno de casa: su hueco + 1 (su sprite es homeMon[hueco]); 0 = de la caja
   char name[TEAM_MAX][BT_NAME_LEN] = {};
   bool cleared = false;  // resultado: fase superada
   StageReward rw = { false, false, (uint8_t)IT_COUNT, 0, 0 };  // lo que pago stageDone
@@ -9506,7 +9864,9 @@ void closeBattle() {
 // quien esta en el campo: 0 = el aliado en curso, 1 = el rival en curso
 int16_t battleDex(uint8_t side) { return side ? bt.run.foeInfo().dex : bt.dex[bt.run.ally]; }
 const char *battleName(uint8_t side) { return side ? dexName(battleDex(1)) : bt.name[bt.run.ally]; }
-PmdMon &battleMon(uint8_t side) { return side ? foePmd : (bt.home[bt.run.ally] ? pmd : allyPmd); }
+PmdMon &battleMon(uint8_t side) {
+  return side ? foePmd : (bt.home[bt.run.ally] ? homeMon[(bt.home[bt.run.ally] - 1) & 1] : allyPmd);
+}
 
 // sprites (bloquean el loop: solo al empezar y en el relevo)
 void battleLoadFoe() {
@@ -9526,18 +9886,20 @@ static bool btAddMate(uint32_t id, uint8_t m, Fighter &out) {
     if (bt.uid[j] == id) return false;
   int8_t k = pet.teamSlotOf(id);
   if (k < 0 || !pet.teamCanFight(id)) return false;
-  if (k == TEAM_HOME) {
-    out = makeFighter(pet.speciesId, pet.level(), pet.geneAtk, pet.geneDef, pet.geneSpe, pet.trAtk, pet.trDef, pet.trSpe);
-    bt.dex[m] = pet.speciesId;
-    bt.shiny[m] = pet.shiny;
-    bt.home[m] = true;
-    snprintf(bt.name[m], BT_NAME_LEN, "%.*s", (int)sizeof(pet.nick), pet.nick[0] ? pet.nick : dexName(pet.speciesId));
+  if (teamIsHome(k)) {  // v3.0: uno de los dos de casa
+    uint8_t hs = teamHomeSlot(k);
+    const PetLife &l = pet.home(hs);
+    out = makeFighter(l.speciesId, l.level(), l.geneAtk, l.geneDef, l.geneSpe, l.trAtk, l.trDef, l.trSpe);
+    bt.dex[m] = l.speciesId;
+    bt.shiny[m] = l.shiny;
+    bt.home[m] = (uint8_t)(hs + 1);
+    snprintf(bt.name[m], BT_NAME_LEN, "%.*s", (int)sizeof(l.nick), l.nick[0] ? l.nick : dexName(l.speciesId));
   } else {
     const PetRecord &r = pet.boxRecord((uint8_t)k);
     out = makeFighter(r.speciesId, levelFor(r.growMin), r.geneAtk, r.geneDef, r.geneSpe, r.trAtk, r.trDef, r.trSpe);
     bt.dex[m] = r.speciesId;
     bt.shiny[m] = (r.flags & REC_SHINY) != 0;
-    bt.home[m] = false;
+    bt.home[m] = 0;
     snprintf(bt.name[m], BT_NAME_LEN, "%.*s", (int)sizeof(r.nick), recName(r));
   }
   bt.uid[m] = id;
