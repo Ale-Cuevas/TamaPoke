@@ -6,6 +6,16 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.5] - 2026-11-18
+
+### Changed
+
+- **Bigger yard: pets and map at the same scale.** Pets in the yard are about 10 % bigger (2.4x instead of 2.2x)
+  and the yard map is 20 % bigger (2.4x instead of 2x), so a map pixel and a pet pixel are now the same size. The
+  map zooms into its centre, so a strip of about one tile around the edge is no longer shown; the walkable area
+  follows (larger cells, still inside the circle and clear of the clock and the dock). No SD update is needed, but
+  re-sending the maps (`tools/send_sd.py --yard`) keeps their stored walk masks in step.
+
 ## [3.4] - 2026-11-18
 
 ### Added

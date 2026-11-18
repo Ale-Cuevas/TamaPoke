@@ -3,6 +3,7 @@
 // que lo escribe tools/pack_yard.py (test/test_tools.py prueba el otro lado).
 #include "framework.h"
 #include "../yardbg.h"
+#include "../yard.h"
 #include <vector>
 
 // fichero TPY1 sintetico: pc colores (0 = 256); el pixel (x,y) usa el indice (x + 3*y) % pc
@@ -64,7 +65,11 @@ TEST(yard_bg, rechaza_ficheros_malos) {
   CHECK_EQ(yardBgParse(idx.data(), idx.size(), &view), YBG_INDEX);
 }
 
-TEST(yard_bg, expande_a_480_con_bloques_de_2x2) {
+// v3.5: el mapa a escala 2,4 (antes 2): el pixel X del mapa entero sale del 20 + X * 5 / 12 de la fuente
+// (se ve el centro de 200x200). Fija la promesa de diseno de la escala (la misma que los bichos del patio)
+TEST(yard_bg, expande_a_480_a_escala_2_4) {
+  CHECK_EQ(YBG_ZOOM10, 24);
+  CHECK_EQ(YBG_ZOOM10, 2 * YARD_PET_SCALE10);  // los bichos a escala entera 2 quedan igual que el mapa
   auto d = tpy1(63);
   CHECK_EQ(yardBgParse(d.data(), d.size(), &view), YBG_OK);
   std::vector<uint16_t> full(YBG_FULL * YBG_FULL + 1, 0xBEEF);
@@ -73,11 +78,11 @@ TEST(yard_bg, expande_a_480_con_bloques_de_2x2) {
   int malos = 0;
   for (int y = 0; y < YBG_FULL; y++)
     for (int x = 0; x < YBG_FULL; x++)
-      if (full[y * YBG_FULL + x] != view.pal[view.px[(y / 2) * YBG_SRC + x / 2]]) malos++;
+      if (full[y * YBG_FULL + x] != view.pal[view.px[(20 + y * 5 / 12) * YBG_SRC + 20 + x * 5 / 12]]) malos++;
   CHECK_EQ(malos, 0);
 }
 
-// el lienzo es la ventana (7, 7) del mapa entero: el pixel (x, y) del lienzo sale del (x+7)/2, (y+7)/2 de la fuente
+// el lienzo es la ventana (7, 7) del mapa entero: el pixel (x, y) del lienzo sale del 20 + (x+7)*5/12 de la fuente
 TEST(yard_bg, el_lienzo_es_la_ventana_con_recorte_de_7) {
   auto d = tpy1(63);
   CHECK_EQ(yardBgParse(d.data(), d.size(), &view), YBG_OK);
@@ -88,14 +93,13 @@ TEST(yard_bg, el_lienzo_es_la_ventana_con_recorte_de_7) {
   for (int y = 0; y < YBG_CANVAS; y++) {
     const uint16_t *row = yardBgCanvasRow(full.data(), y);
     for (int x = 0; x < YBG_CANVAS; x++) {
-      int sx = (x + YBG_CROP) / 2, sy = (y + YBG_CROP) / 2;
+      int sx = 20 + (x + YBG_CROP) * 5 / 12, sy = 20 + (y + YBG_CROP) * 5 / 12;
       if (row[x] != view.pal[view.px[sy * YBG_SRC + sx]]) malos++;
     }
   }
   CHECK_EQ(malos, 0);
-  // el pixel de la fuente (120,120) cubre el bloque (233,233)-(234,234) del lienzo: el centro
+  // el pixel de la fuente (120,120) cubre el centro del lienzo (233,233)
   CHECK_EQ(yardBgCanvasRow(full.data(), 233)[233], view.pal[view.px[120 * YBG_SRC + 120]]);
-  CHECK_EQ(yardBgCanvasRow(full.data(), 234)[234], view.pal[view.px[120 * YBG_SRC + 120]]);
 }
 
 TEST(yard_bg, la_mascara_de_paso) {
@@ -113,12 +117,17 @@ TEST(yard_bg, la_mascara_de_paso) {
   // del lienzo a la celda: el centro (233) cae en la 7, y el centro de la 7 vuelve a ser 233
   CHECK_EQ(yardCellOf(233), 7);
   CHECK_EQ(yardCellCenter(7), 233);
-  CHECK_EQ(yardCellOf(0), 0);
-  CHECK_EQ(yardCellOf(24), 0);
-  CHECK_EQ(yardCellOf(25), 1);
-  CHECK_EQ(yardCellOf(465), 14);
+  // v3.5: celdas de 38,4 px; la 0 y la 14 quedan fuera del lienzo
+  CHECK_EQ(yardCellOf(0), 1);
+  CHECK_EQ(yardCellOf(21), 1);
+  CHECK_EQ(yardCellOf(22), 2);
+  CHECK_EQ(yardCellEdge(2), 21);
+  CHECK_EQ(yardCellOf(465), 13);
+  CHECK(yardCellCenter(0) < 0);
+  CHECK(yardCellCenter(14) > 465);
+  for (int c = 1; c < 14; c++) CHECK_EQ(yardCellOf(yardCellCenter(c)), c);
   CHECK(yardPointBlocked(view.walk, 233, 233));
-  CHECK(!yardPointBlocked(view.walk, yardCellCenter(9), yardCellCenter(0)));
+  CHECK(!yardPointBlocked(view.walk, yardCellCenter(9), yardCellCenter(1)));
 }
 
 TEST(yard_bg, el_tinte) {

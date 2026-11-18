@@ -15,7 +15,7 @@ static void testWalk(uint8_t *walk) {
   for (int y = 6; y <= 8; y++)
     for (int x = 6; x <= 8; x++) block(walk, x, y);
   for (int y = 3; y <= 11; y++)
-    if (y != 10) block(walk, 3, y);
+    if (y != 9) block(walk, 3, y);
 }
 
 static bool gestureNod(uint8_t, uint8_t *act, uint32_t *ms) {
@@ -31,8 +31,8 @@ TEST(yard, mascara_de_respaldo_como_pack_yard) {
   CHECK(!yardCellBlocked(walk, 7, 7));
   CHECK(yardCellBlocked(walk, 0, 0));
   CHECK(yardCellBlocked(walk, 14, 14));
-  CHECK(yardCellBlocked(walk, 7, 1));   // bajo el reloj (y 57)
-  CHECK(yardCellBlocked(walk, 7, 12));  // bajo el dock (y 393)
+  CHECK(yardCellBlocked(walk, 7, 3));   // bajo el reloj (y 79)
+  CHECK(yardCellBlocked(walk, 7, 11));  // bajo el dock (y 386)
   CHECK(!yardCellBlocked(walk, 7, 4));
   // los centros de las celdas libres caen dentro del circulo util
   for (int c = 0; c < YARD_CELLS; c++) {
@@ -40,7 +40,7 @@ TEST(yard, mascara_de_respaldo_como_pack_yard) {
     int dx = yardCellCenter(yardCellCX(c)) - 233, dy = yardCellCenter(yardCellCY(c)) - 233;
     CHECK(dx * dx + dy * dy <= 221 * 221);
   }
-  CHECK(yardFreeCount(walk) > 100);
+  CHECK(yardFreeCount(walk) > 75);  // v3.5: celdas de 38 px (mapa a 2,4), antes > 100 con las de 32
 }
 
 TEST(yard, camino_rodea_lo_bloqueado) {
@@ -199,7 +199,7 @@ TEST(yard, inclinar_lleva_al_lado_bajo) {
     yardStep(w, walk, now, 100, nullptr, -1);
     CHECK(yardSpotOk(walk, w.p[0].x, w.p[0].y));
   }
-  // a la izquierda del todo de lo que alcanza (el muro de la columna 3 tiene un hueco en la 10)
+  // a la izquierda del todo de lo que alcanza (el muro de la columna 3 tiene un hueco en la 9)
   CHECK(yardCellOf((int)w.p[0].x) <= 2);
   CHECK_EQ((int)w.p[0].face, -1);
   for (int f = 0; f < 300; f++) {
@@ -269,11 +269,11 @@ TEST(yard, solo_la_zona_conectada_mas_grande) {
   uint8_t walk[YBG_WALK_BYTES];
   yardFallbackWalk(walk);
   int before = yardFreeCount(walk);
-  // una celda suelta en (10, 4) rodeada de bloqueadas
-  block(walk, 9, 4); block(walk, 11, 4); block(walk, 10, 3); block(walk, 10, 5);
-  CHECK(yardFree(walk, yardCellIdx(10, 4)));
+  // una celda suelta en (9, 6) rodeada de bloqueadas
+  block(walk, 8, 6); block(walk, 10, 6); block(walk, 9, 5); block(walk, 9, 7);
+  CHECK(yardFree(walk, yardCellIdx(9, 6)));
   int n = yardKeepLargestRegion(walk);
-  CHECK(!yardFree(walk, yardCellIdx(10, 4)));
+  CHECK(!yardFree(walk, yardCellIdx(9, 6)));
   CHECK_EQ(n, before - 5);
   CHECK_EQ(yardFreeCount(walk), n);
   // todo lo que queda se alcanza desde el centro
@@ -315,7 +315,7 @@ TEST(yard, paseo_vertical_mira_arriba_o_abajo) {
   yardAdvance(w, walk, 0, 100, YARD_SPEED);
   yardHeading(p, &dx, &dy);
   CHECK_EQ(yardWalkDir(dx, dy, p.face, true, true), YW_UP);
-  CHECK(yardWalkTo(w, walk, 0, yardCellIdx(7, 11), 0));  // y hacia abajo
+  CHECK(yardWalkTo(w, walk, 0, yardCellIdx(7, 10), 0));  // y hacia abajo
   yardAdvance(w, walk, 0, 100, YARD_SPEED);
   yardHeading(p, &dx, &dy);
   CHECK_EQ(yardWalkDir(dx, dy, p.face, true, true), YW_DOWN);
@@ -372,7 +372,7 @@ TEST(yard, comida_delante_sobre_suelo_que_se_pisa) {
   block(walk, 8, 7);  // a la derecha del bicho
   YardPet p;
   p.on = true;
-  p.x = (float)yardCellCenter(7) + 10;  // cerca del borde derecho de su celda: x + 28 cae en la 8
+  p.x = (float)yardCellCenter(7);  // en el centro de su celda (38 px): x + 28 cae en la 8 y x - 28 en la 6
   p.y = (float)yardCellCenter(7);
   p.face = 1;
   YardFood f;
