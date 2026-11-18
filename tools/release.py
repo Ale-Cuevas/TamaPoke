@@ -88,7 +88,7 @@ def src_lines(name):
 
 
 def ident_of(tok):
-    """`Pet::store` -> store, `yardDropFood(kind)` -> yardDropFood, `BDROP_*` -> None"""
+    """`Pet::store` -> store, `yardFeedFront(s, kind)` -> yardFeedFront, `BDROP_*` -> None"""
     t = tok.strip().split("(")[0].strip()
     t = t.split("::")[-1]
     if t.startswith("enum") or t.startswith("struct"):

@@ -173,22 +173,33 @@ While **awake**, per minute:
   Each slip-up **delays evolution by 1 level** and cools the bond.
 
 ### Actions
+**Tap a pet** in the yard to open **its menu** (v3.3), a column on the right of the screen: **Sleep** (or
+**Wake**), **Food**, **Care** (the heart) and **Status** (its stat card), plus a highlighted **Evolve** or
+**Farewell** row when it's ready (a "!" floats over a pet that is). The pet stands still with a ring at its feet
+(if it was under the menu it first steps aside to the left, and so does the other pet). What it can't do right now is grey and shakes
+(Food and Care while asleep). Tap outside the menu, swipe or press USER to close it; tap the other pet to switch the
+menu to it. It closes by itself after 30 s untouched.
+
 - 🍎 **Plain berry** (v3.2): the only **free, unlimited** food: +20 FOOD, nothing else. It is always the
-  first card of the Care panel.
+  first row of the menu's food list.
 - 🫐 **Coloured berries** (v3.2, six: red, blue, green, yellow, pink, orange): items you collect (Bag, page 2).
   Any coloured berry beats the plain one: **+30 FOOD, +3 JOY**. Each evolution line has one **hidden favourite
   colour**, fixed by the line's first form, so it never changes when the pet evolves. Feeding the favourite gives
-  **+35 FOOD, +12 JOY, ♥, +2 bond** and reveals it: the stat card then names it and the Care panel marks it with a
+  **+35 FOOD, +12 JOY, ♥, +2 bond** and reveals it: the stat card then names it and the food list marks it with a
   gold frame and a star. Every pet (including the old ones after updating) starts with its favourite unknown.
   Sources: **Shop 25 coins each** (page 2), stage boss loot, wild-pet drops, walk finds and trips (a random colour
   each time).
-- 🍰 **Cake** (v1.54, in the Care panel): **limited**, found on walks
+- 🍰 **Cake** (v1.54, in the food list): **limited**, found on walks
   (and won from stage bosses). It fills FOOD to 100 and **keeps it full for 3 hours** (the bar turns pink and
   the status says "So full!"; games don't make it hungry either, and the time counts while the board
-  is off), +12 JOY, but **+12 weight**. It has no favourite. The Care panel's food row is the plain berry plus
-  the first 3 foods you own (coloured berries in order, then cake, then Golden Berry); with none it's grey.
-  Food is only used up when the pet eats it.
-- ⚽ **Play:** a menu with all the games: the **ball minigame** (+JOY, −ENE; trains **SPEED** and
+  is off), +12 JOY, but **+12 weight**. It has no favourite.
+- 🍽️ **The food list** (menu → Food, v3.3): the plain berry, then every food you own (coloured berries in order,
+  cake, Golden Berry) with how many are left, 4 per page (the bottom row is ← back, and "1/2 ▸" with more pages).
+  The food you pick appears **in front of the pet** (once it has stepped out from under the menu) and it eats it
+  **as soon as it finishes what it was eating**; one food per pet at a time (the list is grey until then, and a food
+  already chosen for one pet can't be given to the other). Food is only used up when the pet has eaten it.
+- ⚽ **Play:** a menu with all the games (v3.3: with both home pets awake, it asks **who plays**: two cards with
+  their name and level; with only one awake that one plays): the **ball minigame** (+JOY, −ENE; trains **SPEED** and
   burns weight; the ball keeps speeding up as you score: twice as fast at 80 as at 1, up to 3×),
   the **battle stages** (+3 JOY for a finished run, at most once an hour; a boss reward can bring an
   item home; see Battles below), the training bag, the
@@ -203,7 +214,7 @@ While **awake**, per minute:
   +8) and clears that pet's poops; no weight burn. From 30 s the band drifts slowly up and
   down: time in it then gives **bonus DEF** (1 pt per 4 s, up to +3, so +11 for a perfect
   session).
-- 💗 **Pet it** (the heart in the Care panel, v2.3): +20 JOY (v3.1), a heart and its happy pose; bond at most once
+- 💗 **Care** (the heart in the pet's menu, v2.3): +20 JOY (v3.1), a heart and its happy pose; bond at most once
   every 15 min. Free and as often as you like, awake only.
 - 🌙 **Sleep:** rest — ENE **+6/min**, needs drain ~**4× slower** with floors
   (FOOD 30 / JOY 35). No poops, no slip-ups, and neglect doesn't count while asleep.
@@ -263,14 +274,14 @@ While **awake**, per minute:
 ### Evolution
 - Triggers when **level ≥ its evolution level** (16 for most base forms; ~30 for
   stone-style, ~40 for trade-style) **and every stat ≥ 40** at that moment.
-- **Never automatic** — a button appears and **you tap to witness it** (with a
-  flicker between the old and new form). Each **slip-up delays it by 1 level**.
+- **Never automatic** — a "!" floats over the pet and its menu gets a red **Evolve** row: **you tap to witness
+  it** (with a flicker between the old and new form). Each **slip-up delays it by 1 level**.
 - You can **decline** ("keep form"); it re-offers at the next level.
 - *Eevee* branches toward whichever evolution you're still missing.
 
 ### The three endings (you choose & witness each — none auto-fire)
-- 💛 **Farewell** — when it's a **final form** that has lived **3 days**. A button
-  appears; triggering it **blesses your next egg**. You can **postpone** ("stay
+- 💛 **Farewell** — when it's a **final form** that has lived **3 days**. A "!" floats
+  over it and its menu gets a gold **Farewell** row; triggering it **blesses your next egg**. You can **postpone** ("stay
   together", re-offered in a day). The good ending.
 - 💔 **Death by neglect** (v1.60, it replaced the run-away) — with **all three needs at 0**
   (awake, board on), the status says "It feels abandoned..." and the **bond drains** from full to 0
@@ -490,7 +501,7 @@ waving it around doesn't farm anything.
   | Item | Odds | Use |
   |---|---|---|
   | Golden Berry | 28 % | +50 FOOD, +15 JOY, a heart |
-  | Cake (v1.54) | 17 % | FOOD full for 3 h, +12 JOY, +12 weight (Care panel or Bag) |
+  | Cake (v1.54) | 17 % | FOOD full for 3 h, +12 JOY, +12 weight (the pet menu's food list, or the Bag) |
   | Coloured berry (v3.2) | 10 % | A random one of the 6 colours: +30 FOOD, +3 JOY (the favourite: +35 FOOD, +12 JOY, ♥) |
   | Protein / Iron / Carbos | 30 % (1/3 each) | +3 ATK / DEF / SPD training (cap 100) |
   | Shiny Charm | 10 % | Held, not used: the **next egg** gets ×3 shiny odds (never better than 1/8). One at a time; a second one becomes a Golden Berry. |
@@ -499,8 +510,9 @@ waving it around doesn't farm anything.
   | Egg | every 8000–15000 steps (v1.39), apart from the finds above and their daily cap; wrapped as a gift since v1.55 (straight home if the home is empty) | Not used by hand: it comes home by itself when home is free (an ending, or the pet stored in the Box). |
 
 - The **Backpack** holds up to 9 of each item. Since v1.53 it has its own button (the
-  backpack, last on the bottom row): every item with its count (a 4 × 3 grid since v2.2), greyed
-  when you have none, and a hint below. Tap an item to use it (a YES / NO dialog); the Charm, eggs,
+  backpack, in the middle of the dock): every item with its count (a 4 × 3 grid since v2.2), greyed
+  when you have none, and a hint below. Tap an item to use it (a YES / NO dialog); with both home pets able to
+  use it (foods, vitamins, Rare Candy), it asks **who gets it** instead (v3.3). The Charm, eggs,
   the Revive and the Poké Ball aren't used by hand (a tap on the Revive or the ball says what it's for). It opens while the
   pet sleeps too, just to look.
 - The stat card's 5th page, **WALK** (swipe up, then left four times), shows today's steps with
@@ -663,19 +675,20 @@ on, care for your companion:
 **Three stats** that decay: **FOOD**, **JOY**, **ENE** (energy).
 If one bottoms out it counts as a *slip-up*.
 
-**The dock (three round buttons at the bottom, v2.0):**
-- 💗 **Care** → a panel with the free plain berry and your first 3 other foods (coloured berries, the cake
-  (limited: full for 3 h, but it fattens), Golden Berry), the light (🌙 sleep / ☀️ wake) and the heart to pet it
-  (+20 JOY). Food drops into the yard: the pet sees it, walks over and eats it. Asleep, the light still
-  works.
+**The dock (three round buttons at the bottom, v2.0; v3.3: Play, Bag, Shop):**
 - ⚽ **Play** → the games: the pokeball minigame (SPEED), the battle stages, the training bag (STRENGTH), the
-  sled run (SPEED) and the waterfall (DEFENSE). Each result pays a few coins.
+  sled run (SPEED) and the waterfall (DEFENSE). Each result pays a few coins. With both home pets awake a game
+  first asks **who plays** (tap a card); battles keep their team picker.
 - 🎒 **Bag** → two tabs: **ITEMS** (your items and eggs; tap one to use it; swipe or tap the "1/2" for page 2,
-  the coloured berries) and **SHOP** (buy items and backgrounds with coins; page 2 sells the berries).
+  the coloured berries) and the **Collection** of trip souvenirs.
+- 🪙 **Shop** → its own screen: buy items and backgrounds with coins (page 2 sells the berries; the Backgrounds card
+  opens the map picker).
 
-**In the yard:** tap a pet for its stat card (the first page shows the three needs; Care and Play then look
-after that pet), tap a poop to clear it, tap a gift to open it. An egg placed from the Bag sits in the
-yard: tap it to see the time left, shake the board to speed it up.
+(The Care button is gone since v3.3: sleep, food, the heart and the stat card are in each pet's menu.)
+
+**In the yard:** tap a pet to open **its menu** on the right (Sleep / Wake, Food, Care, Status, and Evolve or
+Farewell when ready; see Actions above); tap a poop to clear it, tap a gift to open it. An egg placed from the
+Bag sits in the yard: tap it to see the time left, shake the board to speed it up.
 
 **Coins (v2.0):** each minigame pays 3–8 by result, a stage's first clear 50 and a repeat clear 10 (once per
 stage per day), walk goals 10 / 20 / 40. Games and repeat clears stop at 150 a day. They are spent in the
@@ -683,7 +696,8 @@ Shop: Golden Berry 30, coloured berries 25 each, cake 40, protein / iron / carbo
 Backgrounds are yours, not the pet's: you start with the meadow, and a map you buy works for every pet.
 
 **Touch gestures:**
-- Tap the creature = its stat card (since v2.0; pet it from the heart in the Care panel, v2.3).
+- Tap the creature = **its menu** (v3.3; before, its stat card): Sleep / Wake, Food, Care, Status (the stat card)
+  and Evolve / Farewell when ready.
 - Swipe left = open the **Pokédex / gallery** · swipe right = open the **Box** (v1.37,
   see [The Box](#the-box-v137)), from the pet or from the egg.
 - Vertical swipe up = open the **stat card** (5 pages: Profile / Battle / Medals /
@@ -702,7 +716,8 @@ wakes the screen from off. Eating or a heart doesn't wake a screensaver you put 
 **Physical USER button:** back. It closes whatever is open on top: gallery
 detail → grid → home, the Box (its store / wake question first), stat card, rename keyboard (without saving the name),
 clock screen (without applying the time), the minigame or the bag (quit, no
-reward), and the feed / release / evolve / farewell dialogs. On a dim or dark
+reward), the pet menu (the food list first goes back to the menu), the "who plays?" picker, and the release /
+evolve / farewell dialogs. On a dim or dark
 screen the first press only wakes it.
 
 **Physical BOOT button:** brightness. Each press steps through 4 levels (the

@@ -104,6 +104,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Para un salvaje vencido", "\255Un %s salvaje!", "Toca para luchar", "Elige luchador", "Salvaje", "\255Ganaste!", "Se escap\242...", "+1 h de crecimiento", "\250Lanzar una Pok\202 Ball?", "Te quedan %u", "Lanzar", "\255%s capturado!", "Su huevo, en la mochila", "%s se march\242", "\255%s huy\242!", "No te quedan Pok\202 Balls", "No caben m\240s huevos", "\255Huevo capturado!",
     // dos bichos en casa (v3.0): la caja pregunta cual
     "\250Cu\240l va a la caja?", "\250Con cu\240l lo cambias?",
+    // el menu del bicho, la lista de comida y el selector (v3.3)
+    "Dormir", "Despertar", "Comida", "Estado", "Evoluci\242n", "Despedida", "Volver",
+    "Baya", "Roja", "Azul", "Verde", "Amarilla", "Rosa", "Naranja", "Tarta", "Dorada",
+    "\250Qui\202n juega?", "\250Para qui\202n?",
   },
   // ---------------- EN ----------------
   {
@@ -202,6 +206,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "For a beaten wild pet", "A wild %s appeared!", "Tap to fight", "Choose a fighter", "Wild", "You won!", "It got away...", "+1 h of growth", "Throw a Pok\202 Ball?", "%u left", "Throw", "%s captured!", "Its egg is in the Backpack", "%s went away", "%s fled!", "No Pok\202 Balls left", "No room for another egg", "Captured egg!",
     // dos bichos en casa (v3.0): la caja pregunta cual
     "Which one goes to the Box?", "Swap with which one?",
+    // el menu del bicho, la lista de comida y el selector (v3.3)
+    "Sleep", "Wake", "Food", "Status", "Evolve", "Farewell", "Back",
+    "Berry", "Red", "Blue", "Green", "Yellow", "Pink", "Orange", "Cake", "Golden",
+    "Who plays?", "Who gets it?",
   },
   // ---------------- FR ----------------
   {
@@ -300,6 +308,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Pour un sauvage vaincu", "Un %s sauvage!", "Touche pour combattre", "Choisis un combattant", "Sauvage", "Gagne!", "Il a fui...", "+1 h de croissance", "Lancer une Poke Ball?", "Il en reste %u", "Lancer", "%s capture!", "Son oeuf est dans le sac", "%s est parti", "%s a fui!", "Plus de Poke Balls", "Plus de place pour un oeuf", "Oeuf capture!",
     // dos bichos en casa (v3.0): la caja pregunta cual
     "Lequel va dans la boite?", "Echanger avec lequel?",
+    // el menu del bicho, la lista de comida y el selector (v3.3)
+    "Dormir", "Reveil", "Manger", "Etat", "Evoluer", "Adieu", "Retour",
+    "Baie", "Rouge", "Bleue", "Verte", "Jaune", "Rose", "Orange", "Gateau", "Doree",
+    "Qui joue?", "Pour qui?",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -403,6 +415,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Fuer ein besiegtes wildes", "Ein wildes %s!", "Tippe zum Kampf", "Waehle einen Kaempfer", "Wild", "Gewonnen!", "Entkommen...", "+1 h Wachstum", "Pokeball werfen?", "Noch %u", "Werfen", "%s gefangen!", "Sein Ei ist im Rucksack", "%s ist weg", "%s ist geflohen!", "Keine Pokebaelle mehr", "Kein Platz fuer ein Ei", "Gefangenes Ei!",
     // dos bichos en casa (v3.0): la caja pregunta cual
     "Wer kommt in die Box?", "Mit wem tauschen?",
+    // el menu del bicho, la lista de comida y el selector (v3.3)
+    "Schlafen", "Wecken", "Essen", "Status", "Entwickeln", "Abschied", "Zurueck",
+    "Beere", "Rot", "Blau", "Gruen", "Gelb", "Rosa", "Orange", "Kuchen", "Gold",
+    "Wer spielt?", "Fuer wen?",
   },
   // ---------------- IT ----------------
   {
@@ -501,6 +517,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Per un selvatico battuto", "Un %s selvatico!", "Tocca per lottare", "Scegli chi lotta", "Selvatico", "Vinto!", "E fuggito...", "+1 h di crescita", "Lanciare una Poke Ball?", "Ne restano %u", "Lancia", "%s catturato!", "Il suo uovo e nello zaino", "%s se ne e andato", "%s e fuggito!", "Niente Poke Ball", "Non c'e posto per un uovo", "Uovo catturato!",
     // dos bichos en casa (v3.0): la caja pregunta cual
     "Chi va nel box?", "Scambiare con chi?",
+    // el menu del bicho, la lista de comida y el selector (v3.3)
+    "Dormi", "Sveglia", "Cibo", "Stato", "Evolvi", "Addio", "Indietro",
+    "Bacca", "Rossa", "Blu", "Verde", "Gialla", "Rosa", "Arancio", "Torta", "Dorata",
+    "Chi gioca?", "Per chi?",
   },
   // ---------------- PT ----------------
   {
@@ -599,6 +619,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Para um selvagem vencido", "Um %s selvagem!", "Toca para lutar", "Escolhe quem luta", "Selvagem", "Ganhaste!", "Fugiu...", "+1 h de crescimento", "Lancar uma Poke Bola?", "Restam %u", "Lancar", "%s capturado!", "O ovo esta na mochila", "%s foi embora", "%s fugiu!", "Sem Poke Bolas", "Nao cabem mais ovos", "Ovo capturado!",
     // dos bichos en casa (v3.0): la caja pregunta cual
     "Qual vai para a caixa?", "Trocar com qual?",
+    // el menu del bicho, la lista de comida y el selector (v3.3)
+    "Dormir", "Acordar", "Comida", "Estado", "Evoluir", "Adeus", "Voltar",
+    "Baga", "Vermelha", "Azul", "Verde", "Amarela", "Rosa", "Laranja", "Bolo", "Dourada",
+    "Quem joga?", "Para quem?",
   },
   // ---------------- JA ----------------
   {
@@ -719,6 +743,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "かったやせいにつかう", "やせいの%sがあらわれた!", "タッチでたたかう", "たたかうポケモンをえらぶ", "やせい", "かった!", "にげられた...", "+1じかんぶんせいちょう", "ボールをなげる?", "のこり%u", "なげる", "%sをつかまえた!", "タマゴはバッグに", "%sはさっていった", "%sはにげた!", "ボールがない", "タマゴがいっぱい", "つかまえたタマゴ!",
     // dos bichos en casa (v3.0): la caja pregunta cual
     "どちらを ボックスへ?", "どちらと こうかん?",
+    // el menu del bicho, la lista de comida y el selector (v3.3)
+    "ねる", "おこす", "ごはん", "ようす", "しんか", "おわかれ", "もどる",
+    "きのみ", "あか", "あお", "みどり", "きいろ", "ピンク", "オレンジ", "ケーキ", "きんいろ",
+    "だれが あそぶ?", "だれに あげる?",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -822,6 +850,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "이긴 야생에게 사용", "야생 %s 등장!", "터치해서 싸우기", "싸울 포켓몬 선택", "야생", "이겼다!", "도망쳤다...", "+1시간 성장", "볼을 던질까?", "남은 볼 %u", "던지기", "%s 잡았다!", "알은 가방에", "%s 떠났다", "%s 도망쳤다!", "볼이 없다", "알 자리가 없다", "잡은 알!",
     // dos bichos en casa (v3.0): la caja pregunta cual
     "어느 쪽을 박스에?", "어느 쪽과 교환?",
+    // el menu del bicho, la lista de comida y el selector (v3.3)
+    "재우기", "깨우기", "먹이", "상태", "진화", "작별", "뒤로",
+    "열매", "빨강", "파랑", "초록", "노랑", "분홍", "주황", "케이크", "황금",
+    "누가 놀까?", "누구에게?",
   },
 };
 

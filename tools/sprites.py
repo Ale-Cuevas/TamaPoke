@@ -748,28 +748,6 @@ def icon_bag():
     ]
 
 
-def icon_care():
-    # cuidar (dormir + limpiar): corazon rosa con una cruz blanca
-    return [
-        "................",
-        "................",
-        "...kkk....kkk...",
-        "..kpppk..kpppk..",
-        ".kpwpppkkppppPk.",
-        ".kwppppwwppppPk.",
-        ".kpppppwwpppPPk.",
-        ".kpppwwwwwwppPk.",
-        "..kppwwwwwwpPk..",
-        "...kpppwwppPk...",
-        "....kppwwpPk....",
-        ".....kppPPk.....",
-        "......kPPk......",
-        ".......kk.......",
-        "................",
-        "................",
-    ]
-
-
 def icon_sun():
     # sol (despertar), junto a la luna de ICON_LIGHT
     g = G(16)
@@ -820,6 +798,43 @@ def icon_pet():
         ".......kk.......",
         "................",
     ]
+
+
+def icon_shop():
+    # tienda (v3.3, el boton del dock): una moneda dorada con su canto y una ranura, como la de la cartera
+    g = G(16)
+    g.disk(7.5, 7.5, 6.4, 6.4, 'f', 'Y')
+    g.outline()
+    g.rect(7, 4, 8, 11, 'O')
+    g.px(5, 4, 'w'); g.px(4, 5, 'w'); g.px(4, 6, 'w')
+    return g.rows()
+
+
+def icon_card():
+    # la ficha del bicho (v3.3, "Estado" en su menu): una tarjeta con un retrato y dos barras
+    g = G(16)
+    g.rect(1, 3, 14, 13, 'w')
+    g.outline()
+    g.rect(3, 5, 6, 8, 'b'); g.px(6, 8, 'B'); g.px(6, 7, 'B'); g.px(5, 8, 'B')
+    g.rect(8, 5, 12, 5, 's')
+    g.rect(8, 7, 11, 7, 's')
+    g.rect(3, 10, 12, 10, 'g'); g.rect(10, 10, 12, 10, 'S')
+    g.rect(3, 11, 8, 11, 'o'); g.rect(9, 11, 12, 11, 'S')
+    return g.rows()
+
+
+def icon_letter():
+    # una carta (v3.3, "Despedirse" en el menu del bicho: quiere decirte algo), cerrada con un corazon
+    g = G(16)
+    g.rect(1, 4, 14, 12, 'y')
+    g.outline()
+    for i in range(4):  # la solapa: dos diagonales que bajan hasta el corazon
+        g.px(2 + i, 5 + i, 'Y')
+        g.px(13 - i, 5 + i, 'Y')
+    g.rect(6, 8, 9, 9, 'r'); g.px(6, 8, 'r'); g.px(9, 8, 'r')
+    g.px(7, 10, 'r'); g.px(8, 10, 'r')
+    g.px(7, 8, 'R'); g.px(8, 8, 'R')
+    return g.rows()
 
 
 def icon_revive():
@@ -1129,11 +1144,13 @@ SPRITES = {
     "ICON_DASH": icon_dash(),
     "ICON_ZEN": icon_zen(),
     "ICON_BAG": icon_bag(),
-    "ICON_CARE": icon_care(),
     "ICON_SUN": icon_sun(),
     "ICON_CAKE": icon_cake(),
     "ICON_REVIVE": icon_revive(),
     "ICON_PET": icon_pet(),
+    "ICON_SHOP": icon_shop(),
+    "ICON_CARD": icon_card(),
+    "ICON_LETTER": icon_letter(),
     "BADGE_GRASS": badge_grass(),
     "BADGE_WATER": badge_water(),
     "BADGE_ROCK": badge_rock(),
@@ -1158,6 +1175,9 @@ SPR_NOTE = {
     "ICON_DASH": "16x16: trineo con lineas de velocidad (v1.44)",
     "ICON_ZEN": "16x16: cascada sobre la poza (v1.43)",
     "ICON_PET": "16x16: corazon, el mimo del panel Cuidar (v2.3)",
+    "ICON_SHOP": "16x16: moneda, el boton Tienda del dock (v3.3)",
+    "ICON_CARD": "16x16: ficha, Estado en el menu del bicho (v3.3)",
+    "ICON_LETTER": "16x16: carta, Despedirse en el menu del bicho (v3.3)",
 }
 SPR_PRELUDE = {
     "ICON_EGG": "// huevo de la mochila (v1.39): el de la pantalla principal (SPR_EGG) en pequeno",

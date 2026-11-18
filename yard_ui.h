@@ -29,9 +29,10 @@ constexpr uint16_t yRgb(uint32_t hex) {
 #define Y_COIN_DARK  yRgb(0xB8860B)  // su canto
 #define Y_HILITE     yRgb(0xFF6FA8)  // valores positivos en los registros ("+2 felicidad")
 #define Y_SHADOW     yRgb(0x10121A)  // sombra del texto sobre el mapa
-#define Y_DOCK_CARE  yRgb(0x2EC48A)  // los tres botones del dock: verde, ambar, azul
-#define Y_DOCK_PLAY  yRgb(0xF0A830)
-#define Y_DOCK_BAG   yRgb(0x5E8FE0)
+// los tres botones del dock (v3.3: Jugar, Mochila, Tienda; el de Cuidar se fue al menu de cada bicho)
+#define Y_DOCK_PLAY  yRgb(0xF0A830)  // ambar
+#define Y_DOCK_BAG   yRgb(0x5E8FE0)  // azul
+#define Y_DOCK_SHOP  yRgb(0xD8609A)  // rosa (la moneda dorada encima se ve bien)
 
 // ---------- geometria comun (lienzo de 466x466, centro 233,233) ----------
 #define Y_CX 233

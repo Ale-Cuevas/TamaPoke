@@ -52,7 +52,7 @@ enum StrId : uint16_t {
   S_PROGRESS, S_LVL_FMT, S_NEXT_LVL_FMT, S_EVO_LABEL, S_FINAL_FORM,
   S_EVO_READY, S_EVO_BLOCKED, S_EVO_IN_FMT, S_MISTAKES_FMT,
   S_EVO_TAP,        // texto del boton de evolucion
-  S_FAREWELL_BTN,   // texto del boton de despedida (lleva el nombre: "%s ...")
+  S_FAREWELL_BTN,   // v3.3: sin uso (era el boton de despedida; se queda: quitar un id corre las 8 filas)
   S_ABANDONED,      // estado con el vinculo apagandose por abandono (v1.60, era el boton de escapada)
   // dialogos de decision (evolucionar/mantener, despedirse/quedaros)
   S_EVO_Q, S_EVO_KEEP, S_FAR_Q, S_FAR_GO, S_FAR_STAY,
@@ -130,6 +130,11 @@ enum StrId : uint16_t {
   S_WILD_FLED_FMT, S_NO_BALLS, S_NO_ROOM, S_EGG_CAPTURED,
   // dos bichos en casa (v3.0): la caja pregunta cual se guarda o con cual se cambia
   S_BOX_WHICH_STORE, S_BOX_WHICH_SWAP,
+  // v3.3: el menu de cada bicho en el patio (la etiqueta del antiguo boton Cuidar es ahora su fila del mimo),
+  // los nombres cortos de la lista de comida (en el orden de FOOD_* de food.h) y el selector de bicho
+  S_PM_SLEEP, S_PM_WAKE, S_PM_FOOD, S_PM_STATUS, S_PM_EVOLVE, S_PM_FAREWELL, S_PM_BACK,
+  S_FD_PLAIN, S_FD_RED, S_FD_BLUE, S_FD_GREEN, S_FD_YELLOW, S_FD_PINK, S_FD_ORANGE, S_FD_CAKE, S_FD_GOLDEN,
+  S_PICK_PLAY, S_PICK_ITEM,
   STR_COUNT
 };
 

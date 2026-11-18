@@ -157,15 +157,16 @@ inline int souvAt(int x, int y) {
     if (yInRect(x, y, souvCellX(id), souvCellY(id), SOUV_CELL_W, SOUV_CELL_H)) return id;
   return -1;
 }
-// en que casilla del dock de la mochila va cada pestana: tres pastillas con icono (no caben tres
-// etiquetas: en espanol "OBJETOS / TIENDA / COLECCION" son 330 px y a y 44 el disco deja 229)
-#define BAG_TABS 3
+// en que casilla del dock de la mochila va cada pestana: pastillas con icono (no caben las etiquetas: en
+// espanol "OBJETOS / TIENDA / COLECCION" eran 330 px y a y 44 el disco deja 229). v3.3: la Tienda es su propia
+// pantalla (su boton del dock): quedan dos, Objetos y Coleccion (la Coleccion, hasta la pagina del jugador)
+#define BAG_TABS 2
 #define BAG_TAB_W 64
 #define BAG_TAB_H 34
 #define BAG_TAB_GAP2 8
 #define BAG_TAB_TOP 40
 inline int bagTabX(int t) { return Y_CX - (BAG_TABS * BAG_TAB_W + (BAG_TABS - 1) * BAG_TAB_GAP2) / 2 + t * (BAG_TAB_W + BAG_TAB_GAP2); }
-// pestana tocada (0..2) o -1; la zona se estira a 48 de alto, centrada en la pastilla
+// pestana tocada (0..BAG_TABS-1) o -1; la zona se estira a 48 de alto, centrada en la pastilla
 inline int bagTabHit(int x, int y) {
   int extra = (Y_HIT_MIN - BAG_TAB_H) / 2;
   for (int t = 0; t < BAG_TABS; t++)
