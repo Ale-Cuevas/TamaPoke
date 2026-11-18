@@ -6,6 +6,19 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.8] - 2026-11-18
+
+### Added
+
+- **Need bars in the pet menu.** Tapping a pet now shows three small bars under its name, above the menu: food,
+  happiness and energy, in that order and with the same colours as the Status card (green, amber, red; the cake
+  colour while it's full). They update live while the menu is open, also on the food list.
+
+### Changed
+
+- **Bigger pets in the yard.** Pets are drawn at 2.6x instead of 2.4x (about 8 % bigger, the nearest step to
+  10 %), a little larger than the map.
+
 ## [3.7] - 2026-11-18
 
 ### Changed

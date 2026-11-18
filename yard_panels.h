@@ -85,6 +85,29 @@ inline int petMenuX(uint8_t n) {
   return Y_CX + half - PM_EDGE - PM_W;
 }
 
+// la cabecera de la columna (v3.8): el nombre y, debajo, 3 barritas de necesidades (COM, FEL, ENE, como la
+// ficha) entre el nombre y la primera fila. Su borde derecho, el de la columna o, si el circulo util se
+// estrecha a esa altura, lo que deje el circulo (menos PM_EDGE).
+#define PM_NEED_BAR_H 4
+#define PM_NEED_GAP 2
+#define PM_NEED_H (3 * PM_NEED_BAR_H + 2 * PM_NEED_GAP + 4)  // 20: las 3 barritas y 4 px hasta la columna
+#define PM_NAME_H 18                                          // el nombre a tamano 2 y su sombra
+// lo mas a la derecha que deja el circulo util en la franja [y, y + h) (menos PM_EDGE)
+inline int petMenuSafeRight(int y, int h) {
+  int d = Y_CY - y > y + h - Y_CY ? Y_CY - y : y + h - Y_CY;
+  if (d < 0) d = 0;
+  int half = 0;
+  while ((half + 1) * (half + 1) + d * d <= Y_SAFE_R * Y_SAFE_R) half++;
+  return Y_CX + half - PM_EDGE;
+}
+inline int petMenuNeedsY(uint8_t n) { return petMenuTop(n) - PM_NEED_H; }
+inline int petMenuNameY(uint8_t n) { return petMenuNeedsY(n) - PM_NAME_H; }
+// el borde derecho de la cabecera en la franja [y, y + h)
+inline int petMenuHeadRight(uint8_t n, int y, int h) {
+  int r = petMenuX(n) + PM_W, c = petMenuSafeRight(y, h);
+  return c < r ? c : r;
+}
+
 // la fila i de un menu de n filas; false si no existe
 inline bool petMenuRow(uint8_t i, uint8_t n, int &x, int &y, int &w, int &h) {
   if (n == 0 || n > PM_MAX || i >= n) return false;

@@ -69,7 +69,8 @@ TEST(yard_bg, rechaza_ficheros_malos) {
 // (se ve el centro de 200x200). Fija la promesa de diseno de la escala (la misma que los bichos del patio)
 TEST(yard_bg, expande_a_480_a_escala_2_4) {
   CHECK_EQ(YBG_ZOOM10, 24);
-  CHECK_EQ(YBG_ZOOM10, 2 * YARD_PET_SCALE10);  // los bichos a escala entera 2 quedan igual que el mapa
+  // promesa de diseno (v3.8): los bichos a escala entera 2 quedan a 2,6, algo mas grandes que el mapa (2,4)
+  CHECK_EQ(2 * YARD_PET_SCALE10, 26);
   auto d = tpy1(63);
   CHECK_EQ(yardBgParse(d.data(), d.size(), &view), YBG_OK);
   std::vector<uint16_t> full(YBG_FULL * YBG_FULL + 1, 0xBEEF);

@@ -28,8 +28,8 @@
 #define YARD_THING_GAP 36      // px entre dos cosas del suelo (cacas de 32 px)
 #define YARD_CELLS (YBG_GRID * YBG_GRID)
 // escala de los bichos en decimas sobre su escala entera (v2.1: 11; v3.5: 12, asi casi todos, a escala
-// entera 2, quedan a 2,4 como el mapa, YBG_ZOOM10)
-#define YARD_PET_SCALE10 12
+// entera 2, quedan a 2,4 como el mapa, YBG_ZOOM10; v3.8: 13, a 2,6, un poco mas grandes que el mapa)
+#define YARD_PET_SCALE10 13
 
 // modo de un bicho
 enum : uint8_t { YM_IDLE = 0, YM_WALK, YM_GESTURE, YM_SLEEP, YM_STAY };
