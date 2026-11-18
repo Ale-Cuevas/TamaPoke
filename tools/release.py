@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Release helper for TamaPoke (used by the tamapoke-release skill).
 
-  python3 tools/release.py bump 2.7            FW_VERSION + web/manifest.json + a CHANGELOG skeleton
+  python3 tools/release.py bump 2.7 [--web]    FW_VERSION + a CHANGELOG skeleton (--web: also web/manifest.json,
+                                               only for major updates that rebuild the web installer)
   python3 tools/release.py row "check" "[CHANGELOG 2.7](../CHANGELOG.md)" "build ✓. Board: pending"
                                                append the next numbered row to docs/PENDING_TESTS.md
   python3 tools/release.py pointers [--fix]    re-resolve `name` `file:line` pointers in docs/GAME_LOGIC.md
-  python3 tools/release.py check               versions agree, no TODO left, pointers fresh (exit 1 if not)
+  python3 tools/release.py check               CHANGELOG + guide match FW_VERSION, no TODO left, pointers fresh
+                                               (exit 1 if not); the web installer's version is only reported
 
 Only the standard library; run it with python3 from the repo root (or anywhere: it finds the root itself).
 """
@@ -36,20 +38,24 @@ def manifest_version():
 # ---------------------------------------------------------------- bump
 
 def cmd_bump(args):
+    web = "--web" in args
+    args = [a for a in args if a != "--web"]
     if len(args) != 1 or not re.fullmatch(r"\d+\.\d+", args[0]):
-        sys.exit("usage: release.py bump X.Y")
+        sys.exit("usage: release.py bump X.Y [--web]")
     new = args[0]
     old = fw_version()
     INO.write_text(VER_RE.sub(f'#define FW_VERSION "{new}"', INO.read_text(), count=1))
-    m = MANIFEST.read_text()
-    MANIFEST.write_text(re.sub(r'("version":\s*")[^"]+(")', rf"\g<1>{new}\g<2>", m, count=1))
+    if web:  # el instalador web solo se rehace en las versiones grandes
+        m = MANIFEST.read_text()
+        MANIFEST.write_text(re.sub(r'("version":\s*")[^"]+(")', rf"\g<1>{new}\g<2>", m, count=1))
     cl = CHANGELOG.read_text()
     if f"## [{new}]" not in cl:
         today = datetime.date.today().isoformat()
         i = cl.index("## [")
         cl = cl[:i] + f"## [{new}] - {today}\n\n### Changed\n\n- TODO\n\n" + cl[i:]
         CHANGELOG.write_text(cl)
-    print(f"FW_VERSION {old} -> {new}; web/manifest.json {new}; CHANGELOG has ## [{new}] (fill in the TODO)")
+    webmsg = f"web/manifest.json {new}" if web else f"web installer left at {manifest_version()}"
+    print(f"FW_VERSION {old} -> {new}; {webmsg}; CHANGELOG has ## [{new}] (fill in the TODO)")
     print("Still by hand: the version + commit line at the top of docs/GAME_LOGIC.md")
 
 
@@ -199,8 +205,6 @@ def cmd_pointers(args):
 def cmd_check(_args):
     bad = []
     fw, mf = fw_version(), manifest_version()
-    if fw != mf:
-        bad.append(f"FW_VERSION {fw} != manifest {mf}")
     cl = CHANGELOG.read_text()
     top = re.search(r"^## \[([^\]]+)\]", cl, re.M)
     if not top or top.group(1) != fw:
@@ -217,7 +221,8 @@ def cmd_check(_args):
     for b in bad:
         print("FAIL  " + b)
     if not bad:
-        print(f"OK  v{fw}: manifest, CHANGELOG, guide header and pointers agree")
+        print(f"OK  v{fw}: CHANGELOG, guide header and pointers agree")
+    print(f"web installer: v{mf}" + ("" if mf == fw else f" (not rebuilt for v{fw}; fine unless this is a major update)"))
     return 1 if bad else 0
 
 
