@@ -28,3 +28,19 @@ The firmware has 8 languages (ES, EN, FR, DE, IT, PT, JA, KO), but only **Englis
   `tools/test_i18n_formats.py` require it), but a plain translation is enough; don't spend time polishing them.
 - Bugs that only affect other languages (for example Korean text not being centred) aren't worth raising or
   fixing unless asked.
+
+## Subagents (`.claude/agents`)
+
+The project's subagents live in `.claude/agents`. Use them for anything beyond a simple task.
+
+- **Simple tasks stay in the main agent**: flashing the board, looking something up, answering a question, a
+  one-line fix or a quick check. Spawning an agent for these only costs time.
+- **Everything else goes through the subagents**, with the main agent planning, handing out the work and checking
+  the results:
+  - `reader` (`.claude/agents/reader.md`): gather context (code, docs, logs, serial output) and report back with `file:line` pointers.
+  - `implementer` (`.claude/agents/implementer.md`): write or change code. Sonnet for well-defined tasks, `model: "opus"` for open design choices,
+    cross-cutting or risky changes (save migrations).
+  - `tester` (`.claude/agents/tester.md`): run the test suites or a given test plan / `PENDING_TESTS` rows and report results.
+  - `reviewer` (`.claude/agents/reviewer.md`): review the diff before merging.
+- Give each agent a self-contained prompt (goal, files, rules from this file that apply), and run independent
+  agents in parallel.
