@@ -6,6 +6,31 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.11] - 2026-11-22
+
+### Changed
+
+- **More wild encounters.** The day's roll is now **60 %** (it was 30 %). Walking adds a **50 %** roll at
+  **3,000, 6,000 and 10,000 steps**, and each one can bring another wild pet even after the day's first, so a big
+  walking day can bring up to four. Only one waits in the yard at a time: a roll that comes due while one is there
+  waits until it's gone. Serial `ENC?` now shows the three walk rolls (`walk=a/b/c`).
+- **Pets wake up at 9:00** instead of 8:00, still with the "good morning" tune.
+- **Needs drain half as fast.** Awake, FOOD drops 1 a minute and ENERGY and JOY 1 every 2 minutes (a hungry pet
+  loses 1 more JOY a minute). Naps and nights slow down the same way, so sleep is still a rest. With the board off,
+  needs stop at 16.
+- **Trips pay more:** 50 coins for 1 h, 150 for 3 h and 400 for 8 h (about 50 an hour; it was 15 / 40 / 90).
+- **Berries come in packs of 5.** In the Shop, 25 coins now buy 5 berries of a colour, and you can keep up to 30 of
+  each colour (other items still stop at 9). Each Shop card now shows how many you get for the price (x5, or x1)
+  instead of how many you have; a card turns yellow when the pack won't fit. Going back to an older firmware cuts
+  berries above 9.
+
+### Added
+
+- **Need alarm.** When a need of an awake pet drops to 15 or less, the board plays two low beeps every 2 seconds,
+  also with the screen off, until you take care of it. It waits while a game, battle or encounter is open, stays
+  quiet while the pet sleeps or at volume 0, and stops once every need is at 0. (It keeps the board awake while it
+  rings, so it costs some battery.)
+
 ## [3.10] - 2026-11-18
 
 ### Changed

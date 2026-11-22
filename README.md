@@ -48,11 +48,11 @@ packed on your PC (see [Yard backgrounds](#yard-backgrounds)). Design: [docs/yar
 **v2.1: travel and the Collection.** From the Play panel, send a Box pet on a 1 h, 3 h or 8 h trip to one of
 your backgrounds (real time, also with the board off; needs the clock set). The trip view shows a countdown
 and a log of what happened. Back home, the pet waits in the yard with its suitcase and a "!": tap it to see
-what it brought (coins, growth, sometimes an item, often a souvenir). The 25 souvenirs, 5 per background,
+what it brought (coins: 50 / 150 / 400 for 1 h / 3 h / 8 h since v3.11, growth, sometimes an item, often a souvenir). The 25 souvenirs, 5 per background,
 fill the **Collection**, the third tab of the Bag. Serial `TRAVEL`, `TRAVEL <slot> <map> <0-2>`,
 `TRAVELT <min>`, `TRAVELEND`, `SOUV [mask]`.
 
-**v2.2: wild encounters.** Once in a while (10 % of days, 25 % if you walk 6,000 steps, more after trips)
+**v2.2: wild encounters.** Once in a while (v3.11: 60 % of days, plus a 50 % chance at 3,000, 6,000 and 10,000 steps, more after trips)
 a bush, rock or lump of sand starts shaking in the yard with an excited jingle. Tap it to meet a wild pet,
 pick one fighter and battle it; win to grow your pet and maybe find an item, then throw a **Poké Ball** to
 catch it as an egg that hatches its first form at Lv 1. Omanyte, Kabuto, Aerodactyl, Dratini and Mew only come
@@ -156,19 +156,22 @@ defined in [`tuning.h`](tuning.h): change it there to tune the game.
 ### The three stats (0–100)
 Needs: **FOOD**, **JOY**, **ENE** (energy). Start 80 / 80 / 80. (Hygiene and the bath were removed in v3.1: poops
 now weigh on JOY instead.)
-While **awake**, per minute:
+While **awake** (v3.11: half as fast as before):
 
-| Stat | Drain/min | Notes |
+| Stat | Drain | Notes |
 |---|---|---|
-| FOOD | −2 | |
-| ENE | −1 | −1 extra if overweight (weight > 50 → sluggish) |
-| JOY | −1 | **−2 extra** if FOOD < 30; plus the stale-poop drain below |
+| FOOD | −1 per min | |
+| ENE | −1 every 2 min | −1 extra if overweight (weight > 50 → sluggish) |
+| JOY | −1 every 2 min | **−1 extra per min** if FOOD < 30; plus the stale-poop drain below |
 
 - ~**5 %/min** chance to poop (only if FOOD > 40; about one every 20 min, it was 15 % before v1.58).
   **Tap a poop** to clear it, awake or asleep (it counts as the day's care, no bond). A poop that has been on
   the ground **more than 5 minutes** is *stale*: while the pet is awake, every 3 minutes it costs JOY — 1 with
   one stale poop, 2 with two, 4 with three. Fresh poops cost nothing, and nothing drains asleep. A full
   waterfall session clears all of that pet's poops.
+- **Need alarm (v3.11):** when a need of an awake pet drops to **15 or less**, the board plays two low beeps
+  every 2 seconds (also with the screen off) until you take care of it. It waits while a game, battle or
+  encounter is open, stays quiet while the pet sleeps or at volume 0, and stops once every need is at 0.
 - **Care slip-up** = letting any stat hit **≤ 10** (then it takes 60 awake minutes before another one can count).
   Each slip-up **delays evolution by 1 level** and cools the bond.
 
@@ -187,7 +190,7 @@ menu to it. It closes by itself after 30 s untouched.
   colour**, fixed by the line's first form, so it never changes when the pet evolves. Feeding the favourite gives
   **+35 FOOD, +12 JOY, ♥, +2 bond** and reveals it: the stat card then names it and the food list marks it with a
   gold frame and a star. Every pet (including the old ones after updating) starts with its favourite unknown.
-  Sources: **Shop 25 coins each** (page 2), stage boss loot, wild-pet drops, walk finds and trips (a random colour
+  Sources: **Shop: 25 coins for a pack of 5** (page 2, v3.11; up to 30 of each colour), stage boss loot, wild-pet drops, walk finds and trips (a random colour
   each time).
 - 🍰 **Cake** (v1.54, in the food list): **limited**, found on walks
   (and won from stage bosses). It fills FOOD to 100 and **keeps it full for 3 hours** (the bar turns pink and
@@ -216,13 +219,13 @@ menu to it. It closes by itself after 30 s untouched.
   session).
 - 💗 **Care** (the heart in the pet's menu, v2.3): +20 JOY (v3.1), a heart and its happy pose; bond at most once
   every 15 min. Free and as often as you like, awake only.
-- 🌙 **Sleep:** rest — ENE **+6/min**, needs drain ~**4× slower** with floors
+- 🌙 **Sleep:** rest — ENE **+6/min**, needs drain ~**4× slower** than awake (FOOD and JOY −1 every 4 min) with floors
   (FOOD 30 / JOY 35). No poops, no slip-ups, and neglect doesn't count while asleep.
 - 🌃 **Night (v1.63, needs the clock):** from **22:00** the pet is sleepy (a thought bubble with "zzz",
   "Getting sleepy..."). Putting it to bed while it's sleepy gives **+3 bond**, once a night. At **23:00** it
-  goes to bed by itself (no bond); woken before 08:00, it falls asleep again after 30 minutes awake. Asleep
-  between 22:00 and 08:00 the needs drain half as fast as in a nap, with higher floors (FOOD 50 /
-  JOY 50): a pet put to bed well cared for wakes up with every bar at 50 or more. At **08:00** it wakes up by
+  goes to bed by itself (no bond); woken before 09:00, it falls asleep again after 30 minutes awake. Asleep
+  between 22:00 and 09:00 the needs drain half as fast as in a nap, with higher floors (FOOD 50 /
+  JOY 50): a pet put to bed well cared for wakes up with every bar at 50 or more. At **09:00** (v3.11; it was 08:00) it wakes up by
   itself with a short tune (also with the screen dark). A nap in the afternoon isn't woken, unless it lasts
   into the night. All of this also happens with the board off.
 - **Feedback (v1.30):**
@@ -462,9 +465,10 @@ silhouette with "???".
 Battles between two boards over the air are next (see the roadmap).
 
 ### Wild encounters (v2.2)
-- **When:** at most **one a day**. A **10 %** roll at a random time between 9:00 and 20:00 (the same time all
-  day, a restart doesn't change it). Walking **6,000 steps** that day adds a roll that brings the day to
-  **25 %**. Every trip that comes back adds a roll of **3 % per hour** (1 h 3 %, 3 h 9 %, 8 h 24 %). Rolls need
+- **When (v3.11):** one in the yard at a time, up to **four a day**. A **60 %** roll at a random time between
+  9:00 and 20:00 (the same time all day, a restart doesn't change it). Walking **3,000, 6,000 and 10,000 steps**
+  each adds a **50 %** roll that can bring another one even after the day's first (if one is still in the yard,
+  the roll waits until it's gone). Every trip that comes back adds a roll of **3 % per hour** (1 h 3 %, 3 h 9 %, 8 h 24 %). Rolls need
   the clock set and someone to fight (the home pet or a Box pet); missed ones happen when the board turns on.
 - **In the yard:** a bush (Meadow, Forest), a rock (Quarry, Ruins) or a lump of sand (Beach) that shakes every
   2.4 s with two red curved marks on each side, for **6 hours**. It plays an excited jingle when it appears
