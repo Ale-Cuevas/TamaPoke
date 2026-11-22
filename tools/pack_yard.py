@@ -7,8 +7,8 @@ Lee tools/yard/maps/NN-nombre.txt y su leyenda (tools/yard/legends/), compone un
   NN-nombre_preview.png   466x466 redondo (x2,4 del centro, recorte de 7, mascara, HUD de muestra)
   NN-nombre_debug.png     lo mismo con la rejilla, las celdas bloqueadas y las zonas del HUD
 
-Ambiente opcional en la cabecera del mapa: "hue: A-B T [keep]" (puede repetirse; se aplican en orden;
-"keep" conserva saturacion y valor), "tint: RRGGBB N" (mezcla N %) y "mist: N [RRGGBB]".
+Ambiente opcional en la cabecera del mapa: "hue: A-B T [keep|dark]" (puede repetirse; se aplican en orden;
+"keep" conserva saturacion y valor, "dark" conserva la saturacion y oscurece), "tint: RRGGBB N" (mezcla N %) y "mist: N [RRGGBB]".
 
 Mas opciones (v3.15, fondos nuevos):
   sky: RRGGBB RRGGBB      degradado vertical (arriba, abajo) pintado bajo todo. Un caracter del suelo con
@@ -16,7 +16,7 @@ Mas opciones (v3.15, fondos nuevos):
   decal:                  tercera capa opcional (rejilla de 15x15 tras "objects:"), dibujada encima de los
                           objetos. En la leyenda: "p = draw <nombre> [WxH] [!]". Los pintores son pixel art
                           procedural (sin arte con licencia): lava_crack, bolt, pylon (2x3), smokestack (2x3),
-                          cloud_puff (2x1) y vent. Mismas comprobaciones de solape y de limite que los stamps.
+                          cloud_puff (2x1), vent, bubbles, floor_crack, compass (3x3) y banner (1x2). Mismas comprobaciones de solape y de limite que los stamps.
 
   uv run --no-project --with pillow tools/pack_yard.py          # todos los mapas
   uv run --no-project --with pillow tools/pack_yard.py 01 03    # solo esos
@@ -493,6 +493,79 @@ def paint_vent(w, h, rng):
     return im
 
 
+def paint_bubbles(w, h, rng):
+    """Burbujas y destellos sobre un liquido (lima claro: sobrevive a las reglas de tono verdes)."""
+    im, d = _canvas(w, h)
+    W, H = w * TILE, h * TILE
+    ring, glint = (205, 255, 110, 255), (255, 255, 215, 255)
+    for _ in range(rng.randint(2, 3) * w * h):
+        r = rng.choice((1, 2, 2, 3))
+        x, y = rng.randint(r + 1, W - r - 2), rng.randint(r + 1, H - r - 2)
+        d.ellipse((x - r, y - r, x + r, y + r), outline=ring)
+        d.point((x - r + 1, y - r + 1), fill=glint)
+    for _ in range(w * h * 2):
+        d.point((rng.randrange(1, W - 1), rng.randrange(1, H - 1)), fill=glint)
+    return im
+
+
+def paint_floor_crack(w, h, rng):
+    """Grieta en el suelo de piedra: linea quebrada oscura con un reborde claro."""
+    im, d = _canvas(w, h)
+    W, H = w * TILE, h * TILE
+    x, y = rng.randint(1, 4), rng.randint(3, H - 4)
+    pts = []
+    while x < W - 2:
+        pts.append((x, y))
+        x += rng.choice((1, 1, 2))
+        y = max(2, min(H - 3, y + rng.choice((-2, -1, 0, 1, 2))))
+    for px_, py_ in pts:
+        d.point((px_, py_ + 1), fill=(150, 162, 188, 255))
+    for px_, py_ in pts:
+        d.point((px_, py_), fill=(52, 58, 80, 255))
+    return im
+
+
+def paint_compass(w, h, rng):
+    """Mosaico de rosa de los vientos: aro oscuro, aro claro, estrella dorada y centro rojo."""
+    im, d = _canvas(w, h)
+    W, H = w * TILE, h * TILE
+    cx, cy = W // 2, H // 2
+    r = min(W, H) // 2 - 1
+    dark, cream, blue, gold, red = (44, 54, 84, 255), (222, 228, 240, 255), (104, 126, 170, 255), (240, 200, 80, 255), (200, 56, 64, 255)
+    d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=dark)
+    d.ellipse((cx - r + 2, cy - r + 2, cx + r - 2, cy + r - 2), fill=cream)
+    d.ellipse((cx - r + 5, cy - r + 5, cx + r - 5, cy + r - 5), fill=blue)
+    k = r - 3
+    for sx, sy, ln, col in ((0, -1, k, gold), (0, 1, k, gold), (1, 0, k, gold), (-1, 0, k, gold),
+                            (1, -1, k * 2 // 3, cream), (-1, -1, k * 2 // 3, cream),
+                            (1, 1, k * 2 // 3, cream), (-1, 1, k * 2 // 3, cream)):
+        if sx and sy:
+            tip = (cx + sx * ln * 7 // 10, cy + sy * ln * 7 // 10)
+            a, b = (cx + sx * 3, cy), (cx, cy + sy * 3)
+        else:
+            tip = (cx + sx * ln, cy + sy * ln)
+            a, b = (cx + sy * 3, cy + sx * 3), (cx - sy * 3, cy - sx * 3)
+        d.polygon([tip, a, b], fill=col, outline=dark)
+    d.ellipse((cx - 3, cy - 3, cx + 3, cy + 3), fill=red, outline=dark)
+    return im
+
+
+def paint_banner(w, h, rng):
+    """Estandarte colgado de un mastil, con franja dorada y cola de golondrina."""
+    im, d = _canvas(w, h)
+    W, H = w * TILE, h * TILE
+    dark, pole = (52, 26, 30, 255), (120, 80, 50, 255)
+    px0 = W // 2 - 6
+    d.rectangle((px0, 3, px0 + 1, H - 2), fill=pole, outline=dark)
+    d.ellipse((px0 - 1, 0, px0 + 2, 3), fill=(240, 200, 80, 255), outline=dark)
+    x0, x1, y0, y1 = px0 + 2, px0 + 11, 5, H - 8
+    d.polygon([(x0, y0), (x1, y0), (x1, y1), ((x0 + x1) // 2, y1 - 4), (x0, y1)], fill=(200, 60, 72, 255), outline=dark)
+    d.line((x0 + 1, y0 + 4, x1 - 1, y0 + 4), fill=(240, 200, 80, 255))
+    d.line((x0 + 1, y0 + 5, x1 - 1, y0 + 5), fill=(240, 200, 80, 255))
+    d.rectangle((x0 + 3, y0 + 8, x1 - 3, y0 + 10), fill=(250, 236, 200, 255))
+    return im
+
+
 # nombre -> (pintor, tamano por defecto en celdas)
 PAINTERS = {
     'lava_crack': (paint_lava_crack, (1, 1)),
@@ -501,24 +574,29 @@ PAINTERS = {
     'smokestack': (paint_smokestack, (2, 3)),
     'cloud_puff': (paint_cloud_puff, (2, 1)),
     'vent': (paint_vent, (1, 1)),
+    'bubbles': (paint_bubbles, (1, 1)),
+    'floor_crack': (paint_floor_crack, (1, 1)),
+    'compass': (paint_compass, (3, 3)),
+    'banner': (paint_banner, (1, 2)),
 }
 
 
 def atmosphere(img, meta, map_path, seed):
     """Ambiente opcional del mapa, horneado en la imagen (el firmware no cambia):
       hue: A-B T [keep]   los tonos entre A y B grados (p. ej. la hierba verde) pasan a rondar T; mas
-                          apagados, salvo con "keep" (conserva saturacion y valor: lava, toxico).
+                          apagados, salvo con "keep" (conserva saturacion y valor: lava) o "dark" (conserva la
+                          saturacion y deja el valor al 55 %: lodo toxico, rocas de obsidiana).
                           Puede repetirse: cada linea se aplica en orden.
       tint: RRGGBB N      mezcla toda la imagen un N % hacia ese color (p. ej. morado fantasmal)
       mist: N [RRGGBB]    N jirones de niebla suaves (semilla fija), del color dado o lavanda
     """
     from PIL import Image, ImageDraw, ImageFilter
     for spec in meta.get('hues', []):
-        m = re.fullmatch(r'(\d+)-(\d+)\s+(\d+)(\s+keep)?', spec)
+        m = re.fullmatch(r'(\d+)-(\d+)\s+(\d+)(?:\s+(keep|dark))?', spec)
         if not m:
-            raise MapError(f'{map_path}: expected "hue: from-to target [keep]" (degrees)')
+            raise MapError(f'{map_path}: expected "hue: from-to target [keep|dark]" (degrees)')
         lo, hi, tgt = (int(v) for v in m.groups()[:3])
-        keep = m.group(4) is not None
+        flag = m.group(4)   # None: apagado; keep: igual; dark: igual de vivo pero mas oscuro
         mid = (lo + hi) / 2
         hsv = img.convert('HSV')
         hd, sd, vd = (bytearray(c.tobytes()) for c in hsv.split())
@@ -526,9 +604,11 @@ def atmosphere(img, meta, map_path, seed):
             deg = h * 360 / 256
             if lo <= deg <= hi:   # el tono nuevo, mas apagado y algo mas oscuro (no un violeta chillon)
                 hd[i] = int(((tgt + (deg - mid) * 0.5) % 360) * 256 / 360)
-                if not keep:
+                if flag is None:
                     sd[i] = sd[i] * 45 // 100
                     vd[i] = vd[i] * 80 // 100
+                elif flag == 'dark':
+                    vd[i] = vd[i] * 55 // 100
         chans = [Image.frombytes('L', img.size, bytes(c)) for c in (hd, sd, vd)]
         img = Image.merge('HSV', chans).convert('RGB')
     if 'tint' in meta:

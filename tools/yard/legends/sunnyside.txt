@@ -100,3 +100,7 @@ $ = draw lava_crack         # glowing crack in the ground
 ^ = draw cloud_puff         # small soft cloud, 2x1
 ? = draw vent               # toxic grate with green glow
 Y = autotile "River" over z fill 32,8 33,8 !   # water over the dark ground (lava / sludge with a dark shore)
+( = draw bubbles            # bubbles and glints on a liquid (lime, so green hue rules leave it alone)
+; = draw floor_crack        # crack in a stone floor
+} = draw compass            # compass-rose mosaic, 3x3 (walkable)
+{ = draw banner !           # banner on a pole, 1x2 (blocks)
