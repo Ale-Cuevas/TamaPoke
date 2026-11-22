@@ -22,12 +22,12 @@ inline int shopSellableCount() {
 }
 
 enum ShopBuy : uint8_t { SB_OK = 0, SB_NOT_SOLD, SB_BROKE, SB_FULL };
-// comprobar antes de llamar a Pet::buyItem; "tope" es ITEM_MAX. Primero lo que no se puede arreglar
-// (no se vende, no cabe) y luego las monedas.
+// comprobar antes de llamar a Pet::buyItem; "cap" es itemCap(id). Primero lo que no se puede arreglar
+// (no se vende, no cabe el paquete entero: have + shopPackOf(id) > cap) y luego las monedas.
 inline ShopBuy shopCheckItem(uint8_t itemId, uint16_t coins, uint8_t have, uint8_t cap) {
   uint16_t p = priceOfItem(itemId);
   if (!p) return SB_NOT_SOLD;
-  if (have >= cap) return SB_FULL;
+  if ((uint16_t)have + shopPackOf(itemId) > cap) return SB_FULL;
   if (coins < p) return SB_BROKE;
   return SB_OK;
 }

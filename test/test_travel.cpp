@@ -47,9 +47,11 @@ TEST(travel, tablas_coherentes) {
   for (int i = 0; i < TRV_POOL_N; i++) sum += TRV_POOL_W[i];
   CHECK_EQ(sum, 100);
   for (int t = 0; t < TRV_TIERS; t++) CHECK_EQ(TRV_RARITY_W[t][0] + TRV_RARITY_W[t][1] + TRV_RARITY_W[t][2], 100);
-  CHECK_EQ(TRV_COINS[0], (uint16_t)15);
-  CHECK_EQ(TRV_COINS[1], (uint16_t)40);
-  CHECK_EQ(TRV_COINS[2], (uint16_t)90);
+  // promesa de diseno (v3.11, a proposito): un viaje paga unas 50 monedas por hora de viaje
+  for (int t = 0; t < TRV_TIERS; t++) {
+    int perHour = TRV_COINS[t] * 60 / TRV_MIN[t];
+    CHECK(perHour >= 45 && perHour <= 55);
+  }
   CHECK_EQ(TRV_GROW[2], (uint16_t)240);
   for (uint8_t id = 0; id < SOUV_COUNT; id++) {
     CHECK_EQ(souvenirDest(id), (uint8_t)(id / 5 + 1));

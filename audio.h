@@ -28,6 +28,7 @@ enum Sfx : uint8_t {
   SFX_ALERT,    // una necesidad llego a 0 (v1.50): tres pitidos agudos y cortos
   SFX_MORNING,  // se desperto solo a las WAKE_HOUR (v1.63): un "buenos dias" que sube y repite la ultima nota
   SFX_WILD,     // algo se mueve en el patio (v2.2): un encuentro salvaje, un aviso nervioso y una fanfarria
+  SFX_NEED,     // alarma de necesidad critica (v3.11): dos pitidos agudos (SFX_ALERT son tres)
   SFX_COUNT
 };
 

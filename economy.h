@@ -55,6 +55,13 @@ static const uint16_t ECO_ITEM_PRICE[ECO_ITEMS] = {
 };
 inline uint16_t priceOfItem(uint8_t itemId) { return itemId < ECO_ITEMS ? ECO_ITEM_PRICE[itemId] : 0; }
 
+// bayas de colores (ids 10..15 de pet.h; una static_assert en pet.cpp lo comprueba) y el amuleto (4)
+inline bool itemIsColorBerry(uint8_t itemId) { return itemId >= 10 && itemId <= 15; }
+// tope de cada objeto en la mochila: 1 el amuleto, BERRY_MAX las bayas de colores, ITEM_MAX el resto
+inline uint8_t itemCap(uint8_t itemId) { return itemId == 4 ? 1 : itemIsColorBerry(itemId) ? BERRY_MAX : ITEM_MAX; }
+// cuantas unidades da UNA compra: BERRY_PACK las bayas de colores, 1 el resto
+inline uint8_t shopPackOf(uint8_t itemId) { return itemIsColorBerry(itemId) ? BERRY_PACK : 1; }
+
 // Mapas del patio 1..5 (los .bin de la SD: 01 prado, 02 cantera, 03 bosque, 04 playa, 05 ruinas).
 // Son del jugador, no del bicho: se empieza con el prado y lo comprado vale para todos los bichos.
 // YARD_MAPS y ECO_MAP_PRICE, en tuning.h.

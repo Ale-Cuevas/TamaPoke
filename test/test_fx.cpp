@@ -351,3 +351,46 @@ TEST(fx, el_azar_de_los_efectos_es_repetible) {
   CHECK_EQ(fxHash(7), fxHash(7));
   CHECK(fxHash(7) != fxHash(8));
 }
+
+// ---------------------------------------------------------------- alarma de necesidad critica (v3.11)
+TEST(fx, la_alarma_suena_al_empezar_y_cada_ciclo) {
+  NeedAlarm a;
+  CHECK(!a.step(false, false, 0));                       // nada critico: en silencio
+  CHECK(a.step(true, false, 1000));                      // empieza a ser critica: suena enseguida
+  CHECK(!a.step(true, false, 1000 + NEED_ALARM_EVERY_MS - 1));
+  CHECK(a.step(true, false, 1000 + NEED_ALARM_EVERY_MS));
+  CHECK(!a.step(true, false, 1000 + NEED_ALARM_EVERY_MS + 1));
+  CHECK(a.step(true, false, 1000 + 2 * NEED_ALARM_EVERY_MS));
+}
+
+TEST(fx, la_alarma_para_al_arreglarse_y_vuelve_a_sonar_enseguida) {
+  NeedAlarm a;
+  CHECK(a.step(true, false, 0));
+  CHECK(!a.step(false, false, 500));  // arreglada
+  CHECK(a.step(true, false, 600));    // otra vez critica antes del ciclo: suena de inmediato
+}
+
+TEST(fx, la_alarma_se_pausa_con_un_juego_abierto_y_se_reanuda) {
+  NeedAlarm a;
+  CHECK(a.step(true, false, 0));
+  for (uint32_t t = 100; t < 3 * NEED_ALARM_EVERY_MS; t += 100) CHECK(!a.step(true, true, t));  // en pausa
+  CHECK(a.step(true, false, 3 * NEED_ALARM_EVERY_MS));  // al acabar, suena (ya toca)
+  CHECK(!a.step(true, false, 3 * NEED_ALARM_EVERY_MS + 10));
+}
+
+TEST(fx, la_alarma_aguanta_la_vuelta_de_millis) {
+  NeedAlarm a;
+  uint32_t t0 = 0xFFFFFFFFu - 500;
+  CHECK(a.step(true, false, t0));
+  CHECK(!a.step(true, false, t0 + 1000));  // 1 s despues, ya dio la vuelta (t0 + 1000 = 499)
+  CHECK(a.step(true, false, t0 + NEED_ALARM_EVERY_MS));
+}
+
+TEST(fx, la_alarma_umbral_de_necesidad_critica) {
+  // el umbral esta entre el globo (NEED_LOW) y el descuido (SLIP_AT): avisa antes de que cuente como error
+  CHECK(NEED_ALARM_AT < NEED_LOW);
+  CHECK(NEED_ALARM_AT > SLIP_AT);
+  CHECK(needCritical(NEED_ALARM_AT));
+  CHECK(needCritical(0));
+  CHECK(!needCritical(NEED_ALARM_AT + 1));
+}

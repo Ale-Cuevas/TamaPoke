@@ -140,6 +140,7 @@ static const Note N_WAKE[]    = {{523, 35}, {784, 35}, {1047, 35}, {1568, 35}, {
 // (grave, sin el zumbido de DENY), y una necesidad a 0 son tres pitidos agudos iguales, que no se
 // parecen a ningun otro efecto (DENY y OOPS caen; este repite la misma nota alta)
 static const Note N_POOP[]    = {{392, 40}, {262, 40}, {196, 90}};
+static const Note N_NEED[]    = {{1568, 70}, {0, 70}, {1568, 70}};
 static const Note N_ALERT[]   = {{1568, 70}, {0, 70}, {1568, 70}, {0, 70}, {1568, 70}};
 // buenos dias (v1.63): sube como un despertador amable (sol, si, re, sol) y repite la ultima nota.
 // Mas lento que la subida de nivel (notas de 110 ms), sin el aire de fanfarria de la eclosion
@@ -159,6 +160,7 @@ static const SfxDef SFX[] = {
   SFX_ENTRY(N_BATTLE), SFX_ENTRY(N_HIT), SFX_ENTRY(N_CRIT), SFX_ENTRY(N_SPECIAL), SFX_ENTRY(N_WIN),
   SFX_ENTRY(N_LOSE), SFX_ENTRY(N_LEVELUP), SFX_ENTRY(N_OOPS), SFX_ENTRY(N_STORE), SFX_ENTRY(N_WAKE),
   SFX_ENTRY(N_POOP), SFX_ENTRY(N_ALERT), SFX_ENTRY(N_MORNING), SFX_ENTRY(N_WILD),
+  SFX_ENTRY(N_NEED),
 };
 static_assert(sizeof(SFX) / sizeof(SFX[0]) == SFX_COUNT, "SFX[] tiene que tener un efecto por cada Sfx");
 

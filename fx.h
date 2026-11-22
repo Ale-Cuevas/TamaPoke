@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include "tuning.h"  // NEED_ALARM_AT, NEED_ALARM_EVERY_MS
 
 // Efectos de respuesta (docs/NEXT_FEATURES.md, Tarea FX, v1.30). Logica pura, sin hardware,
 // probada en el PC (test/test_fx.cpp). El dibujo y los sonidos viven en TamaPoke.ino.
@@ -361,3 +362,25 @@ inline uint32_t fxHash(uint32_t x) {
 struct FxNeedSnap {
   uint8_t v[3];  // comida, felicidad, energia (v3.1: sin limpieza)
 };
+
+// alarma de necesidad critica (v3.11): dos pitidos cada NEED_ALARM_EVERY_MS mientras algun bicho de casa, despierto
+// y nacido, tenga su necesidad mas baja a NEED_ALARM_AT o menos. Logica pura; el sonido (SFX_NEED) y el estado de los
+// bichos los pone el loop de TamaPoke.ino. Reloj de millis() de 32 bits, por resta sin signo.
+struct NeedAlarm {
+  bool armed = false;   // venia critica en la llamada anterior
+  uint32_t last = 0;    // ultimo pitido
+  // critical: hay una necesidad critica; paused: un juego/combate/encuentro/evolucion abierto (no suena, y al
+  // acabar se reanuda con un pitido). Devuelve true si toca sonar ahora. Al empezar a ser critica suena enseguida.
+  bool step(bool critical, bool paused, uint32_t now) {
+    if (!critical) {
+      armed = false;
+      return false;
+    }
+    if (paused) return false;
+    if (armed && (uint32_t)(now - last) < NEED_ALARM_EVERY_MS) return false;
+    armed = true;
+    last = now;
+    return true;
+  }
+};
+inline bool needCritical(int lowestStat) { return lowestStat <= NEED_ALARM_AT; }

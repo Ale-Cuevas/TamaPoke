@@ -20,8 +20,8 @@ TEST(shop, la_lista_cubre_todo_lo_que_se_vende) {
   CHECK_EQ(SHOP_ITEMS, SHOP_PAGE0 + BERRY_COLORS);
   for (int c = 0; c < BERRY_COLORS; c++) {
     CHECK_EQ(SHOP_ORDER[SHOP_PAGE0 + c], (uint8_t)(IT_BERRY_R + c));
-    CHECK_EQ(shopCheckItem(IT_BERRY_R + c, PRICE_BERRY, 0, ITEM_MAX), SB_OK);
-    CHECK_EQ(shopCheckItem(IT_BERRY_R + c, PRICE_BERRY - 1, 0, ITEM_MAX), SB_BROKE);
+    CHECK_EQ(shopCheckItem(IT_BERRY_R + c, PRICE_BERRY, 0, itemCap(IT_BERRY_R + c)), SB_OK);
+    CHECK_EQ(shopCheckItem(IT_BERRY_R + c, PRICE_BERRY - 1, 0, itemCap(IT_BERRY_R + c)), SB_BROKE);
   }
 }
 
@@ -70,4 +70,22 @@ TEST(shop, comprar_y_usar_un_mapa_con_el_pet) {
   CHECK_EQ(pickerPill(start, p.yardMapWanted(), p.ownsMap(start), p.coins), PK_USE);
   p.chooseMap(start);  // de vuelta al prado
   CHECK_EQ(p.yardMapWanted(), start);
+}
+
+// v3.11: las bayas de colores se venden en paquetes de BERRY_PACK y caben hasta BERRY_MAX; el resto, de una en una hasta ITEM_MAX
+TEST(shop, paquetes_de_bayas_y_topes) {
+  CHECK_EQ(shopPackOf(IT_BERRY_R), (uint8_t)BERRY_PACK);
+  CHECK_EQ(shopPackOf(IT_BERRY_O), (uint8_t)BERRY_PACK);
+  CHECK_EQ(shopPackOf(IT_GOLDEN), (uint8_t)1);
+  CHECK_EQ(shopPackOf(IT_BALL), (uint8_t)1);
+  CHECK_EQ(itemCap(IT_BERRY_G), (uint8_t)BERRY_MAX);
+  CHECK_EQ(itemCap(IT_GOLDEN), (uint8_t)ITEM_MAX);
+  CHECK_EQ(itemCap(IT_CHARM), (uint8_t)1);
+  uint8_t cap = itemCap(IT_BERRY_G);
+  CHECK_EQ(shopCheckItem(IT_BERRY_G, 999, BERRY_MAX - BERRY_PACK, cap), SB_OK);      // cabe justo el paquete
+  CHECK_EQ(shopCheckItem(IT_BERRY_G, 999, BERRY_MAX - BERRY_PACK + 1, cap), SB_FULL);  // el paquete no cabe entero
+  CHECK_EQ(shopCheckItem(IT_BERRY_G, PRICE_BERRY - 1, 0, cap), SB_BROKE);
+  CHECK_EQ(shopCheckItem(IT_BERRY_G, 0, BERRY_MAX, cap), SB_FULL);
+  CHECK_EQ(shopCheckItem(IT_GOLDEN, 999, ITEM_MAX - 1, itemCap(IT_GOLDEN)), SB_OK);
+  CHECK_EQ(shopCheckItem(IT_GOLDEN, 999, ITEM_MAX, itemCap(IT_GOLDEN)), SB_FULL);
 }

@@ -42,6 +42,11 @@
 #define JOY_DRAIN_HUNGRY 1      // ...y -1 mas cada minuto con la comida por debajo de JOY_HUNGRY_BELOW
 #define JOY_HUNGRY_BELOW 30
 #define NEED_LOW 25             // por debajo: esta triste (mood) y lo pide en un globo del patio
+// alarma de necesidad critica: con un bicho de casa despierto a NEED_ALARM_AT o menos en su necesidad mas baja, la
+// placa suena dos pitidos cada NEED_ALARM_EVERY_MS hasta que se arregla (por debajo de NEED_LOW, justo encima de
+// SLIP_AT: avisa antes del descuido). Volumen 0 = en silencio
+#define NEED_ALARM_AT 15
+#define NEED_ALARM_EVERY_MS 2000UL
 
 // cacas (v1.58): probabilidad (%) por minuto despierto con la comida por encima de POOP_MIN_FOOD. Era 15 (una
 // cada ~7 min); con 5, una cada ~20 min. Solo se quitan tocandolas (o con una sesion entera de cascada).
@@ -126,7 +131,9 @@ static const uint8_t POOP_JOY_DRAIN[POOP_MAX + 1] = { 0, 1, 2, 4 };
 #define RARE_CANDY_LEVELS 1        // Caramelo Raro: +1 nivel (la barra conserva lo que llevaba)
 #define CHARM_SHINY_MULT 3         // amuleto: el siguiente huevo, x3 de probabilidad shiny
 #define REVIVE_START 3             // Revivir con los que empieza una partida (y una vez al actualizar)
-#define ITEM_MAX 9                 // tope de cada objeto en la mochila
+#define ITEM_MAX 9                 // tope de cada objeto en la mochila...
+#define BERRY_MAX 30               // ...salvo las bayas de colores, que se venden en paquetes y caben mas
+#define BERRY_PACK 5               // bayas de colores que da una compra (al precio de PRICE_BERRY)
 
 // --------------------------------------------------------------------------------------------
 // Vinculo y racha
@@ -361,7 +368,7 @@ static const uint8_t ECO_GOAL_COINS[ECO_GOAL_TIERS] = { 10, 20, 40 };  // metas 
 #define PRICE_CAKE 40
 #define PRICE_REVIVE 80
 #define PRICE_BALL 100
-#define PRICE_BERRY 25            // v3.2: cada baya de color
+#define PRICE_BERRY 25            // v3.2: cada compra de baya de color (paquete de BERRY_PACK)
 // mapas del patio 1..5 (prado, cantera, bosque, playa, ruinas): el prado es gratis y de salida
 #define YARD_MAPS 5               // (estructura: los .bin de la SD)
 static const uint16_t ECO_MAP_PRICE[YARD_MAPS] = { 0, 150, 150, 200, 250 };
@@ -371,7 +378,7 @@ static const uint16_t ECO_MAP_PRICE[YARD_MAPS] = { 0, 150, 150, 200, 250 };
 // --------------------------------------------------------------------------------------------
 #define TRV_TIERS 3               // (estructura)
 static const uint16_t TRV_MIN[TRV_TIERS] = { 60, 180, 480 };         // duracion (minutos reales)
-static const uint16_t TRV_COINS[TRV_TIERS] = { 15, 40, 90 };         // monedas (fuera del tope diario)
+static const uint16_t TRV_COINS[TRV_TIERS] = { 50, 150, 400 };       // monedas (fuera del tope diario): ~50 por hora de viaje
 static const uint16_t TRV_GROW[TRV_TIERS] = { 30, 90, 240 };         // minutos de crecimiento
 static const uint8_t TRV_ITEM_PCT[TRV_TIERS] = { 25, 50, 100 };      // probabilidad de un objeto
 static const uint8_t TRV_SOUV_PCT[TRV_TIERS] = { 40, 75, 100 };      // probabilidad de un recuerdo

@@ -1467,7 +1467,7 @@ uint8_t Pet::giftEggs() const {
 // se ve el primero ("mochila llena") y todos siguen envueltos
 static bool giftFits(const uint8_t *items, uint8_t it) {
   if (it == IT_CHARM && items[IT_CHARM]) it = IT_GOLDEN;  // dos amuletos: solo se lleva uno
-  return items[it] < ((it == IT_CHARM) ? 1 : ITEM_MAX);
+  return items[it] < itemCap(it);
 }
 
 uint8_t Pet::openGift(bool *full) {
@@ -1498,7 +1498,7 @@ void Pet::unwrapGifts() {
   for (uint8_t i = 0; i < giftN; i++) {
     uint8_t it = gifts[i];
     if (it == IT_CHARM && items[IT_CHARM]) it = IT_GOLDEN;
-    uint8_t cap = (it == IT_CHARM) ? 1 : ITEM_MAX;
+    uint8_t cap = itemCap(it);
     if (items[it] < cap) items[it]++;
     else gifts[k++] = gifts[i];  // no cabe: sigue envuelto
   }
@@ -1506,7 +1506,7 @@ void Pet::unwrapGifts() {
 }
 
 void Pet::giveFound(uint8_t it, bool gift) {
-  uint8_t cap = (it == IT_CHARM) ? 1 : ITEM_MAX;
+  uint8_t cap = itemCap(it);
   bool full = items[it] >= cap;
   if (!full) items[it]++;
   queueFound(it, full, gift);
@@ -1708,6 +1708,8 @@ bool Pet::teamCanFight(uint32_t id) const {
 static_assert(FOOD_ITEM_BERRY0 == IT_BERRY_R && FOOD_ITEM_CAKE == IT_CAKE && FOOD_ITEM_GOLDEN == IT_GOLDEN,
               "food.h: los ids de objeto son los de pet.h");
 static_assert(PACK_OLD == IT_BERRY_R, "\"bpack\" guarda los objetos de antes de las bayas");
+static_assert(IT_CHARM == 4 && IT_BERRY_R == 10 && IT_BERRY_O == 15, "economy.h: itemCap / shopPackOf usan los ids a mano");
+static_assert(BERRY_MAX <= 255, "items[] es de un byte");
 static_assert(IT_BERRY_O + 1 == ECO_ITEMS && IT_BERRY_O + 1 == IT_COUNT, "economy.h: un precio por objeto de pet.h");
 
 uint16_t Pet::coinsEarnedToday() const { return coinDay == today() ? coinToday : 0; }
@@ -1740,8 +1742,9 @@ bool Pet::spendCoins(uint16_t n) {
 
 bool Pet::buyItem(uint8_t itemId) {
   uint16_t p = priceOfItem(itemId);
-  if (!p || itemId >= IT_COUNT || p > coins || items[itemId] >= ITEM_MAX) return false;
-  items[itemId]++;
+  uint8_t pack = shopPackOf(itemId);
+  if (!p || itemId >= IT_COUNT || p > coins || items[itemId] + pack > itemCap(itemId)) return false;
+  items[itemId] += pack;
   coins -= p;
   save();
   return true;
@@ -1865,7 +1868,7 @@ void Pet::travelComplete() {
   r.coins = addCoins(r.coins, false);
   if (r.dupCoins > r.coins) r.dupCoins = r.coins;
   if (r.item != TRV_NONE) {
-    if (items[r.item] >= ITEM_MAX) r.itemLost = 1;
+    if (items[r.item] >= itemCap(r.item)) r.itemLost = 1;
     else items[r.item]++;
   }
   if (r.souvenir != TRV_NONE && !r.dup) {
@@ -2146,7 +2149,7 @@ EncReward Pet::encounterDone(bool won, uint32_t fighter) {
   }
   if (random(100) < ENC_DROP_PCT) {
     r.item = rollWildItem();
-    uint8_t cap = (r.item == IT_CHARM) ? 1 : ITEM_MAX;
+    uint8_t cap = itemCap(r.item);
     if (items[r.item] < cap) items[r.item]++;
     else r.itemLost = true;
   }
@@ -2496,7 +2499,7 @@ void Pet::load() {
         if (g[1 + i] < IT_COUNT) gifts[giftN++] = g[1 + i];
   }
   for (uint8_t i = 0; i < IT_COUNT; i++) {
-    uint8_t cap = (i == IT_CHARM) ? 1 : ITEM_MAX;
+    uint8_t cap = itemCap(i);
     if (items[i] > cap) items[i] = cap;
   }
   // v1.59: una partida de antes del Revivir recibe los 3 de una partida nueva, una sola vez. La mochila
