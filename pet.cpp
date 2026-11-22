@@ -1033,8 +1033,9 @@ bool Pet::eatCake() {
   return feedFood(FOOD_CAKE);
 }
 
-void Pet::playResult(uint8_t score) {
-  if (busyEnding() || isEgg()) return;
+uint8_t Pet::playResult(uint8_t score) {
+  if (busyEnding() || isEgg()) return 0;
+  uint8_t antes = trSpe;
   uint8_t v = trSpe + score / BALL_SPE_DIV;  // jugar entrena la velocidad
   trSpe = v > 100 ? 100 : v;
   joy = clamp100(joy + BALL_JOY_BASE +
@@ -1049,6 +1050,7 @@ void Pet::playResult(uint8_t score) {
   addBond(GAME_BOND);
   registerCare();
   save();
+  return trSpe - antes;  // lo que subio VEL (tras el tope de 100), para la pantalla de resultado
 }
 
 // saco de entrenamiento: los golpes entrenan la fuerza. Devuelve la subida.

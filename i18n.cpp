@@ -119,6 +119,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Bronce", "Plata", "Oro", "ESTADISTICAS",
     // v3.14: el Cebo
     "Hace salir a un salvaje", "Ya hay un salvaje en el patio", "Ahora nadie puede pelear",
+    "Toca la bola!",
   },
   // ---------------- EN ----------------
   {
@@ -232,6 +233,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Bronze", "Silver", "Gold", "STATS",
     // v3.14: el Cebo
     "Draws out a wild one", "A wild one is already out", "No one can fight now",
+    "Tap the ball!",
   },
   // ---------------- FR ----------------
   {
@@ -345,6 +347,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Bronze", "Argent", "Or", "STATS",
     // v3.14: el Cebo
     "Attire un sauvage", "Un sauvage est deja la", "Personne ne peut combattre",
+    "Touche la balle!",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -463,6 +466,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Bronze", "Silber", "Gold", "WERTE",
     // v3.14: el Cebo
     "Lockt ein wildes an", "Schon ein wildes da", "Niemand kann kampfen",
+    "Tipp den Ball an!",
   },
   // ---------------- IT ----------------
   {
@@ -576,6 +580,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Bronzo", "Argento", "Oro", "STATISTICHE",
     // v3.14: el Cebo
     "Attira un selvatico", "C'e gia un selvatico", "Nessuno puo lottare",
+    "Tocca la palla!",
   },
   // ---------------- PT ----------------
   {
@@ -689,6 +694,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Bronze", "Prata", "Ouro", "ATRIBUTOS",
     // v3.14: el Cebo
     "Atrai um selvagem", "Ja ha um selvagem", "Ninguem pode lutar",
+    "Toque na bola!",
   },
   // ---------------- JA ----------------
   {
@@ -824,6 +830,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "ブロンズ", "シルバー", "ゴールド", "のうりょく",
     // v3.14: el Cebo
     "やせいを よびよせる", "もう やせいが いる", "いまは だれも たたかえない",
+    "タップして！",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -942,6 +949,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "브론즈", "실버", "골드", "능력치",
     // v3.14: el Cebo
     "야생을 불러낸다", "이미 야생이 있다", "지금은 싸울 수 없다",
+    "공을 터치!",
   },
 };
 
