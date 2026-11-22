@@ -1100,6 +1100,11 @@ static const std::vector<Scene> &scenes() {
                                zenNewHi = true; pet.lastCoins = 8; zenOverUntil = millis() + 4000; } },
     { "sack-result-coins", [] { pokemon(66, 13); startSack(); sackHits = 31; sackGain = 7; pet.lastCoins = 6;
                                 sackOverUntil = millis() + 3000; } },
+    { "ball-result-spd", [] { pokemon(25, 13); startGame(); gameScore = 22; gameGainShown = 4; pet.lastCoins = 5; gameOverUntil = millis() + 4000; } },
+    { "ball-result-spd-es", [] { pokemon(25, 13); es(); startGame(); gameScore = 22; gameGainShown = 4; pet.lastCoins = 5; gameOverUntil = millis() + 4000; } },
+    { "ball-result-spd-record-es", [] { pokemon(25, 13); es(); startGame(); gameScore = 22; gameNewHi = true; gameGainShown = 4; pet.lastCoins = 5; gameOverUntil = millis() + 4000; } },
+    { "ball-start-hint", [] { pokemon(25, 13); startGame(); }, 4 },
+    { "ball-start-hint-es", [] { pokemon(25, 13); es(); startGame(); }, 4 },
     { "ball-result-coins", [] { pokemon(25, 13); startGame(); gameScore = 22; pet.lastCoins = 5; gameOverUntil = millis() + 4000; } },
     { "sack-max", [] { pokemon(123, 13); startSack(); pet.trAtk = 100; sackHits = 31; sackGain = 0; sackOverUntil = millis() + 3000; } },
     { "zen-result", [] { zenPlaying(7, 13, 50); zen.t = ZEN_SESSION_MS; zen.inBandMs = 23400; zenGainShown = 11;

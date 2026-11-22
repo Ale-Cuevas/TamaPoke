@@ -268,6 +268,7 @@ BallState ball;              // la pokeball (ballgame.h)
 float gamePetX;
 uint32_t lastGameStep = 0;  // ultima llamada a stepGame(): fisica por tiempo real, no por frame
 uint8_t gameScore, gameMisses;
+uint8_t gameGainShown = 0;  // VEL que dio la partida (o daria, con BALL), para la pantalla de resultado
 bool gameNoSave = false;    // partida abierta con el comando BALL: no toca el record ni da premio
 float hitX, hitY;             // ultimo golpe (anillo de impacto)
 uint32_t hitTime = 0;
@@ -2951,6 +2952,7 @@ void startGame() {
   gameOpen = true;
   gameOverUntil = 0;
   gameScore = 0;
+  gameGainShown = 0;
   gameMisses = 0;
   gameNewHi = false;
   gameNoSave = false;
@@ -2996,13 +2998,14 @@ void stepGame() {
     if (++gameMisses >= 3) {
       if (gameNoSave) {  // partida del comando BALL: ni record ni premio
         gameNewHi = false;
+        gameGainShown = gameScore / BALL_SPE_DIV;  // lo que daria, para verlo; no se aplica
         pet.lastCoins = 0;
         sfxPlay(SFX_LEVEL);
       } else {
         gameNewHi = (gameScore > pet.gameHi);
         FxNeedSnap ns = fxSnap();
         pet.lastCoins = 0;
-        pet.playResult(gameScore);  // actualiza el record y da felicidad
+        gameGainShown = pet.playResult(gameScore);  // actualiza el record y da felicidad
         fxNeeds(ns);  // los "+N" salen al volver a la pantalla principal
         sfxPlay(gameNewHi && gameScore > 0 ? SFX_MEDAL : SFX_LEVEL);
       }
@@ -3860,25 +3863,33 @@ void renderGame() {
     snprintf(buf, sizeof(buf), T(S_SCORE_FMT), gameScore);
     gfx->setTextColor(ink);
     setSize(4);
-    setCur(centerX(buf, 4), 160);
+    setCur(centerX(buf, 4), 150);
     printT(buf);
     setSize(2);
     if (gameNewHi && gameScore > 0) {
       gfx->setTextColor(UI_BAR_WARN);
-      setCur(centerX(T(S_NEW_RECORD), 2), 214);
+      setCur(centerX(T(S_NEW_RECORD), 2), 200);
       printT(T(S_NEW_RECORD));
     } else {
       char rec[20];
       snprintf(rec, sizeof(rec), T(S_RECORD_FMT), pet.gameHi);
       gfx->setTextColor(ink);
-      setCur(centerX(rec, 2), 214);
+      setCur(centerX(rec, 2), 200);
       printT(rec);
     }
+    char g[28];
+    if (gameGainShown == 0 && pet.trSpe >= 100) snprintf(g, sizeof(g), "%s", T(S_SPE_MAX));  // ya al tope
+    else snprintf(g, sizeof(g), T(S_SPD_GAIN_FMT), gameGainShown);
+    gfx->setTextColor(UI_BAR_WARN);
+    setSize(3);
+    setCur(centerX(g, 3), 234);
+    printT(g);
+    setSize(2);
     const char *msg = gameScore >= 10 ? T(S_GREAT_JOY) : T(S_PLUS_JOY);
     gfx->setTextColor(ink);
-    setCur(centerX(msg, 2), 250);
+    setCur(centerX(msg, 2), 276);
     printT(msg);
-    drawCoinGain(286, pet.lastCoins, ink);
+    drawCoinGain(306, pet.lastCoins, ink);
     gfx->flush();
     return;
   }
@@ -3904,6 +3915,13 @@ void renderGame() {
   for (int i = 0; i < 3; i++) {
     if (i < 3 - gameMisses) gfx->fillCircle(180 + i * 28, 104, 6, UI_BAR_BAD);
     else gfx->drawCircle(180 + i * 28, 104, 6, UI_TRACK);
+  }
+
+  if (gameScore == 0 && (millis() / 600) % 4 != 3) {  // pista hasta el primer toque
+    setSize(2);
+    gfx->setTextColor(ink);
+    setCur(centerX(T(S_TAP_BALL), 2), 310);
+    printT(T(S_TAP_BALL));
   }
 
   if (pmd.loaded) {

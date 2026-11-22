@@ -189,7 +189,7 @@ public:
   bool canFeed(uint8_t food) const;
   bool feedFood(uint8_t food);
   bool eatCake();  // una tarta de la mochila (v1.54): false si no hay o no puede comer
-  void playResult(uint8_t score);  // recompensa del minijuego (entrena VEL)
+  uint8_t playResult(uint8_t score);  // recompensa del minijuego (entrena VEL); devuelve lo que subio VEL
   uint8_t trainStrength(uint16_t hits);  // saco de entrenamiento (entrena FUE)
   // cascada completa (entrena DEF y lava), v1.43; driftTenths: la parte con la franja moviendose,
   // que da DEF de bonificacion (v1.47)

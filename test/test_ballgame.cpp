@@ -6,21 +6,25 @@
 static bool near(float a, float b, float eps = 1e-4f) { return std::fabs(a - b) <= eps; }
 
 TEST(ballgame, empieza_a_la_velocidad_de_salida_y_sube_cada_punto) {
+  const float slope = (BALL_SPEED_MAX - BALL_SPEED_START) / (float)(BALL_SPEED_TOP_AT - 1);
   CHECK(near(ballSpeed(0), BALL_SPEED_START));
   CHECK(near(ballSpeed(1), BALL_SPEED_START));
-  CHECK(near(ballSpeed(40), BALL_SPEED_START + 39.0f / BALL_SPEED_PER));
-  CHECK(near(ballSpeed(1 + BALL_SPEED_PER), BALL_SPEED_START + 1.0f));
-  // v3.16, promesa de diseno: sale un 50 % mas rapida que hasta la v3.15 (1x)
+  CHECK(near(ballSpeed(40), BALL_SPEED_START + 39.0f * slope));
+  CHECK(near(ballSpeed(2), BALL_SPEED_START + slope));
+  // v3.17, promesa de diseno: 1,5x con 1 punto, en linea recta hasta 3,5x con 100 puntos, y ese es el tope
   CHECK(near(BALL_SPEED_START, 1.5f));
+  CHECK(near(BALL_SPEED_MAX, 3.5f));
+  CHECK_EQ((int)BALL_SPEED_TOP_AT, 100);
+  CHECK(ballSpeed(100) == BALL_SPEED_MAX);  // exacto, sin error de redondeo
 }
 
 TEST(ballgame, sigue_subiendo_hasta_el_tope) {
-  int capAt = 1 + (int)std::ceil((BALL_SPEED_MAX - BALL_SPEED_START) * BALL_SPEED_PER);
+  int capAt = BALL_SPEED_TOP_AT;
   CHECK(ballSpeed(capAt - 1) < BALL_SPEED_MAX);
   CHECK(near(ballSpeed(capAt), BALL_SPEED_MAX));
   CHECK(near(ballSpeed(255), BALL_SPEED_MAX));
   for (uint16_t s = 1; s < 300; s++) CHECK(ballSpeed(s) >= ballSpeed(s - 1));  // nunca baja
-  for (uint16_t s = 2; s < capAt; s++) CHECK(ballSpeed(s) > ballSpeed(s - 1));  // y sube con cada punto
+  for (uint16_t s = 2; s <= capAt; s++) CHECK(ballSpeed(s) > ballSpeed(s - 1));  // y sube con cada punto
 }
 
 TEST(ballgame, el_frame_tardio_se_recorta_antes_de_la_velocidad) {

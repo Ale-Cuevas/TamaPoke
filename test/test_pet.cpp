@@ -820,7 +820,7 @@ TEST(play, minijuego_entrena_velocidad_y_guarda_record) {
   makePet(p, 4);
   p.joy = 10;
   p.weight = 50;
-  p.playResult(20);
+  CHECK_EQ(p.playResult(20), (uint8_t)4);  // devuelve lo que subio VEL
   CHECK_EQ(p.trSpe, (uint8_t)4);
   CHECK_EQ(p.joy, (uint8_t)45);   // +5 +30 por marcar mas de 15
   CHECK_EQ(p.weight, (uint8_t)40);  // 50 - 20/GAME_WEIGHT_DIV
