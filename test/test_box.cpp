@@ -317,7 +317,7 @@ TEST(box, una_siesta_guardada_sigue_siendo_siesta_al_despertarla_de_dia) {
 TEST(box, dormido_de_noche_guardado_amanece_al_despertarlo_de_dia) {
   Pet p;
   freshPet(p, 7);
-  p.lastSeenEpoch = DAY0 + 23 * 3600u;  // acostado a las 23:00
+  p.lastSeenEpoch = DAY0 + BED_HOUR * 3600u;  // acostado a las BED_HOUR (23:00)
   p.toggleLight();
   CHECK(p.nightSlept());
   CHECK(p.store(0));

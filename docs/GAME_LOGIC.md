@@ -5,7 +5,7 @@
 > `feature/full-yard`, 2026-11-17), v2.6 hungry-pet food fix (branch `fix/hungry-food`, 2026-11-17) and v3.0 two
 > live home pets (`84b2acf`) and v3.1 no hygiene, stale poops drain JOY (`6e10c31`), v3.2 coloured berries (`b7f7d9c`),
 > v3.3 pet menu, Play/Bag/Shop dock (`c8015f8`) and v3.4 player medals, USER page (branch `feature/two-homes`,
-> 2026-11-18), v3.5 yard 2.4x, v3.6 4.4x yard rolled back in v3.7, v3.8 pets 2.6x + pet-menu need bars, v3.9 in a box, v3.10 bigger labels, v3.11 tuning pass (`feature/tuning-v311`), v3.12 sleeping pets fight, v3.13 slower night, v3.14 Lure, v3.15 four new maps and 45 souvenirs (branch `feature/new-maps`), v3.16 faster ball game, v3.17 ball 3.5x at 100 + hint + SPD on the result, v3.18 ball miss thud + dust (2026-11-22).**
+> 2026-11-18), v3.5 yard 2.4x, v3.6 4.4x yard rolled back in v3.7, v3.8 pets 2.6x + pet-menu need bars, v3.9 in a box, v3.10 bigger labels, v3.11 tuning pass (`feature/tuning-v311`), v3.12 sleeping pets fight, v3.13 slower night, v3.14 Lure, v3.15 four new maps and 45 souvenirs (branch `feature/new-maps`), v3.16 faster ball game, v3.17 ball 3.5x at 100 + hint + SPD on the result, v3.18 ball miss thud + dust, v3.19 Box keeps night sleep vs nap (branch `fix/box-night-sleep`) (2026-11-22).**
 > If `FW_VERSION` in `TamaPoke.ino` or `git log` is past this, sections may be stale. The rule (CLAUDE.md) is that
 > every commit that changes game logic updates this guide in the same commit, including this line.
 
@@ -440,8 +440,8 @@ Constants are in `tuning.h`: `EVENING_HOUR` 20, `SLEEPY_HOUR` 22, `BED_HOUR` 23,
 `NIGHT_RESLEEP_MIN` 30, `BED_BOND` 3.
 
 - **22:00** `sleepy()` (`pet.h:210`): a "zzz" bubble. Putting the pet to bed now gives **+3 bond**, once a night
-  (`goToBed`, `pet.cpp:936`).
-- **23:00** auto-sleep (`nightMinute`, `pet.cpp:949`). If it is woken before 09:00, it sleeps again after 30 min
+  (`goToBed`, `pet.cpp:1168`).
+- **23:00** auto-sleep (`nightMinute`, `pet.cpp:1181`). If it is woken before 09:00, it sleeps again after 30 min
   awake. `nightHold` delays this while a game, battle, evolution or Box move is open.
 - **09:00** a night sleep (`nightSleep`, set for bedtimes 20:00–08:59) wakes by itself and plays `SFX_MORNING`. A
   nap is not woken. A nap that reaches bed hours (23:00–08:59) becomes a night sleep. The Box keeps the
@@ -612,7 +612,7 @@ A death sets `lastEnd = CER_DEATH`, which curses the next random egg to Common. 
 There are 6 slots where pets **hibernate**: no ageing, growth, drain or slip-ups. The one exception is that stage
 and wild rewards and trips add growth directly to the slot record.
 
-- **Record.** `PetRecord` (`box.h:35-56`) is 55 bytes packed, with a version and CRC16. It is valid only if the
+- **Record.** `PetRecord` (`box.h:35-51`) is 55 bytes packed, with a version and CRC16. It is valid only if the
   version is known, the CRC matches, `uid != 0` and the species is 1–151. An invalid slot shows "?" and is never
   loaded or overwritten; only `WIPE` or `BOXCLR` clears it.
 - **What is stored.** Only the individual goes into the record. Streak, steps, Backpack, Pokédex and the incubator
