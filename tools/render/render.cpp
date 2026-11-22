@@ -1103,6 +1103,7 @@ static const std::vector<Scene> &scenes() {
     { "ball-result-spd", [] { pokemon(25, 13); startGame(); gameScore = 22; gameGainShown = 4; pet.lastCoins = 5; gameOverUntil = millis() + 4000; } },
     { "ball-result-spd-es", [] { pokemon(25, 13); es(); startGame(); gameScore = 22; gameGainShown = 4; pet.lastCoins = 5; gameOverUntil = millis() + 4000; } },
     { "ball-result-spd-record-es", [] { pokemon(25, 13); es(); startGame(); gameScore = 22; gameNewHi = true; gameGainShown = 4; pet.lastCoins = 5; gameOverUntil = millis() + 4000; } },
+    { "ball-miss", [] { pokemon(25, 13); startGame(); gameScore = 5; gameMisses = 1; missX = 120; missTime = millis(); ball.x = 380; ball.y = 150; }, 1 },
     { "ball-start-hint", [] { pokemon(25, 13); startGame(); }, 4 },
     { "ball-start-hint-es", [] { pokemon(25, 13); es(); startGame(); }, 4 },
     { "ball-result-coins", [] { pokemon(25, 13); startGame(); gameScore = 22; pet.lastCoins = 5; gameOverUntil = millis() + 4000; } },

@@ -29,6 +29,7 @@ enum Sfx : uint8_t {
   SFX_MORNING,  // se desperto solo a las WAKE_HOUR (v1.63): un "buenos dias" que sube y repite la ultima nota
   SFX_WILD,     // algo se mueve en el patio (v2.2): un encuentro salvaje, un aviso nervioso y una fanfarria
   SFX_NEED,     // alarma de necesidad critica (v3.11): dos pitidos agudos (SFX_ALERT son tres)
+  SFX_MISS,     // la bola cae al suelo en el minijuego (v3.18): un golpe sordo que cae, mas grave que HIT y OOPS
   SFX_COUNT
 };
 

@@ -6,6 +6,13 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.18] - 2026-11-22
+
+### Added
+
+- **Feedback when the ball drops in the ball game.** A low "thud" plays, the ball squashes flat on the ground and
+  kicks up a little dust puff, and the life you just lost flashes. The last miss keeps the game-over sound.
+
 ## [3.17] - 2026-11-22
 
 ### Changed
