@@ -6,6 +6,14 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.16] - 2026-11-22
+
+### Changed
+
+- **The ball game starts 50 % faster.** The ball now starts at 1.5x speed instead of 1x, so the opening isn't slow
+  any more. It still speeds up by the same amount with every point and reaches the same top speed (3x), now at
+  120 points instead of 159.
+
 ## [3.15] - 2026-11-22
 
 ### Added

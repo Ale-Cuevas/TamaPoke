@@ -5,7 +5,7 @@
 > `feature/full-yard`, 2026-11-17), v2.6 hungry-pet food fix (branch `fix/hungry-food`, 2026-11-17) and v3.0 two
 > live home pets (`84b2acf`) and v3.1 no hygiene, stale poops drain JOY (`6e10c31`), v3.2 coloured berries (`b7f7d9c`),
 > v3.3 pet menu, Play/Bag/Shop dock (`c8015f8`) and v3.4 player medals, USER page (branch `feature/two-homes`,
-> 2026-11-18), v3.5 yard 2.4x, v3.6 4.4x yard rolled back in v3.7, v3.8 pets 2.6x + pet-menu need bars, v3.9 in a box, v3.10 bigger labels, v3.11 tuning pass (`feature/tuning-v311`), v3.12 sleeping pets fight, v3.13 slower night, v3.14 Lure, v3.15 four new maps and 45 souvenirs (branch `feature/new-maps`, 2026-11-22).**
+> 2026-11-18), v3.5 yard 2.4x, v3.6 4.4x yard rolled back in v3.7, v3.8 pets 2.6x + pet-menu need bars, v3.9 in a box, v3.10 bigger labels, v3.11 tuning pass (`feature/tuning-v311`), v3.12 sleeping pets fight, v3.13 slower night, v3.14 Lure, v3.15 four new maps and 45 souvenirs (branch `feature/new-maps`), v3.16 faster ball game (2026-11-22).**
 > If `FW_VERSION` in `TamaPoke.ino` or `git log` is past this, sections may be stale. The rule (CLAUDE.md) is that
 > every commit that changes game logic updates this guide in the same commit, including this line.
 
@@ -743,7 +743,7 @@ flowchart LR
 
 | Game | Stat | Logic | Rules | Reward (`pet.cpp`) |
 |---|---|---|---|---|
-| Ball | SPD | `ballgame.h`; `startGame` `:2949`, `stepGame` `:2984` | Tap the ball to keep it up; 3 floor misses end it. Speed 1× → 2× at 80 points → 3× cap | `playResult` `:1036`: SPD += score/5 (no per-session cap), JOY +5…+35, ENE down, weight −score/2, coins |
+| Ball | SPD | `ballgame.h`; `startGame` `:2949`, `stepGame` `:2984` | Tap the ball to keep it up; 3 floor misses end it. Speed 1.5× at the start (v3.16, was 1×), +1× every 79 points, 3× cap at 120 points | `playResult` `:1036`: SPD += score/5 (no per-session cap), JOY +5…+35, ENE down, weight −score/2, coins |
 | Training bag | ATK | `.ino` only; `startSack` `:2768` | 10 s of tapping | `trainStrength` `:827`: ATK += hits/4, cap 18, JOY +6, weight −hits/10, coins |
 | Sled | SPD | `dashgame.h`; `startDash` `:3454` | Tilt to dodge rows. 2 s calibration takes the current angle as straight. Speed 1 + t/40 s, cap 3×. 3 hits end it | `dashResult` `:1102`: SPD += rows/6, cap 18, JOY +5…+35, weight −rows/8, coins |
 | Waterfall | DEF | `zengame.h`; `startZen` `:3154` | Hold to raise the gauge, release to lower it; stay in the band for 45 s. The band narrows; from 30 s it drifts (bonus time). Surges push it down | `zenResult` `:1081`: DEF += min(8, t/3.5 s) + bonus min(3, …), **clears all poops of the pet that played** (v3.1), no weight burn, coins. **Only a full session pays** |

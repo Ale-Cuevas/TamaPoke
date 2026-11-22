@@ -5,28 +5,31 @@
 
 static bool near(float a, float b, float eps = 1e-4f) { return std::fabs(a - b) <= eps; }
 
-TEST(ballgame, el_doble_de_rapida_con_80_que_con_1) {
-  CHECK(near(ballSpeed(0), 1.0f));
-  CHECK(near(ballSpeed(1), 1.0f));
-  CHECK(near(ballSpeed(40), 1.0f + 39.0f / 79.0f));
-  CHECK(near(ballSpeed(80), 2.0f));
+TEST(ballgame, empieza_a_la_velocidad_de_salida_y_sube_cada_punto) {
+  CHECK(near(ballSpeed(0), BALL_SPEED_START));
+  CHECK(near(ballSpeed(1), BALL_SPEED_START));
+  CHECK(near(ballSpeed(40), BALL_SPEED_START + 39.0f / BALL_SPEED_PER));
+  CHECK(near(ballSpeed(1 + BALL_SPEED_PER), BALL_SPEED_START + 1.0f));
+  // v3.16, promesa de diseno: sale un 50 % mas rapida que hasta la v3.15 (1x)
+  CHECK(near(BALL_SPEED_START, 1.5f));
 }
 
-TEST(ballgame, sigue_subiendo_pasados_los_80_hasta_3x) {
-  CHECK(ballSpeed(120) > ballSpeed(80));
-  CHECK(near(ballSpeed(159), 3.0f));
-  CHECK(near(ballSpeed(160), 3.0f));
-  CHECK(near(ballSpeed(255), 3.0f));
+TEST(ballgame, sigue_subiendo_hasta_el_tope) {
+  int capAt = 1 + (int)std::ceil((BALL_SPEED_MAX - BALL_SPEED_START) * BALL_SPEED_PER);
+  CHECK(ballSpeed(capAt - 1) < BALL_SPEED_MAX);
+  CHECK(near(ballSpeed(capAt), BALL_SPEED_MAX));
+  CHECK(near(ballSpeed(255), BALL_SPEED_MAX));
   for (uint16_t s = 1; s < 300; s++) CHECK(ballSpeed(s) >= ballSpeed(s - 1));  // nunca baja
-  for (uint16_t s = 2; s <= 159; s++) CHECK(ballSpeed(s) > ballSpeed(s - 1));  // y sube con cada punto
+  for (uint16_t s = 2; s < capAt; s++) CHECK(ballSpeed(s) > ballSpeed(s - 1));  // y sube con cada punto
 }
 
 TEST(ballgame, el_frame_tardio_se_recorta_antes_de_la_velocidad) {
-  CHECK(near(ballStepK(85, 1), 1.0f));
-  CHECK(near(ballStepK(85, 80), 2.0f));
-  CHECK(near(ballStepK(170, 80), 4.0f));
-  CHECK(near(ballStepK(1000, 1), 3.0f));   // 1 s de frame: como mucho 3 pasos
-  CHECK(near(ballStepK(1000, 80), 6.0f));  // ...a doble velocidad, 6: el tope no se come la velocidad
+  float s1 = ballSpeed(1), s80 = ballSpeed(80);
+  CHECK(near(ballStepK(85, 1), s1));
+  CHECK(near(ballStepK(85, 80), s80));
+  CHECK(near(ballStepK(170, 80), 2.0f * s80));
+  CHECK(near(ballStepK(1000, 1), BALL_LATE_MAX * s1));    // 1 s de frame: como mucho 3 pasos
+  CHECK(near(ballStepK(1000, 80), BALL_LATE_MAX * s80));  // ...por la velocidad: el tope no se la come
 }
 
 // frames de 85 ms que la bola pasa en el aire tras un toque, a la velocidad de `score`;
@@ -45,19 +48,22 @@ static int framesInAir(uint16_t score, float *apex) {
   return n;
 }
 
-TEST(ballgame, con_80_puntos_esta_la_mitad_de_tiempo_en_el_aire) {
-  float apex1, apex80;
-  int f1 = framesInAir(1, &apex1), f80 = framesInAir(80, &apex80);
-  // 2 * BALL_LIFT / BALL_GRAV = 33 pasos en el aire: 34 frames a 1x, 17 a 2x
-  CHECK(f1 >= 33 && f1 <= 34);
-  CHECK(std::abs(2 * f80 - f1) <= 1);
-  // el mismo arco: la parabola es exacta, no depende de lo largo del paso
+TEST(ballgame, el_tiempo_en_el_aire_baja_con_la_velocidad) {
+  // 2 * BALL_LIFT / BALL_GRAV = 33 pasos en el aire; a velocidad v son unos 33 / v frames de 85 ms
+  float apex1;
+  int f1 = framesInAir(1, &apex1);
   CHECK(apex1 > 50.0f && apex1 < 60.0f);
-  CHECK(std::fabs(apex80 - apex1) < 2.0f);
-  float apex159;
-  int f159 = framesInAir(159, &apex159);  // 3x: un tercio
-  CHECK(std::abs(3 * f159 - f1) <= 2);
-  CHECK(std::fabs(apex159 - apex1) < 3.0f);
+  const uint16_t scores[] = { 1, 40, 80, 120, 200 };
+  for (uint16_t sc : scores) {
+    float apex;
+    int f = framesInAir(sc, &apex);
+    float steps = f * ballSpeed(sc);
+    CHECK(steps >= 33.0f && steps <= 33.0f + 1.0f + ballSpeed(sc));
+    CHECK(std::fabs(apex - apex1) < 3.0f);  // el mismo arco: la parabola no depende del paso
+  }
+  // a mas velocidad, menos tiempo en el aire
+  CHECK(framesInAir(80, nullptr) < f1);
+  CHECK(framesInAir(200, nullptr) < framesInAir(80, nullptr));
 }
 
 TEST(ballgame, la_forma_del_arco_no_cambia_con_la_puntuacion) {
