@@ -120,10 +120,15 @@ enum StrId : uint16_t {
   // la tienda de la mochila y los fondos (v2.0, Y4)
   S_TAB_ITEMS, S_BACKGROUNDS, S_BUY_FMT, S_NOT_ENOUGH, S_BAG_FULL,
   S_MAP_1, S_MAP_2, S_MAP_3, S_MAP_4, S_MAP_5,
+  S_MAP_6, S_MAP_7, S_MAP_8, S_MAP_9,  // v3.15: volcan, central, torre del cielo, distrito toxico (el primero + mapa - 1)
   S_USING, S_NOT_ON_SD, S_SHOP_HINT,
-  // los viajes del patio (v2.0, Y5): los 25 recuerdos (el primero + su id, 0..24) y las 13 plantillas de sucesos (el primero + la plantilla; travel.h)
+  // los viajes del patio (v2.0, Y5): los recuerdos (el primero + su id, 0..SOUV_COUNT-1; v3.15: 45) y las plantillas de
+  // sucesos (el primero + la plantilla; travel.h; v3.15: 17)
   S_SOUV_0, S_SOUV_1, S_SOUV_2, S_SOUV_3, S_SOUV_4, S_SOUV_5, S_SOUV_6, S_SOUV_7, S_SOUV_8, S_SOUV_9, S_SOUV_10, S_SOUV_11, S_SOUV_12, S_SOUV_13, S_SOUV_14, S_SOUV_15, S_SOUV_16, S_SOUV_17, S_SOUV_18, S_SOUV_19, S_SOUV_20, S_SOUV_21, S_SOUV_22, S_SOUV_23, S_SOUV_24,
+  S_SOUV_25, S_SOUV_26, S_SOUV_27, S_SOUV_28, S_SOUV_29, S_SOUV_30, S_SOUV_31, S_SOUV_32, S_SOUV_33, S_SOUV_34,
+  S_SOUV_35, S_SOUV_36, S_SOUV_37, S_SOUV_38, S_SOUV_39, S_SOUV_40, S_SOUV_41, S_SOUV_42, S_SOUV_43, S_SOUV_44,
   S_TRV_EV_0, S_TRV_EV_1, S_TRV_EV_2, S_TRV_EV_3, S_TRV_EV_4, S_TRV_EV_5, S_TRV_EV_6, S_TRV_EV_7, S_TRV_EV_8, S_TRV_EV_9, S_TRV_EV_10, S_TRV_EV_11, S_TRV_EV_12,
+  S_TRV_EV_13, S_TRV_EV_14, S_TRV_EV_15, S_TRV_EV_16,  // v3.15: uno por mapa nuevo (volcan, central, torre, distrito)
   // los viajes, las pantallas (v2.0, Y5b)
   S_TRV_TITLE, S_TRV_TRAVELLING, S_TRV_ONWAY, S_TRV_BACK_FMT, S_TRV_AWAY, S_TRV_GO, S_TRV_BAGFULL, S_TRV_NEW,
   S_TRV_FOUND_FMT, S_COLLECTION, S_TRV_NOPETS, S_TRV_NOCLOCK, S_RAR_0, S_RAR_1, S_RAR_2, S_TRV_AWAY_FMT,

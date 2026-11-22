@@ -49,7 +49,7 @@ packed on your PC (see [Yard backgrounds](#yard-backgrounds)). Design: [docs/yar
 your backgrounds (real time, also with the board off; needs the clock set). The trip view shows a countdown
 and a log of what happened. Back home, the pet waits in the yard with its suitcase and a "!": tap it to see
 what it brought (coins: 50 / 150 / 400 for 1 h / 3 h / 8 h since v3.11, growth, sometimes an item, often a souvenir). The 25 souvenirs, 5 per background,
-fill the **Collection**, the third tab of the Bag. Serial `TRAVEL`, `TRAVEL <slot> <map> <0-2>`,
+fill the **Collection**, the third tab of the Bag (v3.15: 45 souvenirs over 9 backgrounds, on two Collection pages). Serial `TRAVEL`, `TRAVEL <slot> <map> <0-2>`,
 `TRAVELT <min>`, `TRAVELEND`, `SOUV [mask]`.
 
 **v2.2: wild encounters.** Once in a while (v3.11: 60 % of days, plus a 50 % chance at 3,000, 6,000 and 10,000 steps, more after trips)
@@ -371,7 +371,7 @@ medal, the tier and the coins. They're on the first page of the [USER page](#the
 | Wild tamer | wild Pokémon beaten | 3 / 15 / 40 |
 | Catcher | captures | 1 / 5 / 15 |
 | Globetrotter | trips completed | 3 / 15 / 50 |
-| Collector | souvenirs | 5 / 15 / 25 |
+| Collector | souvenirs | 5 / 20 / 45 (v3.15; gold = all of them) |
 
 - The first seven count **pets**: each pet counts **once** for each of them, the first time it gets there, even
   if it later goes to the Box, comes back, changes home slot or loses it (bond, weight). A pet that grows in the
@@ -471,7 +471,7 @@ Battles between two boards over the air are next (see the roadmap).
   each adds a **50 %** roll that can bring another one even after the day's first (if one is still in the yard,
   the roll waits until it's gone). Every trip that comes back adds a roll of **3 % per hour** (1 h 3 %, 3 h 9 %, 8 h 24 %). Rolls need
   the clock set and someone to fight (the home pet or a Box pet); missed ones happen when the board turns on.
-- **In the yard:** a bush (Meadow, Forest), a rock (Quarry, Ruins) or a lump of sand (Beach) that shakes every
+- **In the yard:** a bush (Meadow, Forest), a rock (Quarry, Ruins, Volcano, Power Plant, Sky Tower, Toxic District) or a lump of sand (Beach) that shakes every
   2.4 s with two red curved marks on each side, for **6 hours**. It plays an excited jingle when it appears
   (after the pet wakes, if it was asleep). An exclusive one sparkles.
 - **The encounter:** tap it. Two black bands close in and the wild pet appears in a circle with its level;
@@ -568,7 +568,8 @@ button or a swipe right from the first page goes back to the yard.
    their coins.
 2. **Walk**: today's steps, goals and finds (above).
 3. **Badges**: your 8 stage badges.
-4. **Collection**: the 25 trip souvenirs (tap one for its card).
+4. **Collection**: the 45 trip souvenirs (tap one for its card) on two pages, maps 1-5 and maps 6-9 (v3.15):
+   the "1/2" under the title, the side arrows or a vertical swipe turn the page.
 
 The **stat card** (Status in the pet menu) has **two pages** since v3.4: **Profile** (level, name, needs,
 streak, bond, favourite berry and age, the evolution line and the slip-ups, which were on the old Progress page)
@@ -876,9 +877,12 @@ U8g2 unifont subset carries ♀ or ♂, so each language picks its own substitut
 
 ## Yard backgrounds
 
-The yard is a **map from the SD card** (`/yard/NN.bin`): 01 meadow, 02 quarry, 03 forest, 04 beach and 05 ruins
-(a ghostly purple one with mist). Everyone starts with the meadow; the others are bought in the Shop and
-picked in its background picker. The **RTC's real time** tints the map for dawn, dusk and night, and sleeping
+The yard is a **map from the SD card** (`/yard/NN.bin`): 01 meadow, 02 quarry, 03 forest, 04 beach, 05 ruins
+(a ghostly purple one with mist) and, since v3.15, 06 volcano, 07 power plant, 08 sky tower and 09 toxic district.
+Everyone starts with the meadow; the others are bought in the Shop (150, 150, 200, 250, 250, 300, 350, 400 coins)
+and picked in its background picker. Each map is also a trip destination with its own 5 souvenirs, and wild
+encounters there favour its types (volcano Fire and Rock, power plant Electric, sky tower Flying, toxic district
+Poison). The **RTC's real time** tints the map for dawn, dusk and night, and sleeping
 forces night. Without the SD map the yard is a flat ground in the colour of the pet's biome.
 
 The maps are made from the [Sunnyside World](https://danieldiggle.itch.io/sunnyside) tile pack by Daniel

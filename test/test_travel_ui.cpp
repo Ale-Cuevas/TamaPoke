@@ -78,6 +78,13 @@ TEST(travel_ui, candidatos_y_mapas_propios) {
   CHECK_EQ(trvStepDest(0b01001, 4, -1), (uint8_t)1);
   CHECK_EQ(trvStepDest(0b11111, 5, 1), (uint8_t)1);
   CHECK_EQ(trvStepDest(0b11111, 1, -1), (uint8_t)5);
+  // v3.15: 9 mapas, la mascara es de 16 bits (el mapa 9 es el bit 8, que no cabia en 8)
+  CHECK_EQ(trvStepDest((uint16_t)((1u << 8) | 1u), 1, 1), (uint8_t)9);
+  CHECK_EQ(trvStepDest((uint16_t)((1u << 8) | 1u), 9, 1), (uint8_t)1);
+  CHECK_EQ(trvStepDest((uint16_t)((1u << 8) | 1u), 1, -1), (uint8_t)9);
+  CHECK_EQ(trvStepDest((uint16_t)((1u << TRV_DESTS) - 1), TRV_DESTS, 1), (uint8_t)1);
+  CHECK_EQ(trvStepDest((uint16_t)((1u << TRV_DESTS) - 1), 5, 1), (uint8_t)6);
+  CHECK_EQ(trvStepDest((uint16_t)((1u << 6) | (1u << 1)), 2, 1), (uint8_t)7);  // cantera -> central
 }
 
 struct R {
@@ -145,22 +152,51 @@ TEST(travel_ui, viaje_en_marcha_dentro_del_circulo) {
   CHECK(safe({ TRV_LOG_X, TRV_LOG_Y, TRV_LOG_W, logH }));
 }
 
-TEST(travel_ui, coleccion_25_casillas_tocables_y_dentro) {
+TEST(travel_ui, coleccion_paginas_casillas_tocables_y_dentro) {
+  // v3.15: 45 recuerdos en paginas de 5 mapas (5 x 5 casillas): la 1.a mapas 1-5, la 2.a mapas 6-9
+  CHECK_EQ(SOUV_PAGES, 2);
+  CHECK_EQ(souvPageCount(0), 25);
+  CHECK_EQ(souvPageCount(1), SOUV_COUNT - 25);
+  CHECK_EQ(souvPageCount(SOUV_PAGES), 0);
+  int total = 0;
+  for (int pg = 0; pg < SOUV_PAGES; pg++) total += souvPageCount(pg);
+  CHECK_EQ(total, SOUV_COUNT);
   for (int id = 0; id < SOUV_COUNT; id++) {
+    int pg = souvPageOf(id);
+    CHECK(id >= souvPageFirst(pg) && id < souvPageFirst(pg) + souvPageCount(pg));
     R r = { souvCellX(id), souvCellY(id), SOUV_CELL_W, SOUV_CELL_H };
     CHECK(r.w >= Y_HIT_MIN && r.h >= Y_HIT_MIN);
     CHECK(safe(r));
-    CHECK(r.y >= SOUV_TITLE_Y + 16);  // bajo "Coleccion N/25"
-    CHECK_EQ(souvAt(r.x + r.w / 2, r.y + r.h / 2), id);
-    CHECK_EQ(souvAt(r.x, r.y), id);
-    CHECK_EQ(souvAt(r.x + r.w - 1, r.y + r.h - 1), id);
+    CHECK(r.y >= SOUV_TITLE_Y + 16);              // bajo "Coleccion N/45"
+    CHECK(r.y >= SOUV_PAGER_Y + 14 + 4);          // y bajo el "1/2"
+    CHECK(r.y + r.h < SOUV_HINT_Y);               // sobre los puntos de la pagina del jugador
+    CHECK_EQ(souvAt(pg, r.x + r.w / 2, r.y + r.h / 2), id);
+    CHECK_EQ(souvAt(pg, r.x, r.y), id);
+    CHECK_EQ(souvAt(pg, r.x + r.w - 1, r.y + r.h - 1), id);
+    for (int other = 0; other < SOUV_PAGES; other++)  // en otra pagina, esa casilla es otro recuerdo (o nada)
+      if (other != pg) CHECK(souvAt(other, r.x + r.w / 2, r.y + r.h / 2) != id);
     // una fila por mapa: el id lo dice
     CHECK_EQ(id / SOUV_COLS, (int)souvenirDest((uint8_t)id) - 1);
+    // las flechas de pagina (las del selector, a los lados) no pisan ninguna casilla
+    CHECK_EQ(yChevronHit(r.x, r.y + r.h / 2), 0);
+    CHECK_EQ(yChevronHit(r.x + r.w - 1, r.y + r.h / 2), 0);
   }
+  // la 2.a pagina tiene 4 filas: la 5.a, vacia
+  CHECK_EQ(souvAt(1, souvCellX(0) + 5, souvCellY(20) + 5), -1);
   CHECK(souvCellY(24) + SOUV_CELL_H < SOUV_HINT_Y);
   CHECK(SOUV_HINT_Y + 14 < Y_BACK_Y - Y_BACK_R);
-  CHECK_EQ(souvAt(Y_CX, 20), -1);
-  CHECK_EQ(souvAt(souvCellX(0) + SOUV_CELL_W + 1, souvCellY(0) + 5), -1);  // el hueco entre casillas
+  CHECK_EQ(souvAt(0, Y_CX, 20), -1);
+  CHECK_EQ(souvAt(0, souvCellX(0) + SOUV_CELL_W + 1, souvCellY(0) + 5), -1);  // el hueco entre casillas
+  CHECK_EQ(souvAt(SOUV_PAGES, souvCellX(0) + 5, souvCellY(0) + 5), -1);
+  // las flechas, dentro del circulo util
+  CHECK(yInsideSafe(Y_CHEV_LX - Y_CHEV_HALF, Y_CY, 0) && yInsideSafe(Y_CHEV_RX + Y_CHEV_HALF, Y_CY, 0));
+  // pasar de pagina: las flechas no salen de las paginas; el "1/2" da la vuelta
+  CHECK_EQ(souvPageStep(0, 1), 1);
+  CHECK_EQ(souvPageStep(1, -1), 0);
+  CHECK_EQ(souvPageStep(0, -1), -1);
+  CHECK_EQ(souvPageStep(SOUV_PAGES - 1, 1), -1);
+  CHECK_EQ(souvPageStep(0, 0), 1);
+  CHECK_EQ(souvPageStep(SOUV_PAGES - 1, 0), 0);
   // la tarjeta del recuerdo, dentro del circulo
   CHECK(safe({ SOUV_TIP_X, SOUV_TIP_Y, SOUV_TIP_W, SOUV_TIP_H }));
 }

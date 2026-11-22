@@ -77,6 +77,32 @@ inline uint32_t medalNext(uint8_t i, uint32_t v) {
   return t < MEDAL_TIERS ? d.t[t] : 0;
 }
 
+// v3.15: la barra de la pagina de medallas con el tramo YA PAGADO. Los tramos pagados se conservan aunque tuning.h
+// suba un umbral (Coleccionista 5/15/25 -> 5/20/45): una partida vieja puede tener pagado mas de lo que su valor
+// alcanza hoy. Lo que se ensena es el camino hacia el primer tramo por encima de los dos (pagado y alcanzado):
+// medalNextShown es ese umbral (0 = Oro ya pagado o alcanzado: barra llena) y medalBarFill el relleno de w px,
+// desde el umbral del tramo alcanzado (<= v). Nunca divide por 0
+inline uint8_t medalShownTier(uint8_t i, uint8_t paid, uint32_t v) {
+  uint8_t r = medalTierOf(i, v);
+  uint8_t t = paid > r ? paid : r;
+  return t > MEDAL_TIERS ? MEDAL_TIERS : t;
+}
+inline uint32_t medalNextShown(uint8_t i, uint8_t paid, uint32_t v) {
+  uint8_t t = medalShownTier(i, paid, v);
+  return t < MEDAL_TIERS ? medalDef(i).t[t] : 0;
+}
+inline int medalBarFill(uint8_t i, uint8_t paid, uint32_t v, int w) {
+  if (w <= 0) return 0;
+  uint32_t next = medalNextShown(i, paid, v);
+  if (!next || v >= next) return w;
+  uint8_t r = medalTierOf(i, v);
+  uint32_t from = r ? medalDef(i).t[r - 1] : 0;
+  if (from > v) from = v;
+  if (next <= from) return w;
+  uint64_t f = (uint64_t)(v - from) * (uint32_t)w / (next - from);
+  return f > (uint64_t)w ? w : (int)f;
+}
+
 // monedas del tramo t (1..3) y de pasar del tramo `from` al `to` (cada uno se paga entero)
 inline uint16_t medalCoins(uint8_t tier) { return tier >= 1 && tier <= MEDAL_TIERS ? MEDAL_COINS[tier - 1] : 0; }
 inline uint16_t medalPayout(uint8_t from, uint8_t to) {

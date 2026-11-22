@@ -1786,12 +1786,12 @@ static_assert(TRV_POOL_ID[0] == IT_GOLDEN && TRV_POOL_ID[1] == IT_CAKE && TRV_PO
 
 uint8_t Pet::souvenirCount() const {
   uint8_t n = 0;
-  for (uint8_t i = 0; i < SOUV_COUNT; i++) n += (souvOwned >> i) & 1;
+  for (uint8_t i = 0; i < SOUV_COUNT; i++) n += (uint8_t)((souvOwned >> i) & 1);
   return n;
 }
 
-void Pet::setSouvenirMask(uint32_t mask) {
-  mask &= (1u << SOUV_COUNT) - 1;
+void Pet::setSouvenirMask(uint64_t mask) {
+  mask &= SOUV_ALL;
   for (uint8_t i = 0; i < SOUV_COUNT; i++) {
     bool had = (souvOwned >> i) & 1, want = (mask >> i) & 1;
     if (want && !had) souvDate[i] = lastSeenEpoch;
@@ -1878,7 +1878,7 @@ void Pet::travelComplete() {
     else items[r.item]++;
   }
   if (r.souvenir != TRV_NONE && !r.dup) {
-    souvOwned |= 1u << r.souvenir;
+    souvOwned |= souvBit(r.souvenir);
     souvDate[r.souvenir] = lastSeenEpoch;
   }
   trvResult = r;
@@ -2336,7 +2336,9 @@ void Pet::save() {
   // estadios (del jugador). Antes del bloque del uid: no tocan nada de los movimientos de la caja, y
   // asi la ventana entre el uid y "eggH" no se alarga. stageDone ya los escribe por su cuenta antes de
   // pagar (aqui solo repiten el mismo valor). "stD" antes que "stM", como en payStageDay
-  prefs.putUInt("souv", souvOwned);  // la coleccion (Y5)
+  // la coleccion (Y5). v3.15: 64 bits en "souv2"; la vieja "souv" (u32) se borra una vez escrita la nueva (un
+  // corte entre las dos deja ambas, y la carga prefiere "souv2"). "souvD" crece de 25 a 45 fechas con la misma clave
+  if (prefs.putULong64("souv2", souvOwned) == sizeof(uint64_t) && prefs.isKey("souv")) prefs.remove("souv");
   prefs.putBytes("souvD", souvDate, sizeof(souvDate));
   prefs.putUChar("bdg", badges);
   prefs.putUInt("stD", stageDay);
@@ -2607,9 +2609,21 @@ void Pet::load() {
   cnSaved = coins;
   cnDSaved = coinDay;
   cnTSaved = coinToday;
-  souvOwned = prefs.getUInt("souv", 0) & ((1u << SOUV_COUNT) - 1);  // un guardado anterior: sin recuerdos
+  // la coleccion. v3.15 (migracion): sin "souv2" se lee la vieja "souv" (u32, los 25 primeros) en los bits bajos;
+  // sin ninguna (un guardado de antes del Y5), sin recuerdos
+  souvOwned = souvLoadMask(prefs.isKey("souv2"), prefs.getULong64("souv2", 0), prefs.getUInt("souv", 0));
+  // "souvD": 100 bytes (25 fechas) antes de v3.15, 180 ahora. Se lee lo que haya hasta el tamano del buffer y el
+  // resto queda a 0 (un blob mas largo, de un firmware futuro, se lee por un temporal y se recorta)
   memset(souvDate, 0, sizeof(souvDate));
-  if (prefs.isKey("souvD")) prefs.getBytes("souvD", souvDate, sizeof(souvDate));
+  if (prefs.isKey("souvD")) {
+    size_t n = prefs.getBytesLength("souvD");
+    if (n && n <= sizeof(souvDate)) {
+      prefs.getBytes("souvD", souvDate, n);
+    } else if (n > sizeof(souvDate) && n <= 64 * sizeof(uint32_t)) {
+      uint32_t tmp[64] = { 0 };
+      if (prefs.getBytes("souvD", tmp, n) == n) memcpy(souvDate, tmp, sizeof(souvDate));
+    }
+  }
   trvSlot = TRV_NONE;
   trvResPending = false;
   if (prefs.isKey("trv")) {  // sin la clave no hay viaje

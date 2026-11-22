@@ -89,16 +89,22 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // la tienda de la mochila y los fondos (v2.0, Y4)
     "OBJETOS", "Fondos", "Comprar %s?", "Faltan monedas", "Mochila llena",
     "Pradera", "Cantera", "Bosque", "Playa", "Ruinas",
+    "Volc\240n", "Central el\202ctrica", "Torre del cielo", "Distrito t\242xico",
     "En uso", "No esta en la SD", "Toca para comprar",
-    // los viajes del patio (v2.0, Y5): 25 recuerdos (5 por mapa; el 5.o es el raro) y 13 sucesos del camino
+    // los viajes del patio (v2.0, Y5; v3.15 9 mapas): 45 recuerdos (5 por mapa; el 5.o es el raro) y 17 sucesos del camino
     "Tr\202bol de cuatro hojas", "Corona de margaritas", "Pluma", "Tarro de miel", "Bellota dorada",
     "Guijarro liso", "Trozo de cuarzo", "Concha f\242sil", "Mineral de hierro", "Piedra lunar",
     "Pi\244a", "Seta", "Pluma de b\243ho", "Gota de \240mbar", "Hoja ancestral",
     "Caracola", "Estrella de mar", "Vidrio marino", "Botella con mensaje", "Perla",
     "Moneda antigua", "M\240scara de barro", "Cabo de vela", "Tablilla de runas", "Farol espiritual",
+    "Brasa", "Obsidiana", "Piedra de magma", "Pluma de fuego", "Ascua de f\202nix",
+    "Pila", "Im\240n", "Bobina de cobre", "Piedra trueno", "Orbe de plasma",
+    "Pluma de vendaval", "Copo de nube", "Campanilla de viento", "Perla del cielo", "Trozo de estrella",
+    "Engranaje", "Frasco de lodo", "M\240scara de gas", "Cristal t\242xico", "Corona oxidada",
     "Conoci\242 a un %s salvaje", "Durmi\242 la siesta bajo un \240rbol", "Encontr\242 algo brillante", "Chapote\242 en el agua", "Escal\242 una roca grande",
     "Oy\242 un ruido extra\244o", "Persigui\242 una mariposa", "Cav\242 un hoyo peque\244o", "Mir\242 las estrellas", "Comparti\242 bayas con un %s salvaje",
     "Hizo un castillo de arena", "Explor\242 un pasillo oscuro", "Par\242 a merendar",
+    "Se calent\242 junto a la lava", "Sinti\242 una chispa", "Vol\242 con una r\240faga de viento", "Contuvo el aliento en el humo",
     // viajes: pantallas (v2.0, Y5b)
     "Viaje", "De viaje", "De camino...", "\255%s ha vuelto!", "fuera", "Ir", "Mochila llena", "NUEVO", "Hallado el %s", "Colecci\242n", "Guarda un bicho en la Caja\npara mandarlo de viaje", "Pon la hora para viajar", "Com\243n", "Poco com\243n", "Raro", "%s est\240 de viaje",
     // encuentros salvajes (v2.2)
@@ -196,16 +202,22 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // la tienda de la mochila y los fondos (v2.0, Y4)
     "ITEMS", "Backgrounds", "Buy %s?", "Not enough coins", "Backpack full",
     "Meadow", "Quarry", "Forest", "Beach", "Ruins",
+    "Volcano", "Power Plant", "Sky Tower", "Toxic District",
     "In use", "Not on SD card", "Tap to buy",
-    // los viajes del patio (v2.0, Y5): 25 recuerdos (5 por mapa; el 5.o es el raro) y 13 sucesos del camino
+    // los viajes del patio (v2.0, Y5; v3.15 9 mapas): 45 recuerdos (5 por mapa; el 5.o es el raro) y 17 sucesos del camino
     "Four-leaf clover", "Daisy crown", "Feather", "Honey jar", "Golden acorn",
     "Smooth pebble", "Quartz shard", "Fossil shell", "Iron ore", "Moon stone",
     "Pine cone", "Mushroom", "Owl feather", "Amber drop", "Ancient leaf",
     "Seashell", "Starfish", "Sea glass", "Message bottle", "Pearl",
     "Old coin", "Clay mask", "Candle stub", "Rune tablet", "Spirit lantern",
+    "Ember", "Obsidian", "Magma stone", "Fire feather", "Phoenix ember",
+    "Battery", "Magnet", "Copper coil", "Thunder stone", "Plasma orb",
+    "Gale feather", "Cloud puff", "Wind chime", "Sky pearl", "Star fragment",
+    "Gear", "Sludge vial", "Gas mask", "Toxic crystal", "Rusted crown",
     "Met a wild %s", "Took a nap under a tree", "Found something shiny", "Splashed in the water", "Climbed a big rock",
     "Heard a strange noise", "Chased a butterfly", "Dug a small hole", "Watched the stars", "Shared berries with a wild %s",
     "Built a sand castle", "Explored a dark corridor", "Stopped for a snack",
+    "Warmed up by the lava", "Felt a static spark", "Rode a gust of wind", "Held its breath in the smog",
     // viajes: pantallas (v2.0, Y5b)
     "Travel", "Travelling", "On the way...", "%s is back!", "away", "Go", "Bag full", "NEW", "Found on %s", "Collection", "Store a pet in the Box\nto send it travelling", "Set the clock to travel", "Common", "Uncommon", "Rare", "%s is away",
     // encuentros salvajes (v2.2)
@@ -303,16 +315,22 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // la tienda de la mochila y los fondos (v2.0, Y4)
     "OBJETS", "Fonds", "Acheter %s?", "Pas assez de pieces", "Sac plein",
     "Prairie", "Carriere", "Foret", "Plage", "Ruines",
+    "Volcan", "Centrale", "Tour celeste", "Quartier toxique",
     "Utilise", "Pas sur la SD", "Touche: acheter",
-    // los viajes del patio (v2.0, Y5): 25 recuerdos (5 por mapa; el 5.o es el raro) y 13 sucesos del camino
+    // los viajes del patio (v2.0, Y5; v3.15 9 mapas): 45 recuerdos (5 por mapa; el 5.o es el raro) y 17 sucesos del camino
     "Trefle a quatre feuilles", "Couronne de marguerites", "Plume", "Pot de miel", "Gland dore",
     "Galet lisse", "Eclat de quartz", "Coquillage fossile", "Minerai de fer", "Pierre de lune",
     "Pomme de pin", "Champignon", "Plume de hibou", "Goutte d'ambre", "Feuille ancienne",
     "Coquillage", "Etoile de mer", "Verre de mer", "Bouteille a la mer", "Perle",
     "Vieille piece", "Masque d'argile", "Bout de bougie", "Tablette runique", "Lanterne spectrale",
+    "Braise", "Obsidienne", "Pierre de magma", "Plume de feu", "Braise de phenix",
+    "Pile", "Aimant", "Bobine de cuivre", "Pierre foudre", "Orbe de plasma",
+    "Plume de rafale", "Bout de nuage", "Carillon a vent", "Perle du ciel", "Eclat d'etoile",
+    "Engrenage", "Fiole de boue", "Masque a gaz", "Cristal toxique", "Couronne rouillee",
     "A rencontre un %s sauvage", "A fait la sieste sous un arbre", "A trouve quelque chose de brillant", "A patauge dans l'eau", "A escalade un gros rocher",
     "A entendu un bruit etrange", "A couru apres un papillon", "A creuse un petit trou", "A regarde les etoiles", "A partage des baies avec un %s sauvage",
     "A fait un chateau de sable", "A explore un couloir sombre", "S'est arrete pour un gouter",
+    "A eu chaud pres de la lave", "A senti une etincelle", "A vole sur une rafale", "A retenu son souffle dans la fumee",
     // viajes: pantallas (v2.0, Y5b)
     "Voyage", "En voyage", "En route...", "%s est de retour !", "absent", "Partir", "Sac plein", "NOUVEAU", "Trouve le %s", "Collection", "Range un bicho dans la Boite\npour l'envoyer en voyage", "Regle l'heure pour voyager", "Commun", "Peu commun", "Rare", "%s est parti",
     // encuentros salvajes (v2.2)
@@ -415,16 +433,22 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // la tienda de la mochila y los fondos (v2.0, Y4)
     "DINGE", "Hintergruende", "%s kaufen?", "Zu wenig Muenzen", "Rucksack voll",
     "Wiese", "Steinbruch", "Wald", "Strand", "Ruinen",
+    "Vulkan", "Kraftwerk", "Himmelsturm", "Giftviertel",
     "Aktiv", "Nicht auf SD", "Tippen: kaufen",
-    // los viajes del patio (v2.0, Y5): 25 recuerdos (5 por mapa; el 5.o es el raro) y 13 sucesos del camino
+    // los viajes del patio (v2.0, Y5; v3.15 9 mapas): 45 recuerdos (5 por mapa; el 5.o es el raro) y 17 sucesos del camino
     "Kleeblatt", "Gaensebluemchenkranz", "Feder", "Honigglas", "Goldene Eichel",
     "Glatter Kiesel", "Quarzsplitter", "Fossile Muschel", "Eisenerz", "Mondstein",
     "Tannenzapfen", "Pilz", "Eulenfeder", "Bernsteintropfen", "Uraltes Blatt",
     "Muschel", "Seestern", "Meerglas", "Flaschenpost", "Perle",
     "Alte Muenze", "Tonmaske", "Kerzenstummel", "Runentafel", "Geisterlaterne",
+    "Glut", "Obsidian", "Magmastein", "Feuerfeder", "Phoenixglut",
+    "Batterie", "Magnet", "Kupferspule", "Donnerstein", "Plasmakugel",
+    "Sturmfeder", "Wolkenbausch", "Windspiel", "Himmelsperle", "Sternsplitter",
+    "Zahnrad", "Schlammphiole", "Gasmaske", "Giftkristall", "Rostige Krone",
     "Traf ein wildes %s", "Machte ein Nickerchen unter einem Baum", "Fand etwas Glitzerndes", "Planschte im Wasser", "Kletterte auf einen Felsen",
     "Hoerte ein seltsames Geraeusch", "Jagte einen Schmetterling", "Grub ein kleines Loch", "Schaute die Sterne an", "Teilte Beeren mit einem wilden %s",
     "Baute eine Sandburg", "Erkundete einen dunklen Gang", "Machte Pause fuer einen Snack",
+    "Waermte sich an der Lava", "Spuerte einen Funken", "Ritt auf einem Windstoss", "Hielt im Smog die Luft an",
     // viajes: pantallas (v2.0, Y5b)
     "Reise", "Unterwegs", "Auf dem Weg...", "%s ist zurueck!", "weg", "Los", "Beutel voll", "NEU", "Gefunden am %s", "Sammlung", "Lege ein Tier in die Box,\num es auf Reisen zu schicken", "Stelle die Uhr zum Reisen", "Haeufig", "Selten", "Sehr selten", "%s ist unterwegs",
     // encuentros salvajes (v2.2)
@@ -522,16 +546,22 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // la tienda de la mochila y los fondos (v2.0, Y4)
     "OGGETTI", "Sfondi", "Comprare %s?", "Monete insufficienti", "Zaino pieno",
     "Prato", "Cava", "Bosco", "Spiaggia", "Rovine",
+    "Vulcano", "Centrale", "Torre del cielo", "Distretto tossico",
     "In uso", "Non sulla SD", "Tocca per comprare",
-    // los viajes del patio (v2.0, Y5): 25 recuerdos (5 por mapa; el 5.o es el raro) y 13 sucesos del camino
+    // los viajes del patio (v2.0, Y5; v3.15 9 mapas): 45 recuerdos (5 por mapa; el 5.o es el raro) y 17 sucesos del camino
     "Quadrifoglio", "Corona di margherite", "Piuma", "Barattolo di miele", "Ghianda dorata",
     "Ciottolo liscio", "Scheggia di quarzo", "Conchiglia fossile", "Minerale di ferro", "Pietra lunare",
     "Pigna", "Fungo", "Piuma di gufo", "Goccia d'ambra", "Foglia antica",
     "Conchiglia", "Stella marina", "Vetro di mare", "Messaggio in bottiglia", "Perla",
     "Moneta antica", "Maschera d'argilla", "Moncone di candela", "Tavola runica", "Lanterna spettrale",
+    "Brace", "Ossidiana", "Pietra di magma", "Piuma di fuoco", "Brace di fenice",
+    "Batteria", "Magnete", "Bobina di rame", "Pietratuono", "Sfera di plasma",
+    "Piuma di bufera", "Batuffolo di nuvola", "Campanella a vento", "Perla del cielo", "Frammento di stella",
+    "Ingranaggio", "Fiala di melma", "Maschera antigas", "Cristallo tossico", "Corona arrugginita",
     "Ha incontrato un %s selvatico", "Ha fatto un pisolino sotto un albero", "Ha trovato qualcosa di luccicante", "Ha sguazzato nell'acqua", "Si e arrampicato su una roccia",
     "Ha sentito un rumore strano", "Ha inseguito una farfalla", "Ha scavato una piccola buca", "Ha guardato le stelle", "Ha diviso le bacche con un %s selvatico",
     "Ha costruito un castello di sabbia", "Ha esplorato un corridoio buio", "Si e fermato per uno spuntino",
+    "Si e scaldato vicino alla lava", "Ha sentito una scintilla", "Ha cavalcato una raffica", "Ha trattenuto il fiato nello smog",
     // viajes: pantallas (v2.0, Y5b)
     "Viaggio", "In viaggio", "In cammino...", "%s e tornato!", "via", "Vai", "Zaino pieno", "NUOVO", "Trovato il %s", "Collezione", "Metti un mostro nel Box\nper mandarlo in viaggio", "Imposta l'ora per viaggiare", "Comune", "Non comune", "Raro", "%s e in viaggio",
     // encuentros salvajes (v2.2)
@@ -629,16 +659,22 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // la tienda de la mochila y los fondos (v2.0, Y4)
     "ITENS", "Fundos", "Comprar %s?", "Faltam moedas", "Mochila cheia",
     "Prado", "Pedreira", "Floresta", "Praia", "Ruinas",
+    "Vulcao", "Usina", "Torre do ceu", "Distrito toxico",
     "Em uso", "Nao esta no SD", "Toque para comprar",
-    // los viajes del patio (v2.0, Y5): 25 recuerdos (5 por mapa; el 5.o es el raro) y 13 sucesos del camino
+    // los viajes del patio (v2.0, Y5; v3.15 9 mapas): 45 recuerdos (5 por mapa; el 5.o es el raro) y 17 sucesos del camino
     "Trevo de quatro folhas", "Coroa de margaridas", "Pena", "Pote de mel", "Bolota dourada",
     "Seixo liso", "Lasca de quartzo", "Concha fossil", "Minerio de ferro", "Pedra da lua",
     "Pinha", "Cogumelo", "Pena de coruja", "Gota de ambar", "Folha ancestral",
     "Concha", "Estrela-do-mar", "Vidro marinho", "Garrafa com mensagem", "Perola",
     "Moeda antiga", "Mascara de barro", "Toco de vela", "Tabuleta de runas", "Lanterna espiritual",
+    "Brasa", "Obsidiana", "Pedra de magma", "Pena de fogo", "Brasa de fenix",
+    "Pilha", "Ima", "Bobina de cobre", "Pedra trovao", "Orbe de plasma",
+    "Pena de vendaval", "Floco de nuvem", "Sino de vento", "Perola do ceu", "Fragmento de estrela",
+    "Engrenagem", "Frasco de lodo", "Mascara de gas", "Cristal toxico", "Coroa enferrujada",
     "Encontrou um %s selvagem", "Tirou uma soneca debaixo de uma arvore", "Achou algo brilhante", "Chapinhou na agua", "Subiu numa pedra grande",
     "Ouviu um barulho estranho", "Perseguiu uma borboleta", "Cavou um buraquinho", "Olhou as estrelas", "Dividiu frutinhas com um %s selvagem",
     "Fez um castelo de areia", "Explorou um corredor escuro", "Parou para um lanche",
+    "Se aqueceu perto da lava", "Sentiu uma faisca", "Voou numa rajada de vento", "Prendeu a respiracao na fumaca",
     // viajes: pantallas (v2.0, Y5b)
     "Viagem", "Em viagem", "A caminho...", "%s voltou!", "fora", "Ir", "Mochila cheia", "NOVO", "Achado em %s", "Colecao", "Guarde um bicho na Caixa\npara mandar viajar", "Acerte a hora para viajar", "Comum", "Incomum", "Raro", "%s esta viajando",
     // encuentros salvajes (v2.2)
@@ -758,16 +794,22 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // la tienda de la mochila y los fondos (v2.0, Y4)
     "どうぐ", "はいけい", "%sをかう?", "コインがたりない", "バッグがいっぱい",
     "そうげん", "さいせきじょう", "もり", "ビーチ", "いせき",
+    "かざん", "はつでんしょ", "そらのとう", "どくのまち",
     "つかいちゅう", "SDカードにない", "タップでかう",
-    // los viajes del patio (v2.0, Y5): 25 recuerdos (5 por mapa; el 5.o es el raro) y 13 sucesos del camino
+    // los viajes del patio (v2.0, Y5; v3.15 9 mapas): 45 recuerdos (5 por mapa; el 5.o es el raro) y 17 sucesos del camino
     "よつばのクローバー", "デイジーのかんむり", "はね", "はちみつのびん", "きんのどんぐり",
     "すべすべのいし", "すいしょうのかけら", "かいのかせき", "てつこうせき", "つきのいし",
     "まつぼっくり", "きのこ", "フクロウのはね", "こはくのしずく", "こだいのは",
     "かいがら", "ヒトデ", "シーグラス", "ボトルレター", "しんじゅ",
     "ふるいコイン", "どろのおめん", "ろうそくのかけら", "ルーンのいた", "れいのランタン",
+    "ひのこ", "こくようせき", "マグマのいし", "ほのおのはね", "フェニックスのひ",
+    "でんち", "じしゃく", "どうのコイル", "かみなりのいし", "プラズマだま",
+    "はやてのはね", "くものかけら", "ふうりん", "そらのしんじゅ", "ほしのかけら",
+    "はぐるま", "ヘドロのびん", "ガスマスク", "どくのけっしょう", "さびたかんむり",
     "やせいの%sにあった", "きのしたでひるね", "きらきらしたものをみつけた", "みずでバシャバシャ", "おおきないわにのぼった",
     "へんなおとがきこえた", "ちょうちょをおいかけた", "ちいさなあなをほった", "ほしをながめた", "やせいの%sときのみをわけた",
     "すなのおしろをつくった", "くらいろうかをたんけん", "おやつをたべた",
+    "ようがんであたたまった", "パチッとしびれた", "かぜにのってとんだ", "スモッグでいきをとめた",
     // viajes: pantallas (v2.0, Y5b)
     "たび", "たびのさいちゅう", "とちゅう...", "%sがかえってきた！", "るす", "ゴー", "ふくろがいっぱい", "あたらしい", "%sにはっけん", "コレクション", "ボックスにあずけてね\nたびにだせるよ", "とけいをあわせてね", "ふつう", "ちょっとめずらしい", "レア", "%sはたびのなか",
     // encuentros salvajes (v2.2)
@@ -870,16 +912,22 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // la tienda de la mochila y los fondos (v2.0, Y4)
     "물건", "배경", "%s 살까요?", "코인이 부족해요", "가방이 가득 찼어요",
     "초원", "채석장", "숲", "해변", "유적",
+    "화산", "발전소", "하늘 탑", "독성 지구",
     "사용 중", "SD 카드에 없음", "눌러서 구매",
-    // los viajes del patio (v2.0, Y5): 25 recuerdos (5 por mapa; el 5.o es el raro) y 13 sucesos del camino
+    // los viajes del patio (v2.0, Y5; v3.15 9 mapas): 45 recuerdos (5 por mapa; el 5.o es el raro) y 17 sucesos del camino
     "네잎클로버", "데이지 화관", "깃털", "꿀단지", "황금 도토리",
     "매끈한 조약돌", "석영 조각", "화석 조개", "철광석", "월석",
     "솔방울", "버섯", "부엉이 깃털", "호박 방울", "고대의 잎",
     "조개껍데기", "불가사리", "바다 유리", "유리병 편지", "진주",
     "옛 동전", "점토 가면", "양초 토막", "룬 석판", "영혼의 등불",
+    "불씨", "흑요석", "마그마 돌", "불꽃 깃털", "불사조 불씨",
+    "건전지", "자석", "구리 코일", "천둥의 돌", "플라스마 구슬",
+    "질풍 깃털", "구름 조각", "풍경", "하늘 진주", "별 조각",
+    "톱니바퀴", "오물 병", "방독면", "독 수정", "녹슨 왕관",
     "야생 %s을(를) 만났어요", "나무 아래서 낮잠을 잤어요", "반짝이는 것을 찾았어요", "물에서 첨벙거렸어요", "큰 바위를 올랐어요",
     "이상한 소리를 들었어요", "나비를 쫓았어요", "작은 구멍을 팠어요", "별을 바라봤어요", "야생 %s와(과) 열매를 나눴어요",
     "모래성을 쌓았어요", "어두운 복도를 탐험했어요", "간식을 먹으려 쉬었어요",
+    "용암 옆에서 몸을 녹였어요", "찌릿한 불꽃을 느꼈어요", "돌풍을 타고 날았어요", "스모그 속에서 숨을 참았어요",
     // viajes: pantallas (v2.0, Y5b)
     "여행", "여행 중", "가는 중...", "%s 돌아왔어요!", "외출", "출발", "가방이 가득", "새로운", "%s에 발견", "수집", "상자에 넣어 두세요\n여행을 보낼 수 있어요", "시계를 맞춰 주세요", "흔함", "드묾", "레어", "%s 여행 중",
     // encuentros salvajes (v2.2)

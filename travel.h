@@ -26,16 +26,26 @@ static constexpr uint8_t TRV_POOL_ID[TRV_POOL_N] = { 0 /*GOLDEN*/, 7 /*CAKE*/, 1
 #define TRV_POOL_BERRY 10  // IT_BERRY_R: el primero de los seis colores
 #define TRV_BERRY_COLORS 6
 
-// ---- recuerdos: 5 mapas x 5. id = (mapa - 1) * 5 + i, i = 0..4 ----
-#define TRV_DESTS 5  // = YARD_MAPS (economy.h); pet.cpp lo comprueba
+// ---- recuerdos: 9 mapas x 5. id = (mapa - 1) * 5 + i, i = 0..4 ----
+#define TRV_DESTS 9  // = YARD_MAPS (tuning.h); pet.cpp lo comprueba
 #define SOUV_PER_DEST 5
-#define SOUV_COUNT (TRV_DESTS * SOUV_PER_DEST)
+#define SOUV_COUNT (TRV_DESTS * SOUV_PER_DEST)  // 45: la mascara de la coleccion es de 64 bits ("souv2")
+static_assert(SOUV_COUNT <= 64, "la coleccion cabe en un uint64_t");
+#define SOUV_ALL ((SOUV_COUNT >= 64) ? ~0ull : ((1ull << SOUV_COUNT) - 1))  // los bits validos
+inline uint64_t souvBit(uint8_t id) { return id < SOUV_COUNT ? 1ull << id : 0; }
+// la mascara guardada (v3.15, migracion): "souv2" (u64) si esta; si no, la vieja "souv" (u32, v2.0..v3.14: 5 mapas,
+// SOUV_COUNT_V1 recuerdos) en los bits bajos. Sin ninguna, v1 llega como 0: sin recuerdos
+#define SOUV_COUNT_V1 25
+inline uint64_t souvLoadMask(bool has2, uint64_t v2, uint32_t v1) {
+  uint64_t m = has2 ? v2 : (uint64_t)(v1 & ((1u << SOUV_COUNT_V1) - 1));
+  return m & SOUV_ALL;
+}
 enum : uint8_t { SOUV_COMMON = 0, SOUV_UNCOMMON, SOUV_RARE };
 inline uint8_t souvenirRarity(uint8_t id) {  // 0-1 comun, 2-3 poco comun, 4 raro
   uint8_t i = id % SOUV_PER_DEST;
   return i <= 1 ? SOUV_COMMON : (i <= 3 ? SOUV_UNCOMMON : SOUV_RARE);
 }
-inline uint8_t souvenirDest(uint8_t id) { return id / SOUV_PER_DEST + 1; }  // mapa 1..5
+inline uint8_t souvenirDest(uint8_t id) { return id / SOUV_PER_DEST + 1; }  // mapa 1..TRV_DESTS
 // el peso de comun / poco comun / raro por duracion (TRV_RARITY_W) esta en tuning.h
 
 // ---- el azar: una semilla -> una secuencia (splitmix32) ----
@@ -50,11 +60,11 @@ inline uint32_t trvNext(uint32_t *s) {
 // lo que trae un viaje y a quien le toco (Pet rellena lo segundo; se guarda tal cual en la NVS: "trvR")
 struct __attribute__((packed)) TravelResult {
   uint8_t valid;       // 1 = hay un resultado sin ver
-  uint8_t dest;        // mapa 1..5
+  uint8_t dest;        // mapa 1..TRV_DESTS
   uint8_t tier;        // 0..2 (1 / 3 / 8 h)
   uint8_t item;        // id de objeto (pet.h IT_*) o TRV_NONE
   uint8_t itemLost;    // 1 = la mochila estaba llena: se perdio
-  uint8_t souvenir;    // id 0..24 o TRV_NONE
+  uint8_t souvenir;    // id 0..SOUV_COUNT-1 o TRV_NONE
   uint8_t dup;         // 1 = ya lo tenia: se cambio por monedas
   uint8_t shiny;       // el bicho era shiny
   uint16_t coins;      // monedas ganadas EN TOTAL (con las del recuerdo repetido)
@@ -67,10 +77,10 @@ struct __attribute__((packed)) TravelResult {
   uint8_t rollItem, rollSouv;  // las tiradas 0..99 (para el registro)
 };
 
-// El sorteo (puro): semilla, mapa 1..5, duracion 0..2 y los recuerdos que ya tiene (bit id).
+// El sorteo (puro): semilla, mapa 1..TRV_DESTS, duracion 0..2 y los recuerdos que ya tiene (bit id, 64 bits).
 // Rellena dest, tier, coins, dupCoins, growMin, item, souvenir, dup y las tiradas.
 // Un recuerdo ya tenido se vuelve a sortear UNA vez; si sigue repetido, TRV_DUP_COINS monedas.
-inline TravelResult travelRoll(uint32_t seed, uint8_t dest, uint8_t tier, uint32_t ownedMask) {
+inline TravelResult travelRoll(uint32_t seed, uint8_t dest, uint8_t tier, uint64_t ownedMask) {
   TravelResult r;
   for (unsigned i = 0; i < sizeof(r); i++) ((uint8_t *)&r)[i] = 0;
   if (tier >= TRV_TIERS) tier = TRV_TIERS - 1;
@@ -113,10 +123,10 @@ inline TravelResult travelRoll(uint32_t seed, uint8_t dest, uint8_t tier, uint32
       }
       uint8_t i = rar == SOUV_COMMON ? (uint8_t)((x >> 20) % 2) : (rar == SOUV_UNCOMMON ? (uint8_t)(2 + (x >> 20) % 2) : 4);
       id = (uint8_t)((dest - 1) * SOUV_PER_DEST + i);
-      if (!(ownedMask & (1u << id))) break;
+      if (!(ownedMask & souvBit(id))) break;
     }
     r.souvenir = id;
-    if (ownedMask & (1u << id)) {
+    if (ownedMask & souvBit(id)) {
       r.dup = 1;
       r.dupCoins = TRV_DUP_COINS;
       r.coins += TRV_DUP_COINS;
@@ -146,33 +156,46 @@ inline uint16_t travelElapsedMin(uint32_t startEpoch, uint8_t tier, uint32_t now
 // ---- los sucesos del camino ----
 // Cada plantilla es un texto (S_TRV_EV_0 + plantilla en i18n.h), valido para algunos mapas (bit mapa-1;
 // TRV_ANY = todos) y, si TRV_ARG, con un %s: el nombre de una especie del bioma (travelEvent la da).
-#define TRV_ANY 0x1F
-#define TRV_ARG 0x80  // la plantilla lleva %s (la especie)
-#define TRV_TEMPLATES 13
+// v3.15: 9 mapas, la mascara pasa a 16 bits (bits 0..8 los mapas, el 15 TRV_ARG)
+#define TRV_ANY 0x1FF
+#define TRV_ARG 0x8000  // la plantilla lleva %s (la especie)
+static_assert(TRV_ANY == (1u << TRV_DESTS) - 1, "TRV_ANY: un bit por mapa");
+#define TRV_TEMPLATES 17
 #define TRV_B(n) (1u << ((n) - 1))
-static const uint8_t TRV_TPL_MASK[TRV_TEMPLATES] = {
-  TRV_ANY | TRV_ARG,                 // 0 Met a wild %s
-  TRV_B(1) | TRV_B(3),               // 1 Took a nap under a tree
-  TRV_ANY,                           // 2 Found something shiny
-  TRV_B(4),                          // 3 Splashed in the water
-  TRV_B(2),                          // 4 Climbed a big rock
-  TRV_B(3) | TRV_B(5),               // 5 Heard a strange noise
-  TRV_B(1),                          // 6 Chased a butterfly
-  TRV_B(2) | TRV_B(4) | TRV_B(5),    // 7 Dug a small hole
-  TRV_ANY,                           // 8 Watched the stars
-  TRV_ANY | TRV_ARG,                 // 9 Shared berries with a wild %s
-  TRV_B(4),                          // 10 Built a sand castle
-  TRV_B(2) | TRV_B(5),               // 11 Explored a dark corridor
-  TRV_ANY,                           // 12 Stopped for a snack
+// v3.15: los mapas 1..5 valen para las mismas plantillas que antes (un viaje en marcha al actualizar sigue con
+// el mismo registro); los nuevos (6..9) solo se suman a algunas y traen una propia cada uno (13..16)
+static const uint16_t TRV_TPL_MASK[TRV_TEMPLATES] = {
+  TRV_ANY | TRV_ARG,                           // 0 Met a wild %s
+  TRV_B(1) | TRV_B(3),                         // 1 Took a nap under a tree
+  TRV_ANY,                                     // 2 Found something shiny
+  TRV_B(4),                                    // 3 Splashed in the water
+  TRV_B(2) | TRV_B(6),                         // 4 Climbed a big rock
+  TRV_B(3) | TRV_B(5) | TRV_B(7) | TRV_B(9),   // 5 Heard a strange noise
+  TRV_B(1),                                    // 6 Chased a butterfly
+  TRV_B(2) | TRV_B(4) | TRV_B(5),              // 7 Dug a small hole
+  TRV_ANY,                                     // 8 Watched the stars
+  TRV_ANY | TRV_ARG,                           // 9 Shared berries with a wild %s
+  TRV_B(4),                                    // 10 Built a sand castle
+  TRV_B(2) | TRV_B(5) | TRV_B(9),              // 11 Explored a dark corridor
+  TRV_ANY,                                     // 12 Stopped for a snack
+  TRV_B(6),                                    // 13 Warmed up by the lava
+  TRV_B(7),                                    // 14 Felt a static spark
+  TRV_B(8),                                    // 15 Rode a gust of wind
+  TRV_B(9),                                    // 16 Held its breath in the smog
 };
 // especies (dex) de cada bioma para "Met a wild %s"
-static const uint8_t TRV_SPECIES[TRV_DESTS][5] = {
+static const uint8_t TRV_SPECIES[][5] = {
   { 19, 16, 10, 43, 69 },    // prado: Rattata, Pidgey, Caterpie, Oddish, Bellsprout
   { 74, 95, 66, 27, 111 },   // cantera: Geodude, Onix, Machop, Sandshrew, Rhyhorn
   { 13, 25, 46, 48, 102 },   // bosque: Weedle, Pikachu, Paras, Venonat, Exeggcute
   { 98, 90, 120, 54, 72 },   // playa: Krabby, Shellder, Staryu, Psyduck, Tentacool
   { 92, 41, 63, 96, 93 },    // ruinas: Gastly, Zubat, Abra, Drowzee, Haunter
+  { 4, 37, 58, 77, 126 },    // volcan: Charmander, Vulpix, Growlithe, Ponyta, Magmar
+  { 25, 81, 100, 125, 82 },  // central: Pikachu, Magnemite, Voltorb, Electabuzz, Magneton
+  { 21, 84, 83, 17, 22 },    // torre del cielo: Spearow, Doduo, Farfetch'd, Pidgeotto, Fearow
+  { 23, 88, 109, 29, 110 },  // distrito toxico: Ekans, Grimer, Koffing, Nidoran H, Weezing
 };
+static_assert(sizeof(TRV_SPECIES) / sizeof(TRV_SPECIES[0]) == TRV_DESTS, "TRV_SPECIES: una fila por mapa");
 inline bool travelTplFits(uint8_t tpl, uint8_t dest) {
   return tpl < TRV_TEMPLATES && dest >= 1 && dest <= TRV_DESTS && (TRV_TPL_MASK[tpl] & TRV_B(dest) & TRV_ANY);
 }

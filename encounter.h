@@ -78,7 +78,11 @@ static inline uint16_t encMinutesLeft(uint32_t spawn, uint32_t now) {
 static inline uint8_t encMapObject(uint8_t map) {
   switch (map) {
     case 2:
-    case 5: return ENC_OBJ_ROCK;  // cantera y ruinas
+    case 5:
+    case 6:
+    case 7:
+    case 8:
+    case 9: return ENC_OBJ_ROCK;  // cantera, ruinas y (v3.15) volcan, central, torre del cielo (suelo de piedra) y distrito
     case 4: return ENC_OBJ_SAND;  // playa
     default: return ENC_OBJ_BUSH; // prado, bosque y el suelo liso
   }
@@ -93,6 +97,10 @@ static inline void encMapTypes(uint8_t map, uint8_t &t1, uint8_t &t2) {
     case 3: t1 = TY_BICHO; t2 = TY_PLANTA; break;   // bosque
     case 4: t1 = TY_AGUA; break;                    // playa
     case 5: t1 = TY_ROCA; t2 = TY_TIERRA; break;    // ruinas
+    case 6: t1 = TY_FUEGO; t2 = TY_ROCA; break;     // volcan (v3.15)
+    case 7: t1 = TY_ELECTRICO; break;               // central
+    case 8: t1 = TY_VOLADOR; break;                 // torre del cielo
+    case 9: t1 = TY_VENENO; break;                  // distrito toxico
   }
 }
 

@@ -152,6 +152,7 @@ size_t Preferences::putShort(const char *k, int16_t v)   { return putScalar(gSto
 size_t Preferences::putUShort(const char *k, uint16_t v) { return putScalar(gStore, ns_, open_, ro_, k, v); }
 size_t Preferences::putInt(const char *k, int32_t v)     { return putScalar(gStore, ns_, open_, ro_, k, v); }
 size_t Preferences::putUInt(const char *k, uint32_t v)   { return putScalar(gStore, ns_, open_, ro_, k, v); }
+size_t Preferences::putULong64(const char *k, uint64_t v) { return putScalar(gStore, ns_, open_, ro_, k, v); }
 size_t Preferences::putBytes(const char *k, const void *v, size_t len) {
   return rawPut(gStore, ns_, open_, ro_, k, v, len);
 }
@@ -166,6 +167,13 @@ int16_t Preferences::getShort(const char *k, int16_t def)  { return getScalar(gS
 uint16_t Preferences::getUShort(const char *k, uint16_t def){ return getScalar(gStore, ns_, open_, k, def); }
 int32_t Preferences::getInt(const char *k, int32_t def)    { return getScalar(gStore, ns_, open_, k, def); }
 uint32_t Preferences::getUInt(const char *k, uint32_t def) { return getScalar(gStore, ns_, open_, k, def); }
+uint64_t Preferences::getULong64(const char *k, uint64_t def) { return getScalar(gStore, ns_, open_, k, def); }
+size_t Preferences::getBytesLength(const char *k) {
+  if (!open_) return 0;
+  KV &kv = gStore[ns_];
+  KV::iterator it = kv.find(k);
+  return it == kv.end() ? 0 : it->second.size();
+}
 
 size_t Preferences::getBytes(const char *k, void *buf, size_t maxLen) {
   if (!open_) return 0;

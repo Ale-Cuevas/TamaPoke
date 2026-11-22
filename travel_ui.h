@@ -6,7 +6,8 @@
 // Pantalla de salida (panel PANEL_TRAVEL sin viaje): arriba una ventana con el destino (< >), debajo
 // los bichos de la caja que pueden viajar (3 por pagina), las 3 duraciones con su recompensa y el boton
 // Ir. Con un viaje en marcha: cuenta atras, ventana con el bicho y el registro de sucesos.
-// Coleccion (3.a pestana de la mochila): rejilla de 5 x 5 (una fila por mapa, el raro a la derecha).
+// Coleccion (pagina del jugador): rejilla de 5 columnas, una fila por mapa (el raro a la derecha); v3.15: 9 mapas
+// en 2 paginas (mapas 1-5 y 6-9).
 #include <stdint.h>
 #include <stdio.h>
 #include "yard_ui.h"
@@ -66,7 +67,7 @@ inline uint8_t trvCandidates(uint8_t okMask, uint8_t *out) {
 }
 // el siguiente mapa propio (ownedMask: bit n-1 = mapa n) en la direccion dir (+1 / -1), dando la vuelta;
 // cur si no hay otro
-inline uint8_t trvStepDest(uint8_t ownedMask, uint8_t cur, int dir) {
+inline uint8_t trvStepDest(uint16_t ownedMask, uint8_t cur, int dir) {
   for (int i = 1; i <= TRV_DESTS; i++) {
     int m = ((int)cur - 1 + dir * i) % TRV_DESTS;
     if (m < 0) m += TRV_DESTS;
@@ -149,13 +150,35 @@ inline TrvHit trvHit(int x, int y) {
 #define SOUV_TIP_Y 112
 #define SOUV_TIP_W 320
 #define SOUV_TIP_H 212
+// v3.15: paginas de SOUV_PAGE_ROWS mapas (filas). El "1/2" va bajo el titulo (Y_SUB_Y) y las flechas < > a los
+// lados (las del selector de fondos, Y_CHEV_*), fuera de la rejilla
+#define SOUV_PAGE_ROWS 5
+#define SOUV_PAGE_N (SOUV_PER_DEST * SOUV_PAGE_ROWS)  // recuerdos por pagina
+#define SOUV_PAGES ((SOUV_COUNT + SOUV_PAGE_N - 1) / SOUV_PAGE_N)
+#define SOUV_PAGER_Y Y_SUB_Y
+inline int souvPageFirst(int page) { return page * SOUV_PAGE_N; }
+inline int souvPageCount(int page) {  // recuerdos en la pagina
+  if (page < 0 || page >= SOUV_PAGES) return 0;
+  int n = SOUV_COUNT - souvPageFirst(page);
+  return n < SOUV_PAGE_N ? n : SOUV_PAGE_N;
+}
+inline int souvPageOf(int id) { return id / SOUV_PAGE_N; }
+// la casilla de un recuerdo, en su pagina
 inline int souvCellX(int id) { return Y_CX - (SOUV_COLS * SOUV_CELL_W + (SOUV_COLS - 1) * SOUV_GAP) / 2 + (id % SOUV_COLS) * (SOUV_CELL_W + SOUV_GAP); }
-inline int souvCellY(int id) { return SOUV_GRID_Y + (id / SOUV_COLS) * (SOUV_CELL_H + SOUV_GAP); }
-// recuerdo bajo el toque (0..24) o -1
-inline int souvAt(int x, int y) {
-  for (int id = 0; id < SOUV_COUNT; id++)
+inline int souvCellY(int id) { return SOUV_GRID_Y + (id % SOUV_PAGE_N / SOUV_COLS) * (SOUV_CELL_H + SOUV_GAP); }
+// recuerdo de la pagina bajo el toque (0..SOUV_COUNT-1) o -1
+inline int souvAt(int page, int x, int y) {
+  int first = souvPageFirst(page), n = souvPageCount(page);
+  for (int id = first; id < first + n; id++)
     if (yInRect(x, y, souvCellX(id), souvCellY(id), SOUV_CELL_W, SOUV_CELL_H)) return id;
   return -1;
+}
+// la pagina tras tocar una flecha (dir -1 / +1, yChevronHit) o el "1/2" (dir 0: la siguiente, dando la vuelta);
+// -1 = no cambia (flecha hacia fuera de las paginas)
+inline int souvPageStep(int page, int dir) {
+  if (dir == 0) return (page + 1) % SOUV_PAGES;
+  int p = page + dir;
+  return p >= 0 && p < SOUV_PAGES ? p : -1;
 }
 // en que casilla del dock de la mochila va cada pestana: pastillas con icono (no caben las etiquetas: en
 // espanol "OBJETOS / TIENDA / COLECCION" eran 330 px y a y 44 el disco deja 229). v3.3: la Tienda es su propia

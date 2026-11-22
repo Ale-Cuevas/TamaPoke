@@ -42,7 +42,11 @@ static void tReboot(Pet &p, uint32_t now) {
 // ---------------------------------------------------------------- logica pura
 TEST(travel, tablas_coherentes) {
   CHECK_EQ(TRV_DESTS, YARD_MAPS);
-  CHECK_EQ(SOUV_COUNT, 25);
+  CHECK_EQ(SOUV_COUNT, 45);  // v3.15: 9 mapas x 5
+  CHECK(SOUV_COUNT <= 64);   // caben en la mascara de 64 bits ("souv2")
+  CHECK_EQ(SOUV_ALL, (1ull << SOUV_COUNT) - 1);
+  CHECK_EQ(souvBit(44), 1ull << 44);
+  CHECK_EQ(souvBit(SOUV_COUNT), 0ull);  // fuera de la coleccion: ningun bit
   int sum = 0;
   for (int i = 0; i < TRV_POOL_N; i++) sum += TRV_POOL_W[i];
   CHECK_EQ(sum, 100);
@@ -62,7 +66,7 @@ TEST(travel, tablas_coherentes) {
 
 TEST(travel, el_sorteo_es_determinista) {
   for (uint32_t s = 1; s < 200; s++)
-    for (uint8_t d = 1; d <= 5; d++)
+    for (uint8_t d = 1; d <= TRV_DESTS; d++)
       for (uint8_t t = 0; t < 3; t++) {
         TravelResult a = travelRoll(s * 7919u, d, t, 0), b = travelRoll(s * 7919u, d, t, 0);
         CHECK(memcmp(&a, &b, sizeof(a)) == 0);
@@ -84,7 +88,7 @@ TEST(travel, sin_raros_en_1h_y_el_resto_de_reglas) {
   int itemId[IT_COUNT] = { 0 };
   for (uint8_t t = 0; t < 3; t++)
     for (int i = 0; i < N; i++) {
-      uint8_t d = (uint8_t)(1 + i % 5);
+      uint8_t d = (uint8_t)(1 + i % TRV_DESTS);
       TravelResult r = travelRoll((uint32_t)i * 2654435761u + t, d, t, 0);
       if (r.souvenir != TRV_NONE) {
         souv[t]++;
@@ -192,7 +196,7 @@ TEST(travel, los_sucesos) {
   CHECK_EQ(travelEventCount(1), (uint8_t)2);
   CHECK_EQ(travelEventCount(2), (uint8_t)3);
   for (uint32_t s = 1; s < 400; s++)
-    for (uint8_t d = 1; d <= 5; d++)
+    for (uint8_t d = 1; d <= TRV_DESTS; d++)
       for (uint8_t t = 0; t < 3; t++) {
         uint16_t prev = 0;
         uint8_t used[3] = { 255, 255, 255 };
@@ -220,13 +224,22 @@ TEST(travel, los_sucesos) {
         }
       }
   // cada mapa tiene plantillas de sobra para 3 sucesos distintos y las de un solo mapa solo salen en el suyo
-  for (uint8_t d = 1; d <= 5; d++) {
+  for (uint8_t d = 1; d <= TRV_DESTS; d++) {
     int fit = 0;
     for (uint8_t k = 0; k < TRV_TEMPLATES; k++) fit += travelTplFits(k, d);
     CHECK(fit >= 3);
   }
   CHECK(!travelTplFits(3, 1));  // "chapoteo": solo la playa
   CHECK(travelTplFits(3, 4));
+  // v3.15: la mascara es de 16 bits; el mapa 9 (bit 8) no se confunde con TRV_ARG (bit 15)
+  CHECK(travelTplFits(16, 9) && !travelTplFits(16, 1) && !travelTplHasArg(16));
+  CHECK(travelTplFits(13, 6) && travelTplFits(14, 7) && travelTplFits(15, 8));
+  CHECK(travelTplFits(0, 9) && travelTplHasArg(0));
+  CHECK(!travelTplFits(0, TRV_DESTS + 1));
+  // los mapas 1..5 valen para las mismas plantillas que antes de v3.15 (un viaje en marcha no cambia de registro)
+  static const uint16_t OLD_MASK[13] = { 0x1F, 0x05, 0x1F, 0x08, 0x02, 0x14, 0x01, 0x1A, 0x1F, 0x1F, 0x08, 0x12, 0x1F };
+  for (uint8_t k = 0; k < TRV_TEMPLATES; k++)
+    for (uint8_t d = 1; d <= 5; d++) CHECK_EQ(travelTplFits(k, d), k < 13 && ((OLD_MASK[k] >> (d - 1)) & 1));
 }
 
 // ---------------------------------------------------------------- salir
@@ -493,12 +506,13 @@ TEST(travel, un_guardado_de_antes_sin_las_claves) {
   pr.remove("trv");
   pr.remove("trvR");
   pr.remove("souv");
+  pr.remove("souv2");
   pr.remove("souvD");
   Pet q;
   q.begin();
   CHECK(!q.travelling());
   CHECK(!q.travelResultPending());
-  CHECK_EQ(q.souvenirMask(), 0u);
+  CHECK_EQ(q.souvenirMask(), 0ull);
   CHECK_EQ(q.souvenirCount(), (uint8_t)0);
   CHECK_EQ(q.souvenirFoundEpoch(0), (uint32_t)0);
   CHECK_EQ(q.travelSlot(), (uint8_t)TRV_NONE);
@@ -511,23 +525,25 @@ TEST(travel, un_guardado_de_antes_sin_las_claves) {
   mockNvsReset();
   n.begin();
   CHECK(!n.travelling());
-  CHECK_EQ(n.souvenirMask(), 0u);
+  CHECK_EQ(n.souvenirMask(), 0ull);
 }
 
 TEST(travel, serie_souv_y_dbg) {
   Pet p;
   tBorn(p);
-  p.setSouvenirMask(0x1000001u);
-  CHECK_EQ(p.souvenirCount(), (uint8_t)2);
-  CHECK(p.hasSouvenir(0) && p.hasSouvenir(24) && !p.hasSouvenir(1) && !p.hasSouvenir(25));
+  p.setSouvenirMask(0x1000001ull | (1ull << 44));
+  CHECK_EQ(p.souvenirCount(), (uint8_t)3);
+  CHECK(p.hasSouvenir(0) && p.hasSouvenir(24) && p.hasSouvenir(44) && !p.hasSouvenir(1) && !p.hasSouvenir(25) &&
+        !p.hasSouvenir(45));
   CHECK_EQ(p.souvenirFoundEpoch(24), TT);
+  CHECK_EQ(p.souvenirFoundEpoch(44), TT);
   CHECK_EQ(p.souvenirFoundEpoch(1), (uint32_t)0);
-  p.setSouvenirMask(0xFFFFFFFFu);  // los bits de mas se ignoran
-  CHECK_EQ(p.souvenirCount(), (uint8_t)25);
+  p.setSouvenirMask(~0ull);  // los bits de mas se ignoran
+  CHECK_EQ(p.souvenirCount(), (uint8_t)SOUV_COUNT);
   Pet q;
   q.begin();
   q.setClock(TT);
-  CHECK_EQ(q.souvenirMask(), (1u << 25) - 1);
+  CHECK_EQ(q.souvenirMask(), (1ull << SOUV_COUNT) - 1);
   // TRAVELT: salio 30 min antes
   CHECK(q.startTravel(0, 1, 0));
   q.dbgTravelElapsed(30);
@@ -575,4 +591,126 @@ TEST(travel, corte_de_luz_al_volver_nunca_duplica_monedas) {
   }
   CHECK(sawOnce > 0);  // sin corte (o tarde) se cobra una vez
   CHECK(sawLost > 0);  // y alguno de los cortes pierde el premio
+}
+
+// ---------------------------------------------------------------- v3.15: 9 mapas, 45 recuerdos
+TEST(travel, los_mapas_nuevos_traen_sus_recuerdos_25_a_44) {
+  bool seen[SOUV_COUNT] = { false };
+  for (uint8_t d = 6; d <= TRV_DESTS; d++)
+    for (int i = 0; i < 4000; i++) {
+      TravelResult r = travelRoll((uint32_t)i * 2654435761u + d, d, 2, 0);  // 8 h: siempre trae recuerdo
+      CHECK_EQ(r.dest, d);
+      CHECK(r.souvenir != TRV_NONE);
+      CHECK(r.souvenir >= 25 && r.souvenir < SOUV_COUNT);
+      CHECK_EQ(souvenirDest(r.souvenir), d);
+      CHECK_EQ((int)r.souvenir, (d - 1) * SOUV_PER_DEST + r.souvenir % SOUV_PER_DEST);
+      seen[r.souvenir] = true;
+    }
+  for (int id = 25; id < SOUV_COUNT; id++) CHECK_MSG(seen[id], "el recuerdo " + std::to_string(id) + " no sale nunca");
+  // la mascara de 64 bits: tener los 5 de la torre (35..39) hace repetido todo lo que trae de alli
+  uint64_t tower = 0x1Full << 35;
+  for (int i = 0; i < 500; i++) {
+    TravelResult r = travelRoll((uint32_t)i * 977u, 8, 2, tower);
+    CHECK(r.dup);
+    CHECK(r.souvenir >= 35 && r.souvenir <= 39);
+    CHECK_EQ(r.coins, (uint16_t)(TRV_COINS[2] + TRV_DUP_COINS));
+  }
+  // ...y no los de otro mapa con los mismos bits bajos (35 - 32 = 3: un desplazamiento de 32 bits los confundiria)
+  TravelResult r = travelRoll(5, 1, 2, tower);
+  CHECK(!r.dup);
+  // un mapa fuera de rango se queda en el ultimo
+  CHECK_EQ(travelRoll(5, TRV_DESTS + 3, 2, 0).dest, (uint8_t)TRV_DESTS);
+}
+
+TEST(travel, un_viaje_a_un_mapa_nuevo_paga_su_recuerdo_y_se_guarda) {
+  Pet p;
+  tBorn(p);
+  p.coins = 9999;
+  CHECK(p.buyMap(9));
+  CHECK(p.startTravel(0, 9, 2));
+  TravelResult want = travelRoll(p.travelSeed(), 9, 2, p.souvenirMask());
+  p.travelFinishNow();
+  TravelResult res;
+  CHECK(p.takeTravelResult(&res));
+  CHECK_EQ(res.souvenir, want.souvenir);
+  CHECK(res.souvenir >= 40 && res.souvenir <= 44);
+  CHECK(p.hasSouvenir(res.souvenir));
+  CHECK_EQ(p.souvenirFoundEpoch(res.souvenir), TT);
+  p.flushSave();
+  Pet q;
+  q.begin();
+  CHECK_EQ(q.souvenirMask(), p.souvenirMask());
+  CHECK_EQ(q.souvenirFoundEpoch(res.souvenir), TT);
+  Preferences pr;
+  pr.begin("tamapoke", true);
+  CHECK(pr.isKey("souv2"));
+  CHECK(!pr.isKey("souv"));
+  CHECK_EQ(pr.getBytesLength("souvD"), sizeof(uint32_t) * SOUV_COUNT);
+}
+
+// la mascara guardada: "souv2" manda; sin ella, la vieja "souv" de 32 bits en los bits bajos (solo sus 25)
+TEST(travel, souvLoadMask_migra_la_mascara_de_32_bits) {
+  CHECK_EQ(souvLoadMask(false, 0, 0), 0ull);
+  CHECK_EQ(souvLoadMask(false, 0, 0x0A5B6D3u), 0x0A5B6D3ull);
+  CHECK_EQ(souvLoadMask(false, 0, 0xFFFFFFFFu), (1ull << 25) - 1);  // bits de mas en la vieja: fuera
+  CHECK_EQ(souvLoadMask(true, 1ull << 44, 0x1Fu), 1ull << 44);       // con las dos (un corte al guardar): la nueva
+  CHECK_EQ(souvLoadMask(true, 0, 0x1Fu), 0ull);
+  CHECK_EQ(souvLoadMask(true, ~0ull, 0), SOUV_ALL);
+}
+
+// una partida de v3.14: "souv" (u32) y "souvD" de 25 fechas (100 bytes). Al arrancar con v3.15 conserva los mismos
+// recuerdos y fechas, los 20 nuevos vacios; al guardar escribe "souv2", borra "souv" y "souvD" pasa a 180 bytes
+TEST(travel, migracion_de_la_coleccion_de_v3_14) {
+  Pet p;
+  tBorn(p);
+  p.flushSave();
+  const uint32_t oldMask = 0x1A5B6D3u;  // 15 recuerdos, entre ellos el 24 (el raro de las ruinas)
+  uint32_t oldDates[25] = { 0 };
+  for (int i = 0; i < 25; i++)
+    if (oldMask & (1u << i)) oldDates[i] = TT - 86400u * (uint32_t)(i + 1);
+  Preferences pr;
+  pr.begin("tamapoke", false);
+  pr.remove("souv2");
+  pr.putUInt("souv", oldMask);
+  pr.putBytes("souvD", oldDates, sizeof(oldDates));
+  CHECK_EQ(pr.getBytesLength("souvD"), (size_t)100);
+  Pet q;
+  q.begin();
+  CHECK_EQ(q.souvenirMask(), (uint64_t)oldMask);
+  CHECK_EQ(q.souvenirCount(), (uint8_t)15);
+  for (uint8_t i = 0; i < 25; i++) CHECK_EQ(q.souvenirFoundEpoch(i), oldDates[i]);
+  for (uint8_t i = 25; i < SOUV_COUNT; i++) {
+    CHECK(!q.hasSouvenir(i));
+    CHECK_EQ(q.souvenirFoundEpoch(i), (uint32_t)0);
+  }
+  // guarda: la clave nueva, sin la vieja, y las 45 fechas
+  q.setClock(TT);
+  q.setSouvenirMask(q.souvenirMask() | (1ull << 30));  // (guarda) uno de la central, fechado ahora
+  CHECK(pr.isKey("souv2"));
+  CHECK(!pr.isKey("souv"));
+  CHECK_EQ(pr.getULong64("souv2", 0), (uint64_t)oldMask | (1ull << 30));
+  CHECK_EQ(pr.getBytesLength("souvD"), sizeof(uint32_t) * SOUV_COUNT);
+  Pet r;
+  r.begin();
+  CHECK_EQ(r.souvenirMask(), (uint64_t)oldMask | (1ull << 30));
+  for (uint8_t i = 0; i < 25; i++) CHECK_EQ(r.souvenirFoundEpoch(i), oldDates[i]);
+  CHECK(r.souvenirFoundEpoch(30) != 0);
+  // un corte entre "souv2" y el borrado de "souv" deja las dos: manda "souv2"
+  pr.putUInt("souv", 0x3u);
+  Pet s;
+  s.begin();
+  CHECK_EQ(s.souvenirMask(), (uint64_t)oldMask | (1ull << 30));
+  // un "souvD" mas largo (un firmware futuro) se lee recortado; uno raro, mas corto y sin fechas enteras, tambien
+  uint32_t longer[50];
+  for (int i = 0; i < 50; i++) longer[i] = 1000u + (uint32_t)i;
+  pr.putBytes("souvD", longer, sizeof(longer));
+  Pet t;
+  t.begin();
+  CHECK_EQ(t.souvenirFoundEpoch(0), 1000u);
+  CHECK_EQ(t.souvenirFoundEpoch(30), 1030u);
+  pr.putBytes("souvD", longer, 6);  // 1 fecha y media: la 1.a entera, lo demas como venga, desde la 3.a a 0
+  Pet u;
+  u.begin();
+  CHECK_EQ(u.souvenirFoundEpoch(0), 1000u);
+  CHECK_EQ(u.souvenirFoundEpoch(4), (uint32_t)0);
 }

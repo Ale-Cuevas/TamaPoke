@@ -73,3 +73,34 @@ H = stamp 2x2 39,9 !        # stacked crates
 b = 38,16 39,16 40,16 !     # barrel / bucket
 k = stamp 2x2 37,21 !       # campfire ring
 n = 49,8                    # red mushroom (walkable)
+
+# ---- added for maps 06-09 (volcano, power plant, sky tower, toxic district) ----
+# "o = void !" draws no tile (the map's "sky:" gradient shows) and blocks. An autotile may be drawn over it (clouds).
+# "p = draw <name> [WxH] [!]" is a procedural decal (see pack_yard.py), only used in the "decal:" layer:
+# lava_crack, bolt, pylon (2x3), smokestack (2x3), cloud_puff (2x1), vent.
+o = void !                  # empty sky (blocks)
+p = autotile "Clouds 01" over o     # white clouds on the sky (blocks, like all the sky)
+j = autotile "Clouds 02" over o     # grey clouds
+# ground
+z = 9,31 13,31 10,32 11,32 12,32 13,32  weights 6 6 1 1 1 1      # dark scorched/paved ground (the cliff's dark block)
+S = 8,16 13,15 14,15  weights 8 1 1                               # grey stone floor
+a = 11,16 12,16             # manhole (walkable floor variant)
+# buildings and pipes
+M = 20,42 !                 # purple factory roof (shingles with a chimney hole)
+N = 24,41 25,41 !           # purple roof ridge with a wooden gable
+L = 24,45 25,45 !           # wooden siding wall
+J = 21,45 !                 # factory door
+I = 44,4 44,5 !             # stone pipe, vertical
+i = 45,3 46,3 47,3 !        # stone pipe with flanges
+# decals
+$ = draw lava_crack         # glowing crack in the ground
+% = draw bolt               # lightning scorch mark on the floor
+& = draw pylon !            # electric pylon, 2x3 (blocks)
+@ = draw smokestack !       # smokestack with a smoke puff, 2x3 (blocks)
+^ = draw cloud_puff         # small soft cloud, 2x1
+? = draw vent               # toxic grate with green glow
+Y = autotile "River" over z fill 32,8 33,8 !   # water over the dark ground (lava / sludge with a dark shore)
+( = draw bubbles            # bubbles and glints on a liquid (lime, so green hue rules leave it alone)
+; = draw floor_crack        # crack in a stone floor
+} = draw compass            # compass-rose mosaic, 3x3 (walkable)
+{ = draw banner !           # banner on a pole, 1x2 (blocks)

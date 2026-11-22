@@ -315,6 +315,8 @@ public:
   void dbgMedalCount(uint8_t i, uint16_t v);  // serie MEDAL i v: el contador de una de bicho o de evento
   void dbgRegister(int16_t dex, bool sh = false) { registerSpecies(dex, sh); }  // renderizador y pruebas
   void dbgClearMedalNews() { medalNewsN = 0; }  // renderizador: cada escena sin banners pendientes
+  // pruebas y renderizador (v3.15): un tramo pagado a mano, como una partida vieja cobrada con umbrales mas bajos
+  void dbgMedalTierSet(uint8_t i, uint8_t tier) { if (i < MEDAL_COUNT) pm.tier[i] = tier > MEDAL_TIERS ? MEDAL_TIERS : tier; }
   // renderizador: contadores a 0 y cada tramo ya alcanzado, ya pagado (una escena no cobra lo de la anterior)
   void dbgMedalsQuiet() {
     pmClear(pm);
@@ -352,7 +354,7 @@ public:
   bool travelling() const { return trvSlot != TRV_NONE; }
   bool slotTravelling(uint8_t k) const { return trvSlot != TRV_NONE && trvSlot == k; }
   uint8_t travelSlot() const { return trvSlot; }  // TRV_NONE si no hay viaje
-  uint8_t travelDest() const { return trvDest; }  // mapa 1..5
+  uint8_t travelDest() const { return trvDest; }  // mapa 1..TRV_DESTS
   uint8_t travelTier() const { return trvTier; }  // 0..2
   uint32_t travelStartEpoch() const { return trvStart; }
   uint32_t travelSeed() const { return trvSeed; }
@@ -364,11 +366,11 @@ public:
   bool takeTravelResult(TravelResult *out);
   bool peekTravelResult(TravelResult *out) const { if (out && trvResPending) *out = trvResult; return trvResPending; }  // sin olvidarlo
   // coleccion (del jugador): bit id = recuerdo id (0..SOUV_COUNT-1) conseguido
-  uint32_t souvenirMask() const { return souvOwned; }
-  bool hasSouvenir(uint8_t id) const { return id < SOUV_COUNT && (souvOwned & (1u << id)); }
+  uint64_t souvenirMask() const { return souvOwned; }  // v3.15: 45 recuerdos, 64 bits (NVS "souv2")
+  bool hasSouvenir(uint8_t id) const { return id < SOUV_COUNT && (souvOwned & souvBit(id)); }
   uint8_t souvenirCount() const;
   uint32_t souvenirFoundEpoch(uint8_t id) const { return id < SOUV_COUNT && hasSouvenir(id) ? souvDate[id] : 0; }  // 0 = sin hora
-  void setSouvenirMask(uint32_t mask);  // serie SOUV (pruebas): los nuevos se fechan ahora
+  void setSouvenirMask(uint64_t mask);  // serie SOUV (pruebas): los nuevos se fechan ahora
   void dbgTravelElapsed(uint32_t min);  // serie TRAVELT: el viaje salio hace min minutos MAS
   void travelFinishNow();               // serie TRAVELEND
   uint16_t lastCoins = 0;        // lo ganado en el ultimo minijuego (la UI lo ensena; no se guarda)
@@ -550,10 +552,11 @@ private:
   void placeEgg();          // el huevo del foco pasa a ser del patio, puesto ahora
   void eggClockStamp();     // puesto sin hora: se fecha en cuanto se sabe
   // viajes (Y5): "trv" (hueco, mapa, duracion, uid del viajero, salida, semilla) en UNA entrada; sin ella no
-  // hay viaje. "souv" la mascara y "souvD" las 25 fechas; "trvR" el resultado sin ver
+  // hay viaje. "souv2" la mascara (u64, v3.15; antes "souv", u32, 25 recuerdos) y "souvD" las fechas (45 x u32;
+  // antes 25); "trvR" el resultado sin ver
   uint8_t trvSlot = TRV_NONE, trvDest = 0, trvTier = 0;
   uint32_t trvUid = 0, trvStart = 0, trvSeed = 0;
-  uint32_t souvOwned = 0;
+  uint64_t souvOwned = 0;
   uint32_t souvDate[SOUV_COUNT] = { 0 };
   TravelResult trvResult = {};
   bool trvResPending = false;

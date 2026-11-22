@@ -103,6 +103,8 @@ TEST(encounter, el_objeto_del_patio_depende_del_mapa) {
   CHECK_EQ(encMapObject(3), (uint8_t)ENC_OBJ_BUSH);
   CHECK_EQ(encMapObject(4), (uint8_t)ENC_OBJ_SAND);
   CHECK_EQ(encMapObject(5), (uint8_t)ENC_OBJ_ROCK);
+  // v3.15: volcan, central, torre del cielo (suelo de piedra) y distrito toxico
+  for (uint8_t m = 6; m <= YARD_MAPS; m++) CHECK_EQ(encMapObject(m), (uint8_t)ENC_OBJ_ROCK);
   CHECK_EQ(encMapObject(0), (uint8_t)ENC_OBJ_BUSH);
 }
 
@@ -179,6 +181,38 @@ TEST(encounter, el_mapa_hace_mas_probables_sus_tipos) {
   CHECK_EQ(encLineWeight(2, 1), (uint8_t)0);                // Ivysaur: evolucion
   CHECK_EQ(encLineWeight(150, 1), (uint8_t)0);              // Mewtwo: legendario
   CHECK_EQ(encLineWeight(147, 4), (uint8_t)0);              // Dratini: solo por el 5 %
+  // v3.15: los mapas nuevos y su tipo
+  uint8_t t1, t2;
+  encMapTypes(6, t1, t2);
+  CHECK(t1 == TY_FUEGO && t2 == TY_ROCA);
+  encMapTypes(7, t1, t2);
+  CHECK(t1 == TY_ELECTRICO && t2 == TY_NONE);
+  encMapTypes(8, t1, t2);
+  CHECK(t1 == TY_VOLADOR && t2 == TY_NONE);
+  encMapTypes(9, t1, t2);
+  CHECK(t1 == TY_VENENO && t2 == TY_NONE);
+  CHECK_EQ(encLineWeight(4, 6), (uint8_t)ENC_MAP_WEIGHT);    // Charmander en el volcan
+  CHECK_EQ(encLineWeight(4, 1), (uint8_t)1);
+  CHECK_EQ(encLineWeight(81, 7), (uint8_t)ENC_MAP_WEIGHT);   // Magnemite en la central
+  CHECK_EQ(encLineWeight(21, 8), (uint8_t)ENC_MAP_WEIGHT);   // Spearow en la torre del cielo
+  CHECK_EQ(encLineWeight(109, 9), (uint8_t)ENC_MAP_WEIGHT);  // Koffing en el distrito toxico
+  CHECK_EQ(encLineWeight(109, 7), (uint8_t)1);
+  auto share = [](uint8_t map, uint8_t ty) {
+    uint32_t rng = 777;
+    int hit = 0, normal = 0;
+    for (int i = 0; i < 40000; i++) {
+      bool ex;
+      int16_t b = encPickBase(map, rng, ex);
+      if (ex) continue;
+      normal++;
+      hit += DEX_TBL[b].type1 == ty || DEX_TBL[b].type2 == ty;
+    }
+    return hit * 100.0 / normal;
+  };
+  CHECK(share(6, TY_FUEGO) > share(1, TY_FUEGO) * 1.8);
+  CHECK(share(7, TY_ELECTRICO) > share(1, TY_ELECTRICO) * 1.8);
+  CHECK(share(8, TY_VOLADOR) > share(4, TY_VOLADOR) * 1.8);
+  CHECK(share(9, TY_VENENO) > share(4, TY_VENENO) * 1.8);
 }
 
 TEST(encounter, el_salvaje_sale_en_la_forma_de_su_nivel_con_entrenamiento_del_estadio) {
