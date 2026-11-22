@@ -410,7 +410,7 @@ average genes (100) and are never shiny. Training is the same 0–100 scale as y
 
 **The team.** After you pick a stage, a picker shows the **home pet and every pet in the Box**. Tap a pet to add
 it (a number shows its place in the order), tap it again to remove it (the ones behind move up). You can take
-1 to 4; a fifth, or a pet that can't fight (the home pet asleep), shakes with the deny sound. The last team is
+1 to 4; a fifth, or a pet that can't fight (one on a trip; sleeping pets can fight since v3.12), shakes with the deny sound. The last team is
 pre-selected. **Start** begins; tap the title to go back to the list.
 
 **The fight.** It is **automatic**, as before: the pets take turns attacking until one faints. What changes:

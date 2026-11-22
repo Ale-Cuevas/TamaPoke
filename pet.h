@@ -429,7 +429,7 @@ public:
   void setTeam(const uint32_t *uids, uint8_t n);
   // donde esta el bicho de ese uid: TEAM_HOME0/1 (en casa, ese hueco), su hueco de la caja (BOX_OK) o -1
   int8_t teamSlotOf(uint32_t id) const;
-  // puede ir en el equipo: uno de casa si canBattle(); uno de la caja, siempre (hiberna entero)
+  // puede ir en el equipo: uno de casa si canBattle() (v3.12: dormido tambien); uno de la caja, si no esta de viaje
   bool teamCanFight(uint32_t id) const;
   // fin de un estadio (vencido o no), una vez al acabar: la felicidad del combate de practica a los de
   // casa (una vez por hora); vencido, la medalla y, si hoy no se pago, el premio del jefe a cada uid

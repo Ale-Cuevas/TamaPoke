@@ -5,8 +5,7 @@
 > `feature/full-yard`, 2026-11-17), v2.6 hungry-pet food fix (branch `fix/hungry-food`, 2026-11-17) and v3.0 two
 > live home pets (`84b2acf`) and v3.1 no hygiene, stale poops drain JOY (`6e10c31`), v3.2 coloured berries (`b7f7d9c`),
 > v3.3 pet menu, Play/Bag/Shop dock (`c8015f8`) and v3.4 player medals, USER page (branch `feature/two-homes`,
-> 2026-11-18), v3.5 yard 2.4x, v3.6 4.4x yard rolled back in v3.7, v3.8 pets 2.6x + pet-menu need bars, v3.9 in a box, v3.10 bigger labels, v3.11 tuning pass: more wild encounters, wake at 9,
-> slower needs, trip coins, need alarm, berry packs (branch `feature/tuning-v311`, 2026-11-22).**
+> 2026-11-18), v3.5 yard 2.4x, v3.6 4.4x yard rolled back in v3.7, v3.8 pets 2.6x + pet-menu need bars, v3.9 in a box, v3.10 bigger labels, v3.11 tuning pass (`feature/tuning-v311`), v3.12 sleeping pets fight (2026-11-22).**
 > If `FW_VERSION` in `TamaPoke.ino` or `git log` is past this, sections may be stale. The rule (CLAUDE.md) is that
 > every commit that changes game logic updates this guide in the same commit, including this line.
 
@@ -706,8 +705,8 @@ bubble, food fx → `yardDrawHud` (`:8589`)
 - **Panels** (`yard_panels.h`):
   - The Care panel is gone (v3.3): care is the pet menu.
   - Play: ball, battle, bag, sled, waterfall, travel. A minigame asks "Who plays?" (pet picker) when both home
-    pets can play. With the home pet asleep or an egg but pets in the Box, Play
-    jumps straight to the stages.
+    pets can play. With no home pet awake but someone who can fight (a sleeping home pet
+    since v3.12, or a Box pet), Play jumps straight to the stages (`openPlayPanel`, `stagesCanOpen`).
 - **Scale (v3.5, v3.8).** The map is `YBG_ZOOM10` 24 (`yardbg.h`, 2.4x). Pets are `YARD_PET_SCALE10` 13
   (`yard.h`, on top of the sprite's whole scale, 2 for almost all), so 2.6x since v3.8, a bit bigger than the map
   (v3.5 had them equal at 12).
@@ -788,7 +787,8 @@ skipped while cake-full.
   plus the fixed boss at the top level. Foes have genes 100 and are never shiny.
 - **Unlocking.** `stageUnlocked(s)` = `s == 0 || hasBadge(s−1)`. `badges` is an 8-bit mask, NVS `"bdg"`, and
   belongs to the player.
-- **Team.** 1–4 fighters from the home pet (if awake) and the Box pets that are not travelling (`teamCanFight`
+- **Team.** 1–4 fighters from the home pets (awake or asleep since v3.12; a sleeping one stays asleep) and the Box
+  pets that are not travelling (`teamCanFight`
   `pet.cpp:1701`). The last team is pre-selected.
 
 ```mermaid

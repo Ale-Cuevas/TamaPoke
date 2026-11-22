@@ -571,7 +571,7 @@ TEST(home2, el_equipo_reconoce_a_los_dos_de_casa) {
   CHECK(!teamIsHome(0));
   CHECK(p.teamCanFight(a));
   p.slotRef(1).sleeping = true;
-  CHECK(!p.teamCanFight(a));
+  CHECK(p.teamCanFight(a));  // v3.12: dormido tambien pelea
   CHECK(p.teamCanFight(b));
 }
 

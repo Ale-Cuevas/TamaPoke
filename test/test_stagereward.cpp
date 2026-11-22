@@ -456,12 +456,13 @@ TEST(stage, con_un_huevo_o_la_casa_vacia) {
   CHECK(v.isVacant());
 }
 
-TEST(stage, el_de_casa_dormido_o_en_un_final_no_puede_combatir) {
+TEST(stage, el_de_casa_dormido_puede_combatir_pero_no_en_un_final) {
   Pet p;
   sBorn(p);
   CHECK(p.teamCanFight(p.uid));
   p.toggleLight();
-  CHECK(!p.teamCanFight(p.uid));
+  CHECK(p.sleeping);
+  CHECK(p.teamCanFight(p.uid));  // v3.12: dormido tambien se puede elegir
   CHECK_EQ(p.teamSlotOf(p.uid), (int8_t)TEAM_HOME);  // sigue en casa
   p.toggleLight();
   p.startDying();
