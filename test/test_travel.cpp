@@ -81,7 +81,7 @@ TEST(travel, el_sorteo_es_determinista) {
 TEST(travel, sin_raros_en_1h_y_el_resto_de_reglas) {
   const int N = 20000;
   int rare[3] = { 0, 0, 0 }, souv[3] = { 0, 0, 0 }, item[3] = { 0, 0, 0 };
-  int itemId[16] = { 0 };
+  int itemId[IT_COUNT] = { 0 };
   for (uint8_t t = 0; t < 3; t++)
     for (int i = 0; i < N; i++) {
       uint8_t d = (uint8_t)(1 + i % 5);
@@ -113,12 +113,16 @@ TEST(travel, sin_raros_en_1h_y_el_resto_de_reglas) {
   for (int i = 0; i < TRV_POOL_N; i++)
     if (TRV_POOL_ID[i] != TRV_POOL_BERRY)
       CHECK_RANGE(itemId[TRV_POOL_ID[i]] * 100.0 / item[1], TRV_POOL_W[i] - 3.0, TRV_POOL_W[i] + 3.0);
-  int colored = 0;
+  int colored = 0, berryW = -1;
+  for (int i = 0; i < TRV_POOL_N; i++)
+    if (TRV_POOL_ID[i] == TRV_POOL_BERRY) berryW = TRV_POOL_W[i];
+  CHECK(berryW >= 0);
   for (int c = 0; c < TRV_BERRY_COLORS; c++) {
     colored += itemId[IT_BERRY_R + c];
     CHECK(itemId[IT_BERRY_R + c] > 0);  // los seis colores salen
   }
-  CHECK_RANGE(colored * 100.0 / item[1], TRV_POOL_W[TRV_POOL_N - 1] - 3.0, TRV_POOL_W[TRV_POOL_N - 1] + 3.0);
+  CHECK_RANGE(colored * 100.0 / item[1], berryW - 3.0, berryW + 3.0);
+  CHECK(itemId[IT_LURE] > 0);  // v3.14: el Cebo tambien sale de los viajes
   CHECK_EQ(itemId[IT_CHARM] + itemId[IT_EGG], 0);
 }
 
@@ -130,10 +134,7 @@ TEST(travel, la_baya_de_color_sale_de_la_semilla) {
     TravelResult r = travelRoll(seed, 1 + i % TRV_DESTS, 2, 0);  // 8 h: siempre trae objeto
     CHECK(r.item != TRV_NONE);
     CHECK(r.item < IT_COUNT);
-    if (r.item >= IT_BERRY_R) {
-      CHECK(r.item <= IT_BERRY_O);
-      seen[r.item - IT_BERRY_R] = true;
-    }
+    if (r.item >= IT_BERRY_R && r.item <= IT_BERRY_O) seen[r.item - IT_BERRY_R] = true;
     TravelResult again = travelRoll(seed, 1 + i % TRV_DESTS, 2, 0);
     CHECK_EQ(again.item, r.item);
   }

@@ -209,10 +209,10 @@ uint8_t yardMapPreview = 0;   // selector de fondos abierto en el mapa n (1..YAR
 enum : uint8_t { SHT_NONE = 0, SHT_OK, SHT_BROKE, SHT_FULL };
 #define SHOP_TOAST_MS 1500UL
 uint32_t bagReviveHintUntil = 0;  // la pista del Revivir en la mochila (v1.59)...
-uint8_t bagHintItem = IT_REVIVE;  // ...o la de la Poke Ball (v2.2): las dos dicen para que sirven
+uint8_t bagHintItem = IT_REVIVE;  // ...o la de la Poke Ball (v2.2) o la del Cebo (v3.14): dicen para que sirven
 uint32_t revivedMsgUntil = 0;     // "Revivido!" en el estado tras usar un Revivir (v1.60)
 bool foundShown = false;      // el ultimo frame enseno un hallazgo: un toque lo cierra
-static_assert(S_IT_BERRY_O - S_IT_GOLDEN == IT_BERRY_O - IT_GOLDEN && IT_BERRY_O + 1 == IT_COUNT, "nombres de objeto en el orden de IT_*");
+static_assert(S_IT_LURE - S_IT_GOLDEN == IT_LURE - IT_GOLDEN && IT_LURE + 1 == IT_COUNT, "nombres de objeto en el orden de IT_*");
 bool clockOpen = false;       // pantalla de ajuste de hora (deslizar abajo)
 static int barLabelGap();  // (mas abajo, con drawBar; la usan antes la ficha y el patio)
 #define YDEMO_PAGES 3
@@ -1271,7 +1271,7 @@ void handleSerial() {
     if (line.startsWith("GIFT ")) {
       long it = line.substring(5).toInt();
       bool ok = it >= 0 && it < IT_COUNT && pet.addGift((uint8_t)it);
-      Serial.println(ok ? "gift added" : "gift refused (item 0-15, at most 8)");
+      Serial.printf(ok ? "gift added\n" : "gift refused (item 0-%u, at most 8)\n", (unsigned)(IT_COUNT - 1));
       pet.flushSave();
     }
     Serial.printf("gifts n=%u:", pet.giftCount());
@@ -1363,6 +1363,22 @@ void handleSerial() {
   } else if (line == "ENCEND") {  // se va sin mas
     if (encOpen()) closeEncUi();
     pet.encClear();
+    encReport();
+    Serial.println("DONE");
+  } else if (line == "LURE" || line.startsWith("LURE ")) {  // v3.14: LURE usa un Cebo (como la mochila); LURE <n>: n Cebos
+    if (line.length() > 5) {
+      pet.setLures((uint8_t)constrain(line.substring(5).toInt(), 0, ITEM_MAX));
+    } else if (bagOpen || encOpen() || battleOpen() || teamOpen) {
+      Serial.println("lure: cierra antes la pantalla abierta (BACK)");
+    } else {
+      if (pet.useLure()) {
+        yardEncX = -1;
+        openEncounter();
+      } else {
+        sfxPlay(SFX_DENY);
+      }
+    }
+    Serial.printf("lure=%u block=%u\n", pet.items[IT_LURE], pet.lureBlock());
     encReport();
     Serial.println("DONE");
   } else if (line == "BALLS" || line.startsWith("BALLS ")) {  // BALLS <n>: Poke Balls en la mochila
@@ -2651,7 +2667,7 @@ static uint32_t screenKey() {
   } else if (bagOpen) {
     for (uint8_t n : pet.items) h = mixKey(h, n);
     for (uint32_t v : { (uint32_t)pet.eggsOwned(), (uint32_t)itemConfirm, (uint32_t)pet.sleeping, (uint32_t)gLang,
-                        (uint32_t)(timeLeft(bagReviveHintUntil) > 0), (uint32_t)bagHintItem,
+                        (uint32_t)(timeLeft(bagReviveHintUntil) > 0), (uint32_t)bagHintItem, (uint32_t)pet.encShown(),
                         // v2.0 (Y4b): pestana, tienda, aviso, selector de fondos y lo que lo cambia
                         (uint32_t)bagTab | ((uint32_t)bagPage << 8), (uint32_t)shopBuyId, (uint32_t)shopToast, (uint32_t)yardMapPreview,
                         (uint32_t)pet.coins, (uint32_t)pet.yardOwned, (uint32_t)pet.yardChosen,
@@ -4199,6 +4215,7 @@ static const char *const *const ITEM_ICON[IT_COUNT] = {
   SPR_ICON_GOLDEN, SPR_ICON_PROTEIN, SPR_ICON_IRON, SPR_ICON_CARBOS, SPR_ICON_CHARM, SPR_ICON_RARECANDY, SPR_ICON_EGG,
   SPR_ICON_CAKE, SPR_ICON_REVIVE, SPR_ICON_PLAY,  // la Poke Ball (v2.2) es la del boton Jugar
   SPR_ICON_BERRY_R, SPR_ICON_BERRY_B, SPR_ICON_BERRY_G, SPR_ICON_BERRY_Y, SPR_ICON_BERRY_P, SPR_ICON_BERRY_O,  // v3.2
+  SPR_ICON_LURE,  // v3.14
 };
 // el icono de cada comida (FOOD_*, food.h): la baya normal, las 6 de colores, la tarta y la dorada
 static const char *const *const FOOD_ICON[FOOD_COUNT] = {
@@ -5050,12 +5067,13 @@ void renderUserWalk() {
 #define BAG_ASK_H (BAG_ROWS * BAG_SLOT_H + (BAG_ROWS - 1) * BAG_GAP + 8)
 #define BAG_ASK_PILL_Y (BAG_ASK_Y + 170)
 #define BAG_ASK_PILL_GAP 24
-// orden en pantalla: lo que se come, las vitaminas, el caramelo y lo que no se usa a mano
+// orden en pantalla: lo que se come, las vitaminas, el caramelo, lo que no se usa a mano y el Cebo (v3.14, junto a
+// la Poke Ball: los dos son de los salvajes)
 static const uint8_t BAG_ORDER[] = { IT_GOLDEN, IT_CAKE, IT_RARECANDY, IT_PROTEIN, IT_IRON, IT_CARBOS,
-                                     IT_CHARM, IT_EGG, IT_REVIVE, IT_BALL,
+                                     IT_CHARM, IT_EGG, IT_REVIVE, IT_BALL, IT_LURE,
                                      IT_BERRY_R, IT_BERRY_B, IT_BERRY_G, IT_BERRY_Y, IT_BERRY_P, IT_BERRY_O };  // v3.2: 2.a pagina
 #define BAG_SLOTS (sizeof(BAG_ORDER) / sizeof(BAG_ORDER[0]))
-#define BAG_PAGE0 10   // casillas de la 1.a pagina; el resto (las 6 bayas de colores) van en la 2.a
+#define BAG_PAGE0 11   // casillas de la 1.a pagina (de 12); el resto (las 6 bayas de colores) van en la 2.a
 #define BAG_PAGES 2
 #define BAG_PAGER_X (CX + 104)  // el "1/2" a la derecha de las monedas
 #define BAG_PAGER_Y (BAG_COIN_Y + 2)
@@ -5501,7 +5519,9 @@ void renderBag() {
   // como se usa
   bool empty = pet.itemCount() == 0 && !pet.eggsOwned();
   bool reviveHint = timeLeft(bagReviveHintUntil) > 0;
-  const char *hint = reviveHint            ? T(bagHintItem == IT_BALL ? S_BALL_HINT : S_REVIVE_HINT)
+  const char *hint = reviveHint            ? T(bagHintItem == IT_BALL   ? S_BALL_HINT
+                                               : bagHintItem == IT_LURE ? (pet.encShown() ? S_LURE_BUSY : S_LURE_HINT)
+                                                                        : S_REVIVE_HINT)
                      : empty               ? T(S_BACKPACK_EMPTY)
                      : pet.homeAsleep()    ? T(S_BAG_ASLEEP)
                      : pet.eggsOwned()     ? T(S_EGG_HINT)
@@ -5564,6 +5584,24 @@ bool bagUseOn(uint8_t s, uint8_t it) {
   return ok;
 }
 
+// v3.14: el Cebo. Sale un salvaje y su pantalla se abre ya, como al tocarlo en el patio (intro y el selector
+// de un luchador); si se vuelve atras, se queda en el patio. La mochila se cierra antes: debajo queda el patio.
+// Si no se puede (lureBlock), no se gasta: suena el "no" y la pista dice para que sirve o que ya hay uno
+static bool bagUseLure() {
+  if (!pet.useLure()) {
+    sfxPlay(SFX_DENY);
+    bagReviveHintUntil = millis() + BAG_REVIVE_HINT_MS;
+    bagHintItem = IT_LURE;
+    Serial.printf("LURE refused (%u)\n", pet.lureBlock());
+    return false;
+  }
+  closeBag();
+  yardEncX = -1;  // el patio lo coloca de nuevo (para cuando se vuelva atras)
+  openEncounter();
+  Serial.printf("LURE used: #%d nv.%u left=%u\n", pet.encDex(), pet.encLevel(), pet.items[IT_LURE]);
+  return true;
+}
+
 // toques en la mochila: una casilla pide confirmacion; el boton de volver (o fuera de la rejilla)
 // la cierra
 void bagTap(int16_t x, int16_t y) {
@@ -5587,6 +5625,8 @@ void bagTap(int16_t x, int16_t y) {
         pet.onSlot((uint8_t)vs, [&] { ok = pet.hatchFromBag(); });
         sfxPlay(ok ? SFX_TAP : SFX_DENY);
         if (ok) closeBag();
+      } else if (it == IT_LURE) {  // v3.14: el Cebo (a la pantalla del encuentro, o "no" y sigue en la mochila)
+        bagUseLure();
       } else {
         // v3.3: en el bicho de casa que puede (con los dos se abre antes el selector, petPick); a la pantalla
         // principal a verlo: comer, subir de nivel o entrenar (v1.30, "ATK +3")
@@ -5627,6 +5667,19 @@ void bagTap(int16_t x, int16_t y) {
       itemConfirm = i + 1;
       itemConfirmUntil = millis() + 10000;
       sfxPlay(SFX_TAP);
+    } else if (i == IT_LURE && pet.items[i]) {
+      // v3.14: el Cebo pide confirmacion (hace salir un salvaje); si ahora no se puede, "no" y la pista
+      if (pet.lureBlock() == LURE_OK) {
+        itemConfirmSlot = -1;
+        itemConfirm = i + 1;
+        itemConfirmUntil = millis() + 10000;
+        sfxPlay(SFX_TAP);
+      } else {
+        bagReviveHintUntil = millis() + BAG_REVIVE_HINT_MS;
+        bagHintItem = i;
+        sfxPlay(SFX_DENY);
+        Serial.printf("LURE refused (%u)\n", pet.lureBlock());
+      }
     } else if ((i == IT_REVIVE || i == IT_BALL) && pet.items[i]) {
       // el Revivir se guarda para cuando se muera (v1.59); la Poke Ball, para un salvaje vencido (v2.2)
       bagReviveHintUntil = millis() + BAG_REVIVE_HINT_MS;
@@ -6723,7 +6776,7 @@ void encReport() {
                 pet.encActive() ? 1 : 0, pet.encWonPending() ? 1 : 0, pet.encDex(),
                 pet.encShown() ? dexName(pet.encDex()) : "-", pet.encLevel(), pet.encShiny() ? 1 : 0,
                 pet.encExclusive() ? 1 : 0, pet.encMinutesLeft(), encMapObject(yardMapNow()), yardEncX, yardEncY, encUi);
-  Serial.printf("enc: balls=%u capEggs=%u", pet.items[IT_BALL], pet.captureEggs());
+  Serial.printf("enc: balls=%u lures=%u capEggs=%u", pet.items[IT_BALL], pet.items[IT_LURE], pet.captureEggs());
   for (uint8_t i = 0; i < pet.captureEggs(); i++) Serial.printf(" #%d", pet.captureEggSpecies(i));
   Serial.printf(" homeEggCaptured=%d\n", pet.eggIsCaptured() ? 1 : 0);
 }

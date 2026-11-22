@@ -1541,8 +1541,10 @@ uint8_t Pet::itemCount() const {
 bool Pet::canUseItem(uint8_t it) const {
   // el amuleto, el huevo y el Revivir no se usan a mano: uno se lleva, otro va a casa cuando queda
   // libre, y el Revivir se ofrece cuando el bicho se muere (v1.59)
-  // (v2.2) la Poke Ball tampoco: se lanza al ganar a un bicho salvaje
-  if (it >= IT_COUNT || it == IT_CHARM || it == IT_EGG || it == IT_REVIVE || it == IT_BALL || !items[it]) return false;
+  // (v2.2) la Poke Ball tampoco: se lanza al ganar a un bicho salvaje. (v3.14) el Cebo no se usa en un bicho: es
+  // del patio (useLure)
+  if (it >= IT_COUNT || it == IT_CHARM || it == IT_EGG || it == IT_REVIVE || it == IT_BALL || it == IT_LURE || !items[it])
+    return false;
   if (isEgg() || sleeping || busyEnding()) return false;
   if (it == IT_PROTEIN) return trAtk < 100;
   if (it == IT_IRON) return trDef < 100;
@@ -1651,6 +1653,7 @@ uint8_t Pet::rollBattleItem() {
   else if ((r -= BDROP_CHARM) < BDROP_REVIVE) it = IT_REVIVE;
   else if ((r -= BDROP_REVIVE) < BDROP_BALL) it = IT_BALL;  // v2.2
   else if ((r -= BDROP_BALL) < BDROP_COLORED) it = IT_BERRY_R + random(BERRY_COLORS);  // v3.2
+  else if ((r -= BDROP_COLORED) < BDROP_LURE) it = IT_LURE;  // v3.14
   else it = IT_EGG;
   if (it == IT_CHARM && items[IT_CHARM]) it = IT_CAKE;  // solo se lleva un amuleto
   return it;
@@ -1708,9 +1711,11 @@ bool Pet::teamCanFight(uint32_t id) const {
 static_assert(FOOD_ITEM_BERRY0 == IT_BERRY_R && FOOD_ITEM_CAKE == IT_CAKE && FOOD_ITEM_GOLDEN == IT_GOLDEN,
               "food.h: los ids de objeto son los de pet.h");
 static_assert(PACK_OLD == IT_BERRY_R, "\"bpack\" guarda los objetos de antes de las bayas");
+static_assert(PACK_OLD + PACK2_LEN == IT_BERRY_O + 1 && PACK3_FIRST == IT_LURE, "\"bpk2\" las bayas, \"bpk3\" desde el Cebo");
+static_assert(IT_COUNT - PACK3_FIRST <= PACK3_LEN, "\"bpk3\" no se alarga: un objeto nuevo usa uno de sus huecos libres");
 static_assert(IT_CHARM == 4 && IT_BERRY_R == 10 && IT_BERRY_O == 15, "economy.h: itemCap / shopPackOf usan los ids a mano");
 static_assert(BERRY_MAX <= 255, "items[] es de un byte");
-static_assert(IT_BERRY_O + 1 == ECO_ITEMS && IT_BERRY_O + 1 == IT_COUNT, "economy.h: un precio por objeto de pet.h");
+static_assert(IT_COUNT == ECO_ITEMS, "economy.h: un precio por objeto de pet.h");
 
 uint16_t Pet::coinsEarnedToday() const { return coinDay == today() ? coinToday : 0; }
 
@@ -1775,6 +1780,7 @@ static_assert(TRV_DESTS == YARD_MAPS, "travel.h: un destino por mapa del patio")
 static_assert(TRV_POOL_ID[0] == IT_GOLDEN && TRV_POOL_ID[1] == IT_CAKE && TRV_POOL_ID[2] == IT_PROTEIN &&
                 TRV_POOL_ID[3] == IT_IRON && TRV_POOL_ID[4] == IT_CARBOS && TRV_POOL_ID[5] == IT_RARECANDY &&
                 TRV_POOL_ID[6] == IT_REVIVE && TRV_POOL_ID[7] == IT_BALL && TRV_POOL_ID[8] == IT_BERRY_R &&
+                TRV_POOL_ID[9] == IT_LURE && TRV_POOL_N == 10 &&
                 TRV_POOL_BERRY == IT_BERRY_R && TRV_BERRY_COLORS == 6 && IT_BERRY_O == IT_BERRY_R + 5,
               "travel.h: los ids de objeto son los de pet.h");
 
@@ -2105,6 +2111,37 @@ void Pet::encClear() {
   save();
 }
 
+// el Cebo (v3.14). Alguien que pueda pelear YA (no basta encCanRoll: la pantalla del encuentro se abre al momento y el
+// selector lleva un solo luchador): uno de casa (despierto o dormido, v3.12) o uno de la caja que no este de viaje
+uint8_t Pet::lureBlock() const {
+  if (!items[IT_LURE]) return LURE_NONE;
+  if (starterPick || home(0).busyEnding() || home(1).busyEnding()) return LURE_BUSY;
+  if (!eggClockKnown(lastSeenEpoch)) return LURE_NO_CLOCK;
+  bool fighter = home(0).canBattle() || home(1).canBattle();
+  for (uint8_t k = 0; k < BOX_SLOTS && !fighter; k++) fighter = boxSt[k] == BOX_OK && !slotTravelling(k);
+  if (!encCanRoll() || !fighter) return LURE_NO_FIGHTER;
+  if (encShown()) return LURE_ENC;  // uno a la vez (tambien el vencido con la Poke Ball pendiente)
+  return LURE_OK;
+}
+
+// Orden de escritura (corte de luz): "enc" primero (el salvaje), luego save() con la mochila. Un corte entre los dos
+// deja el salvaje y el Cebo sin gastar (uno de mas, nunca uno gastado sin salvaje)
+bool Pet::useLure() {
+  uint8_t b = lureBlock();
+  if (b != LURE_OK) {
+    Serial.printf("enc: cebo no (%u)\n", b);
+    return false;
+  }
+  uint32_t rng = ((uint32_t)random(0x10000) << 16) | (uint32_t)random(0x10000);
+  encStart(0, rng, false);  // como los de pasear: no cierra las tiradas del dia
+  encSound = false;         // la UI abre su pantalla ya, con su sonido
+  encPersist();
+  items[IT_LURE]--;
+  save();
+  Serial.printf("enc: cebo -> sale #%d (quedan %u)\n", encDexV, items[IT_LURE]);
+  return true;
+}
+
 uint8_t Pet::rollWildItem() {
   long r = random(100);
   uint8_t it;
@@ -2380,10 +2417,13 @@ void Pet::saveCapEggs() {
 
 // la mochila (y sus huevos de captura) ya, antes que el hueco: un huevo que pasa de casa a la mochila
 // (endLife) queda escrito antes de que el hueco deje de tenerlo. Un corte entre los dos: un huevo de mas
-// la mochila a la NVS: "bpack" (10) y justo despues "bpk2" (las bayas). Un corte entre las dos solo desfasa las bayas
+// la mochila a la NVS: "bpack" (10), justo despues "bpk2" (las bayas) y "bpk3" (v3.14: el Cebo y los que vengan,
+// 8 bytes fijos). Un corte entre ellas solo desfasa lo de los blobs de detras (lo de antes del corte ya esta)
 void Pet::putPack() {
   prefs.putBytes("bpack", items, PACK_OLD);
-  prefs.putBytes("bpk2", items + PACK_OLD, IT_COUNT - PACK_OLD);
+  prefs.putBytes("bpk2", items + PACK_OLD, PACK2_LEN);
+  memcpy(pack3Raw, items + PACK3_FIRST, IT_COUNT - PACK3_FIRST);  // los de despues (de otro firmware), tal cual
+  prefs.putBytes("bpk3", pack3Raw, PACK3_LEN);
 }
 
 void Pet::saveBag() {
@@ -2492,7 +2532,12 @@ void Pet::load() {
   // v3.2: "bpack" sigue con los 10 primeros objetos (un firmware anterior lo lee en un buffer de 10 y un blob mas
   // largo le daria una mochila vacia); las 6 bayas de colores van en "bpk2". Sin "bpk2": 0 bayas
   prefs.getBytes("bpack", items, PACK_OLD);
-  if (prefs.isKey("bpk2")) prefs.getBytes("bpk2", items + PACK_OLD, IT_COUNT - PACK_OLD);
+  if (prefs.isKey("bpk2")) prefs.getBytes("bpk2", items + PACK_OLD, PACK2_LEN);
+  // v3.14: "bpk3" (8 bytes) desde IT_LURE. Sin ella (un guardado anterior): 0 Cebos
+  memset(pack3Raw, 0, sizeof(pack3Raw));
+  if (prefs.isKey("bpk3") && prefs.getBytes("bpk3", pack3Raw, PACK3_LEN) == PACK3_LEN)
+    memcpy(items + PACK3_FIRST, pack3Raw, IT_COUNT - PACK3_FIRST);
+  else memset(pack3Raw, 0, sizeof(pack3Raw));
   {
     uint8_t g[GIFT_MAX + 1] = { 0 };
     giftN = 0;

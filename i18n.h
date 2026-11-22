@@ -68,6 +68,7 @@ enum StrId : uint16_t {
   S_IT_GOLDEN, S_IT_PROTEIN, S_IT_IRON, S_IT_CARBOS, S_IT_CHARM, S_IT_RARECANDY, S_IT_EGG, S_IT_CAKE, S_IT_REVIVE,
   S_IT_BALL,  // v2.2
   S_IT_BERRY_R, S_IT_BERRY_B, S_IT_BERRY_G, S_IT_BERRY_Y, S_IT_BERRY_P, S_IT_BERRY_O,  // v3.2: bayas de colores
+  S_IT_LURE,  // v3.14: el Cebo
   // combate de practica (v1.24): tarjeta VS, rotulos de cada golpe, resultado
   S_PRACTICE, S_SUPER_EFF, S_NOT_EFF, S_NO_EFFECT, S_CRITICAL, S_SPECIAL, S_TAP_CHARGE,
   S_SUDDEN_DEATH, S_RECOIL,  // v1.67: muerte subita (ataque 21 en adelante)
@@ -139,6 +140,8 @@ enum StrId : uint16_t {
   S_PICK_PLAY, S_PICK_ITEM,
   // v3.4: los tramos de las medallas del jugador y la 2.a pagina de la ficha (era "Combate")
   S_TIER_BRONZE, S_TIER_SILVER, S_TIER_GOLD, S_STATS,
+  // v3.14: la pista del Cebo en la mochila cuando no se puede usar (para que sirve / ya hay un salvaje)
+  S_LURE_HINT, S_LURE_BUSY,
   STR_COUNT
 };
 

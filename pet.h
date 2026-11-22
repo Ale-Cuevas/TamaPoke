@@ -42,10 +42,17 @@
 // tampoco se usa a mano: se ofrece cuando el bicho se muere de abandono. La Poke Ball (v2.2) tampoco: se
 // lanza al ganar a un bicho salvaje (encounter.h). Las seis bayas de colores (v3.2: roja, azul, verde, amarilla,
 // rosa, naranja) van detras de la Poke Ball: un guardado anterior trae menos huecos y el resto vale 0.
+// El Cebo (v3.14) va detras de las bayas: usarlo desde la mochila hace salir ya un salvaje (useLure).
 enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_RARECANDY, IT_EGG, IT_CAKE, IT_REVIVE, IT_BALL,
-       IT_BERRY_R, IT_BERRY_B, IT_BERRY_G, IT_BERRY_Y, IT_BERRY_P, IT_BERRY_O, IT_COUNT };
+       IT_BERRY_R, IT_BERRY_B, IT_BERRY_G, IT_BERRY_Y, IT_BERRY_P, IT_BERRY_O, IT_LURE, IT_COUNT };
 
-#define PACK_OLD 10  // objetos de "bpack" (hasta IT_BALL): el formato de antes. Las bayas, en "bpk2" (v3.2). No es de equilibrio
+// La mochila se guarda por posicion en tres blobs, que NUNCA se alargan: un firmware anterior lee cada uno en
+// un buffer de su tamano y getBytes no lee nada de un blob mas largo (se quedaria sin esos objetos). No son
+// numeros de equilibrio: cambiarlos es una migracion del guardado.
+#define PACK_OLD 10    // "bpack": los objetos de antes (hasta IT_BALL)
+#define PACK2_LEN 6    // "bpk2" (v3.2): las 6 bayas de colores
+#define PACK3_FIRST 16 // "bpk3" (v3.14): desde IT_LURE, un byte por objeto...
+#define PACK3_LEN 8    // ...con 8 huecos fijos: los objetos que vengan despues entran sin alargarlo (sin ese objeto = 0)
 
 // --- trucos del IMU (Tarea 2): lo que restan el enfado y el mareo, en tuning.h
 
@@ -59,6 +66,9 @@ enum : uint8_t { IT_GOLDEN = 0, IT_PROTEIN, IT_IRON, IT_CARBOS, IT_CHARM, IT_RAR
 enum : uint8_t { ENCF_SHINY = 1, ENCF_EXCL = 2, ENCF_WON = 4 };
 // por que no se puede lanzar la Poke Ball
 enum : uint8_t { CAP_OK = 0, CAP_NO_BALL, CAP_NO_ROOM, CAP_NONE };
+// el Cebo (v3.14, useLure): se puede usar o por que no. LURE_BUSY = el inicial por elegir o una despedida o un
+// Revivir en casa; LURE_ENC = ya hay un salvaje en el patio (tambien uno vencido con la Poke Ball pendiente)
+enum : uint8_t { LURE_OK = 0, LURE_NONE, LURE_BUSY, LURE_NO_CLOCK, LURE_NO_FIGHTER, LURE_ENC };
 
 // lo que dio ganar (o perder) a un bicho salvaje (encounterDone)
 struct EncReward {
@@ -459,6 +469,11 @@ public:
   void takeEncSound() { encSound = false; }
   bool encSpawnNow(int16_t dex = 0);   // serie ENC [dex] y renderizador: sale ya (dex 0 = sorteo)
   void encClear();                     // serie ENCEND: se va sin mas
+  // el Cebo (v3.14): hace salir ya un salvaje al azar (como cualquiera: encRollWild), que no gasta las tiradas del
+  // dia. Solo con hora, sin otro salvaje en el patio y con alguien que pueda pelear ahora mismo. Se gasta solo si
+  // sale el salvaje; guarda (es un toque). La UI abre luego su pantalla (openEncounter)
+  uint8_t lureBlock() const;           // LURE_OK o por que no
+  bool useLure();
   void dbgEncSet(uint8_t lv, bool sh) {  // renderizador: el nivel y el shiny del que hay
     encLv = lv ? lv : encLv;
     encFlags = sh ? (encFlags | ENCF_SHINY) : (encFlags & ~ENCF_SHINY);
@@ -473,6 +488,7 @@ public:
   uint8_t captureEggs() const { return capN; }
   int16_t captureEggSpecies(uint8_t i) const { return i < capN ? capDex[i] : 0; }
   void setBalls(uint8_t n) { items[IT_BALL] = n > ITEM_MAX ? ITEM_MAX : n; save(); }  // serie BALLS
+  void setLures(uint8_t n) { items[IT_LURE] = n > ITEM_MAX ? ITEM_MAX : n; save(); }  // serie LURE <n> (v3.14)
   void setBadges(uint8_t mask) { badges = mask; pendingSave = true; }    // serie y renderizador
   void clearStageDay() { stageDay = 0; stageMask = 0; pendingSave = true; }  // premios de hoy otra vez
 
@@ -638,7 +654,10 @@ private:
   void registerSpecies(int16_t dex, bool sh);  // sh: tambien en la de shinies
   bool saveHome1();                 // "hm1" (si cambio); false si no se pudo escribir
   bool saveOk = true;               // el ultimo save() llego a escribir "hm1" (y lo de despues)
-  void putPack();                   // "bpack" (10 objetos de antes) + "bpk2" (las 6 bayas), v3.2
+  void putPack();                   // "bpack" (10 objetos de antes) + "bpk2" (las 6 bayas, v3.2) + "bpk3" (v3.14)
+  // "bpk3" tal como se leyo: los bytes de objetos que este firmware no conoce (de uno mas nuevo) se vuelven a
+  // escribir tal cual, asi volver a una version anterior y despues a la nueva no los pierde
+  uint8_t pack3Raw[PACK3_LEN] = { 0 };
   void saveBag();                   // "bpack" y "cegg" ya (endLife: un huevo de casa a la mochila)
   void saveCapEggs();               // "cegg"
   // medallas del jugador (v3.4): "pm" (medals.h) y la copia de lo ultimo escrito; pmReady = cargado o creado

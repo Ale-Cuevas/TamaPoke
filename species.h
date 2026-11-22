@@ -953,6 +953,25 @@ static const char* const SPR_ICON_LETTER[16] = {  // 16x16: carta, Despedirse en
   "................",
 };
 
+static const char* const SPR_ICON_LURE[16] = {  // 16x16: pez de cebo con sedal y anzuelo, el Cebo de la mochila (v3.14)
+  "..............S.",
+  "..............S.",
+  "..............S.",
+  "..............S.",
+  "k.............S.",
+  "kk....kkkkkkk.S.",
+  "kOk..kowooowkkS.",
+  "kOOkkowooookkOk.",
+  "kOOooooooooooOk.",
+  "kOOkkooooooooOk.",
+  "kOk..kffffffOk..",
+  "kk....kkkkkkk...",
+  "k........S......",
+  ".........S......",
+  "......S..S......",
+  ".......SS.......",
+};
+
 static const char* const SPR_BADGE_GRASS[16] = {  // 16x16
   "................",
   "..........kkkk..",

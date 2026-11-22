@@ -10,7 +10,7 @@
 // las tablas de lo que se encuentra / suelta suman 100 (tambien lo comprueba tuning.h al compilar)
 static_assert(ODDS_GOLDEN + ODDS_CAKE + ODDS_VITAMIN + ODDS_CHARM + ODDS_REVIVE + ODDS_COLORED == 100, "hallazgos");
 static_assert(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDROP_CHARM + BDROP_REVIVE + BDROP_EGG +
-                      BDROP_BALL + BDROP_COLORED == 100, "botin");
+                      BDROP_BALL + BDROP_COLORED + BDROP_LURE == 100, "botin");
 static_assert(WDROP_CAKE + WDROP_GOLDEN + WDROP_VITAMIN + WDROP_RARECANDY + WDROP_REVIVE + WDROP_CHARM + WDROP_COLORED ==
                 100, "salvajes");
 
@@ -32,7 +32,8 @@ TEST(food, los_objetos_de_las_bayas_van_al_final_de_la_mochila) {
   CHECK_EQ((int)IT_BALL, 9);
   CHECK_EQ((int)IT_BERRY_R, 10);
   CHECK_EQ((int)IT_BERRY_O, 15);
-  CHECK_EQ((int)IT_COUNT, 16);
+  CHECK_EQ((int)IT_LURE, 16);  // v3.14: el Cebo, detras de las bayas
+  CHECK_EQ((int)IT_COUNT, 17);
   for (uint8_t c = 0; c < BERRY_COLORS; c++) {
     CHECK_EQ(foodItem(FOOD_BERRY0 + c), (uint8_t)(IT_BERRY_R + c));
     CHECK_EQ(foodOfItem(IT_BERRY_R + c), (uint8_t)(FOOD_BERRY0 + c));

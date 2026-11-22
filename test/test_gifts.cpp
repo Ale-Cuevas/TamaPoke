@@ -214,6 +214,7 @@ TEST(battle_drop, la_tabla_y_el_huevo_es_lo_mas_raro) {
     CHECK(n[IT_BERRY_R + c] > 0);
   }
   near("bayas de color", colored, BDROP_COLORED);
+  near("cebo", n[IT_LURE], BDROP_LURE);  // v3.14
   // el huevo es lo que menos sale de todo lo que sale (cada color por separado cae por debajo: es una sola casilla)
   for (uint8_t it = 0; it < IT_COUNT; it++)
     if (it != IT_EGG && (it < IT_BERRY_R || it > IT_BERRY_O) && n[it]) CHECK(n[IT_EGG] < n[it]);
@@ -229,6 +230,9 @@ TEST(battle_drop, la_tabla_y_el_huevo_es_lo_mas_raro) {
   mockForceRandom(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDROP_CHARM + BDROP_REVIVE + BDROP_BALL);
   uint8_t col = p.rollBattleItem();  // v3.2: una baya de color
   CHECK(col >= IT_BERRY_R && col <= IT_BERRY_O);
+  mockForceRandom(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDROP_CHARM + BDROP_REVIVE + BDROP_BALL +
+                  BDROP_COLORED);
+  CHECK_EQ(p.rollBattleItem(), (uint8_t)IT_LURE);  // v3.14
   mockForceRandom(99);
   CHECK_EQ(p.rollBattleItem(), (uint8_t)IT_EGG);
 }
