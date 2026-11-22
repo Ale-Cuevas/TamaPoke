@@ -224,8 +224,8 @@ menu to it. It closes by itself after 30 s untouched.
 - 🌃 **Night (v1.63, needs the clock):** from **22:00** the pet is sleepy (a thought bubble with "zzz",
   "Getting sleepy..."). Putting it to bed while it's sleepy gives **+3 bond**, once a night. At **23:00** it
   goes to bed by itself (no bond); woken before 09:00, it falls asleep again after 30 minutes awake. Asleep
-  between 22:00 and 09:00 the needs drain half as fast as in a nap, with higher floors (FOOD 50 /
-  JOY 50): a pet put to bed well cared for wakes up with every bar at 50 or more. At **09:00** (v3.11; it was 08:00) it wakes up by
+  between 22:00 and 09:00 the needs drain a quarter as fast as in a nap (FOOD and JOY −1 every 16 min since v3.13),
+  with higher floors (FOOD 50 / JOY 50): a pet put to bed full at 23:00 wakes up at 09:00 with about 62. At **09:00** (v3.11; it was 08:00) it wakes up by
   itself with a short tune (also with the screen dark). A nap in the afternoon isn't woken, unless it lasts
   into the night. All of this also happens with the board off.
 - **Feedback (v1.30):**

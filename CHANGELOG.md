@@ -6,6 +6,13 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.13] - 2026-11-22
+
+### Changed
+
+- **Nights are more restful.** Asleep between 22:00 and 09:00, FOOD and JOY now drop 1 every 16 minutes (it was every
+  8), so a pet put to bed full at 23:00 wakes up at 9:00 with about 62 instead of 50. Daytime naps don't change.
+
 ## [3.12] - 2026-11-22
 
 ### Changed
