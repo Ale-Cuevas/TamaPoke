@@ -83,9 +83,9 @@ static const uint8_t POOP_JOY_DRAIN[POOP_MAX + 1] = { 0, 1, 2, 4 };
 #define NAP_FOOD_JOY_EVERY 4
 #define NAP_FOOD_FLOOR 30
 #define NAP_JOY_FLOOR 35
-// de noche (de SLEEPY_HOUR a WAKE_HOUR) baja la mitad que en una siesta (comida 8x mas lenta que despierto), con suelos mas altos: amanece con
-// todo a 50 o mas si se acosto bien cuidado
-#define NIGHT_FOOD_JOY_EVERY 8
+// de noche (de SLEEPY_HOUR a WAKE_HOUR) baja la cuarta parte que en una siesta (v3.13: 8 -> 16 min; comida 16x mas
+// lenta que despierto), con suelos mas altos: acostado lleno a las 23, amanece a las 9 con ~62
+#define NIGHT_FOOD_JOY_EVERY 16
 #define NIGHT_FOOD_FLOOR 50
 #define NIGHT_JOY_FLOOR 50
 // Desde SLEEPY_HOUR tiene sueno (globo con "zzz"); a las BED_HOUR se duerme solo y, despertado antes de
