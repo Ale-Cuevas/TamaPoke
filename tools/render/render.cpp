@@ -1177,6 +1177,11 @@ static const std::vector<Scene> &scenes() {
     { "user-walk-es", [] { pokemon(25, 13); walker(3512, 61200, 4, { 4, 0, 9, 1, 1 }, 1); es(); openUser(USERP_WALK); } },
     { "user-badges", [] { pokemon(25, 13); stageSetup(0x07, 0, false); openUser(USERP_BADGES); } },
     { "user-badges-es", [] { pokemon(25, 13); stageSetup(0x07, 0, true); openUser(USERP_BADGES); } },
+    // v3.15: Coleccionista pagado con los umbrales viejos (5/15/25): Plata con 15, Oro con 25 (sin dividir por 0)
+    { "user-medals-old-collector", [] { userMedals(false); pet.setSouvenirMask(0x7FFFull); pet.dbgMedalTierSet(MD_SOUV, 2);
+                                        userMedalPage = MD_SOUV / USER_MEDAL_ROWS; } },
+    { "user-medals-old-collector-gold-es", [] { userMedals(true); pet.setSouvenirMask(0x1FFFFFFull);
+                                                pet.dbgMedalTierSet(MD_SOUV, 3); userMedalPage = MD_SOUV / USER_MEDAL_ROWS; } },
     { "user-collection", [] { collection(0x0A5B6D3); } },
     { "user-collection-es", [] { collection(0x0A5B6D3); es(); } },
     { "user-swipe-up", [] { pokemon(25, 13); onSwipeV(-1); } },  // the yard's swipe up opens the USER page

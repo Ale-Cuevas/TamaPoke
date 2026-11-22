@@ -315,6 +315,8 @@ public:
   void dbgMedalCount(uint8_t i, uint16_t v);  // serie MEDAL i v: el contador de una de bicho o de evento
   void dbgRegister(int16_t dex, bool sh = false) { registerSpecies(dex, sh); }  // renderizador y pruebas
   void dbgClearMedalNews() { medalNewsN = 0; }  // renderizador: cada escena sin banners pendientes
+  // pruebas y renderizador (v3.15): un tramo pagado a mano, como una partida vieja cobrada con umbrales mas bajos
+  void dbgMedalTierSet(uint8_t i, uint8_t tier) { if (i < MEDAL_COUNT) pm.tier[i] = tier > MEDAL_TIERS ? MEDAL_TIERS : tier; }
   // renderizador: contadores a 0 y cada tramo ya alcanzado, ya pagado (una escena no cobra lo de la anterior)
   void dbgMedalsQuiet() {
     pmClear(pm);

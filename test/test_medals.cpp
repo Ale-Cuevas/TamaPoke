@@ -733,3 +733,58 @@ TEST(medals, un_corte_en_las_monedas_nunca_regala_y_se_repara) {
     CHECK_MSG(c.items[IT_GOLDEN] == a.items[IT_GOLDEN], at + "mochila");
   }
 }
+
+// v3.15: la barra de la pagina de medallas con tramos pagados por encima de lo alcanzado (Coleccionista subio de
+// 5/15/25 a 5/20/45: una partida vieja tiene la Plata con 15-19 recuerdos o el Oro con 25). Nunca divide por 0
+TEST(medals, la_barra_con_un_umbral_subido_no_divide_por_cero) {
+  const uint32_t *t = MEDAL_T[MD_SOUV];
+  const int W = 120;
+  // casos normales: pagado = alcanzado
+  CHECK_EQ(medalBarFill(MD_SOUV, 0, 0, W), 0);
+  CHECK_EQ(medalNextShown(MD_SOUV, 0, 0), t[0]);
+  CHECK_EQ(medalBarFill(MD_SOUV, 1, t[0], W), 0);  // justo en el Bronce: barra vacia hacia la Plata
+  CHECK_EQ(medalNextShown(MD_SOUV, 1, t[0]), t[1]);
+  uint32_t mid = (t[0] + t[1]) / 2;
+  CHECK_EQ(medalBarFill(MD_SOUV, 1, mid, W), (int)((uint64_t)(mid - t[0]) * W / (t[1] - t[0])));
+  CHECK_EQ(medalBarFill(MD_SOUV, 3, t[2], W), W);  // Oro: llena
+  CHECK_EQ(medalNextShown(MD_SOUV, 3, t[2]), 0u);
+  // una Plata vieja con 15-19 recuerdos (por debajo del umbral nuevo de Plata): hacia el Oro, desde el Bronce
+  for (uint32_t v = 15; v < t[1]; v++) {
+    CHECK_EQ(medalNextShown(MD_SOUV, 2, v), t[2]);
+    CHECK_EQ(medalShownTier(MD_SOUV, 2, v), (uint8_t)2);
+    int f = medalBarFill(MD_SOUV, 2, v, W);
+    CHECK(f >= 0 && f <= W);
+    CHECK_EQ(f, (int)((uint64_t)(v - t[0]) * W / (t[2] - t[0])));
+  }
+  // un Oro viejo con 25 (o cualquier valor): barra llena, sin siguiente tramo
+  for (uint32_t v : { 0u, 5u, 19u, 25u, 44u }) {
+    CHECK_EQ(medalBarFill(MD_SOUV, 3, v, W), W);
+    CHECK_EQ(medalNextShown(MD_SOUV, 3, v), 0u);
+  }
+  // general: cualquier medalla, cualquier tramo pagado y valor, nunca fuera de [0, w]; w <= 0 da 0
+  for (uint8_t i = 0; i < MEDAL_COUNT; i++)
+    for (uint8_t paid = 0; paid <= MEDAL_TIERS; paid++)
+      for (uint32_t v : { 0u, 1u, MEDAL_T[i][0], MEDAL_T[i][1] - 1, MEDAL_T[i][1], MEDAL_T[i][2], MEDAL_T[i][2] * 2 }) {
+        int f = medalBarFill(i, paid, v, W);
+        CHECK(f >= 0 && f <= W);
+        uint32_t n = medalNextShown(i, paid, v);
+        CHECK(n == 0 || n > v);
+        CHECK_EQ(medalBarFill(i, paid, v, 0), 0);
+      }
+}
+
+// los tramos ya pagados se conservan: una partida con la Plata vieja (15 recuerdos) no la pierde ni cobra de nuevo
+TEST(medals, un_tramo_pagado_con_el_umbral_viejo_se_conserva) {
+  Pet p;
+  mBorn(p, 4);
+  p.setSouvenirMask(0x7FFFull);  // 15 recuerdos: hoy solo Bronce
+  p.medalsUpdate();
+  CHECK_EQ(p.medalTierPaid(MD_SOUV), (uint8_t)1);
+  p.dbgMedalTierSet(MD_SOUV, 2);  // como si la hubiera cobrado con 5/15/25
+  uint16_t c = p.coins;
+  p.medalsUpdate();
+  CHECK_EQ(p.medalTierPaid(MD_SOUV), (uint8_t)2);
+  CHECK_EQ(p.coins, c);
+  CHECK_EQ(medalBarFill(MD_SOUV, p.medalTierPaid(MD_SOUV), p.medalValue(MD_SOUV), 100),
+           (int)((15 - MEDAL_T[MD_SOUV][0]) * 100 / (MEDAL_T[MD_SOUV][2] - MEDAL_T[MD_SOUV][0])));
+}

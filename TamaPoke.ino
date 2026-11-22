@@ -5851,7 +5851,9 @@ static void renderUserMedals() {
     int y = UMED_Y0 + r * UMED_STEP;
     uint8_t tier = pet.medalTierPaid((uint8_t)i);
     uint32_t v = pet.medalValue((uint8_t)i);
-    uint32_t next = medalNext((uint8_t)i, v);
+    // v3.15: hacia el primer tramo por encima del pagado y del alcanzado (un umbral subido en tuning.h deja a una
+    // partida vieja con mas pagado que alcanzado: lo conserva)
+    uint32_t next = medalNextShown((uint8_t)i, tier, v);
     yCard(CARD_ROW_X, y, CARD_ROW_W, UMED_H, false);
     drawMedalDisc(CARD_ROW_X + 26, y + UMED_H / 2 + 3, UMED_DISC_R, tier);
     gfx->setTextColor(Y_TEXT);
@@ -5875,10 +5877,9 @@ static void renderUserMedals() {
     // la barra, desde el tramo anterior hasta el siguiente
     int bx = UMED_TEXT_X, bw = px - 10 - bx, by = y + 28;
     gfx->fillRoundRect(bx, by, bw, 8, 3, Y_CARD_HI);
-    uint32_t from = tier ? MEDAL_T[i][tier - 1] : 0;
-    int fw = next ? (int)((uint64_t)(v > from ? v - from : 0) * bw / (next - from)) : bw;
-    if (fw > bw) fw = bw;
-    if (fw > 2) gfx->fillRoundRect(bx, by, fw, 8, 3, medalTierColor(next ? tier + 1 : MTIER_GOLD));
+    int fw = medalBarFill((uint8_t)i, tier, v, bw);  // v3.15: nunca divide por 0
+    uint8_t shown = medalShownTier((uint8_t)i, tier, v);
+    if (fw > 2) gfx->fillRoundRect(bx, by, fw, 8, 3, medalTierColor(next ? shown + 1 : MTIER_GOLD));
   }
   if (userMedalTip >= 0) renderMedalTip((uint8_t)userMedalTip);
 }

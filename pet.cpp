@@ -2338,8 +2338,7 @@ void Pet::save() {
   // pagar (aqui solo repiten el mismo valor). "stD" antes que "stM", como en payStageDay
   // la coleccion (Y5). v3.15: 64 bits en "souv2"; la vieja "souv" (u32) se borra una vez escrita la nueva (un
   // corte entre las dos deja ambas, y la carga prefiere "souv2"). "souvD" crece de 25 a 45 fechas con la misma clave
-  prefs.putULong64("souv2", souvOwned);
-  if (prefs.isKey("souv")) prefs.remove("souv");
+  if (prefs.putULong64("souv2", souvOwned) == sizeof(uint64_t) && prefs.isKey("souv")) prefs.remove("souv");
   prefs.putBytes("souvD", souvDate, sizeof(souvDate));
   prefs.putUChar("bdg", badges);
   prefs.putUInt("stD", stageDay);
