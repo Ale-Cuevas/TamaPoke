@@ -141,7 +141,7 @@ enum StrId : uint16_t {
   // v3.4: los tramos de las medallas del jugador y la 2.a pagina de la ficha (era "Combate")
   S_TIER_BRONZE, S_TIER_SILVER, S_TIER_GOLD, S_STATS,
   // v3.14: la pista del Cebo en la mochila cuando no se puede usar (para que sirve / ya hay un salvaje)
-  S_LURE_HINT, S_LURE_BUSY,
+  S_LURE_HINT, S_LURE_BUSY, S_LURE_NOFIGHT,
   STR_COUNT
 };
 

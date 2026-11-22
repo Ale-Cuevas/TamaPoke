@@ -1532,8 +1532,8 @@ void Pet::popFound() {
   foundN--;
 }
 
-uint8_t Pet::itemCount() const {
-  uint8_t n = 0;
+uint16_t Pet::itemCount() const {
+  uint16_t n = 0;
   for (uint8_t i = 0; i < IT_COUNT; i++) n += items[i];
   return n;
 }

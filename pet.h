@@ -393,7 +393,7 @@ public:
   // efecto de usar un objeto de la mochila (false = no se pudo: dormido, huevo, no hay)
   bool canUseItem(uint8_t it) const;
   bool useItem(uint8_t it);
-  uint8_t itemCount() const;  // objetos en la mochila, amuleto incluido
+  uint16_t itemCount() const;  // objetos en la mochila, amuleto incluido
   // hallazgos pendientes de mostrar (cola en RAM, se pierde al reiniciar; el
   // objeto ya esta en la mochila). full = la mochila estaba llena.
   bool hasFound() const { return foundN > 0; }

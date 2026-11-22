@@ -59,7 +59,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "3.13"
+#define FW_VERSION "3.14"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -1368,7 +1368,7 @@ void handleSerial() {
   } else if (line == "LURE" || line.startsWith("LURE ")) {  // v3.14: LURE usa un Cebo (como la mochila); LURE <n>: n Cebos
     if (line.length() > 5) {
       pet.setLures((uint8_t)constrain(line.substring(5).toInt(), 0, ITEM_MAX));
-    } else if (bagOpen || encOpen() || battleOpen() || teamOpen) {
+    } else if (uiModalOpen()) {  // como la mochila: solo con el patio delante
       Serial.println("lure: cierra antes la pantalla abierta (BACK)");
     } else {
       if (pet.useLure()) {
@@ -5520,7 +5520,9 @@ void renderBag() {
   bool empty = pet.itemCount() == 0 && !pet.eggsOwned();
   bool reviveHint = timeLeft(bagReviveHintUntil) > 0;
   const char *hint = reviveHint            ? T(bagHintItem == IT_BALL   ? S_BALL_HINT
-                                               : bagHintItem == IT_LURE ? (pet.encShown() ? S_LURE_BUSY : S_LURE_HINT)
+                                               : bagHintItem == IT_LURE ? (pet.encShown()                            ? S_LURE_BUSY
+                                                                        : pet.lureBlock() == LURE_NO_FIGHTER ? S_LURE_NOFIGHT
+                                                                                                             : S_LURE_HINT)
                                                                         : S_REVIVE_HINT)
                      : empty               ? T(S_BACKPACK_EMPTY)
                      : pet.homeAsleep()    ? T(S_BAG_ASLEEP)
