@@ -59,7 +59,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "3.16"
+#define FW_VERSION "3.17"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -3920,7 +3920,7 @@ void renderGame() {
   if (gameScore == 0 && (millis() / 600) % 4 != 3) {  // pista hasta el primer toque
     setSize(2);
     gfx->setTextColor(ink);
-    setCur(centerX(T(S_TAP_BALL), 2), 310);
+    setCur(centerX(T(S_TAP_BALL), 2), 250);  // por encima de bichos altos (escala 3)
     printT(T(S_TAP_BALL));
   }
 

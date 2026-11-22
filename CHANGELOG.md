@@ -6,6 +6,19 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.17] - 2026-11-22
+
+### Changed
+
+- **The ball game speeds up faster.** It still starts at 1.5x, but now reaches its top speed of 3.5x at 100 points
+  (it was 3x at 120).
+
+### Added
+
+- **"Tap the ball!" hint** at the start of the ball game, until your first hit.
+- **The ball game's result shows the SPD your pet gained** ("SPD +N", or a note when SPD is already at the max), like
+  the sled.
+
 ## [3.16] - 2026-11-22
 
 ### Changed
