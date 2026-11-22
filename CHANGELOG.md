@@ -6,6 +6,27 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.15] - 2026-11-22
+
+### Added
+
+- **Four new yard backgrounds: Volcano, Power Plant, Sky Tower and Toxic District.** Buy them in the Shop for
+  250, 300, 350 and 400 coins. A lava lake with glowing cracks, a power plant with pylons and yellow crystals, a
+  stone platform above the clouds, and a factory district with smokestacks and a bubbling sludge river.
+- **Nine travel destinations.** The new maps are trip destinations too, each with its own wild Pokémon on the road
+  and a new trip event (lava, static spark, gust of wind, smog). Wild encounters favour Fire/Rock on the Volcano,
+  Electric on the Power Plant, Flying on the Sky Tower and Poison in the Toxic District.
+- **20 new souvenirs (45 in all).** Ember, obsidian, battery, magnet, gale feather, wind chime, gas mask, rusted
+  crown and more. The Collection now has two pages: tap the arrows or the "1/2" label, or swipe up/down.
+
+### Changed
+
+- **Collector medal: Gold now means all 45 souvenirs** (tiers 5 / 20 / 45). Tiers you already earned are kept.
+- Your souvenirs move to a bigger save slot on the first boot (kept with their dates). Going back to an older
+  firmware loses the Collection.
+- The new maps are files on the SD card (`/yard/06.bin`-`09.bin`, built with `tools/pack_yard.py`, sent with
+  `tools/send_sd.py --yard`); without them the yard shows the meadow.
+
 ## [3.14] - 2026-11-22
 
 ### Added
