@@ -2,6 +2,7 @@
 // viaje, uno al dia), las 6 h en el patio, el nivel alrededor del ultimo estadio, la especie (5 % exclusivas,
 // el mapa pesa x3), el combate de un solo rival, el premio, la Poke Ball y el huevo de captura (forma base,
 // nivel 1), y lo que sobrevive a un reinicio.
+#include <cmath>
 #include "framework.h"
 #include "shim/Arduino.h"
 #include "shim/Preferences.h"
@@ -31,6 +32,20 @@ static void forceEncHit(uint16_t permil) {
   for (uint32_t v = 1; v < 0x10000; v++) {
     uint32_t rng = (v << 16) | v;
     if (encHit(permil, rng)) {
+      mockForceRandom((long)v);
+      return;
+    }
+  }
+}
+
+// fuerza random() a un valor con el que sale cualquier tirada (base, pasear y hasta un viaje de 1 h)
+static void forceEncAll() { forceEncHit(encTravelPermil(1)); }
+
+// fuerza random() a un valor con el que ninguna tirada (ni base ni pasear) sale
+static void forceEncMiss() {
+  for (uint32_t v = 1; v < 0x10000; v++) {
+    uint32_t rng = (v << 16) | v;
+    if (!encHit(ENC_BASE_PERMIL, rng) && !encHit(ENC_WALK_PERMIL, rng)) {
       mockForceRandom((long)v);
       return;
     }
@@ -215,7 +230,7 @@ TEST(encounter, el_combate_salvaje_es_uno_contra_uno) {
 }
 
 // ------------------------------------------------------------------ Pet: las tiradas del dia
-// tasa de dias con encuentro: cada dia a las 21:00, con (o sin) 6000 pasos
+// tasa de dias con algun encuentro: cada dia a las 21:00, con (o sin) todos los pasos de las tiradas de pasear
 static double dailyRate(bool walk, int days) {
   Pet p;
   eBorn(p);
@@ -224,7 +239,7 @@ static double dailyRate(bool walk, int days) {
   for (int i = 1; i <= days; i++) {
     uint32_t d = EDAY + i;
     p.lastSeenEpoch = at(d, 21);
-    if (walk) p.addSteps(ENC_WALK_STEPS, d);
+    if (walk) p.addSteps(ENC_WALK_AT[ENC_WALK_TIERS - 1], d);
     else p.encCheck();
     if (p.encActive()) {
       hits++;
@@ -234,11 +249,12 @@ static double dailyRate(bool walk, int days) {
   return hits * 100.0 / days;
 }
 
-// las probabilidades salen de tuning.h: hoy un 10 % (ENC_BASE_PERMIL) y, paseando, un 25 % el dia
+// las probabilidades salen de tuning.h: la base (ENC_BASE_PERMIL) y, paseando, ademas ENC_WALK_TIERS tiradas
+// de ENC_WALK_PERMIL (se cuenta si salio alguno en el dia)
 TEST(encounter, un_dia_normal_y_paseando_salen_a_su_probabilidad) {
   double base = dailyRate(false, 4000), walk = dailyRate(true, 4000);
   double wantBase = ENC_BASE_PERMIL / 10.0;
-  double wantWalk = 100.0 * (1.0 - (1.0 - ENC_BASE_PERMIL / 1000.0) * (1.0 - ENC_WALK_PERMIL / 1000.0));
+  double wantWalk = 100.0 * (1.0 - (1.0 - ENC_BASE_PERMIL / 1000.0) * pow(1.0 - ENC_WALK_PERMIL / 1000.0, ENC_WALK_TIERS));
   CHECK_MSG(base > wantBase - 1.5 && base < wantBase + 1.5, "base " + std::to_string(base));
   CHECK_MSG(walk > wantWalk - 2.5 && walk < wantWalk + 2.5, "paseando " + std::to_string(walk));
 }
@@ -260,13 +276,149 @@ TEST(encounter, la_tirada_base_espera_a_su_hora_y_solo_uno_al_dia) {
   CHECK(!p.encSoundPending());
   p.encClear();
   // el mismo dia ya no sale otro: ni paseando ni viajando
-  p.addSteps(ENC_WALK_STEPS, EDAY);
-  p.encTravelRoll(8);
+  p.encTravelRoll(8);  // (con todas las tiradas forzadas a salir: la base y el viaje ya no tiran)
   CHECK(!p.encActive());
+  CHECK_EQ(p.encRolledMask() & ENC_ROLL_WALK0, 0);  // (y pasear aun no se tiro: no hay pasos)
   // al dia siguiente, otra vez
   p.lastSeenEpoch = at(EDAY + 1, 21);
   p.encCheck();
   CHECK(p.encActive());
+  mockClearForcedRandom();
+}
+
+// ---- v3.11: tiradas de pasear por umbral
+// un dia con la tirada base temprano (a las 21:00 ya toca) y reloj a esa hora
+static void eEvening(Pet &p) {
+  eBorn(p);
+  p.lastSeenEpoch = at(EDAY, 21);
+}
+static uint8_t walkBit(int i) { return (uint8_t)(ENC_ROLL_WALK0 << i); }
+
+TEST(encounter, cada_umbral_de_pasear_tira_una_sola_vez) {
+  Pet p;
+  eEvening(p);
+  forceEncMiss();  // ninguna tirada sale
+  p.encCheck();    // la base tira y falla
+  CHECK(p.encRolledMask() & ENC_ROLL_BASE);
+  CHECK_EQ(p.encRolledMask() & ENC_ROLL_SPAWNED, 0);
+  for (int i = 0; i < ENC_WALK_TIERS; i++) {
+    CHECK_EQ(p.encRolledMask() & walkBit(i), 0);
+    p.addSteps(ENC_WALK_AT[i], EDAY);  // cruza el umbral i
+    CHECK(p.encRolledMask() & walkBit(i));
+    for (int j = i + 1; j < ENC_WALK_TIERS; j++) CHECK_EQ(p.encRolledMask() & walkBit(j), 0);
+    CHECK(!p.encActive());
+  }
+  p.addSteps(1, EDAY);  // mas pasos: ya no tiran otra vez
+  mockClearForcedRandom();
+}
+
+TEST(encounter, un_umbral_con_acierto_saca_uno_y_no_cierra_la_base_ni_el_viaje) {
+  Pet p;
+  eEvening(p);
+  forceEncAll();  // todo sale
+  p.addSteps(ENC_WALK_AT[0], EDAY);
+  // la base (ya tocaba a las 21:00) tira antes y sale: cuenta como la del dia
+  CHECK(p.encActive());
+  CHECK(p.encRolledMask() & ENC_ROLL_SPAWNED);
+  mockClearForcedRandom();
+  // un dia nuevo, base fallida: el de pasear no pone ENC_ROLL_SPAWNED
+  Pet q;
+  eBorn(q);
+  q.lastSeenEpoch = at(EDAY, 0);  // la base aun no toca
+  forceEncAll();
+  q.addSteps(ENC_WALK_AT[0], EDAY);
+  CHECK(q.encActive());
+  CHECK_EQ(q.encRolledMask() & ENC_ROLL_SPAWNED, 0);
+  CHECK(q.encRolledMask() & walkBit(0));
+  CHECK_EQ(q.encRolledMask() & walkBit(1), 0);
+  // sigue pudiendo salir un viaje cuando se va este (aqui forzado)
+  q.encClear();
+  q.encTravelRoll(1);
+  CHECK(q.encActive());
+  CHECK(q.encRolledMask() & ENC_ROLL_SPAWNED);
+  mockClearForcedRandom();
+}
+
+TEST(encounter, solo_uno_en_el_patio_y_el_umbral_cruzado_espera_a_que_quede_libre) {
+  Pet p;
+  eBorn(p);
+  p.lastSeenEpoch = at(EDAY, 0);  // la base aun no toca
+  forceEncAll();
+  p.addSteps(ENC_WALK_AT[0], EDAY);
+  CHECK(p.encActive());
+  int16_t first = p.encDex();
+  uint8_t mask = p.encRolledMask();
+  p.addSteps(ENC_WALK_AT[1] - ENC_WALK_AT[0], EDAY);  // cruza el 2.o con el primero en el patio
+  CHECK_EQ(p.encRolledMask(), mask);                  // no tiro
+  CHECK_EQ(p.encDex(), first);
+  CHECK_EQ(p.encRolledMask() & walkBit(1), 0);
+  p.encClear();
+  p.encCheck();  // libre: ahora tira el 2.o (y el 3.o aun no tiene sus pasos)
+  CHECK(p.encActive());
+  CHECK(p.encRolledMask() & walkBit(1));
+  CHECK_EQ(p.encRolledMask() & walkBit(2), 0);
+  mockClearForcedRandom();
+}
+
+TEST(encounter, el_ganado_con_la_bola_pendiente_tambien_ocupa_el_patio) {
+  Pet p;
+  eBorn(p);
+  p.lastSeenEpoch = at(EDAY, 0);
+  eSpawn(p);
+  EncReward r = p.encounterDone(true, p.uid);
+  CHECK(r.won);
+  CHECK(p.encWonPending());
+  forceEncAll();
+  p.addSteps(ENC_WALK_AT[0], EDAY);
+  CHECK(p.encWonPending());  // sigue el mismo: no se piso con otro
+  CHECK_EQ(p.encRolledMask() & walkBit(0), 0);
+  mockClearForcedRandom();
+}
+
+TEST(encounter, la_base_sigue_tirando_tras_uno_de_pasear) {
+  Pet p;
+  eBorn(p);
+  uint16_t m = encBaseMinute(EDAY);
+  p.lastSeenEpoch = at(EDAY, 0);
+  forceEncAll();
+  p.addSteps(ENC_WALK_AT[0], EDAY);  // sale uno de pasear antes de la hora de la base
+  CHECK(p.encActive());
+  p.encClear();
+  CHECK_EQ(p.encRolledMask() & ENC_ROLL_BASE, 0);
+  p.lastSeenEpoch = at(EDAY, 0) + m * 60;
+  p.encCheck();  // le toca a la base: sale
+  CHECK(p.encActive());
+  CHECK(p.encRolledMask() & ENC_ROLL_BASE);
+  CHECK(p.encRolledMask() & ENC_ROLL_SPAWNED);
+  mockClearForcedRandom();
+}
+
+TEST(encounter, el_viaje_sigue_cerrado_tras_la_base_del_dia) {
+  Pet p;
+  eEvening(p);
+  forceEncAll();
+  p.encCheck();  // la base sale
+  CHECK(p.encActive());
+  p.encClear();
+  p.encTravelRoll(8);
+  CHECK(!p.encActive());
+  mockClearForcedRandom();
+}
+
+// como mucho 1 (base o viaje) + ENC_WALK_TIERS al dia, con todo forzado a salir y el patio liberado
+TEST(encounter, con_todo_a_favor_salen_como_mucho_uno_mas_los_umbrales_al_dia) {
+  Pet p;
+  eEvening(p);
+  forceEncAll();
+  p.addSteps(ENC_WALK_AT[ENC_WALK_TIERS - 1], EDAY);  // pasos de todos los umbrales
+  int n = 0;
+  for (int guard = 0; guard < 20 && p.encActive(); guard++) {
+    n++;
+    p.encClear();
+    p.encCheck();
+    p.encTravelRoll(8);
+  }
+  CHECK_EQ(n, 1 + ENC_WALK_TIERS);
   mockClearForcedRandom();
 }
 

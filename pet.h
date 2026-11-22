@@ -598,7 +598,7 @@ private:
   uint8_t capN = 0;
   uint8_t capDex[CAP_EGG_MAX] = { 0 };
   bool capShiny[CAP_EGG_MAX] = { false };
-  void encStart(int16_t dex, uint32_t rng);
+  void encStart(int16_t dex, uint32_t rng, bool countsAsDaily = true);
   void encEnd();
   void capPush(int16_t dex, bool sh, bool front);
   void bagEggOut(bool saveNow);  // un huevo de la mochila al hueco del foco: primero los de captura

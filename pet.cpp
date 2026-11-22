@@ -403,8 +403,9 @@ void Pet::syncHome(uint32_t seen, uint32_t mins) {
       continue;
     }
     if (!full) fullness = dropTo(fullness, FOOD_DRAIN, OFFLINE_FLOOR);
-    energy = dropTo(energy, ENE_DRAIN, OFFLINE_FLOOR);
-    joy = dropTo(joy, JOY_DRAIN, OFFLINE_FLOOR);
+    if (ageMinutes % ENE_DRAIN_EVERY == 0) energy = dropTo(energy, ENE_DRAIN, OFFLINE_FLOOR);
+    if (ageMinutes % JOY_DRAIN_EVERY == 0) joy = dropTo(joy, JOY_DRAIN, OFFLINE_FLOOR);
+    if (fullness < JOY_HUNGRY_BELOW) joy = dropTo(joy, JOY_DRAIN_HUNGRY, OFFLINE_FLOOR);
     // v3.1: las cacas se hacen dentro del repaso (para que tengan su edad) y las viejas quitan felicidad
     // (con el mismo suelo). Durmiendo no ensucia ni pesa: el sueno ya hizo continue
     offlineAwake++;
@@ -488,7 +489,7 @@ bool Pet::tickHome() {
 
   // el sueño es descanso: la energia se recupera y las necesidades bajan MUCHO
   // mas lento que despierto y con suelo (amanece pidiendo algo de mimo, no a
-  // cero, sin descuidos ni escapadas). despierto: comida -2/min, hig/joy -1/min.
+  // cero, sin descuidos ni escapadas). despierto: comida -FOOD_DRAIN/min, energia/joy cada 2 min.
   // El peso aun se quema; la racha de buen cuidado (goodTicks) queda en pausa.
   if (sleeping) {
     sleepMinute(full, h);
@@ -499,11 +500,13 @@ bool Pet::tickHome() {
   // tiempo apagado, Caramelo Raro, LVL) y la anuncia con su propio sonido
 
   if (!full) fullness = clamp100(fullness - FOOD_DRAIN);
-  energy = clamp100(energy - ENE_DRAIN);
   if (fullness > POOP_MIN_FOOD && poops < POOP_MAX && random(100) < POOP_ODDS) addPoop();
 
-  // el sobrepeso da pereza: la energia cae el doble
-  if (weight > OVERWEIGHT_AT) energy = clamp100(energy - OVERWEIGHT_ENE_DRAIN);
+  // la energia baja cada ENE_DRAIN_EVERY min; el sobrepeso da pereza: cae el doble (en el mismo toque)
+  if (ageMinutes % ENE_DRAIN_EVERY == 0) {
+    energy = clamp100(energy - ENE_DRAIN);
+    if (weight > OVERWEIGHT_AT) energy = clamp100(energy - OVERWEIGHT_ENE_DRAIN);
+  }
   if (weight > 0 && ageMinutes % WEIGHT_BURN_AWAKE_MIN == 0) weight--;
 
   // la disciplina forja la defensa: 12 h seguidas bien cuidado = +1 DEF
@@ -516,7 +519,7 @@ bool Pet::tickHome() {
     goodTicks = 0;
   }
 
-  int dJoy = -JOY_DRAIN;
+  int dJoy = ageMinutes % JOY_DRAIN_EVERY == 0 ? -JOY_DRAIN : 0;
   if (fullness < JOY_HUNGRY_BELOW) dJoy -= JOY_DRAIN_HUNGRY;
   // v3.1: las cacas viejas (mas de POOP_STALE_MIN min en el suelo) quitan felicidad; mas cacas, mas rapido
   uint8_t stale = stalePoops();
@@ -1182,7 +1185,7 @@ void Pet::nightMinute(int h, bool live) {
   }
   if (sleeping) {
     nightAwakeMin = 0;
-    if (bedHour(h)) nightSleep = true;  // una siesta que llega a la noche tambien amanece a las 8
+    if (bedHour(h)) nightSleep = true;  // una siesta que llega a la noche tambien amanece a las WAKE_HOUR
     // por la mañana: se despierta solo (una siesta de tarde no). Solo de WAKE_HOUR a EVENING_HOUR:
     // acostado a las 20-21 ya es dormir de noche y no debe despertarse al minuto siguiente
     if (nightSleep && h >= WAKE_HOUR && h < EVENING_HOUR) {
@@ -1363,7 +1366,7 @@ void Pet::addSteps(uint32_t n, uint32_t day) {
       if (tier == STEP_GOAL_TIERS) pmBump(pm, MD_MARATHON);   // v3.4: un dia de 10000 pasos (del jugador, una vez al dia)
       goalReward(tier, rewarded);
     }
-    encCheck();  // v2.2: los ENC_WALK_STEPS pasos del dia dan otra tirada de encuentro
+    encCheck();  // v2.2: los umbrales ENC_WALK_AT de pasos del dia dan otra tirada de encuentro
   }
   medalsUpdate();  // v3.4: los pasos y los niveles de las metas (sin escribir: marca el guardado)
 }
@@ -2001,7 +2004,8 @@ uint16_t Pet::encMinutesLeft() const { return encActive() ? ::encMinutesLeft(enc
 // espera 6 h). Sin eso no se tira (la tirada se queda para luego)
 bool Pet::encCanRoll() const { return !starterPick && (homeHatched() || boxHasPets()); }  // v3.0: cualquiera de casa
 
-void Pet::encStart(int16_t dex, uint32_t rng) {
+// countsAsDaily: la base, el viaje y ENC cierran esas tiradas del dia; los de pasear no (v3.11)
+void Pet::encStart(int16_t dex, uint32_t rng, bool countsAsDaily) {
   EncWild w = encRollWild(yardMapWanted(), badges, rng);
   if (dex >= 1 && dex <= DEX_COUNT) {  // serie ENC <dex>: esa especie, al nivel del sorteo
     w.dex = dex;
@@ -2014,7 +2018,7 @@ void Pet::encStart(int16_t dex, uint32_t rng) {
   encTr[2] = w.tSpe;
   encFlags = (w.exclusive ? ENCF_EXCL : 0) | (random(shinyOdds(false)) == 0 ? ENCF_SHINY : 0);
   encSpawnAt = lastSeenEpoch;
-  encRolled |= ENC_ROLL_SPAWNED;
+  if (countsAsDaily) encRolled |= ENC_ROLL_SPAWNED;
   encSound = true;
   pendingSave = true;
   Serial.printf("enc: sale #%d nv.%u%s%s ent.%u/%u/%u\n", encDexV, encLv, encShiny() ? " shiny" : "",
@@ -2041,9 +2045,9 @@ void Pet::encCheck() {
     encRolled = 0;
     pendingSave = true;
   }
-  if (encSpawnAt || (encRolled & ENC_ROLL_SPAWNED) || !encCanRoll()) return;
+  if (encSpawnAt || !encCanRoll()) return;  // solo uno a la vez (tambien el ganado con la bola pendiente)
   uint32_t rng = ((uint32_t)random(0x10000) << 16) | (uint32_t)random(0x10000);
-  if (!(encRolled & ENC_ROLL_BASE) && (now / 60) % 1440 >= encBaseMinute(d)) {
+  if (!(encRolled & (ENC_ROLL_BASE | ENC_ROLL_SPAWNED)) && (now / 60) % 1440 >= encBaseMinute(d)) {
     encRolled |= ENC_ROLL_BASE;
     pendingSave = true;
     bool hit = encHit(ENC_BASE_PERMIL, rng);
@@ -2053,12 +2057,19 @@ void Pet::encCheck() {
       return;
     }
   }
-  if (!(encRolled & ENC_ROLL_WALK) && stepsOn(d) >= ENC_WALK_STEPS) {
-    encRolled |= ENC_ROLL_WALK;
+  // v3.11: una tirada por umbral de pasos (el bit solo se marca al tirar de verdad)
+  for (uint8_t i = 0; i < ENC_WALK_TIERS; i++) {
+    uint8_t bit = (uint8_t)(ENC_ROLL_WALK0 << i);
+    if ((encRolled & bit) || stepsOn(d) < ENC_WALK_AT[i]) continue;
+    encRolled |= bit;
     pendingSave = true;
     bool hit = encHit(ENC_WALK_PERMIL, rng);
-    Serial.printf("enc: tirada de pasear %s\n", hit ? "SI" : "no");
-    if (hit) encStart(0, rng);
+    Serial.printf("enc: tirada de pasear (%u pasos) %s\n", (unsigned)ENC_WALK_AT[i], hit ? "SI" : "no");
+    if (hit) {
+      encStart(0, rng, false);
+      return;
+    }
+    rng = ((uint32_t)random(0x10000) << 16) | (uint32_t)random(0x10000);
   }
 }
 

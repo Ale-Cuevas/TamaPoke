@@ -184,7 +184,7 @@ TEST(cake, la_comida_no_baja_durante_tres_horas) {
   CHECK_EQ(p.fullness, (uint8_t)100);
   CHECK(!p.sated());
   advance(p, 1);
-  CHECK_EQ(p.fullness, (uint8_t)98);  // despues, -2 al minuto como siempre
+  CHECK_EQ(p.fullness, (uint8_t)(100 - FOOD_DRAIN));  // despues, FOOD_DRAIN al minuto como siempre
 }
 
 TEST(cake, jugar_no_da_hambre_mientras_dura) {
@@ -205,7 +205,7 @@ TEST(cake, apagado_cuenta_lo_que_quedaba) {
   advance(p, 120);  // le queda 1 h
   CHECK_EQ(p.fullness, (uint8_t)100);
   p.setClock(1000u * 86400 + 12 * 3600);  // a mediodia: de noche se dormiria solo (v1.63)
-  p.syncClock(1000u * 86400 + 12 * 3600 + 240 * 60);  // 4 h apagado: 1 h lleno, 3 h bajando (-2/min, suelo 15)
+  p.syncClock(1000u * 86400 + 12 * 3600 + 240 * 60);  // 4 h apagado: 1 h lleno, 3 h bajando (suelo 15)
   CHECK(!p.sated());
   CHECK_EQ(p.fullness, (uint8_t)15);
   Pet q;
@@ -303,7 +303,7 @@ TEST(feed, dormido_o_huevo_no_come) {
 }
 
 // ---------------------------------------------------------------- tick
-// el ritmo de cada barra sale de tuning.h (FOOD_DRAIN 2, ENE_DRAIN 1, JOY_DRAIN 1 hoy)
+// el ritmo de cada barra sale de tuning.h (FOOD_DRAIN cada minuto, ENE_DRAIN y JOY_DRAIN cada *_EVERY min)
 TEST(tick, despierto_cada_barra_baja_a_su_ritmo) {
   Pet p;
   makePet(p, 4);
@@ -313,10 +313,37 @@ TEST(tick, despierto_cada_barra_baja_a_su_ritmo) {
   advance(p, 10);
   mockClearForcedRandom();
   CHECK_EQ(p.fullness, (uint8_t)(100 - 10 * FOOD_DRAIN));
-  CHECK_EQ(p.energy, (uint8_t)(100 - 10 * ENE_DRAIN));
-  CHECK_EQ(p.joy, (uint8_t)(100 - 10 * JOY_DRAIN));
+  CHECK_EQ(p.energy, (uint8_t)(100 - (10 / ENE_DRAIN_EVERY) * ENE_DRAIN));
+  CHECK_EQ(p.joy, (uint8_t)(100 - (10 / JOY_DRAIN_EVERY) * JOY_DRAIN));
   CHECK_EQ(p.ageMinutes, (uint32_t)10);
   CHECK_EQ(p.poops, (uint8_t)0);
+}
+
+// con hambre (comida por debajo de JOY_HUNGRY_BELOW) la felicidad baja ademas JOY_DRAIN_HUNGRY cada minuto
+TEST(tick, con_hambre_la_felicidad_baja_mas) {
+  Pet p;
+  makePet(p, 4);
+  setStats(p, JOY_HUNGRY_BELOW - 1 + FOOD_DRAIN, 100, 100);  // tras el primer minuto ya esta por debajo
+  p.poops = 0;
+  mockForceRandom(99);
+  advance(p, 10);
+  mockClearForcedRandom();
+  CHECK(p.fullness < JOY_HUNGRY_BELOW);
+  CHECK_EQ(p.joy, (uint8_t)(100 - (10 / JOY_DRAIN_EVERY) * JOY_DRAIN - 10 * JOY_DRAIN_HUNGRY));
+}
+
+// apagada: los mismos toques que en vivo (cada *_EVERY min), con el suelo OFFLINE_FLOOR
+TEST(tick, apagado_baja_al_mismo_ritmo_que_en_vivo) {
+  Pet p;
+  makePet(p, 4);
+  setStats(p, 100, 100, 100);
+  p.poops = 0;
+  p.ageMinutes = 0;
+  p.setClock(1000u * 86400 + 12 * 3600);
+  p.syncClock(1000u * 86400 + 12 * 3600 + 10 * 60);  // 10 min apagada, a mediodia
+  CHECK_EQ(p.fullness, (uint8_t)(100 - 10 * FOOD_DRAIN));
+  CHECK_EQ(p.energy, (uint8_t)(100 - (10 / ENE_DRAIN_EVERY) * ENE_DRAIN));
+  CHECK_EQ(p.joy, (uint8_t)(100 - (10 / JOY_DRAIN_EVERY) * JOY_DRAIN));
 }
 
 // v3.1: las cacas viejas (mas de POOP_STALE_MIN min en el suelo) quitan felicidad, solo despierto. Todo sale de
@@ -330,7 +357,7 @@ TEST(poop, una_caca_recien_hecha_no_quita_felicidad) {
   advance(p, POOP_STALE_MIN);  // la mas vieja tiene justo POOP_STALE_MIN: aun no es vieja
   mockClearForcedRandom();
   CHECK_EQ(p.stalePoops(), (uint8_t)0);
-  CHECK_EQ(p.joy, (uint8_t)(100 - POOP_STALE_MIN * JOY_DRAIN));
+  CHECK_EQ(p.joy, (uint8_t)(100 - (POOP_STALE_MIN / JOY_DRAIN_EVERY) * JOY_DRAIN));
 }
 
 TEST(poop, las_viejas_quitan_felicidad_segun_la_tabla) {
@@ -345,7 +372,7 @@ TEST(poop, las_viejas_quitan_felicidad_segun_la_tabla) {
     const uint32_t span = POOP_JOY_EVERY * 4;  // 4 toques del drenaje, sea cual sea la fase
     advance(p, span);
     mockClearForcedRandom();
-    CHECK_EQ(p.joy, (uint8_t)(100 - span * JOY_DRAIN - 4 * POOP_JOY_DRAIN[n]));
+    CHECK_EQ(p.joy, (uint8_t)(100 - (span / JOY_DRAIN_EVERY) * JOY_DRAIN - 4 * POOP_JOY_DRAIN[n]));
   }
 }
 
@@ -1223,7 +1250,7 @@ TEST(death, revivir_gasta_uno_y_devuelve_la_mitad) {
   CHECK_EQ(p.careMistakes, (uint8_t)(mist + 1));
   CHECK(!p.revive());  // ya no se esta muriendo
   advance(p, 1);       // y el tiempo vuelve a correr
-  CHECK_EQ(p.fullness, (uint8_t)(REVIVE_NEEDS - 2));
+  CHECK_EQ(p.fullness, (uint8_t)(REVIVE_NEEDS - FOOD_DRAIN));
   Pet b;               // guardado al momento
   b.begin();
   CHECK(!b.isDying());
@@ -1549,8 +1576,8 @@ TEST(offline, las_cacas_viejas_bajan_la_felicidad_hasta_el_suelo) {
   p.ageMinutes += 100;
   p.setClock(at(9, 0));
   p.syncClock(at(9, 0) + 60 * 60);  // 1 h apagado
-  // sin cacas viejas bajaria 60 * JOY_DRAIN; con las 3 viejas, mas
-  CHECK_MSG(p.joy < 100 - 60 * JOY_DRAIN, "las tres viejas drenan ademas del ritmo normal");
+  // sin cacas viejas bajaria (60 / JOY_DRAIN_EVERY) * JOY_DRAIN; con las 3 viejas, mas
+  CHECK_MSG(p.joy < 100 - (60 / JOY_DRAIN_EVERY) * JOY_DRAIN, "las tres viejas drenan ademas del ritmo normal");
   CHECK_MSG(p.joy >= OFFLINE_FLOOR, "sin bajar del suelo");
 }
 
@@ -2458,9 +2485,9 @@ TEST(night, tiene_sueno_desde_las_22) {
   CHECK(!p.sleepy());
   p.lastSeenEpoch = at(22, 0);
   CHECK(p.sleepy());
-  p.lastSeenEpoch = at(7, 59);
+  p.lastSeenEpoch = at(WAKE_HOUR - 1, 59);
   CHECK(p.sleepy());
-  p.lastSeenEpoch = at(8, 0);
+  p.lastSeenEpoch = at(WAKE_HOUR, 0);
   CHECK(!p.sleepy());
   p.lastSeenEpoch = at(22, 30);
   p.toggleLight();
@@ -2569,18 +2596,18 @@ TEST(night, por_la_manana_se_despierta_solo_y_suena) {
   makePet(p, 4);
   p.lastSeenEpoch = at(23, 30);
   p.toggleLight();
-  p.lastSeenEpoch = at(7, 58, 1001);
-  liveMinutes(p, 1);  // 07:59
+  p.lastSeenEpoch = at(WAKE_HOUR - 1, 58, 1001);
+  liveMinutes(p, 1);  // WAKE_HOUR - 1:59
   CHECK(p.sleeping);
   CHECK(!p.morningWake);
-  liveMinutes(p, 1);  // 08:00
+  liveMinutes(p, 1);  // WAKE_HOUR:00
   CHECK(!p.sleeping);
   CHECK(!p.nightSlept());
   CHECK(p.morningWake);
   CHECK(p.savePending());
 }
 
-TEST(night, acostado_a_las_21_sigue_dormido_hasta_las_8) {
+TEST(night, acostado_a_las_21_sigue_dormido_hasta_las_WAKE_HOUR) {
   Pet p;
   makePet(p, 4);
   p.lastSeenEpoch = at(20, 0);
@@ -2588,10 +2615,10 @@ TEST(night, acostado_a_las_21_sigue_dormido_hasta_las_8) {
   CHECK(p.nightSlept());
   liveMinutes(p, 1);  // 20:01: antes se despertaba aqui, solo
   CHECK(p.sleeping);
-  liveMinutes(p, 12 * 60 - 2);  // 07:59
+  liveMinutes(p, (24 - 20 + WAKE_HOUR) * 60 - 2);  // WAKE_HOUR - 1:59
   CHECK(p.sleeping);
   CHECK(!p.morningWake);
-  liveMinutes(p, 1);  // 08:00
+  liveMinutes(p, 1);  // WAKE_HOUR:00
   CHECK(!p.sleeping);
   CHECK(p.morningWake);
   Pet q;  // a las 21:30, igual
@@ -2612,12 +2639,12 @@ TEST(night, una_siesta_de_tarde_no_se_despierta_sola) {
   CHECK(p.sleeping);
 }
 
-TEST(night, una_siesta_que_llega_a_la_noche_amanece_a_las_8) {
+TEST(night, una_siesta_que_llega_a_la_noche_amanece_a_las_WAKE_HOUR) {
   Pet p;
   makePet(p, 4);
   p.lastSeenEpoch = at(18, 0);
   p.toggleLight();
-  liveMinutes(p, 14 * 60);  // hasta las 08:00
+  liveMinutes(p, (24 - 18 + WAKE_HOUR) * 60);  // hasta las WAKE_HOUR
   CHECK(!p.sleeping);
   CHECK(p.morningWake);
 }
@@ -2670,8 +2697,8 @@ TEST(night, apagado_toda_la_noche_duerme_y_amanece) {
   makePet(p, 4);
   setStats(p, 100, 100, 50);
   p.setClock(at(22, 50));
-  p.syncClock(at(8, 5, 1001));  // apagada de 22:50 a 08:05
-  CHECK_MSG(!p.sleeping, "a las 8 se desperto");
+  p.syncClock(at(WAKE_HOUR, 5, 1001));  // apagada de 22:50 a WAKE_HOUR:05
+  CHECK_MSG(!p.sleeping, "a las WAKE_HOUR se desperto");
   CHECK_MSG(!p.morningWake, "apagada no suena");
   CHECK_MSG(p.energy >= 90, "durmio toda la noche (la energia volvio)");
   CHECK(p.fullness >= 30);  // 50 de noche, y 5 min despierto

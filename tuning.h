@@ -31,12 +31,15 @@
 // --------------------------------------------------------------------------------------------
 // Necesidades despierto: lo que baja cada minuto (Pet::tick, pet.cpp). Barras de 0 a 100.
 // --------------------------------------------------------------------------------------------
-#define FOOD_DRAIN 2            // comida -2/min (nada mientras dura la tarta)
-#define ENE_DRAIN 1             // energia -1/min...
-#define OVERWEIGHT_AT 50        // ...y -OVERWEIGHT_ENE_DRAIN mas con el peso por encima de esto
+// (v3.11: el doble de lento que antes: comida -2/min, energia y felicidad -1/min, hambre -2 mas)
+#define FOOD_DRAIN 1            // comida -1/min (nada mientras dura la tarta)
+#define ENE_DRAIN 1             // energia -1 cada ENE_DRAIN_EVERY min...
+#define ENE_DRAIN_EVERY 2
+#define OVERWEIGHT_AT 50        // ...y -OVERWEIGHT_ENE_DRAIN mas (en el mismo toque) con el peso por encima de esto
 #define OVERWEIGHT_ENE_DRAIN 1
-#define JOY_DRAIN 1             // felicidad -1/min...
-#define JOY_DRAIN_HUNGRY 2      // ...y -2 mas con la comida por debajo de JOY_HUNGRY_BELOW
+#define JOY_DRAIN 1             // felicidad -1 cada JOY_DRAIN_EVERY min...
+#define JOY_DRAIN_EVERY 2
+#define JOY_DRAIN_HUNGRY 1      // ...y -1 mas cada minuto con la comida por debajo de JOY_HUNGRY_BELOW
 #define JOY_HUNGRY_BELOW 30
 #define NEED_LOW 25             // por debajo: esta triste (mood) y lo pide en un globo del patio
 
@@ -87,7 +90,7 @@ static const uint8_t POOP_JOY_DRAIN[POOP_MAX + 1] = { 0, 1, 2, 4 };
 #define EVENING_HOUR 20
 #define SLEEPY_HOUR 22
 #define BED_HOUR 23
-#define WAKE_HOUR 8
+#define WAKE_HOUR 9
 #define NIGHT_RESLEEP_MIN 30
 #define BED_BOND 3
 
@@ -302,9 +305,10 @@ static_assert(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDRO
 // --------------------------------------------------------------------------------------------
 // Encuentros salvajes (encounter.h, pet.cpp encCheck / encounterDone). Probabilidades en tantos por mil.
 // --------------------------------------------------------------------------------------------
-#define ENC_BASE_PERMIL 300       // la tirada base del dia: 10 %
-#define ENC_WALK_STEPS 6000       // pasos del dia para la tirada de pasear...
-#define ENC_WALK_PERMIL 167       // ...que deja el dia en el 25 %
+#define ENC_BASE_PERMIL 600       // la tirada base del dia: 60 %
+#define ENC_WALK_TIERS 3          // v3.11: tiradas de pasear, una por cada umbral de pasos del dia...
+static const uint16_t ENC_WALK_AT[ENC_WALK_TIERS] = { 3000, 6000, 10000 };
+#define ENC_WALK_PERMIL 500       // ...cada una al 50 %
 #define ENC_TRAVEL_PERMIL_H 30    // cada viaje: 3 % por hora
 #define ENC_FIRST_MIN (9 * 60)    // la hora de la tirada base: de las 9:00...
 #define ENC_LAST_MIN (20 * 60)    // ...a las 20:00

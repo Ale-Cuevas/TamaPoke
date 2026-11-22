@@ -5,13 +5,15 @@
 // Logica pura, sin Arduino (test/test_encounter.cpp): las probabilidades del dia, la hora de la tirada
 // base, el nivel, la especie y lo que dura en el patio. Pet (pet.cpp) guarda el estado y llama aqui.
 //
-// El dia: como mucho UN encuentro por dia natural, con tres tiradas que se suman:
-//   - la base: un 10 % a una hora al azar entre las 9:00 y las 20:00 (la misma para ese dia, sale del
-//     numero de dia: un reinicio no la cambia);
-//   - pasear: al llegar a ENC_WALK_STEPS pasos, otra tirada que lleva el total del dia al 25 %
-//     (1 - 0,9 * (1 - p) = 0,25  ->  p = 1 - 0,75 / 0,9 = 16,7 %);
-//   - viajar: cada viaje que vuelve tira un 3 % por hora de viaje (1 h: 3 %, 3 h: 9 %, 8 h: 24 %).
-// Una vez sale uno, ya no se tira mas ese dia. Se queda ENC_LIFETIME_MIN minutos en el patio.
+// El dia (v3.11): solo UNO a la vez en el patio, y hasta 4 al dia:
+//   - la base: un 60 % (ENC_BASE_PERMIL) a una hora al azar entre las 9:00 y las 20:00 (la misma para
+//     ese dia, sale del numero de dia: un reinicio no la cambia);
+//   - viajar: cada viaje que vuelve tira un 3 % por hora de viaje (1 h: 3 %, 3 h: 9 %, 8 h: 24 %);
+//   - pasear: al llegar el dia a cada umbral de ENC_WALK_AT (3000, 6000 y 10000 pasos), una tirada al
+//     50 % (ENC_WALK_PERMIL) por umbral.
+// Si sale uno de la base o de un viaje (ENC_ROLL_SPAWNED), ya no se tiran mas bases ni viajes ese dia;
+// las de pasear siguen. Un umbral cruzado con otro en el patio tira cuando el patio queda libre.
+// Cada uno se queda ENC_LIFETIME_MIN minutos en el patio.
 #include <stdint.h>
 #include "dex.h"
 #include "battle.h"  // battleRand, evolveForLevel
@@ -22,7 +24,9 @@
 enum : uint8_t { ENC_OBJ_BUSH = 0, ENC_OBJ_ROCK, ENC_OBJ_SAND };
 
 // las tiradas del dia (la mascara que guarda Pet)
-enum : uint8_t { ENC_ROLL_BASE = 1, ENC_ROLL_WALK = 2, ENC_ROLL_SPAWNED = 0x80 };
+// (el umbral i de pasear usa el bit ENC_ROLL_WALK0 << i; ENC_ROLL_SPAWNED: ya salio el de la base o un viaje)
+enum : uint8_t { ENC_ROLL_BASE = 0x01, ENC_ROLL_WALK0 = 0x02, ENC_ROLL_SPAWNED = 0x80 };
+static_assert((ENC_ROLL_WALK0 << (ENC_WALK_TIERS - 1)) < ENC_ROLL_SPAWNED, "los umbrales de pasear caben bajo 0x80");
 
 // las especies que solo salen aqui (dex.h: R_ENCUENTRO) y su peso dentro del 5 %
 struct EncExclusive {

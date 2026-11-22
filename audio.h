@@ -26,7 +26,7 @@ enum Sfx : uint8_t {
   SFX_WAKE,     // caja: sale de el (destello que sube)
   SFX_POOP,     // ha hecho caca (v1.50): "plop" que cae
   SFX_ALERT,    // una necesidad llego a 0 (v1.50): tres pitidos agudos y cortos
-  SFX_MORNING,  // se desperto solo a las 8 (v1.63): un "buenos dias" que sube y repite la ultima nota
+  SFX_MORNING,  // se desperto solo a las WAKE_HOUR (v1.63): un "buenos dias" que sube y repite la ultima nota
   SFX_WILD,     // algo se mueve en el patio (v2.2): un encuentro salvaje, un aviso nervioso y una fanfarria
   SFX_COUNT
 };

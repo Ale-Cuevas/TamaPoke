@@ -596,7 +596,7 @@ void loop() {
   // Aqui cubre todas las vias: el boton de luz, el sueno nocturno y el que llega
   // aplicado desde la progresion offline. v3.0: con los dos de casa dormidos
   audioSetSleeping(pet.homeAsleep());
-  // se desperto solo a las 8: suena, tambien con la pantalla apagada (despues de audioSetSleeping,
+  // se desperto solo a las WAKE_HOUR: suena, tambien con la pantalla apagada (despues de audioSetSleeping,
   // que dormido tiene el amplificador apagado)
   if (pet.morningWake) {
     pet.morningWake = false;
@@ -6695,9 +6695,11 @@ void encReport() {
   uint32_t d = pet.dayNumber();
   uint16_t bm = encBaseMinute(d);
   uint8_t m = pet.encRolledMask();
-  Serial.printf("enc: day=%lu base=%02u:%02u rolled base=%d walk=%d spawned=%d steps=%lu/%u\n", (unsigned long)d,
-                bm / 60, bm % 60, (m & ENC_ROLL_BASE) ? 1 : 0, (m & ENC_ROLL_WALK) ? 1 : 0, (m & ENC_ROLL_SPAWNED) ? 1 : 0,
-                (unsigned long)pet.stepsOn(d), (unsigned)ENC_WALK_STEPS);
+  Serial.printf("enc: day=%lu base=%02u:%02u rolled base=%d walk=%d/%d/%d (a %u/%u/%u pasos) spawned=%d steps=%lu\n",
+                (unsigned long)d, bm / 60, bm % 60, (m & ENC_ROLL_BASE) ? 1 : 0, (m & (ENC_ROLL_WALK0 << 0)) ? 1 : 0,
+                (m & (ENC_ROLL_WALK0 << 1)) ? 1 : 0, (m & (ENC_ROLL_WALK0 << 2)) ? 1 : 0, (unsigned)ENC_WALK_AT[0],
+                (unsigned)ENC_WALK_AT[1], (unsigned)ENC_WALK_AT[2], (m & ENC_ROLL_SPAWNED) ? 1 : 0,
+                (unsigned long)pet.stepsOn(d));
   Serial.printf("enc: active=%d won=%d dex=#%d %s nv.%u shiny=%d excl=%d left=%u min obj=%d at %d,%d ui=%u\n",
                 pet.encActive() ? 1 : 0, pet.encWonPending() ? 1 : 0, pet.encDex(),
                 pet.encShown() ? dexName(pet.encDex()) : "-", pet.encLevel(), pet.encShiny() ? 1 : 0,
