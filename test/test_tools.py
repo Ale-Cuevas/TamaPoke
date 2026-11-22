@@ -460,10 +460,12 @@ class TestPackYard(unittest.TestCase):
         with open(os.path.join(self.tmp, rel), 'w') as fh:
             fh.write(text)
 
-    def mapa(self, ground=None, objects=None, head='name: Test\nlegend: fake\nseed: 1\n'):
+    def mapa(self, ground=None, objects=None, head='name: Test\nlegend: fake\nseed: 1\n', decal=None):
         ground = ground or ['g' * 15] * 15
         objects = objects or ['.' * 15] * 15
         text = head + 'ground:\n' + '\n'.join(ground) + '\nobjects:\n' + '\n'.join(objects) + '\n'
+        if decal is not None:
+            text += 'decal:\n' + '\n'.join(decal) + '\n'
         self.write('maps/01-test.txt', text)
         return os.path.join(self.tmp, 'maps', '01-test.txt')
 
@@ -563,6 +565,133 @@ class TestPackYard(unittest.TestCase):
         g[7] = 'gggggggwggggggg'
         self.mapa(ground=g)
         self.falla("autotile set 'Lava' not found")
+
+    # ---- v3.15: varias lineas hue (con keep), cielo + void y decals ----
+    def compone(self, path):
+        return self.py.compose(path, self.tmp, os.path.join(self.tmp, 'tilesets'))
+
+    @unittest.skipUnless(_pil_ok(), 'Pillow no disponible')
+    def test_hue_apaga_y_keep_conserva(self):
+        # la hierba del paquete falso es verde puro (tono ~120): a 0 grados pasa a rojo
+        _, img, _ = self.compone(self.mapa(head='name: T\nlegend: fake\nseed: 1\nhue: 90-150 0\n'))
+        r, g, b = img.getpixel((8, 8))
+        self.assertTrue(180 <= r <= 215 and g > 70, (r, g, b))      # apagado: sat 45 %, valor 80 %
+        _, img, _ = self.compone(self.mapa(head='name: T\nlegend: fake\nseed: 1\nhue: 90-150 0 keep\n'))
+        r, g, b = img.getpixel((8, 8))
+        self.assertTrue(r >= 235 and g <= 40, (r, g, b))            # keep: se queda vivo
+
+    @unittest.skipUnless(_pil_ok(), 'Pillow no disponible')
+    def test_varios_hue_se_aplican_en_orden(self):
+        a = 'hue: 90-150 200\nhue: 190-260 30 keep\n'
+        _, img, _ = self.compone(self.mapa(head='name: T\nlegend: fake\nseed: 1\n' + a))
+        r, g, b = img.getpixel((8, 8))
+        self.assertTrue(r > g > b, (r, g, b))                       # verde -> azul -> naranja
+        b2 = 'hue: 190-260 30 keep\nhue: 90-150 200\n'
+        _, img, _ = self.compone(self.mapa(head='name: T\nlegend: fake\nseed: 1\n' + b2))
+        r, g, b = img.getpixel((8, 8))
+        self.assertTrue(b > r, (r, g, b))                           # al reves se queda azul
+
+    def test_hue_mal_escrito(self):
+        self.mapa(head='name: T\nlegend: fake\nseed: 1\nhue: 90-150 0 mantener\n')
+        self.falla('expected "hue: from-to target \\[keep\\]"')
+
+    @unittest.skipUnless(_pil_ok(), 'Pillow no disponible')
+    def test_cielo_y_void(self):
+        self.write('legends/fake.txt', self.LEGEND + 'o = void !\n')
+        g = ['o' * 15] + ['g' * 15] * 13 + ['o' * 15]
+        head = 'name: T\nlegend: fake\nseed: 1\nsky: 000000 ff0000\n'
+        meta, img, blocked = self.compone(self.mapa(ground=g, head=head))
+        self.assertLess(img.getpixel((100, 0))[0], 8)               # arriba del degradado
+        self.assertGreater(img.getpixel((100, 239))[0], 247)        # abajo
+        self.assertTrue(all(blocked[0]) and all(blocked[14]))       # el void bloquea
+        self.assertFalse(any(blocked[7]))
+
+    @unittest.skipUnless(_pil_ok(), 'Pillow no disponible')
+    def test_void_sin_cielo(self):
+        self.write('legends/fake.txt', self.LEGEND + 'o = void !\n')
+        self.mapa(ground=['o' * 15] * 15)
+        self.falla('needs a "sky:"')
+
+    @unittest.skipUnless(_pil_ok(), 'Pillow no disponible')
+    def test_cielo_mal_escrito(self):
+        self.mapa(head='name: T\nlegend: fake\nseed: 1\nsky: 123456\n')
+        self.falla('expected "sky: RRGGBB RRGGBB"')
+
+    DECALS = 'k = draw lava_crack\nP = draw pylon !\nS = draw smokestack 2x3\nc = draw cloud_puff\n'
+
+    def decal(self, *celdas):
+        filas = [['.'] * 15 for _ in range(15)]
+        for x, y, ch in celdas:
+            filas[y][x] = ch
+        return [''.join(f) for f in filas]
+
+    @unittest.skipUnless(_pil_ok(), 'Pillow no disponible')
+    def test_decals_se_pintan_y_bloquean(self):
+        self.write('legends/fake.txt', self.LEGEND + self.DECALS)
+        _, base, _ = self.compone(self.mapa())
+        mp = self.mapa(decal=self.decal((2, 2, 'k'), (6, 4, 'P'), (10, 1, 'c')))
+        _, img, blocked = self.compone(mp)
+        for (x, y, w, h) in ((2, 2, 1, 1), (6, 4, 2, 3), (10, 1, 2, 1)):
+            box = (x * 16, y * 16, (x + w) * 16, (y + h) * 16)
+            self.assertNotEqual(img.crop(box).tobytes(), base.crop(box).tobytes(), (x, y))
+        self.assertEqual(img.crop((0, 0, 32, 16)).tobytes(), base.crop((0, 0, 32, 16)).tobytes())  # lo demas igual
+        self.assertFalse(blocked[2][2])                              # la grieta se pisa
+        self.assertFalse(blocked[1][10])
+        self.assertTrue(all(blocked[y][x] for y in (4, 5, 6) for x in (6, 7)))   # el pilon: 2x3 y bloquea
+        self.assertFalse(blocked[4][8] or blocked[7][6])
+        _, again, _ = self.compone(mp)                               # determinista
+        self.assertEqual(again.tobytes(), img.tobytes())
+
+    @unittest.skipUnless(_pil_ok(), 'Pillow no disponible')
+    def test_decal_se_pisa_con_un_sello(self):
+        self.write('legends/fake.txt', self.LEGEND + self.DECALS)
+        self.mapa(objects=self.con_objeto(5, '.....R.........'), decal=self.decal((6, 5, 'k')))
+        self.falla("decal 'k' overlaps 'R'")
+
+    @unittest.skipUnless(_pil_ok(), 'Pillow no disponible')
+    def test_decal_fuera_de_la_rejilla_y_entre_si(self):
+        self.write('legends/fake.txt', self.LEGEND + self.DECALS)
+        self.mapa(decal=self.decal((3, 13, 'P')))
+        self.falla("decal 'P' \\(2x3\\) runs off the grid")
+        self.mapa(decal=self.decal((3, 3, 'S'), (4, 5, 'P')))
+        self.falla("decal 'P' overlaps 'S'")
+
+    @unittest.skipUnless(_pil_ok(), 'Pillow no disponible')
+    def test_decal_caracteres_que_no_valen(self):
+        self.write('legends/fake.txt', self.LEGEND + self.DECALS)
+        self.mapa(decal=self.decal((1, 1, '?')))
+        self.falla("unknown character '\\?' in decal")
+        self.mapa(decal=self.decal((1, 1, 'u')))
+        self.falla('not a "draw" entry')
+        self.mapa(objects=self.con_objeto(0, 'k..............'))
+        self.falla("draw 'k' only allowed in the decal layer")
+
+    def test_leyenda_de_decals_mal_escrita(self):
+        self.write('legends/bad.txt', 'pack = fake\nsheet = s.png\nk = draw lava\n')
+        with self.assertRaisesRegex(self.py.MapError, r'bad.txt:3: unknown painter .lava.'):
+            self.py.parse_legend(os.path.join(self.tmp, 'legends', 'bad.txt'))
+        self.write('legends/bad.txt', 'pack = fake\nsheet = s.png\nk = draw bolt big\n')
+        with self.assertRaisesRegex(self.py.MapError, r'bad.txt:3: expected "draw <name> \[WxH\]"'):
+            self.py.parse_legend(os.path.join(self.tmp, 'legends', 'bad.txt'))
+
+    def test_leyenda_clave_repetida(self):
+        self.write('legends/bad.txt', 'pack = fake\nsheet = s.png\ng = 0,0\ng = 1,0\n')
+        with self.assertRaisesRegex(self.py.MapError, r'bad.txt:4: legend key .g. is defined twice'):
+            self.py.parse_legend(os.path.join(self.tmp, 'legends', 'bad.txt'))
+
+    def test_decal_con_filas_de_menos(self):
+        path = self.mapa(decal=['.' * 15] * 14)
+        with self.assertRaisesRegex(self.py.MapError, 'decal layer has 14 rows'):
+            self.py.parse_map(path)
+
+    @unittest.skipUnless(_pil_ok(), 'Pillow no disponible')
+    def test_todos_los_pintores_dan_el_tamano_pedido(self):
+        import random
+        for nombre, (pintor, (w, h)) in self.py.PAINTERS.items():
+            im = pintor(w, h, random.Random(1))
+            self.assertEqual(im.size, (w * 16, h * 16), nombre)
+            self.assertEqual(im.mode, 'RGBA', nombre)
+            self.assertGreaterEqual(len(im.getcolors(4096)), 3, nombre)   # transparente + al menos 2 colores
 
     # ---- el fichero TPY1 ----
     @unittest.skipUnless(_pil_ok(), 'Pillow no disponible')
