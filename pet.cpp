@@ -489,7 +489,7 @@ bool Pet::tickHome() {
 
   // el sueño es descanso: la energia se recupera y las necesidades bajan MUCHO
   // mas lento que despierto y con suelo (amanece pidiendo algo de mimo, no a
-  // cero, sin descuidos ni escapadas). despierto: comida -FOOD_DRAIN/min, energia/joy cada 2 min.
+  // cero, sin descuidos ni escapadas). despierto: comida -FOOD_DRAIN/min, energia/joy cada *_EVERY min.
   // El peso aun se quema; la racha de buen cuidado (goodTicks) queda en pausa.
   if (sleeping) {
     sleepMinute(full, h);
@@ -1145,7 +1145,7 @@ void Pet::toggleLight() {
 
 // --- la noche (v1.63)
 // un minuto dormido: la energia vuelve y las necesidades bajan lento y con suelo. De dia (una
-// siesta) ~4x mas lento que despierto; de noche la mitad aun, con suelos mas altos
+// siesta) la comida baja NAP_FOOD_JOY_EVERY veces mas lento que despierto; de noche, NIGHT_FOOD_JOY_EVERY, con suelos mas altos
 void Pet::sleepMinute(bool full, int h) {
   energy = clamp100(energy + SLEEP_ENE_GAIN);
   if (nightHour(h)) {
@@ -2020,7 +2020,10 @@ void Pet::encStart(int16_t dex, uint32_t rng, bool countsAsDaily) {
   encTr[1] = w.tDef;
   encTr[2] = w.tSpe;
   encFlags = (w.exclusive ? ENCF_EXCL : 0) | (random(shinyOdds(false)) == 0 ? ENCF_SHINY : 0);
+  // la medalla de "vencido"/"capturado" se guarda por su hora de salida: dos salvajes en el mismo reloj no la repiten
   encSpawnAt = lastSeenEpoch;
+  uint32_t lastId = pm.wildId > pm.catchId ? pm.wildId : pm.catchId;
+  if (encSpawnAt <= lastId) encSpawnAt = lastId + 1;
   if (countsAsDaily) encRolled |= ENC_ROLL_SPAWNED;
   encSound = true;
   pendingSave = true;

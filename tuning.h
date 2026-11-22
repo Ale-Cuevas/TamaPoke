@@ -80,12 +80,12 @@ static const uint8_t POOP_JOY_DRAIN[POOP_MAX + 1] = { 0, 1, 2, 4 };
 // --------------------------------------------------------------------------------------------
 #define SLEEP_ENE_GAIN 6           // energia +6/min dormido
 // siesta (de dia): comida y felicidad -1 cada NAP_FOOD_JOY_EVERY min, sin bajar de sus suelos
-#define NAP_FOOD_JOY_EVERY 2
+#define NAP_FOOD_JOY_EVERY 4
 #define NAP_FOOD_FLOOR 30
 #define NAP_JOY_FLOOR 35
-// de noche (de SLEEPY_HOUR a WAKE_HOUR) baja la mitad que en una siesta, con suelos mas altos: amanece con
+// de noche (de SLEEPY_HOUR a WAKE_HOUR) baja la mitad que en una siesta (comida 8x mas lenta que despierto), con suelos mas altos: amanece con
 // todo a 50 o mas si se acosto bien cuidado
-#define NIGHT_FOOD_JOY_EVERY 4
+#define NIGHT_FOOD_JOY_EVERY 8
 #define NIGHT_FOOD_FLOOR 50
 #define NIGHT_JOY_FLOOR 50
 // Desde SLEEPY_HOUR tiene sueno (globo con "zzz"); a las BED_HOUR se duerme solo y, despertado antes de
@@ -102,9 +102,13 @@ static const uint8_t POOP_JOY_DRAIN[POOP_MAX + 1] = { 0, 1, 2, 4 };
 // --------------------------------------------------------------------------------------------
 // Placa apagada (Pet::syncClock): el tiempo pasa igual, pero con piedad
 // --------------------------------------------------------------------------------------------
-// apagada baja al ritmo de despierto (FOOD_DRAIN, ENE_DRAIN, JOY_DRAIN, y las cacas viejas) pero sin bajar de
-// OFFLINE_FLOOR (por encima de SLIP_AT: sin descuidos, abandono ni muerte en ausencia)
-#define OFFLINE_FLOOR 15
+// apagada baja al ritmo de despierto (FOOD_DRAIN, ENE_DRAIN, JOY_DRAIN, JOY_DRAIN_HUNGRY con hambre, y las cacas
+// viejas) pero sin bajar de OFFLINE_FLOOR (por encima de SLIP_AT: sin descuidos, abandono ni muerte en ausencia; y
+// por encima de NEED_ALARM_AT: al encender no suena la alarma de necesidad)
+#define OFFLINE_FLOOR 16
+static_assert(OFFLINE_FLOOR > NEED_ALARM_AT && OFFLINE_FLOOR > SLIP_AT, "tuning.h: el suelo de ausencia queda por encima de la alarma y del descuido");
+static_assert(ENE_DRAIN_EVERY >= 1 && JOY_DRAIN_EVERY >= 1 && NAP_FOOD_JOY_EVERY >= 1 && NIGHT_FOOD_JOY_EVERY >= 1,
+              "tuning.h: los *_EVERY son divisores (un 0 dividiria por cero)");
 #define OFFLINE_POOP_EVERY_MIN 240   // una caca cada 4 h despierto apagada
 #define OFFLINE_MAX_MIN (14UL * 24 * 60)  // como mucho 2 semanas de golpe
 

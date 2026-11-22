@@ -205,9 +205,9 @@ TEST(cake, apagado_cuenta_lo_que_quedaba) {
   advance(p, 120);  // le queda 1 h
   CHECK_EQ(p.fullness, (uint8_t)100);
   p.setClock(1000u * 86400 + 12 * 3600);  // a mediodia: de noche se dormiria solo (v1.63)
-  p.syncClock(1000u * 86400 + 12 * 3600 + 240 * 60);  // 4 h apagado: 1 h lleno, 3 h bajando (suelo 15)
+  p.syncClock(1000u * 86400 + 12 * 3600 + 240 * 60);  // 4 h apagado: 1 h lleno, 3 h bajando (suelo OFFLINE_FLOOR)
   CHECK(!p.sated());
-  CHECK_EQ(p.fullness, (uint8_t)15);
+  CHECK_EQ(p.fullness, (uint8_t)OFFLINE_FLOOR);
   Pet q;
   makePet(q, 4);
   q.items[IT_CAKE] = 1;
@@ -344,6 +344,19 @@ TEST(tick, apagado_baja_al_mismo_ritmo_que_en_vivo) {
   CHECK_EQ(p.fullness, (uint8_t)(100 - 10 * FOOD_DRAIN));
   CHECK_EQ(p.energy, (uint8_t)(100 - (10 / ENE_DRAIN_EVERY) * ENE_DRAIN));
   CHECK_EQ(p.joy, (uint8_t)(100 - (10 / JOY_DRAIN_EVERY) * JOY_DRAIN));
+}
+
+// apagada con hambre: tambien se aplica JOY_DRAIN_HUNGRY, como en vivo (mismas cuentas que el test de vivo)
+TEST(tick, apagado_con_hambre_baja_la_felicidad_extra) {
+  Pet p;
+  makePet(p, 4);
+  setStats(p, JOY_HUNGRY_BELOW - 1 + FOOD_DRAIN, 100, 100);  // tras el primer minuto ya esta por debajo
+  p.poops = 0;
+  p.ageMinutes = 0;
+  p.setClock(1000u * 86400 + 12 * 3600);
+  p.syncClock(1000u * 86400 + 12 * 3600 + 10 * 60);
+  CHECK(p.fullness < JOY_HUNGRY_BELOW);
+  CHECK_EQ(p.joy, (uint8_t)(100 - (10 / JOY_DRAIN_EVERY) * JOY_DRAIN - 10 * JOY_DRAIN_HUNGRY));
 }
 
 // v3.1: las cacas viejas (mas de POOP_STALE_MIN min en el suelo) quitan felicidad, solo despierto. Todo sale de
@@ -1535,16 +1548,16 @@ TEST(ceremony, un_huevo_no_se_despide_ni_se_suelta) {
 }
 
 // ---------------------------------------------------------------- offline
-TEST(offline, aplica_el_tiempo_apagado_con_suelo_de_15) {
+TEST(offline, aplica_el_tiempo_apagado_con_el_suelo_offline) {
   Pet p;
   makePet(p, 4);
   setStats(p, 80, 80, 80);
   p.setClock(at(9, 0));  // de dia: despierto todo el rato (la noche lo acostaria)
   p.syncClock(at(9, 0) + 600 * 60);  // 600 minutos apagado
   CHECK_EQ(p.ageMinutes, (uint32_t)600);
-  CHECK_MSG(p.fullness == 15, "suelo de comida offline = 15");
-  CHECK_MSG(p.energy == 15, "suelo de energia offline = 15");
-  CHECK_MSG(p.joy == 15, "suelo de felicidad offline = 15");
+  CHECK_MSG(p.fullness == OFFLINE_FLOOR, "suelo de comida offline");
+  CHECK_MSG(p.energy == OFFLINE_FLOOR, "suelo de energia offline");
+  CHECK_MSG(p.joy == OFFLINE_FLOOR, "suelo de felicidad offline");
   CHECK_MSG(p.careMistakes == 0, "en ausencia no se acumulan descuidos");
   CHECK_EQ(p.poops, (uint8_t)2);  // una caca cada 4 h
 }
@@ -2662,21 +2675,21 @@ TEST(night, dormido_de_noche_amanece_con_todo_a_50_o_mas) {
   CHECK(p.joy >= NIGHT_JOY_FLOOR);
   CHECK_EQ(p.energy, (uint8_t)100);
   CHECK_EQ(p.poops, (uint8_t)0);
-  // y a la mitad de una siesta: en 2 h de noche la comida baja 30; en una siesta de dia, 60
+  // y a la mitad de una siesta: en 2 h la comida baja 1 cada NIGHT_FOOD_JOY_EVERY min de noche y 1 cada NAP_FOOD_JOY_EVERY en una siesta de dia
   Pet q;
   makePet(q, 4);
   setStats(q, 100, 100, 100);
   q.lastSeenEpoch = at(23, 0);
   q.toggleLight();
   liveMinutes(q, 2 * 60);
-  CHECK_EQ(q.fullness, (uint8_t)70);
+  CHECK_EQ(q.fullness, (uint8_t)(100 - 120 / NIGHT_FOOD_JOY_EVERY));
   Pet n;
   makePet(n, 4);
   setStats(n, 100, 100, 100);
   n.lastSeenEpoch = at(13, 0);
   n.toggleLight();
   liveMinutes(n, 2 * 60);
-  CHECK_EQ(n.fullness, (uint8_t)40);
+  CHECK_EQ(n.fullness, (uint8_t)(100 - 120 / NAP_FOOD_JOY_EVERY));
 }
 
 TEST(night, por_debajo_del_suelo_no_baja_mas) {

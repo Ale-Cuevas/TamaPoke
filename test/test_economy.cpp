@@ -322,3 +322,33 @@ TEST(economy, una_eleccion_de_un_mapa_no_suyo_guardada_se_ignora) {
   CHECK(q.yardChosen != 0);
   CHECK_EQ(q.yardMapWanted(), (uint8_t)YARD_MAP_START);  // no es suyo: el inicial
 }
+
+// v3.11: las bayas de colores llegan a BERRY_MAX (mas que el resto) y sobreviven a guardar y cargar
+TEST(economy, treinta_bayas_de_colores_sobreviven_al_guardado) {
+  Pet p;
+  eBorn(p);
+  p.items[IT_BERRY_G] = BERRY_MAX;
+  p.items[IT_BERRY_R] = BERRY_MAX - 1;
+  p.setRevives(p.items[IT_REVIVE]);  // guarda la mochila al momento
+  Pet q;
+  q.begin();
+  CHECK_EQ(q.items[IT_BERRY_G], (uint8_t)BERRY_MAX);
+  CHECK_EQ(q.items[IT_BERRY_R], (uint8_t)(BERRY_MAX - 1));
+}
+
+TEST(economy, un_regalo_de_baya_llena_el_tope_y_con_el_tope_se_queda_envuelto) {
+  Pet p;
+  eBorn(p);
+  p.items[IT_BERRY_G] = BERRY_MAX - 1;
+  CHECK(p.addGift(IT_BERRY_G));
+  bool full = true;
+  CHECK_EQ(p.openGift(&full), (uint8_t)IT_BERRY_G);
+  CHECK(!full);
+  CHECK_EQ(p.items[IT_BERRY_G], (uint8_t)BERRY_MAX);
+  p.popFound();
+  CHECK(p.addGift(IT_BERRY_G));  // en el tope: no cabe, sigue envuelto
+  CHECK_EQ(p.openGift(&full), (uint8_t)IT_BERRY_G);
+  CHECK(full);
+  CHECK_EQ(p.items[IT_BERRY_G], (uint8_t)BERRY_MAX);
+  CHECK_EQ(p.giftCount(), (uint8_t)1);
+}

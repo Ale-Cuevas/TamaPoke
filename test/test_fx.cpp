@@ -394,3 +394,10 @@ TEST(fx, la_alarma_umbral_de_necesidad_critica) {
   CHECK(needCritical(0));
   CHECK(!needCritical(NEED_ALARM_AT + 1));
 }
+
+// v3.11: con las tres necesidades a 0 (descuidado) manda el flujo de vinculo/muerte y la alarma calla
+TEST(fx, la_alarma_calla_con_el_bicho_descuidado) {
+  CHECK(needCritical(0, false));
+  CHECK(!needCritical(0, true));
+  CHECK(!needCritical(NEED_ALARM_AT, true));
+}

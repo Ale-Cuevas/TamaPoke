@@ -616,7 +616,7 @@ void loop() {
     bool crit = false;
     for (uint8_t s = 0; s < HOME_SLOTS; s++) {
       const PetLife &l = pet.home(s);
-      if (!l.isEgg() && !l.sleeping && !l.busyEnding() && needCritical(l.lowestStat())) crit = true;
+      if (!l.isEgg() && !l.sleeping && !l.busyEnding() && needCritical(l.lowestStat(), l.neglected())) crit = true;
     }
     if (needAlarm.step(crit, pet.nightHold, now)) sfxPlay(SFX_NEED);
   }
@@ -6713,11 +6713,12 @@ void encReport() {
   uint32_t d = pet.dayNumber();
   uint16_t bm = encBaseMinute(d);
   uint8_t m = pet.encRolledMask();
-  Serial.printf("enc: day=%lu base=%02u:%02u rolled base=%d walk=%d/%d/%d (a %u/%u/%u pasos) spawned=%d steps=%lu\n",
-                (unsigned long)d, bm / 60, bm % 60, (m & ENC_ROLL_BASE) ? 1 : 0, (m & (ENC_ROLL_WALK0 << 0)) ? 1 : 0,
-                (m & (ENC_ROLL_WALK0 << 1)) ? 1 : 0, (m & (ENC_ROLL_WALK0 << 2)) ? 1 : 0, (unsigned)ENC_WALK_AT[0],
-                (unsigned)ENC_WALK_AT[1], (unsigned)ENC_WALK_AT[2], (m & ENC_ROLL_SPAWNED) ? 1 : 0,
-                (unsigned long)pet.stepsOn(d));
+  Serial.printf("enc: day=%lu base=%02u:%02u rolled base=%d walk=", (unsigned long)d, bm / 60, bm % 60,
+                (m & ENC_ROLL_BASE) ? 1 : 0);
+  for (int i = 0; i < ENC_WALK_TIERS; i++) Serial.printf("%s%d", i ? "/" : "", (m & (ENC_ROLL_WALK0 << i)) ? 1 : 0);
+  Serial.print(" (a ");
+  for (int i = 0; i < ENC_WALK_TIERS; i++) Serial.printf("%s%u", i ? "/" : "", (unsigned)ENC_WALK_AT[i]);
+  Serial.printf(" pasos) spawned=%d steps=%lu\n", (m & ENC_ROLL_SPAWNED) ? 1 : 0, (unsigned long)pet.stepsOn(d));
   Serial.printf("enc: active=%d won=%d dex=#%d %s nv.%u shiny=%d excl=%d left=%u min obj=%d at %d,%d ui=%u\n",
                 pet.encActive() ? 1 : 0, pet.encWonPending() ? 1 : 0, pet.encDex(),
                 pet.encShown() ? dexName(pet.encDex()) : "-", pet.encLevel(), pet.encShiny() ? 1 : 0,

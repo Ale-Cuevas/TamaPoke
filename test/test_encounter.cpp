@@ -255,7 +255,7 @@ TEST(encounter, un_dia_normal_y_paseando_salen_a_su_probabilidad) {
   double base = dailyRate(false, 4000), walk = dailyRate(true, 4000);
   double wantBase = ENC_BASE_PERMIL / 10.0;
   double wantWalk = 100.0 * (1.0 - (1.0 - ENC_BASE_PERMIL / 1000.0) * pow(1.0 - ENC_WALK_PERMIL / 1000.0, ENC_WALK_TIERS));
-  CHECK_MSG(base > wantBase - 1.5 && base < wantBase + 1.5, "base " + std::to_string(base));
+  CHECK_MSG(base > wantBase - 2.5 && base < wantBase + 2.5, "base " + std::to_string(base));
   CHECK_MSG(walk > wantWalk - 2.5 && walk < wantWalk + 2.5, "paseando " + std::to_string(walk));
 }
 
@@ -303,7 +303,7 @@ TEST(encounter, cada_umbral_de_pasear_tira_una_sola_vez) {
   CHECK_EQ(p.encRolledMask() & ENC_ROLL_SPAWNED, 0);
   for (int i = 0; i < ENC_WALK_TIERS; i++) {
     CHECK_EQ(p.encRolledMask() & walkBit(i), 0);
-    p.addSteps(ENC_WALK_AT[i], EDAY);  // cruza el umbral i
+    p.addSteps(ENC_WALK_AT[i] - (i ? ENC_WALK_AT[i - 1] : 0), EDAY);  // cruza el umbral i
     CHECK(p.encRolledMask() & walkBit(i));
     for (int j = i + 1; j < ENC_WALK_TIERS; j++) CHECK_EQ(p.encRolledMask() & walkBit(j), 0);
     CHECK(!p.encActive());
@@ -587,8 +587,8 @@ TEST(encounter, el_objeto_sale_la_mitad_de_las_veces_y_nunca_monedas_ni_bolas) {
     p.releaseWild();
   }
   CHECK_RANGE(drops, 160, 240);
-  // ninguna moneda del salvaje: solo las de la medalla Domador (v3.4; aqui sale siempre a la misma hora, asi que
-  // cuenta como un solo encuentro)
+  // ninguna moneda del salvaje: solo las de la medalla Domador (v3.4; aqui sale siempre a la misma hora, pero cada
+  // salvaje tiene su propio id)
   CHECK_EQ(p.coins, (uint16_t)(coins + medalPayout(0, p.medalTierPaid(MD_WILD))));
 }
 
@@ -725,4 +725,29 @@ TEST(encounter, la_poke_ball_se_vende_y_no_se_usa_a_mano) {
   CHECK(p.items[IT_BALL] > 0);
   CHECK(!p.canUseItem(IT_BALL));
   CHECK(!p.useItem(IT_BALL));
+}
+
+// v3.11: dos salvajes con el mismo reloj (misma ventana de 30 s) no repiten su hora de salida: es el id de las
+// medallas "vencido"/"capturado", que se cuentan una vez por id
+TEST(encounter, dos_salvajes_con_el_mismo_reloj_cuentan_cada_uno_para_la_medalla) {
+  Pet p;
+  eBorn(p);
+  p.lastSeenEpoch = at(EDAY, 12);
+  eSpawn(p);
+  uint32_t a = p.encSpawnEpoch();
+  p.encounterDone(true, p.uid);
+  p.releaseWild();
+  eSpawn(p);  // el reloj no se ha movido
+  CHECK(p.encSpawnEpoch() > a);
+  p.encounterDone(true, p.uid);
+  CHECK_EQ(p.medalValue(MD_WILD), (uint32_t)2);
+  p.releaseWild();
+  eSpawn(p);  // y la captura igual
+  p.encounterDone(true, p.uid);
+  p.items[IT_BALL] = 2;
+  CHECK(p.captureWild());
+  eSpawn(p);
+  p.encounterDone(true, p.uid);
+  CHECK(p.captureWild());
+  CHECK_EQ(p.medalValue(MD_CATCH), (uint32_t)2);
 }

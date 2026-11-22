@@ -383,4 +383,5 @@ struct NeedAlarm {
     return true;
   }
 };
-inline bool needCritical(int lowestStat) { return lowestStat <= NEED_ALARM_AT; }
+// neglected: las tres a 0 (PetLife::neglected): ya manda el flujo de vinculo/muerte, la alarma calla
+inline bool needCritical(int lowestStat, bool neglected = false) { return !neglected && lowestStat <= NEED_ALARM_AT; }

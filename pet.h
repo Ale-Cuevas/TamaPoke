@@ -323,7 +323,7 @@ public:
   uint16_t addCoins(uint16_t n, bool capped);
   void setCoins(uint16_t n) { coins = n > COIN_MAX ? COIN_MAX : n; save(); }  // serie COINS (pruebas)
   bool spendCoins(uint16_t n);  // false si no hay tantas (no toca nada); guarda
-  // comprar un objeto de la mochila: false si no se vende, no hay monedas o no cabe (ITEM_MAX); guarda
+  // comprar un objeto de la mochila: false si no se vende, no hay monedas o no cabe (itemCap); guarda
   bool buyItem(uint8_t itemId);
   bool ownsMap(uint8_t n) const;  // 1..YARD_MAPS: comprado, o el inicial (el prado)
   bool buyMap(uint8_t n);         // false si ya es suyo, no existe o no hay monedas; guarda
