@@ -149,6 +149,10 @@ static const Note N_MORNING[] = {{784, 110}, {988, 110}, {1175, 110}, {1568, 160
 static const Note N_WILD[]    = {{659, 55}, {0, 25}, {659, 55}, {0, 40}, {880, 60}, {1047, 60}, {1319, 70}, {0, 30},
                                  {1319, 45}, {1568, 45}, {1319, 45}, {1568, 45}, {1319, 45}, {1568, 45}, {0, 30}, {2093, 260}};
 
+// fallo de la bola (v3.18): golpe sordo y corto (190 ms) que cae por debajo de HIT (220-150 Hz),
+// OOPS (392-330) y POOP (392-196), para que no se confunda con ninguno
+static const Note N_MISS[]    = {{180, 40}, {120, 60}, {80, 90}};
+
 struct SfxDef { const Note *n; uint8_t len; };
 #define SFX_ENTRY(n) { n, (uint8_t)(sizeof(n) / sizeof(n[0])) }
 // en el orden del enum Sfx (audio.h). Sin tamano fijo a proposito: con
@@ -160,7 +164,7 @@ static const SfxDef SFX[] = {
   SFX_ENTRY(N_BATTLE), SFX_ENTRY(N_HIT), SFX_ENTRY(N_CRIT), SFX_ENTRY(N_SPECIAL), SFX_ENTRY(N_WIN),
   SFX_ENTRY(N_LOSE), SFX_ENTRY(N_LEVELUP), SFX_ENTRY(N_OOPS), SFX_ENTRY(N_STORE), SFX_ENTRY(N_WAKE),
   SFX_ENTRY(N_POOP), SFX_ENTRY(N_ALERT), SFX_ENTRY(N_MORNING), SFX_ENTRY(N_WILD),
-  SFX_ENTRY(N_NEED),
+  SFX_ENTRY(N_NEED), SFX_ENTRY(N_MISS),
 };
 static_assert(sizeof(SFX) / sizeof(SFX[0]) == SFX_COUNT, "SFX[] tiene que tener un efecto por cada Sfx");
 

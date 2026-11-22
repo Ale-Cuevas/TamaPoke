@@ -272,6 +272,11 @@ uint8_t gameGainShown = 0;  // VEL que dio la partida (o daria, con BALL), para 
 bool gameNoSave = false;    // partida abierta con el comando BALL: no toca el record ni da premio
 float hitX, hitY;             // ultimo golpe (anillo de impacto)
 uint32_t hitTime = 0;
+// fallo de la bola (v3.18): polvo en el suelo y la vida perdida parpadea. Son de interfaz, no de balance
+#define BALL_MISS_MS 450         // duracion de la animacion de fallo
+#define BALL_MISS_SQUASH_MS 120  // la bola aplastada se ve solo los primeros ms
+float missX;
+uint32_t missTime = 0;
 bool gameNewHi = false;
 
 // saco de entrenamiento (entrena la fuerza)
@@ -2957,6 +2962,7 @@ void startGame() {
   gameNewHi = false;
   gameNoSave = false;
   hitTime = 0;
+  missTime = 0;
   gamePetX = 233;
   lastGameStep = millis();
   respawnBall();
@@ -3011,6 +3017,9 @@ void stepGame() {
       }
       gameOverUntil = millis() + 4000;
     } else {
+      sfxPlay(SFX_MISS);
+      missX = ball.x < 30 ? 30 : ball.x > 436 ? 436 : ball.x;
+      missTime = millis();
       respawnBall();
     }
   }
@@ -3916,6 +3925,13 @@ void renderGame() {
     if (i < 3 - gameMisses) gfx->fillCircle(180 + i * 28, 104, 6, UI_BAR_BAD);
     else gfx->drawCircle(180 + i * 28, 104, 6, UI_TRACK);
   }
+  uint32_t mt = millis() - missTime;
+  bool missAnim = missTime && mt < BALL_MISS_MS && gameMisses > 0 && gameMisses < 3;
+  if (missAnim) {  // la vida recien perdida: un aro blanco que se encoge y parpadea en rojo
+    int lx = 180 + (3 - gameMisses) * 28;
+    if ((mt / 75) % 2 == 0) gfx->fillCircle(lx, 104, 6, UI_BAR_BAD);
+    gfx->drawCircle(lx, 104, 6 + (int)((BALL_MISS_MS - mt) * 8 / BALL_MISS_MS), UI_WHITE);
+  }
 
   if (gameScore == 0 && (millis() / 600) % 4 != 3) {  // pista hasta el primer toque
     setSize(2);
@@ -3948,6 +3964,20 @@ void renderGame() {
     int rad = 22 + (int)(ht / 6);
     gfx->drawCircle((int)hitX, (int)hitY, rad, C565(0xff, 0xe7, 0x9f));
     gfx->drawCircle((int)hitX, (int)hitY, rad - 2, C565(0xff, 0xd9, 0x8a));
+  }
+
+  // fallo: polvo que sale de lado y se encoge, y la bola aplastada un instante
+  if (missAnim) {
+    bool nightM = sceneHour() < 6 || sceneHour() >= 20;
+    uint16_t dust = nightM ? C565(0x6a, 0x66, 0x70) : C565(0xa8, 0x90, 0x70);
+    for (int i = 0; i < 4; i++) {
+      int dir = (i & 1) ? 1 : -1;
+      int dx = dir * (8 + (int)(mt / 8) * (i < 2 ? 1 : 2) / 2);
+      int dy = -(int)(mt / 14) * (i < 2 ? 1 : 2) / 2;
+      int r = 9 - (int)(mt * 7 / BALL_MISS_MS) - (i >> 1) * 2;
+      if (r > 0) gfx->fillCircle((int)missX + dx, 386 + dy, r, dust);
+    }
+    if (mt < BALL_MISS_SQUASH_MS) gfx->fillEllipse((int)missX, 384, 30, 9, C565(0xd8, 0x3a, 0x3a));
   }
 
   // la pokeball
