@@ -2825,6 +2825,7 @@ PetRecord PetLife::record(uint32_t epoch) const {
   memset(&r, 0, sizeof(r));
   r.flags = (shiny ? REC_SHINY : 0) | (berryKnown ? REC_FAV6 : 0) | (sleeping ? REC_SLEEP : 0) |
             (careDay && careDay == bondDay ? REC_CARED : 0) |  // v3.0: su primer cuidado de ese dia, ya dado
+            (sleeping && nightSleep ? REC_NIGHT : 0) |         // v3.19: dormia de noche, no una siesta
             REC_V3;  // v3.4: medals = lo que ya conto para las medallas del jugador
   r.uid = uid;
   r.speciesId = speciesId;
@@ -2865,7 +2866,9 @@ void PetLife::loadRecord(const PetRecord &r) {
   shiny = (r.flags & REC_SHINY) != 0;
   berryKnown = (r.flags & REC_FAV6) != 0;  // v3.2: el REC_BERRY de antes (otra baya favorita) se ignora
   sleeping = (r.flags & REC_SLEEP) != 0;
-  nightSleep = sleeping;  // dormido en la caja: se despierta solo por la mañana (v1.63)
+  // v3.19: de noche (REC_NIGHT) se despierta solo por la mañana; una siesta no (antes todo dormido era de noche, y
+  // una siesta despertada de la caja de dia se despertaba al minuto). Un registro de antes carga como siesta
+  nightSleep = sleeping && (r.flags & REC_NIGHT) != 0;
   nightAwakeMin = 0;
   memcpy(nick, r.nick, sizeof(nick));
   nick[sizeof(nick) - 1] = 0;

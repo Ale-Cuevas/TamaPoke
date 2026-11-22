@@ -282,6 +282,79 @@ TEST(box, dormido_se_guarda_y_vuelve_dormido) {
   CHECK(p.sleeping);
 }
 
+// v3.19: la caja distingue dormir de noche (REC_NIGHT) de una siesta. Antes todo bicho dormido salia de la caja
+// como "de noche" y, despertado de dia (WAKE_HOUR..EVENING_HOUR), se despertaba solo al minuto siguiente
+
+// minutos en vivo con el reloj andando (como liveMinutes de test_pet.cpp)
+static void boxLiveMinutes(Pet &p, uint32_t minutes) {
+  for (uint32_t i = 0; i < minutes; i++) {
+    p.lastSeenEpoch += 60;
+    mockAdvanceMillis(PET_TICK_MS);
+    p.update(millis());
+  }
+}
+
+TEST(box, una_siesta_guardada_sigue_siendo_siesta_al_despertarla_de_dia) {
+  const int napH = EVENING_HOUR - 6;  // una siesta de tarde (14:00)
+  CHECK(napH > WAKE_HOUR);
+  Pet p;
+  freshPet(p, 7);
+  p.lastSeenEpoch = DAY0 + napH * 3600u;
+  p.toggleLight();
+  CHECK(p.sleeping);
+  CHECK(!p.nightSlept());
+  CHECK(p.store(0));
+  hatchNow(p);
+  p.lastSeenEpoch = DAY0 + (napH + 1) * 3600u;  // una hora despues, de dia
+  CHECK(p.wake(0));
+  CHECK(p.sleeping);
+  CHECK_MSG(!p.nightSlept(), "una siesta sale de la caja como siesta");
+  boxLiveMinutes(p, (EVENING_HOUR - napH - 1) * 60 - 1);  // hasta las EVENING_HOUR - 1:59
+  CHECK_MSG(p.sleeping, "una siesta no se despierta sola de dia");
+  CHECK(!p.morningWake);
+}
+
+TEST(box, dormido_de_noche_guardado_amanece_al_despertarlo_de_dia) {
+  Pet p;
+  freshPet(p, 7);
+  p.lastSeenEpoch = DAY0 + 23 * 3600u;  // acostado a las 23:00
+  p.toggleLight();
+  CHECK(p.nightSlept());
+  CHECK(p.store(0));
+  CHECK((p.boxRecord(0).flags & REC_NIGHT) != 0);
+  hatchNow(p);
+  p.lastSeenEpoch = DAY0 + 86400u + (WAKE_HOUR + 1) * 3600u;  // a la mañana siguiente
+  CHECK(p.wake(0));
+  CHECK(p.sleeping);
+  CHECK(p.nightSlept());
+  boxLiveMinutes(p, 1);
+  CHECK_MSG(!p.sleeping, "dormia de noche: de dia se despierta solo al minuto siguiente");
+}
+
+TEST(box, un_registro_dormido_sin_REC_NIGHT_carga_como_siesta) {
+  Pet p;
+  freshPet(p, 7);
+  p.sleeping = true;
+  PetRecord r = p.toRecord();
+  CHECK((r.flags & REC_SLEEP) != 0);
+  r.flags &= (uint8_t)~REC_NIGHT;  // un registro de antes de v3.19
+  recordSeal(r);
+  CHECK(recordValid(r));
+  Pet q;
+  q.fromRecord(r);
+  CHECK(q.sleeping);
+  CHECK(!q.nightSlept());
+  r.flags |= REC_NIGHT;  // y con el bit, de noche
+  recordSeal(r);
+  q.fromRecord(r);
+  CHECK(q.nightSlept());
+  r.flags &= (uint8_t)~REC_SLEEP;  // REC_NIGHT sin REC_SLEEP no lo duerme
+  recordSeal(r);
+  q.fromRecord(r);
+  CHECK(!q.sleeping);
+  CHECK(!q.nightSlept());
+}
+
 TEST(box, un_huevo_no_se_guarda_ni_durante_evolucion_o_despedida) {
   Pet p;
   freshPet(p, 4);

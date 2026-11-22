@@ -62,7 +62,7 @@ To tune the game, change it there (see §17, "Tuning").
 | Egg odds, shiny odds, genes | `pickEggSpecies` `pet.cpp:590`, `shinyOdds` `:337`, `hatch` `:939`, `newEgg` `:130` |
 | Evolution rules | `canEvolveNow` `pet.cpp:970`, `evolve` `:977` |
 | Farewell / release / death / Revive | `canFarewellNow` `pet.cpp:854`, `release` `:929`, `startDying` `:872`, `revive` `:889`, `letGo` `:906`, `endLife` `:255` |
-| Box store/wake and power-cut safety | `Pet::store` `pet.cpp:2967`, `wake` `:3002`, `boxBoot` `:3083`, `box.h` |
+| Box store/wake and power-cut safety | `Pet::store` `pet.cpp:2970`, `wake` `:3005`, `boxBoot` `:3086`, `box.h` |
 | A minigame's rules | `ballgame.h`, `zengame.h`, `dashgame.h` (pure); the bag is only in `TamaPoke.ino` (`startSack` `:3035`) |
 | A minigame's reward | `Pet::playResult` `pet.cpp:1036`, `trainStrength` `:1057`, `zenResult` `:1083`, `dashResult` `:1104` |
 | Battle damage / types / special | `battle.h` (`hitDamage` `:113`, `TYPE_CHART` `:39`, `SpecialMeter` `:245`) |
@@ -444,7 +444,9 @@ Constants are in `tuning.h`: `EVENING_HOUR` 20, `SLEEPY_HOUR` 22, `BED_HOUR` 23,
 - **23:00** auto-sleep (`nightMinute`, `pet.cpp:949`). If it is woken before 09:00, it sleeps again after 30 min
   awake. `nightHold` delays this while a game, battle, evolution or Box move is open.
 - **09:00** a night sleep (`nightSleep`, set for bedtimes 20:00–08:59) wakes by itself and plays `SFX_MORNING`. A
-  nap is not woken.
+  nap is not woken. A nap that reaches bed hours (23:00–08:59) becomes a night sleep. The Box keeps the
+  difference (`REC_NIGHT`, v3.19; home slots use `nslp` / `HRF_NIGHT`): a napping pet woken out of the Box in the
+  day keeps napping, a night sleeper woken out of it after 09:00 wakes on the next minute.
 - Shaking the board while the pet sleeps calls `wakeGrumpy()` (`pet.cpp:1580`): −5 JOY.
 
 ### Care actions
@@ -610,12 +612,14 @@ A death sets `lastEnd = CER_DEATH`, which curses the next random egg to Common. 
 There are 6 slots where pets **hibernate**: no ageing, growth, drain or slip-ups. The one exception is that stage
 and wild rewards and trips add growth directly to the slot record.
 
-- **Record.** `PetRecord` (`box.h:33-54`) is 55 bytes packed, with a version and CRC16. It is valid only if the
+- **Record.** `PetRecord` (`box.h:35-56`) is 55 bytes packed, with a version and CRC16. It is valid only if the
   version is known, the CRC matches, `uid != 0` and the species is 1–151. An invalid slot shows "?" and is never
   loaded or overwritten; only `WIPE` or `BOXCLR` clears it.
 - **What is stored.** Only the individual goes into the record. Streak, steps, Backpack, Pokédex and the incubator
   egg stay at home. Flag `REC_CARED` (v3.0) keeps "had its first care today" so a pet woken the same day doesn't get
-  that bond twice. The cake effect and cooldowns are not saved.
+  that bond twice. `REC_SLEEP` keeps it asleep and `REC_NIGHT` (v3.19, same record version) marks a night sleep
+  rather than a nap (`PetLife::record` / `loadRecord`); a record from before v3.19 loads a sleeping pet as a nap.
+  The cake effect and cooldowns are not saved.
 - **RAM copies.** `pet.boxRec[]` and `boxSt[]` mean the UI never reads flash.
 - **NVS keys.** `box0`–`box5` hold the slots. `boxT` is a transfer copy whose presence means a move was cut off.
   `eggH` means an egg waits in slot 0 while a pet is out (slot 1 keeps that flag inside `hm1`). `boxTs` (v3.0)
@@ -642,7 +646,7 @@ free.
 
 A failed commit keeps `boxT`/`boxTs`, so the next boot finishes or undoes the move.
 
-`boxBoot()` (`pet.cpp:3083`, per slot in `boxBootSlot` `:3110`) reconciles at boot. It reads `boxTs`, finishes or
+`boxBoot()` (`pet.cpp:3086`, per slot in `boxBootSlot` `:3113`) reconciles at boot. It reads `boxTs`, finishes or
 undoes a cut move in that slot, makes a Box copy win over a duplicate in either home slot, vacates slot 1 if it
 duplicates slot 0 (bringing a waiting egg home), and clears stray keys and egg-held flags per slot.
 
