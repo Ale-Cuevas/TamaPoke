@@ -21,6 +21,7 @@ public:
   size_t putUShort(const char *k, uint16_t v);
   size_t putInt(const char *k, int32_t v);
   size_t putUInt(const char *k, uint32_t v);
+  size_t putULong64(const char *k, uint64_t v);
   size_t putBytes(const char *k, const void *v, size_t len);
   size_t putString(const char *k, const char *v);
 
@@ -31,6 +32,8 @@ public:
   uint16_t getUShort(const char *k, uint16_t def = 0);
   int32_t getInt(const char *k, int32_t def = 0);
   uint32_t getUInt(const char *k, uint32_t def = 0);
+  uint64_t getULong64(const char *k, uint64_t def = 0);
+  size_t getBytesLength(const char *k);  // como la real: 0 si falta
   size_t getBytes(const char *k, void *buf, size_t maxLen);
   size_t getString(const char *k, char *buf, size_t maxLen);
 

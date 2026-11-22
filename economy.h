@@ -64,7 +64,8 @@ inline uint8_t itemCap(uint8_t itemId) { return itemId == 4 ? 1 : itemIsColorBer
 // cuantas unidades da UNA compra: BERRY_PACK las bayas de colores, 1 el resto
 inline uint8_t shopPackOf(uint8_t itemId) { return itemIsColorBerry(itemId) ? BERRY_PACK : 1; }
 
-// Mapas del patio 1..5 (los .bin de la SD: 01 prado, 02 cantera, 03 bosque, 04 playa, 05 ruinas).
+// Mapas del patio 1..9 (los .bin de la SD: 01 prado, 02 cantera, 03 bosque, 04 playa, 05 ruinas; v3.15: 06 volcan,
+// 07 central, 08 torre del cielo, 09 distrito toxico).
 // Son del jugador, no del bicho: se empieza con el prado y lo comprado vale para todos los bichos.
 // YARD_MAPS y ECO_MAP_PRICE, en tuning.h.
 #define YARD_MAP_START 1  // el prado: de todo el mundo desde el principio, no se vende

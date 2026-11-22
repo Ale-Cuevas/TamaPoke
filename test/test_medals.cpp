@@ -394,6 +394,19 @@ TEST(medals, las_derivadas_leen_el_estado) {
   CHECK_EQ(p.medalTierPaid(MD_STREAK), medalTierOf(MD_STREAK, 9));
 }
 
+// v3.15: 45 recuerdos. Promesa de diseno: el Oro de Coleccionista es tenerlos todos, y los 45 dan para el
+TEST(medals, coleccionista_oro_con_los_45_recuerdos) {
+  CHECK_EQ(MEDAL_T[MD_SOUV][MEDAL_TIERS - 1], (uint32_t)SOUV_COUNT);
+  Pet p;
+  mBorn(p, 4);
+  p.setSouvenirMask((1ull << 44) | 0x1Full);  // 6, uno de ellos del distrito toxico
+  CHECK_EQ(p.medalValue(MD_SOUV), (uint32_t)6);
+  p.setSouvenirMask(SOUV_ALL);
+  CHECK_EQ(p.medalValue(MD_SOUV), (uint32_t)SOUV_COUNT);
+  p.medalsUpdate();
+  CHECK_EQ(p.medalTierPaid(MD_SOUV), (uint8_t)MTIER_GOLD);
+}
+
 // ---------------------------------------------------------------- la migracion (partida de la v3.3)
 // dos en casa y dos en la caja de antes:
 //   hueco 0: Charmander Nv.30, vinculo 100, peso 0, sin descuidos -> Nv.10, Nv.25, vinculo, en forma

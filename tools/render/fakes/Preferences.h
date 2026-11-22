@@ -20,6 +20,7 @@ class Preferences {
   size_t putUShort(const char *k, uint16_t v) { return put(k, &v, sizeof v); }
   size_t putInt(const char *k, int32_t v) { return put(k, &v, sizeof v); }
   size_t putUInt(const char *k, uint32_t v) { return put(k, &v, sizeof v); }
+  size_t putULong64(const char *k, uint64_t v) { return put(k, &v, sizeof v); }
   size_t putBytes(const char *k, const void *v, size_t n) { return put(k, v, n); }
   size_t putString(const char *k, const char *v) { return put(k, v, strlen(v) + 1); }
   bool getBool(const char *k, bool d = false) { return get(k, d); }
@@ -29,6 +30,7 @@ class Preferences {
   uint16_t getUShort(const char *k, uint16_t d = 0) { return get(k, d); }
   int32_t getInt(const char *k, int32_t d = 0) { return get(k, d); }
   uint32_t getUInt(const char *k, uint32_t d = 0) { return get(k, d); }
+  uint64_t getULong64(const char *k, uint64_t d = 0) { return get(k, d); }
   size_t getBytesLength(const char *k) { return isKey(k) ? store()[ns_][k].size() : 0; }
   size_t getBytes(const char *k, void *buf, size_t n) {
     if (!isKey(k)) return 0;

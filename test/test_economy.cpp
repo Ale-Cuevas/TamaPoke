@@ -64,7 +64,14 @@ TEST(economy, precios) {
   CHECK_EQ(priceOfMap(3), (uint16_t)150);
   CHECK_EQ(priceOfMap(4), (uint16_t)200);
   CHECK_EQ(priceOfMap(5), (uint16_t)250);
-  CHECK_EQ(priceOfMap(6), (uint16_t)0);
+  // v3.15: volcan, central, torre del cielo, distrito toxico (de tuning.h); el 10 no existe
+  for (uint8_t n = 6; n <= YARD_MAPS; n++) {
+    CHECK_EQ(priceOfMap(n), ECO_MAP_PRICE[n - 1]);
+    CHECK(priceOfMap(n) >= priceOfMap(n - 1));  // promesa de diseno: los mapas nuevos no bajan de precio
+  }
+  CHECK_EQ(YARD_MAPS, 9);
+  CHECK_EQ(priceOfMap(YARD_MAPS + 1), (uint16_t)0);
+  CHECK_EQ(priceOfMap(10), (uint16_t)0);
   CHECK_EQ(YARD_MAP_START, 1);
 }
 
@@ -231,6 +238,8 @@ TEST(economy, mapas) {
   CHECK(!p.ownsMap(other));
   CHECK(!p.ownsMap(0));
   CHECK(!p.ownsMap(6));
+  CHECK(!p.ownsMap(YARD_MAPS + 1));
+  CHECK(!p.buyMap(YARD_MAPS + 1));
   CHECK(!p.buyMap(other));  // sin monedas
   p.chooseMap(other);       // no es suyo: se ignora
   CHECK_EQ(p.yardChosen, (uint8_t)0);
@@ -252,6 +261,22 @@ TEST(economy, mapas) {
 
 // los mapas son del jugador: otro bicho en casa (otra especie, otro bioma) sigue teniendo lo comprado
 // y ve el mismo patio
+// v3.15: el mapa 9 (bit 9 de "ybgO", u16) se compra, se elige y sigue tras reiniciar
+TEST(economy, el_ultimo_mapa_se_guarda) {
+  Pet p;
+  eBorn(p);
+  p.addCoins(ECO_MAP_PRICE[YARD_MAPS - 1], false);
+  CHECK(p.buyMap(YARD_MAPS));
+  p.chooseMap(YARD_MAPS);
+  CHECK_EQ(p.coins, (uint16_t)0);
+  p.flushSave();
+  Pet q;
+  q.begin();
+  CHECK(q.ownsMap(YARD_MAPS));
+  CHECK(!q.ownsMap(YARD_MAPS - 1));
+  CHECK_EQ(q.yardMapWanted(), (uint8_t)YARD_MAPS);
+}
+
 TEST(economy, los_mapas_valen_para_todos_los_bichos) {
   Pet p;
   eBorn(p);

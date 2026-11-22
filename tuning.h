@@ -374,9 +374,11 @@ static const uint8_t ECO_GOAL_COINS[ECO_GOAL_TIERS] = { 10, 20, 40 };  // metas 
 #define PRICE_REVIVE 80
 #define PRICE_BALL 100
 #define PRICE_BERRY 25            // v3.2: cada compra de baya de color (paquete de BERRY_PACK)
-// mapas del patio 1..5 (prado, cantera, bosque, playa, ruinas): el prado es gratis y de salida
-#define YARD_MAPS 5               // (estructura: los .bin de la SD)
-static const uint16_t ECO_MAP_PRICE[YARD_MAPS] = { 0, 150, 150, 200, 250 };
+// mapas del patio 1..9 (prado, cantera, bosque, playa, ruinas, volcan, central, torre del cielo, distrito
+// toxico): el prado es gratis y de salida
+#define YARD_MAPS 9               // (estructura: los .bin de la SD; 9 cabe en "ybgO", u16, y en "trv" / "trvR")
+static const uint16_t ECO_MAP_PRICE[] = { 0, 150, 150, 200, 250, 250, 300, 350, 400 };
+static_assert(sizeof(ECO_MAP_PRICE) / sizeof(ECO_MAP_PRICE[0]) == YARD_MAPS, "ECO_MAP_PRICE: un precio por mapa");
 
 // --------------------------------------------------------------------------------------------
 // Viajes (travel.h): 1, 3 u 8 h de tiempo real
@@ -427,5 +429,5 @@ static const uint32_t MEDAL_T[][3] = {
   { 3, 15, 40 },            // Domador: salvajes vencidos
   { 1, 5, 15 },             // Cazador: capturas
   { 3, 15, 50 },            // Trotamundos: viajes completados
-  { 5, 15, 25 },            // Coleccionista: recuerdos
+  { 5, 20, 45 },            // Coleccionista: recuerdos (el Oro, todos: SOUV_COUNT)
 };

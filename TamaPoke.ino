@@ -54,7 +54,7 @@
 #include "yard.h"     // el patio (v2.0, Y2): los bichos que pasean por el mapa (logica pura)
 #include "shop.h"     // la tienda de la mochila y el selector de fondos (v2.0, Y4b): logica pura
 #include "travel_ui.h"      // los viajes y la coleccion (v2.0, Y5b): geometria y logica pura de las pantallas
-#include "souvenir_icons.h"  // los 25 recuerdos y la maleta (generado por tools/souvenirs.py)
+#include "souvenir_icons.h"  // los 45 recuerdos y la maleta (generado por tools/souvenirs.py)
 // (eggtimer.h, el huevo del patio de la Y3, llega con pet.h)
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
@@ -201,6 +201,7 @@ uint32_t itemConfirmUntil = 0;
 uint8_t bagPage = 0;          // v3.2: Objetos y Tienda tienen 2 paginas (la 2.a, las bayas de colores)
 uint8_t bagTab = 0;           // 0 = Objetos, 1 = Tienda (v3.3: su pantalla, del dock). v3.4: la Coleccion, a la pagina del jugador
 uint8_t souvTip = 0;          // coleccion (pagina del jugador): recuerdo con la tarjeta abierta + 1 (0 = ninguna)
+uint8_t souvPage = 0;         // v3.15: su pagina (0 = mapas 1-5, 1 = mapas 6-9; SOUV_PAGES)
 uint8_t shopBuyId = 0;        // tienda: objeto a comprar + 1 (0 = ninguno)
 uint32_t shopBuyUntil = 0;
 uint8_t shopToast = 0;        // aviso verde / rojo (SHT_*) y hasta cuando
@@ -1406,17 +1407,17 @@ void handleSerial() {
         Serial.printf("travel start %d %d %d -> %s\n", sl, de, ti, ok ? "ok" : "no");
         wakeUI();
       } else {
-        Serial.println("travel: TRAVEL <hueco 0-5> <mapa 1-5> <duracion 0-2 (1 h, 3 h, 8 h)>");
+        Serial.println("travel: TRAVEL <hueco 0-5> <mapa 1-9> <duracion 0-2 (1 h, 3 h, 8 h)>");
       }
     }
     travelReport();
     Serial.println("DONE");
-  } else if (line == "SOUV" || line.startsWith("SOUV ")) {  // SOUV [mascara]: los recuerdos; con mascara (0x.. o decimal), la pone
+  } else if (line == "SOUV" || line.startsWith("SOUV ")) {  // SOUV [mascara]: los recuerdos; con mascara (0x.. o decimal, 64 bits), la pone
     if (line.length() > 5) {
-      pet.setSouvenirMask((uint32_t)strtoul(line.c_str() + 5, nullptr, 0));
+      pet.setSouvenirMask((uint64_t)strtoull(line.c_str() + 5, nullptr, 0));
       wakeUI();
     }
-    Serial.printf("souvenirs %u/%u mask=0x%X\n", pet.souvenirCount(), SOUV_COUNT, (unsigned)pet.souvenirMask());
+    Serial.printf("souvenirs %u/%u mask=0x%llX\n", pet.souvenirCount(), SOUV_COUNT, (unsigned long long)pet.souvenirMask());
     for (uint8_t i = 0; i < SOUV_COUNT; i++)
       Serial.printf("  %2u map %u rar %u %s%s\n", i, souvenirDest(i), souvenirRarity(i), T((StrId)(S_SOUV_0 + i)),
                     pet.hasSouvenir(i) ? "  [have]" : "");
@@ -1580,10 +1581,10 @@ void handleSerial() {
                   pet.items[IT_REVIVE], pet.lastEnd);
     Serial.printf("coins=%u earnedToday=%u/%u maps owned=0x%X chosen=%u wanted=%u\n", pet.coins,
                   pet.coinsEarnedToday(), ECO_DAILY_CAP, pet.yardOwned, pet.yardChosen, pet.yardMapWanted());
-    Serial.printf("travel %s slot=%d map=%u tier=%u left=%lus souvenirs=%u/%u mask=0x%X pending=%d\n",
+    Serial.printf("travel %s slot=%d map=%u tier=%u left=%lus souvenirs=%u/%u mask=0x%llX pending=%d\n",
                   pet.travelling() ? "away" : "none", pet.travelling() ? (int)pet.travelSlot() : -1, pet.travelDest(),
                   pet.travelTier(), (unsigned long)pet.travelSecondsLeft(), pet.souvenirCount(), SOUV_COUNT,
-                  (unsigned)pet.souvenirMask(), pet.travelResultPending() ? 1 : 0);
+                  (unsigned long long)pet.souvenirMask(), pet.travelResultPending() ? 1 : 0);
     Serial.printf("rec ball=%u bag=%u zen=%u.%u dash=%u\n", pet.gameHi, pet.strHi, pet.zenHi / 10, pet.zenHi % 10, pet.dashHi);
     // crecimiento (v1.35, growth.h): de el sale el nivel; la edad va aparte
     Serial.printf("grow=%lu lv=%u into=%u/%u age=%lu\n", (unsigned long)pet.growMin, pet.level(),
@@ -2683,7 +2684,8 @@ static uint32_t screenKey() {
     h = mixKey(h, gLang);
   } else if (userOpen) {
     // v3.4: la pagina del jugador. Medallas (tramos y lo que mide cada una), insignias, coleccion y el paseo
-    for (uint32_t v : { (uint32_t)userMedalPage, (uint32_t)(userMedalTip + 1), (uint32_t)souvTip, pet.souvenirMask(),
+    for (uint32_t v : { (uint32_t)userMedalPage, (uint32_t)(userMedalTip + 1), (uint32_t)souvTip, (uint32_t)souvPage,
+                        (uint32_t)pet.souvenirMask(), (uint32_t)(pet.souvenirMask() >> 32),
                         (uint32_t)pet.badgeMask(), (uint32_t)gLang })
       h = mixKey(h, v);
     for (uint8_t i = 0; i < MEDAL_COUNT; i++) h = mixKey(h, pet.medalValue(i) * 4u + pet.medalTierPaid(i));
@@ -5301,7 +5303,8 @@ static void renderPicker() {
   if (ok) yardShowFull();  // v2.5: el mapa como se vera, a toda la pantalla
   const char *name = T((StrId)(S_MAP_1 + n - 1));
   if (!ok) yPanelBg();  // sin el .bin (o sin SD): un panel oscuro con el aviso
-  yShadowText(centerX(name, 3), Y_TITLE_Y, name, 3, Y_TEXT);
+  int ts = textW(name, 3) <= 236 ? 3 : 2;  // v3.15: como yTitleFit ("Central electrica" no cabe a 3 arriba del circulo)
+  yShadowText(centerX(name, ts), ts == 3 ? Y_TITLE_Y : Y_TITLE_Y + 4, name, ts, Y_TEXT);
   if (!ok) {
     const char *m = T(S_NOT_ON_SD);
     yShadowText(centerX(m, 2), Y_CY - 7, m, 2, Y_TEXT_DIM);
@@ -5413,8 +5416,16 @@ void bagSwipe(int dir) {
 }
 
 // ---------- la coleccion (v2.0, Y5b; v3.4: 4.a pagina del jugador, era una pestana de la mochila) ----------
-// Una rejilla de 5 x 5: una fila por mapa, de comun a raro de izquierda a derecha. Los que se tienen, en
-// color (el raro, con marco dorado); los que no, en silueta. Tocar uno abre su tarjeta.
+// Una rejilla de 5 columnas: una fila por mapa, de comun a raro de izquierda a derecha. Los que se tienen, en
+// color (el raro, con marco dorado); los que no, en silueta. Tocar uno abre su tarjeta. v3.15: 9 mapas no caben
+// en una rejilla de 5 x 5: dos paginas (mapas 1-5 y 6-9), con el "1/2" bajo el titulo y las flechas < > del
+// selector de fondos a los lados; tocar el "1/2" pasa a la otra, y deslizar arriba / abajo tambien.
+// Los textos salen de S_MAP_1 + mapa - 1 y S_SOUV_0 + id: los ids nuevos van seguidos
+static_assert(S_MAP_9 == S_MAP_1 + YARD_MAPS - 1 && S_USING == S_MAP_1 + YARD_MAPS, "i18n.h: un S_MAP_ por mapa, seguidos");
+static_assert(S_SOUV_44 == S_SOUV_0 + SOUV_COUNT - 1 && S_TRV_EV_0 == S_SOUV_0 + SOUV_COUNT, "i18n.h: un S_SOUV_ por recuerdo");
+static_assert(S_TRV_EV_16 == S_TRV_EV_0 + TRV_TEMPLATES - 1 && S_TRV_TITLE == S_TRV_EV_0 + TRV_TEMPLATES,
+              "i18n.h: un S_TRV_EV_ por plantilla de travel.h");
+static_assert(sizeof(SOUV_ICON) / sizeof(SOUV_ICON[0]) == SOUV_COUNT, "souvenir_icons.h: un icono por recuerdo");
 static const char *souvDestName(uint8_t id) { return T((StrId)(S_MAP_1 + souvenirDest(id) - 1)); }
 
 static void souvFrame(int x, int y, int w, int h, uint16_t col) {
@@ -5454,7 +5465,13 @@ static void renderCollection() {
   char head[32];
   snprintf(head, sizeof(head), "%s %u/%u", T(S_COLLECTION), (unsigned)pet.souvenirCount(), (unsigned)SOUV_COUNT);
   yTitleFit(head);  // v3.4: el titulo de la pagina del jugador
-  for (int id = 0; id < SOUV_COUNT; id++) {
+  if (souvPage >= SOUV_PAGES) souvPage = 0;
+  if (SOUV_PAGES > 1) {  // v3.15: el "1/2" y las flechas hacia la otra pagina (no con la tarjeta abierta)
+    yPager(souvPage, SOUV_PAGES, SOUV_PAGER_Y);
+    yChevrons(!souvTip && souvPage > 0, !souvTip && souvPage + 1 < SOUV_PAGES);
+  }
+  int first = souvPageFirst(souvPage), last = first + souvPageCount(souvPage);
+  for (int id = first; id < last; id++) {
     int x = souvCellX(id), y = souvCellY(id);
     bool have = pet.hasSouvenir((uint8_t)id), rare = souvenirRarity((uint8_t)id) == SOUV_RARE;
     int ix = x + (SOUV_CELL_W - 32) / 2, iy = y + (SOUV_CELL_H - 32) / 2;
@@ -5470,8 +5487,23 @@ static void renderCollection() {
   if (souvTip) renderSouvTip(souvTip - 1);
 }
 
+// la otra pagina de la coleccion (dir -1 / +1; 0 = la siguiente, dando la vuelta); false si no cambia
+static bool collectionPage(int dir) {
+  int p = souvPageStep(souvPage, dir);
+  if (p < 0 || p == souvPage) return false;
+  souvPage = (uint8_t)p;
+  souvTip = 0;
+  return true;
+}
+
 static void collectionTap(int16_t x, int16_t y) {
-  int id = souvAt(x, y);
+  int c = yChevronHit(x, y);
+  bool pager = y >= SOUV_PAGER_Y - 14 && y < SOUV_GRID_Y - 2;  // la franja del "1/2", como en las medallas
+  if (SOUV_PAGES > 1 && (c || pager)) {
+    if (collectionPage(c)) sfxPlay(SFX_TAP);
+    return;
+  }
+  int id = souvAt(souvPage, x, y);
   if (id < 0) return;
   souvTip = (uint8_t)(id + 1);
   sfxPlay(SFX_TAP);
@@ -5735,6 +5767,7 @@ void openUser(uint8_t page) {
   userMedalPage = 0;
   userMedalTip = -1;
   souvTip = 0;
+  souvPage = 0;
 }
 
 // el color de un tramo (0 = sin tramo: la pista oscura)
@@ -5892,6 +5925,14 @@ void userSwipeV(int dir) {
       return;
     }
     if (p >= USER_MEDAL_PAGES) return;  // arriba en la ultima: nada
+  }
+  if (userPage == USERP_COLLECTION && !souvTip) {  // v3.15: igual con las paginas de la coleccion
+    int p = (int)souvPage + (dir < 0 ? 1 : -1);
+    if (p >= 0 && p < SOUV_PAGES) {
+      souvPage = (uint8_t)p;
+      return;
+    }
+    if (p >= SOUV_PAGES) return;
   }
   if (dir > 0) userOpen = false;
 }
@@ -6803,7 +6844,7 @@ void travelReport() {
     Serial.printf("  result: %s map=%u tier=%u coins=%u(dup %u) grow=+%u lv %u->%u item=%d%s souv=%d%s\n", r.nick, r.dest,
                   r.tier, r.coins, r.dupCoins, r.growMin, r.lvBefore, r.lvAfter, r.item == TRV_NONE ? -1 : r.item,
                   r.itemLost ? " LOST" : "", r.souvenir == TRV_NONE ? -1 : r.souvenir, r.dup ? " DUP" : "");
-  Serial.printf("  souvenirs %u/%u mask=0x%X\n", pet.souvenirCount(), SOUV_COUNT, (unsigned)pet.souvenirMask());
+  Serial.printf("  souvenirs %u/%u mask=0x%llX\n", pet.souvenirCount(), SOUV_COUNT, (unsigned long long)pet.souvenirMask());
 }
 
 void boxReport() {
@@ -8146,10 +8187,10 @@ static uint8_t trvOkMask() {  // huecos de la caja con un bicho sano
   return m;
 }
 
-static uint8_t trvOwnedMask() {  // mapas propios (bit n-1)
-  uint8_t m = 0;
+static uint16_t trvOwnedMask() {  // mapas propios (bit n-1; v3.15: 9 mapas, 16 bits)
+  uint16_t m = 0;
   for (uint8_t n = 1; n <= TRV_DESTS; n++)
-    if (pet.ownsMap(n)) m |= (uint8_t)(1u << (n - 1));
+    if (pet.ownsMap(n)) m |= (uint16_t)(1u << (n - 1));
   return m;
 }
 
@@ -8157,7 +8198,7 @@ static uint8_t trvOwnedMask() {  // mapas propios (bit n-1)
 static uint8_t trvFix(uint8_t *cand) {
   uint8_t n = trvCandidates(trvOkMask(), cand);
   if (trvSelPet >= n) trvSelPet = 0;
-  uint8_t own = trvOwnedMask();
+  uint16_t own = trvOwnedMask();
   if (!own) own = 1;  // el prado siempre es del jugador
   if (!(own & (1u << (trvSelDest - 1)))) trvSelDest = trvStepDest(own, trvSelDest, 1);
   if (trvSelTier >= TRV_TIERS) trvSelTier = 0;
@@ -8242,7 +8283,7 @@ static void trvTwoLines(const char *t, int cx, int y, int maxW, uint16_t col) {
 static void renderTravelSetup() {
   uint8_t cand[8];
   uint8_t nc = trvFix(cand);
-  uint8_t own = trvOwnedMask() ? trvOwnedMask() : 1;
+  uint16_t own = trvOwnedMask() ? trvOwnedMask() : 1;
   // el fondo: oscuro, con el destino en una ventana
   trvMapPrev = trvSelDest;
   yardEnsureBg();
@@ -8250,7 +8291,16 @@ static void renderTravelSetup() {
   yTitle(T(S_TRV_TITLE), nullptr);
   yardWindow(TRV_BAN_X, TRV_BAN_Y, TRV_BAN_W, TRV_BAN_H, 190, 12);
   const char *dn = T((StrId)(S_MAP_1 + trvSelDest - 1));
-  yShadowText(centerX(dn, 2), TRV_BAN_Y + (TRV_BAN_H - 14) / 2, dn, 2, Y_TEXT);
+  // v3.15: entre las flechas; un nombre largo ("Central electrica") se aprieta (printTight) en vez de pisarlas
+  int dnW = TRV_BAN_W - 84, dnY = TRV_BAN_Y + (TRV_BAN_H - 14) / 2;
+  if (textW(dn, 2) <= dnW) {
+    yShadowText(centerX(dn, 2), dnY, dn, 2, Y_TEXT);
+  } else {
+    gfx->setTextColor(Y_SHADOW);
+    printTight(dn, CX + 2, dnY + 2, dnW);
+    gfx->setTextColor(Y_TEXT);
+    printTight(dn, CX, dnY, dnW);
+  }
   if (own & (own - 1)) {  // mas de un mapa propio: flechas
     trvDrawArrow(TRV_BAN_X + 20, TRV_BAN_Y + TRV_BAN_H / 2, -1, true);
     trvDrawArrow(TRV_BAN_X + TRV_BAN_W - 20, TRV_BAN_Y + TRV_BAN_H / 2, 1, true);
@@ -8691,7 +8741,7 @@ static_assert(YBG_CANVAS == UI_SIZE, "el lienzo es la ventana (YBG_CROP, YBG_CRO
 // ---- el fondo ----
 // el mapa del patio es del jugador (Pet::yardMapWanted: el elegido, o el prado del principio), igual para
 // todos los bichos
-#define YARD_MAP_FALLBACK 1  // si falta el del bioma; si falta este tambien, el suelo liso
+#define YARD_MAP_FALLBACK 1  // si falta el pedido (1..YARD_MAPS); si falta este tambien, el suelo liso
 #define YARD_MAP_NONE 255    // YARDBG 255: el suelo liso a proposito (para verlo)
 
 uint8_t *yardFile = nullptr;       // el .bin entero en PSRAM (yardView.px apunta dentro)
@@ -8730,7 +8780,7 @@ static bool yardTryMap(uint8_t n) {
   return true;
 }
 
-// carga el mapa que toca (el del bioma, o el forzado); se mira cada frame, solo lee al cambiar
+// carga el mapa que toca (el forzado, el del selector o de los viajes, o el elegido); se mira cada frame, solo lee al cambiar
 void yardEnsureMap() {
   // el selector de fondos (Y4b) manda sobre lo elegido, solo mientras esta abierto
   uint8_t want = yardMapForced ? yardMapForced : yardMapPreview ? yardMapPreview
@@ -10883,8 +10933,10 @@ static void btThumb(const uint8_t *b, int x, int y, int s, bool sil) {
 
 // el bioma de la fase: el del jefe (planta: bosque, agua: playa, fuego: volcan...)
 uint8_t battleBiome() {
-  if (bt.wild) {  // v2.2: el del mapa del patio (prado, cantera = montana, bosque, playa, ruinas)
-    static const uint8_t MAP_BIOME[YARD_MAPS + 1] = { 0, 0, 4, 2, 1, 8 };
+  if (bt.wild) {  // v2.2: el del mapa del patio (prado, cantera = montana, bosque, playa, ruinas, ...)
+    // v3.15: volcan = volcan, central = central, torre del cielo = montana, distrito toxico = pantano
+    static const uint8_t MAP_BIOME[] = { 0, 0, 4, 2, 1, 8, 3, 6, 4, 7 };
+    static_assert(sizeof(MAP_BIOME) == YARD_MAPS + 1, "MAP_BIOME: el suelo liso y un bioma por mapa");
     uint8_t m = pet.yardMapWanted();
     return MAP_BIOME[m <= YARD_MAPS ? m : 0];
   }

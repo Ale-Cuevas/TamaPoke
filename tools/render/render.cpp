@@ -648,7 +648,7 @@ static void shopToastNow(uint8_t kind) {
   shopToastUntil = millis() + 1000;
 }
 // the background picker on map n
-static void pickerOpen(uint8_t n, uint16_t coins, uint8_t owned = 0) {
+static void pickerOpen(uint8_t n, uint16_t coins, uint16_t owned = 0) {
   shopOpen(coins);
   for (uint8_t m = 1; m <= YARD_MAPS; m++)
     if (owned & (1u << m)) pet.yardOwned |= (uint16_t)(1u << m);
@@ -680,10 +680,10 @@ static void travelRunning(uint8_t dest, uint8_t tier, uint32_t elapsed) {
   if (elapsed) pet.dbgTravelElapsed(elapsed);
 }
 // a finished trip's result waiting on the yard home (the Box pet is back)
-static void travelBack(uint8_t dest, uint32_t souvMask, bool fullBag) {
+static void travelBack(uint8_t dest, uint64_t souvMask, bool fullBag) {
   pokemon(25, 13);
   boxPet(1, 133, 23, true);
-  ownMaps({ 2, 3, 4 });
+  ownMaps({ 2, 3, 4, dest });
   pet.setSouvenirMask(souvMask);
   if (fullBag)
     for (uint8_t id : { 0, 1, 2, 3, 5, 7, 8 }) pet.items[id] = ITEM_MAX;
@@ -730,10 +730,11 @@ static void tapTraveller(bool bubble) {
   onTap(x, y);
 }
 // the collection page of the USER page (v3.4; it was a Bag tab) with the given souvenirs owned
-static void collection(uint32_t mask) {
+static void collection(uint64_t mask, uint8_t page = 0) {
   pokemon(25, 13);
   pet.setSouvenirMask(mask);
   openUser(USERP_COLLECTION);
+  souvPage = page;  // v3.15: 2 paginas (mapas 1-5, 6-9)
 }
 // v3.4: the medals page with a believable mid-game player: some pets counted, a few events, steps, badges
 static void userMedals(bool es_) {
@@ -753,8 +754,8 @@ static void userMedals(bool es_) {
   if (es_) es();
   openUser(USERP_MEDALS);
 }
-static void collectionTip(uint32_t mask, uint8_t id) {
-  collection(mask);
+static void collectionTip(uint64_t mask, uint8_t id) {
+  collection(mask, (uint8_t)souvPageOf(id));
   onTap(souvCellX(id) + SOUV_CELL_W / 2, souvCellY(id) + SOUV_CELL_H / 2);
 }
 
@@ -1322,6 +1323,12 @@ static const std::vector<Scene> &scenes() {
     { "picker-notowned-es", [] { pickerOpen(4, 300); es(); } },
     { "picker-broke-es", [] { pickerOpen(4, 10); shopToastNow(SHT_BROKE); es(); } },
     { "picker-using-es", [] { pickerOpen(YARD_MAP_START, 50); es(); } },
+    // v3.15: los mapas nuevos (titulo largo en ES; precios 250-400; el ultimo sin flecha derecha)
+    { "picker-map6", [] { pickerOpen(6, 300); } },
+    { "picker-map7-es", [] { pickerOpen(7, 300); es(); } },
+    { "picker-map8-es", [] { pickerOpen(8, 50, 1 << 8); es(); } },
+    { "picker-map9", [] { pickerOpen(9, 500); } },
+    { "picker-map9-es", [] { pickerOpen(9, 500); es(); } },
     { "card-profile-es", [] { pokemon(25, 13); pet.streak = 365; pet.bestStreak = 365; setLang(LANG_ES); applyLangFont(); cardOpen = true; cardPage = 0; } },
     // v2.0: las 4 necesidades en el perfil (en el patio ya no hay barras)
     { "card-profile-needs", [] { pokemon(25, 13); pet.fullness = 20; pet.joy = 45; pet.energy = 10; cardOpen = true; cardPage = 0; } },
@@ -1399,6 +1406,13 @@ static const std::vector<Scene> &scenes() {
     { "travel-setup-es", [] { travelSetup(3, { 2, 4 }); es(); trvSelPet = 2; trvSelDest = 4; trvSelTier = 2; } },
     { "travel-setup-1map", [] { travelSetup(2, {}); } },
     { "travel-setup-page2", [] { travelSetup(6, { 2, 3, 4, 5 }); trvSelPet = 4; trvSelDest = 5; } },
+    // v3.15: los mapas nuevos como destino (nombres largos en ES)
+    { "travel-setup-map7-es", [] { travelSetup(3, { 2, 7, 9 }); es(); trvSelDest = 7; } },
+    { "travel-setup-map9-es", [] { travelSetup(3, { 2, 7, 9 }); es(); trvSelDest = 9; } },
+    { "travel-setup-map8", [] { travelSetup(3, { 8 }); trvSelDest = 8; } },
+    { "travel-trip-map6-late-es", [] { travelSetup(3, { 6 }); pet.startTravel(1, 6, 2); pet.dbgTravelElapsed(470); es(); } },
+    { "travel-back-new-map9-es", [] { travelBack(9, 0, false); es(); render(); tapTraveller(false); }, 3 },
+    { "travel-back-new-map7", [] { travelBack(7, 0, false); render(); tapTraveller(false); }, 3 },
     { "travel-setup-nopets", [] { travelSetup(0, { 2 }); } },
     { "travel-setup-nopets-es", [] { travelSetup(0, { 2 }); es(); } },
     { "travel-setup-noclock", [] { travelSetup(3, { 2 }); pet.lastSeenEpoch = 0; } },
@@ -1441,6 +1455,16 @@ static const std::vector<Scene> &scenes() {
     { "collection-tip-rare", [] { collectionTip(0x0A5B6D3 | (1u << 14), 14); } },
     { "collection-tip-unknown", [] { collectionTip(0x0A5B6D3, 2); } },
     { "collection-tip-es", [] { collection(0x0A5B6D3); es(); onTap(souvCellX(18) + 10, souvCellY(18) + 10); } },
+    // v3.15: 45 recuerdos en 2 paginas (mapas 1-5 y 6-9)
+    { "collection-page2", [] { collection(0x0A5B6D3ull | (0x13ull << 25) | (0x7ull << 35) | (1ull << 44), 1); } },
+    { "collection-page2-es", [] { collection(0x0A5B6D3ull | (0x13ull << 25) | (0x7ull << 35) | (1ull << 44), 1); es(); } },
+    { "collection-page2-empty", [] { collection(0x0A5B6D3, 1); } },
+    { "collection-full-page2", [] { collection(SOUV_ALL, 1); } },
+    { "collection-page2-swipe", [] { collection(0x0A5B6D3ull | (1ull << 29), 0); render(); onTap(Y_CHEV_RX, Y_CY); } },
+    { "collection-page2-tap-pager-es", [] { collection(1ull << 29, 0); es(); render(); onTap(CX, SOUV_PAGER_Y + 7); } },
+    { "collection-tip-page2", [] { collectionTip((1ull << 29) | (1ull << 31), 29); } },
+    { "collection-tip-page2-es", [] { collectionTip((1ull << 29) | (1ull << 31) | (1ull << 37), 37); es(); } },
+    { "collection-tip-page2-unknown-es", [] { collectionTip(1ull << 29, 42); es(); } },
     { "bag-tabs-es", [] { pokemon(25, 13); walker(1840, 52310, 2, { 2, 1, 0, 3, 0, 1, 0 }); openBag(); es(); } },
     { "shop-tabs-es", [] { shopOpen(120); es(); } },
     { "box-full", [] {
