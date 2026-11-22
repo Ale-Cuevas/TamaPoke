@@ -598,6 +598,13 @@ class TestPackYard(unittest.TestCase):
         k, d = keep.getpixel((8, 8)), dark.getpixel((8, 8))
         self.assertTrue(d[0] < k[0] * 0.65 and d[1] <= 40, (k, d))   # mismo tono rojo vivo, pero oscuro
 
+    @unittest.skipUnless(_pil_ok(), 'Pillow no disponible')
+    def test_hue_murk_es_turbio_y_casi_negro(self):
+        _, img, _ = self.compone(self.mapa(head='name: T\nlegend: fake\nseed: 1\nhue: 90-150 0 murk\n'))
+        r, g, b = img.getpixel((8, 8))
+        self.assertTrue(r < 90 and g < 60, (r, g, b))              # oscuro: valor ~30 %
+        self.assertGreater(r, g)                                   # pero sigue rojizo (el tono se mantiene)
+
     def test_hue_mal_escrito(self):
         self.mapa(head='name: T\nlegend: fake\nseed: 1\nhue: 90-150 0 mantener\n')
         self.falla('expected "hue: from-to target \\[keep|dark\\]"')

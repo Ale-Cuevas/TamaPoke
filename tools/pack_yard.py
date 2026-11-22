@@ -7,8 +7,8 @@ Lee tools/yard/maps/NN-nombre.txt y su leyenda (tools/yard/legends/), compone un
   NN-nombre_preview.png   466x466 redondo (x2,4 del centro, recorte de 7, mascara, HUD de muestra)
   NN-nombre_debug.png     lo mismo con la rejilla, las celdas bloqueadas y las zonas del HUD
 
-Ambiente opcional en la cabecera del mapa: "hue: A-B T [keep|dark]" (puede repetirse; se aplican en orden;
-"keep" conserva saturacion y valor, "dark" conserva la saturacion y oscurece), "tint: RRGGBB N" (mezcla N %) y "mist: N [RRGGBB]".
+Ambiente opcional en la cabecera del mapa: "hue: A-B T [keep|dark|murk]" (puede repetirse; se aplican en orden;
+"keep" conserva saturacion y valor, "dark" conserva la saturacion y oscurece, "murk" deja un liquido turbio: sat 55 %, valor 30 %), "tint: RRGGBB N" (mezcla N %) y "mist: N [RRGGBB]".
 
 Mas opciones (v3.15, fondos nuevos):
   sky: RRGGBB RRGGBB      degradado vertical (arriba, abajo) pintado bajo todo. Un caracter del suelo con
@@ -592,9 +592,9 @@ def atmosphere(img, meta, map_path, seed):
     """
     from PIL import Image, ImageDraw, ImageFilter
     for spec in meta.get('hues', []):
-        m = re.fullmatch(r'(\d+)-(\d+)\s+(\d+)(?:\s+(keep|dark))?', spec)
+        m = re.fullmatch(r'(\d+)-(\d+)\s+(\d+)(?:\s+(keep|dark|murk))?', spec)
         if not m:
-            raise MapError(f'{map_path}: expected "hue: from-to target [keep|dark]" (degrees)')
+            raise MapError(f'{map_path}: expected "hue: from-to target [keep|dark|murk]" (degrees)')
         lo, hi, tgt = (int(v) for v in m.groups()[:3])
         flag = m.group(4)   # None: apagado; keep: igual; dark: igual de vivo pero mas oscuro
         mid = (lo + hi) / 2
@@ -609,6 +609,9 @@ def atmosphere(img, meta, map_path, seed):
                     vd[i] = vd[i] * 80 // 100
                 elif flag == 'dark':
                     vd[i] = vd[i] * 55 // 100
+                elif flag == 'murk':   # liquido turbio: poca saturacion y casi negro
+                    sd[i] = sd[i] * 55 // 100
+                    vd[i] = vd[i] * 30 // 100
         chans = [Image.frombytes('L', img.size, bytes(c)) for c in (hd, sd, vd)]
         img = Image.merge('HSV', chans).convert('RGB')
     if 'tint' in meta:
