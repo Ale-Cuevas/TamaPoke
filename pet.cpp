@@ -403,8 +403,9 @@ void Pet::syncHome(uint32_t seen, uint32_t mins) {
       continue;
     }
     if (!full) fullness = dropTo(fullness, FOOD_DRAIN, OFFLINE_FLOOR);
-    energy = dropTo(energy, ENE_DRAIN, OFFLINE_FLOOR);
-    joy = dropTo(joy, JOY_DRAIN, OFFLINE_FLOOR);
+    if (ageMinutes % ENE_DRAIN_EVERY == 0) energy = dropTo(energy, ENE_DRAIN, OFFLINE_FLOOR);
+    if (ageMinutes % JOY_DRAIN_EVERY == 0) joy = dropTo(joy, JOY_DRAIN, OFFLINE_FLOOR);
+    if (fullness < JOY_HUNGRY_BELOW) joy = dropTo(joy, JOY_DRAIN_HUNGRY, OFFLINE_FLOOR);
     // v3.1: las cacas se hacen dentro del repaso (para que tengan su edad) y las viejas quitan felicidad
     // (con el mismo suelo). Durmiendo no ensucia ni pesa: el sueno ya hizo continue
     offlineAwake++;
@@ -488,7 +489,7 @@ bool Pet::tickHome() {
 
   // el sueño es descanso: la energia se recupera y las necesidades bajan MUCHO
   // mas lento que despierto y con suelo (amanece pidiendo algo de mimo, no a
-  // cero, sin descuidos ni escapadas). despierto: comida -2/min, hig/joy -1/min.
+  // cero, sin descuidos ni escapadas). despierto: comida -FOOD_DRAIN/min, energia/joy cada *_EVERY min.
   // El peso aun se quema; la racha de buen cuidado (goodTicks) queda en pausa.
   if (sleeping) {
     sleepMinute(full, h);
@@ -499,11 +500,13 @@ bool Pet::tickHome() {
   // tiempo apagado, Caramelo Raro, LVL) y la anuncia con su propio sonido
 
   if (!full) fullness = clamp100(fullness - FOOD_DRAIN);
-  energy = clamp100(energy - ENE_DRAIN);
   if (fullness > POOP_MIN_FOOD && poops < POOP_MAX && random(100) < POOP_ODDS) addPoop();
 
-  // el sobrepeso da pereza: la energia cae el doble
-  if (weight > OVERWEIGHT_AT) energy = clamp100(energy - OVERWEIGHT_ENE_DRAIN);
+  // la energia baja cada ENE_DRAIN_EVERY min; el sobrepeso da pereza: cae el doble (en el mismo toque)
+  if (ageMinutes % ENE_DRAIN_EVERY == 0) {
+    energy = clamp100(energy - ENE_DRAIN);
+    if (weight > OVERWEIGHT_AT) energy = clamp100(energy - OVERWEIGHT_ENE_DRAIN);
+  }
   if (weight > 0 && ageMinutes % WEIGHT_BURN_AWAKE_MIN == 0) weight--;
 
   // la disciplina forja la defensa: 12 h seguidas bien cuidado = +1 DEF
@@ -516,7 +519,7 @@ bool Pet::tickHome() {
     goodTicks = 0;
   }
 
-  int dJoy = -JOY_DRAIN;
+  int dJoy = ageMinutes % JOY_DRAIN_EVERY == 0 ? -JOY_DRAIN : 0;
   if (fullness < JOY_HUNGRY_BELOW) dJoy -= JOY_DRAIN_HUNGRY;
   // v3.1: las cacas viejas (mas de POOP_STALE_MIN min en el suelo) quitan felicidad; mas cacas, mas rapido
   uint8_t stale = stalePoops();
@@ -1142,7 +1145,7 @@ void Pet::toggleLight() {
 
 // --- la noche (v1.63)
 // un minuto dormido: la energia vuelve y las necesidades bajan lento y con suelo. De dia (una
-// siesta) ~4x mas lento que despierto; de noche la mitad aun, con suelos mas altos
+// siesta) la comida baja NAP_FOOD_JOY_EVERY veces mas lento que despierto; de noche, NIGHT_FOOD_JOY_EVERY, con suelos mas altos
 void Pet::sleepMinute(bool full, int h) {
   energy = clamp100(energy + SLEEP_ENE_GAIN);
   if (nightHour(h)) {
@@ -1182,7 +1185,7 @@ void Pet::nightMinute(int h, bool live) {
   }
   if (sleeping) {
     nightAwakeMin = 0;
-    if (bedHour(h)) nightSleep = true;  // una siesta que llega a la noche tambien amanece a las 8
+    if (bedHour(h)) nightSleep = true;  // una siesta que llega a la noche tambien amanece a las WAKE_HOUR
     // por la mañana: se despierta solo (una siesta de tarde no). Solo de WAKE_HOUR a EVENING_HOUR:
     // acostado a las 20-21 ya es dormir de noche y no debe despertarse al minuto siguiente
     if (nightSleep && h >= WAKE_HOUR && h < EVENING_HOUR) {
@@ -1363,7 +1366,7 @@ void Pet::addSteps(uint32_t n, uint32_t day) {
       if (tier == STEP_GOAL_TIERS) pmBump(pm, MD_MARATHON);   // v3.4: un dia de 10000 pasos (del jugador, una vez al dia)
       goalReward(tier, rewarded);
     }
-    encCheck();  // v2.2: los ENC_WALK_STEPS pasos del dia dan otra tirada de encuentro
+    encCheck();  // v2.2: los umbrales ENC_WALK_AT de pasos del dia dan otra tirada de encuentro
   }
   medalsUpdate();  // v3.4: los pasos y los niveles de las metas (sin escribir: marca el guardado)
 }
@@ -1464,7 +1467,7 @@ uint8_t Pet::giftEggs() const {
 // se ve el primero ("mochila llena") y todos siguen envueltos
 static bool giftFits(const uint8_t *items, uint8_t it) {
   if (it == IT_CHARM && items[IT_CHARM]) it = IT_GOLDEN;  // dos amuletos: solo se lleva uno
-  return items[it] < ((it == IT_CHARM) ? 1 : ITEM_MAX);
+  return items[it] < itemCap(it);
 }
 
 uint8_t Pet::openGift(bool *full) {
@@ -1495,7 +1498,7 @@ void Pet::unwrapGifts() {
   for (uint8_t i = 0; i < giftN; i++) {
     uint8_t it = gifts[i];
     if (it == IT_CHARM && items[IT_CHARM]) it = IT_GOLDEN;
-    uint8_t cap = (it == IT_CHARM) ? 1 : ITEM_MAX;
+    uint8_t cap = itemCap(it);
     if (items[it] < cap) items[it]++;
     else gifts[k++] = gifts[i];  // no cabe: sigue envuelto
   }
@@ -1503,7 +1506,7 @@ void Pet::unwrapGifts() {
 }
 
 void Pet::giveFound(uint8_t it, bool gift) {
-  uint8_t cap = (it == IT_CHARM) ? 1 : ITEM_MAX;
+  uint8_t cap = itemCap(it);
   bool full = items[it] >= cap;
   if (!full) items[it]++;
   queueFound(it, full, gift);
@@ -1705,6 +1708,8 @@ bool Pet::teamCanFight(uint32_t id) const {
 static_assert(FOOD_ITEM_BERRY0 == IT_BERRY_R && FOOD_ITEM_CAKE == IT_CAKE && FOOD_ITEM_GOLDEN == IT_GOLDEN,
               "food.h: los ids de objeto son los de pet.h");
 static_assert(PACK_OLD == IT_BERRY_R, "\"bpack\" guarda los objetos de antes de las bayas");
+static_assert(IT_CHARM == 4 && IT_BERRY_R == 10 && IT_BERRY_O == 15, "economy.h: itemCap / shopPackOf usan los ids a mano");
+static_assert(BERRY_MAX <= 255, "items[] es de un byte");
 static_assert(IT_BERRY_O + 1 == ECO_ITEMS && IT_BERRY_O + 1 == IT_COUNT, "economy.h: un precio por objeto de pet.h");
 
 uint16_t Pet::coinsEarnedToday() const { return coinDay == today() ? coinToday : 0; }
@@ -1737,8 +1742,9 @@ bool Pet::spendCoins(uint16_t n) {
 
 bool Pet::buyItem(uint8_t itemId) {
   uint16_t p = priceOfItem(itemId);
-  if (!p || itemId >= IT_COUNT || p > coins || items[itemId] >= ITEM_MAX) return false;
-  items[itemId]++;
+  uint8_t pack = shopPackOf(itemId);
+  if (!p || itemId >= IT_COUNT || p > coins || items[itemId] + pack > itemCap(itemId)) return false;
+  items[itemId] += pack;
   coins -= p;
   save();
   return true;
@@ -1862,7 +1868,7 @@ void Pet::travelComplete() {
   r.coins = addCoins(r.coins, false);
   if (r.dupCoins > r.coins) r.dupCoins = r.coins;
   if (r.item != TRV_NONE) {
-    if (items[r.item] >= ITEM_MAX) r.itemLost = 1;
+    if (items[r.item] >= itemCap(r.item)) r.itemLost = 1;
     else items[r.item]++;
   }
   if (r.souvenir != TRV_NONE && !r.dup) {
@@ -2001,7 +2007,8 @@ uint16_t Pet::encMinutesLeft() const { return encActive() ? ::encMinutesLeft(enc
 // espera 6 h). Sin eso no se tira (la tirada se queda para luego)
 bool Pet::encCanRoll() const { return !starterPick && (homeHatched() || boxHasPets()); }  // v3.0: cualquiera de casa
 
-void Pet::encStart(int16_t dex, uint32_t rng) {
+// countsAsDaily: la base, el viaje y ENC cierran esas tiradas del dia; los de pasear no (v3.11)
+void Pet::encStart(int16_t dex, uint32_t rng, bool countsAsDaily) {
   EncWild w = encRollWild(yardMapWanted(), badges, rng);
   if (dex >= 1 && dex <= DEX_COUNT) {  // serie ENC <dex>: esa especie, al nivel del sorteo
     w.dex = dex;
@@ -2013,8 +2020,11 @@ void Pet::encStart(int16_t dex, uint32_t rng) {
   encTr[1] = w.tDef;
   encTr[2] = w.tSpe;
   encFlags = (w.exclusive ? ENCF_EXCL : 0) | (random(shinyOdds(false)) == 0 ? ENCF_SHINY : 0);
+  // la medalla de "vencido"/"capturado" se guarda por su hora de salida: dos salvajes en el mismo reloj no la repiten
   encSpawnAt = lastSeenEpoch;
-  encRolled |= ENC_ROLL_SPAWNED;
+  uint32_t lastId = pm.wildId > pm.catchId ? pm.wildId : pm.catchId;
+  if (encSpawnAt <= lastId) encSpawnAt = lastId + 1;
+  if (countsAsDaily) encRolled |= ENC_ROLL_SPAWNED;
   encSound = true;
   pendingSave = true;
   Serial.printf("enc: sale #%d nv.%u%s%s ent.%u/%u/%u\n", encDexV, encLv, encShiny() ? " shiny" : "",
@@ -2041,9 +2051,9 @@ void Pet::encCheck() {
     encRolled = 0;
     pendingSave = true;
   }
-  if (encSpawnAt || (encRolled & ENC_ROLL_SPAWNED) || !encCanRoll()) return;
+  if (encSpawnAt || !encCanRoll()) return;  // solo uno a la vez (tambien el ganado con la bola pendiente)
   uint32_t rng = ((uint32_t)random(0x10000) << 16) | (uint32_t)random(0x10000);
-  if (!(encRolled & ENC_ROLL_BASE) && (now / 60) % 1440 >= encBaseMinute(d)) {
+  if (!(encRolled & (ENC_ROLL_BASE | ENC_ROLL_SPAWNED)) && (now / 60) % 1440 >= encBaseMinute(d)) {
     encRolled |= ENC_ROLL_BASE;
     pendingSave = true;
     bool hit = encHit(ENC_BASE_PERMIL, rng);
@@ -2053,12 +2063,19 @@ void Pet::encCheck() {
       return;
     }
   }
-  if (!(encRolled & ENC_ROLL_WALK) && stepsOn(d) >= ENC_WALK_STEPS) {
-    encRolled |= ENC_ROLL_WALK;
+  // v3.11: una tirada por umbral de pasos (el bit solo se marca al tirar de verdad)
+  for (uint8_t i = 0; i < ENC_WALK_TIERS; i++) {
+    uint8_t bit = (uint8_t)(ENC_ROLL_WALK0 << i);
+    if ((encRolled & bit) || stepsOn(d) < ENC_WALK_AT[i]) continue;
+    encRolled |= bit;
     pendingSave = true;
     bool hit = encHit(ENC_WALK_PERMIL, rng);
-    Serial.printf("enc: tirada de pasear %s\n", hit ? "SI" : "no");
-    if (hit) encStart(0, rng);
+    Serial.printf("enc: tirada de pasear (%u pasos) %s\n", (unsigned)ENC_WALK_AT[i], hit ? "SI" : "no");
+    if (hit) {
+      encStart(0, rng, false);
+      return;
+    }
+    rng = ((uint32_t)random(0x10000) << 16) | (uint32_t)random(0x10000);
   }
 }
 
@@ -2135,7 +2152,7 @@ EncReward Pet::encounterDone(bool won, uint32_t fighter) {
   }
   if (random(100) < ENC_DROP_PCT) {
     r.item = rollWildItem();
-    uint8_t cap = (r.item == IT_CHARM) ? 1 : ITEM_MAX;
+    uint8_t cap = itemCap(r.item);
     if (items[r.item] < cap) items[r.item]++;
     else r.itemLost = true;
   }
@@ -2485,7 +2502,7 @@ void Pet::load() {
         if (g[1 + i] < IT_COUNT) gifts[giftN++] = g[1 + i];
   }
   for (uint8_t i = 0; i < IT_COUNT; i++) {
-    uint8_t cap = (i == IT_CHARM) ? 1 : ITEM_MAX;
+    uint8_t cap = itemCap(i);
     if (items[i] > cap) items[i] = cap;
   }
   // v1.59: una partida de antes del Revivir recibe los 3 de una partida nueva, una sola vez. La mochila

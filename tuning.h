@@ -31,14 +31,22 @@
 // --------------------------------------------------------------------------------------------
 // Necesidades despierto: lo que baja cada minuto (Pet::tick, pet.cpp). Barras de 0 a 100.
 // --------------------------------------------------------------------------------------------
-#define FOOD_DRAIN 2            // comida -2/min (nada mientras dura la tarta)
-#define ENE_DRAIN 1             // energia -1/min...
-#define OVERWEIGHT_AT 50        // ...y -OVERWEIGHT_ENE_DRAIN mas con el peso por encima de esto
+// (v3.11: el doble de lento que antes: comida -2/min, energia y felicidad -1/min, hambre -2 mas)
+#define FOOD_DRAIN 1            // comida -1/min (nada mientras dura la tarta)
+#define ENE_DRAIN 1             // energia -1 cada ENE_DRAIN_EVERY min...
+#define ENE_DRAIN_EVERY 2
+#define OVERWEIGHT_AT 50        // ...y -OVERWEIGHT_ENE_DRAIN mas (en el mismo toque) con el peso por encima de esto
 #define OVERWEIGHT_ENE_DRAIN 1
-#define JOY_DRAIN 1             // felicidad -1/min...
-#define JOY_DRAIN_HUNGRY 2      // ...y -2 mas con la comida por debajo de JOY_HUNGRY_BELOW
+#define JOY_DRAIN 1             // felicidad -1 cada JOY_DRAIN_EVERY min...
+#define JOY_DRAIN_EVERY 2
+#define JOY_DRAIN_HUNGRY 1      // ...y -1 mas cada minuto con la comida por debajo de JOY_HUNGRY_BELOW
 #define JOY_HUNGRY_BELOW 30
 #define NEED_LOW 25             // por debajo: esta triste (mood) y lo pide en un globo del patio
+// alarma de necesidad critica: con un bicho de casa despierto a NEED_ALARM_AT o menos en su necesidad mas baja, la
+// placa suena dos pitidos cada NEED_ALARM_EVERY_MS hasta que se arregla (por debajo de NEED_LOW, justo encima de
+// SLIP_AT: avisa antes del descuido). Volumen 0 = en silencio
+#define NEED_ALARM_AT 15
+#define NEED_ALARM_EVERY_MS 2000UL
 
 // cacas (v1.58): probabilidad (%) por minuto despierto con la comida por encima de POOP_MIN_FOOD. Era 15 (una
 // cada ~7 min); con 5, una cada ~20 min. Solo se quitan tocandolas (o con una sesion entera de cascada).
@@ -72,12 +80,12 @@ static const uint8_t POOP_JOY_DRAIN[POOP_MAX + 1] = { 0, 1, 2, 4 };
 // --------------------------------------------------------------------------------------------
 #define SLEEP_ENE_GAIN 6           // energia +6/min dormido
 // siesta (de dia): comida y felicidad -1 cada NAP_FOOD_JOY_EVERY min, sin bajar de sus suelos
-#define NAP_FOOD_JOY_EVERY 2
+#define NAP_FOOD_JOY_EVERY 4
 #define NAP_FOOD_FLOOR 30
 #define NAP_JOY_FLOOR 35
-// de noche (de SLEEPY_HOUR a WAKE_HOUR) baja la mitad que en una siesta, con suelos mas altos: amanece con
+// de noche (de SLEEPY_HOUR a WAKE_HOUR) baja la mitad que en una siesta (comida 8x mas lenta que despierto), con suelos mas altos: amanece con
 // todo a 50 o mas si se acosto bien cuidado
-#define NIGHT_FOOD_JOY_EVERY 4
+#define NIGHT_FOOD_JOY_EVERY 8
 #define NIGHT_FOOD_FLOOR 50
 #define NIGHT_JOY_FLOOR 50
 // Desde SLEEPY_HOUR tiene sueno (globo con "zzz"); a las BED_HOUR se duerme solo y, despertado antes de
@@ -87,16 +95,20 @@ static const uint8_t POOP_JOY_DRAIN[POOP_MAX + 1] = { 0, 1, 2, 4 };
 #define EVENING_HOUR 20
 #define SLEEPY_HOUR 22
 #define BED_HOUR 23
-#define WAKE_HOUR 8
+#define WAKE_HOUR 9
 #define NIGHT_RESLEEP_MIN 30
 #define BED_BOND 3
 
 // --------------------------------------------------------------------------------------------
 // Placa apagada (Pet::syncClock): el tiempo pasa igual, pero con piedad
 // --------------------------------------------------------------------------------------------
-// apagada baja al ritmo de despierto (FOOD_DRAIN, ENE_DRAIN, JOY_DRAIN, y las cacas viejas) pero sin bajar de
-// OFFLINE_FLOOR (por encima de SLIP_AT: sin descuidos, abandono ni muerte en ausencia)
-#define OFFLINE_FLOOR 15
+// apagada baja al ritmo de despierto (FOOD_DRAIN, ENE_DRAIN, JOY_DRAIN, JOY_DRAIN_HUNGRY con hambre, y las cacas
+// viejas) pero sin bajar de OFFLINE_FLOOR (por encima de SLIP_AT: sin descuidos, abandono ni muerte en ausencia; y
+// por encima de NEED_ALARM_AT: al encender no suena la alarma de necesidad)
+#define OFFLINE_FLOOR 16
+static_assert(OFFLINE_FLOOR > NEED_ALARM_AT && OFFLINE_FLOOR > SLIP_AT, "tuning.h: el suelo de ausencia queda por encima de la alarma y del descuido");
+static_assert(ENE_DRAIN_EVERY >= 1 && JOY_DRAIN_EVERY >= 1 && NAP_FOOD_JOY_EVERY >= 1 && NIGHT_FOOD_JOY_EVERY >= 1,
+              "tuning.h: los *_EVERY son divisores (un 0 dividiria por cero)");
 #define OFFLINE_POOP_EVERY_MIN 240   // una caca cada 4 h despierto apagada
 #define OFFLINE_MAX_MIN (14UL * 24 * 60)  // como mucho 2 semanas de golpe
 
@@ -123,7 +135,9 @@ static const uint8_t POOP_JOY_DRAIN[POOP_MAX + 1] = { 0, 1, 2, 4 };
 #define RARE_CANDY_LEVELS 1        // Caramelo Raro: +1 nivel (la barra conserva lo que llevaba)
 #define CHARM_SHINY_MULT 3         // amuleto: el siguiente huevo, x3 de probabilidad shiny
 #define REVIVE_START 3             // Revivir con los que empieza una partida (y una vez al actualizar)
-#define ITEM_MAX 9                 // tope de cada objeto en la mochila
+#define ITEM_MAX 9                 // tope de cada objeto en la mochila...
+#define BERRY_MAX 30               // ...salvo las bayas de colores, que se venden en paquetes y caben mas
+#define BERRY_PACK 5               // bayas de colores que da una compra (al precio de PRICE_BERRY)
 
 // --------------------------------------------------------------------------------------------
 // Vinculo y racha
@@ -302,9 +316,10 @@ static_assert(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDRO
 // --------------------------------------------------------------------------------------------
 // Encuentros salvajes (encounter.h, pet.cpp encCheck / encounterDone). Probabilidades en tantos por mil.
 // --------------------------------------------------------------------------------------------
-#define ENC_BASE_PERMIL 300       // la tirada base del dia: 10 %
-#define ENC_WALK_STEPS 6000       // pasos del dia para la tirada de pasear...
-#define ENC_WALK_PERMIL 167       // ...que deja el dia en el 25 %
+#define ENC_BASE_PERMIL 600       // la tirada base del dia: 60 %
+#define ENC_WALK_TIERS 3          // v3.11: tiradas de pasear, una por cada umbral de pasos del dia...
+static const uint16_t ENC_WALK_AT[ENC_WALK_TIERS] = { 3000, 6000, 10000 };
+#define ENC_WALK_PERMIL 500       // ...cada una al 50 %
 #define ENC_TRAVEL_PERMIL_H 30    // cada viaje: 3 % por hora
 #define ENC_FIRST_MIN (9 * 60)    // la hora de la tirada base: de las 9:00...
 #define ENC_LAST_MIN (20 * 60)    // ...a las 20:00
@@ -357,7 +372,7 @@ static const uint8_t ECO_GOAL_COINS[ECO_GOAL_TIERS] = { 10, 20, 40 };  // metas 
 #define PRICE_CAKE 40
 #define PRICE_REVIVE 80
 #define PRICE_BALL 100
-#define PRICE_BERRY 25            // v3.2: cada baya de color
+#define PRICE_BERRY 25            // v3.2: cada compra de baya de color (paquete de BERRY_PACK)
 // mapas del patio 1..5 (prado, cantera, bosque, playa, ruinas): el prado es gratis y de salida
 #define YARD_MAPS 5               // (estructura: los .bin de la SD)
 static const uint16_t ECO_MAP_PRICE[YARD_MAPS] = { 0, 150, 150, 200, 250 };
@@ -367,7 +382,7 @@ static const uint16_t ECO_MAP_PRICE[YARD_MAPS] = { 0, 150, 150, 200, 250 };
 // --------------------------------------------------------------------------------------------
 #define TRV_TIERS 3               // (estructura)
 static const uint16_t TRV_MIN[TRV_TIERS] = { 60, 180, 480 };         // duracion (minutos reales)
-static const uint16_t TRV_COINS[TRV_TIERS] = { 15, 40, 90 };         // monedas (fuera del tope diario)
+static const uint16_t TRV_COINS[TRV_TIERS] = { 50, 150, 400 };       // monedas (fuera del tope diario): ~50 por hora de viaje
 static const uint16_t TRV_GROW[TRV_TIERS] = { 30, 90, 240 };         // minutos de crecimiento
 static const uint8_t TRV_ITEM_PCT[TRV_TIERS] = { 25, 50, 100 };      // probabilidad de un objeto
 static const uint8_t TRV_SOUV_PCT[TRV_TIERS] = { 40, 75, 100 };      // probabilidad de un recuerdo

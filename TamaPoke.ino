@@ -59,7 +59,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "3.10"
+#define FW_VERSION "3.11"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -596,7 +596,7 @@ void loop() {
   // Aqui cubre todas las vias: el boton de luz, el sueno nocturno y el que llega
   // aplicado desde la progresion offline. v3.0: con los dos de casa dormidos
   audioSetSleeping(pet.homeAsleep());
-  // se desperto solo a las 8: suena, tambien con la pantalla apagada (despues de audioSetSleeping,
+  // se desperto solo a las WAKE_HOUR: suena, tambien con la pantalla apagada (despues de audioSetSleeping,
   // que dormido tiene el amplificador apagado)
   if (pet.morningWake) {
     pet.morningWake = false;
@@ -609,6 +609,17 @@ void loop() {
     sfxPlay(SFX_WILD);
   }
   fxCollect(now);  // subidas de nivel, medallas, metas... (fx.h)
+  // v3.11: alarma de necesidad critica, dos pitidos cada NEED_ALARM_EVERY_MS (fx.h). Tambien con la pantalla
+  // apagada; en pausa con un juego, combate, encuentro o evolucion abiertos
+  {
+    static NeedAlarm needAlarm;
+    bool crit = false;
+    for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+      const PetLife &l = pet.home(s);
+      if (!l.isEgg() && !l.sleeping && !l.busyEnding() && needCritical(l.lowestStat(), l.neglected())) crit = true;
+    }
+    if (needAlarm.step(crit, pet.nightHold, now)) sfxPlay(SFX_NEED);
+  }
 
   // avisa con un sonido cuando el bicho pasa a estar listo para evolucionar
   // (incluye el caso de cumplir al despertar). canEvolveNow es false durmiendo.
@@ -1411,7 +1422,7 @@ void handleSerial() {
       Serial.printf("buymap %u -> %s\n", n, ok ? "ok" : "no");
     } else if (line.startsWith("BUY ")) {
       uint8_t id = (uint8_t)line.substring(4).toInt();
-      ShopBuy r = shopCheckItem(id, pet.coins, id < IT_COUNT ? pet.items[id] : 0, ITEM_MAX);
+      ShopBuy r = shopCheckItem(id, pet.coins, id < IT_COUNT ? pet.items[id] : 0, itemCap(id));
       bool ok = r == SB_OK && pet.buyItem(id);
       Serial.printf("buy %u -> %s\n", id, ok ? "ok" : r == SB_FULL ? "full" : r == SB_NOT_SOLD ? "not sold" : "no coins");
     }
@@ -5148,12 +5159,13 @@ static void shopCell(int k, uint8_t id) {
   bagSlotXY(k, x, y);
   uint8_t n = pet.items[id];
   uint16_t pr = priceOfItem(id);
-  bool can = shopCheckItem(id, pet.coins, n, ITEM_MAX) == SB_OK;
+  bool can = shopCheckItem(id, pet.coins, n, itemCap(id)) == SB_OK;
+  bool full = shopCheckItem(id, 0xFFFF, n, itemCap(id)) == SB_FULL;  // no cabe otra compra
   yCard(x, y, BAG_SLOT_W, BAG_SLOT_H, false);
   drawMap(ITEM_ICON[id], 16, x + 6, y + 6, 2, false);
   char c[6];
-  snprintf(c, sizeof(c), "x%u", n);
-  gfx->setTextColor(n >= ITEM_MAX ? UI_BAR_WARN : n ? Y_TEXT : Y_TEXT_DIM);
+  snprintf(c, sizeof(c), "x%u", shopPackOf(id));  // v3.11: cuantas da la compra, no cuantas hay
+  gfx->setTextColor(full ? UI_BAR_WARN : Y_TEXT);
   setSize(2);
   setCur(x + 42, y + 13);
   printT(c);
@@ -5199,11 +5211,17 @@ static void renderShop() {
   if (shopBuyId) {  // "comprar?": la tarjeta tapa la rejilla
     uint8_t it = shopBuyId - 1;
     uint16_t pr = priceOfItem(it);
-    bool can = shopCheckItem(it, pet.coins, pet.items[it], ITEM_MAX) == SB_OK;
+    bool can = shopCheckItem(it, pet.coins, pet.items[it], itemCap(it)) == SB_OK;
     yCard(BAG_ASK_X, BAG_ASK_Y, BAG_ASK_W, BAG_ASK_H, true);
     drawMap(ITEM_ICON[it], 16, CX - 32, BAG_ASK_Y + 30, 4, false);
     char q[48];
-    snprintf(q, sizeof(q), T(S_BUY_FMT), T((StrId)(S_IT_GOLDEN + it)));
+    if (shopPackOf(it) > 1) {  // v3.11: "Comprar Baya roja x5?"
+      char nm[40];
+      snprintf(nm, sizeof(nm), "%s x%u", T((StrId)(S_IT_GOLDEN + it)), (unsigned)shopPackOf(it));
+      snprintf(q, sizeof(q), T(S_BUY_FMT), nm);
+    } else {
+      snprintf(q, sizeof(q), T(S_BUY_FMT), T((StrId)(S_IT_GOLDEN + it)));
+    }
     gfx->setTextColor(Y_TEXT);
     setSize(2);
     setCur(centerX(q, 2), BAG_ASK_Y + 108);
@@ -5325,7 +5343,7 @@ static void shopTap(int16_t x, int16_t y) {
     int xy, wy, xn, wn;
     shopAskPills(T(S_BUY), xy, wy, xn, wn);
     if (!timeLeft(shopBuyUntil) || !yPillHit(x, y, xy, BAG_ASK_PILL_Y, wy)) return;
-    ShopBuy r = shopCheckItem(it, pet.coins, pet.items[it], ITEM_MAX);
+    ShopBuy r = shopCheckItem(it, pet.coins, pet.items[it], itemCap(it));
     if (r == SB_OK && pet.buyItem(it)) {
       shopSetToast(SHT_OK);
       sfxPlay(SFX_LEVELUP);
@@ -6695,9 +6713,12 @@ void encReport() {
   uint32_t d = pet.dayNumber();
   uint16_t bm = encBaseMinute(d);
   uint8_t m = pet.encRolledMask();
-  Serial.printf("enc: day=%lu base=%02u:%02u rolled base=%d walk=%d spawned=%d steps=%lu/%u\n", (unsigned long)d,
-                bm / 60, bm % 60, (m & ENC_ROLL_BASE) ? 1 : 0, (m & ENC_ROLL_WALK) ? 1 : 0, (m & ENC_ROLL_SPAWNED) ? 1 : 0,
-                (unsigned long)pet.stepsOn(d), (unsigned)ENC_WALK_STEPS);
+  Serial.printf("enc: day=%lu base=%02u:%02u rolled base=%d walk=", (unsigned long)d, bm / 60, bm % 60,
+                (m & ENC_ROLL_BASE) ? 1 : 0);
+  for (int i = 0; i < ENC_WALK_TIERS; i++) Serial.printf("%s%d", i ? "/" : "", (m & (ENC_ROLL_WALK0 << i)) ? 1 : 0);
+  Serial.print(" (a ");
+  for (int i = 0; i < ENC_WALK_TIERS; i++) Serial.printf("%s%u", i ? "/" : "", (unsigned)ENC_WALK_AT[i]);
+  Serial.printf(" pasos) spawned=%d steps=%lu\n", (m & ENC_ROLL_SPAWNED) ? 1 : 0, (unsigned long)pet.stepsOn(d));
   Serial.printf("enc: active=%d won=%d dex=#%d %s nv.%u shiny=%d excl=%d left=%u min obj=%d at %d,%d ui=%u\n",
                 pet.encActive() ? 1 : 0, pet.encWonPending() ? 1 : 0, pet.encDex(),
                 pet.encShown() ? dexName(pet.encDex()) : "-", pet.encLevel(), pet.encShiny() ? 1 : 0,
