@@ -6,6 +6,14 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.12] - 2026-11-22
+
+### Changed
+
+- **Sleeping pets can fight.** In the stages' team picker (and when you face a wild pet) you can now pick any pet
+  that isn't on a trip, including a sleeping one; it stays asleep after the battle. With every home pet asleep,
+  the Play button now opens the stages instead of being greyed out.
+
 ## [3.11] - 2026-11-22
 
 ### Changed

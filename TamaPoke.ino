@@ -59,7 +59,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "3.11"
+#define FW_VERSION "3.12"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -7055,7 +7055,7 @@ static void drawTeamCard(uint8_t idx, uint8_t n) {
   teamCardPos(idx, n, x, y);
   x += stShakeDx(idx);
   bool fight = pet.teamCanFight(c.uid), picked = teamIsPicked(c.uid);
-  // elegido: tarjeta clara con borde verde; no pelea (dormido): solo el contorno, sobre el fondo
+  // elegido: tarjeta clara con borde verde; no pelea (de viaje, o muriendose): solo el contorno, sobre el fondo
   uint16_t bg = !fight ? Y_CARD : picked ? Y_CARD_HI : Y_CARD;  // dormido: la miniatura se apaga hacia Y_CARD
   if (fight) yCard(x, y, TEAM_CW, TEAM_CH, picked);
   uint16_t edge = !fight ? Y_CARD_HI : picked ? Y_ACCENT_GO : 0;
@@ -7411,15 +7411,15 @@ static uint8_t playSlotsMask(uint8_t i) {
   return m;
 }
 
-// Jugar: los juegos y las fases. Sin nadie despierto en casa no hay juegos, pero los de la caja si pueden ir a
-// las fases (v1.65)
+// Jugar: los juegos y las fases. Sin nadie despierto en casa no hay juegos, pero los de la caja (v1.65) y, desde
+// v3.12, los de casa dormidos si pueden ir a las fases
 void openPlayPanel() {
   if (pet.ceremony) return;
   if (playSlotsMask(PP_BALL)) {
     panelKind = PANEL_PLAY;
     panelShakeIdx = -1;
     panelShakeUntil = 0;
-  } else if (pet.boxHasPets()) {
+  } else if (stagesCanOpen()) {
     openStages();
   } else {
     sfxPlay(SFX_DENY);
@@ -9682,7 +9682,7 @@ static bool yardDockOff(int d) {
     const PetLife &l = pet.home(s);
     anyAwake |= l.hatched() && !l.sleeping;
   }
-  return d == DOCK_PLAY && !anyAwake && !pet.boxHasPets();
+  return d == DOCK_PLAY && !anyAwake && !stagesCanOpen();  // v3.12: dormidos tambien van a las fases
 }
 
 #define YARD_COIN_Y 40   // la cartera, justo debajo de la bateria (v2.1: sin hora, chocaba con el aviso de vuelta)

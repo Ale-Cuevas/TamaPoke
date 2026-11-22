@@ -2753,7 +2753,7 @@ TEST(night, huevo_ni_ceremonia_ni_moribundo) {
 }
 
 // ---------------------------------------------------------------- combate de practica (Tarea 3a)
-TEST(battle, solo_combate_nacido_y_despierto) {
+TEST(battle, solo_combate_nacido_dormido_o_despierto) {
   mockNvsReset();
   Pet egg;
   egg.begin();
@@ -2764,7 +2764,7 @@ TEST(battle, solo_combate_nacido_y_despierto) {
   makePet(p, 4);
   CHECK(p.canBattle());
   p.toggleLight();
-  CHECK(!p.canBattle());
+  CHECK(p.canBattle());  // v3.12: dormido tambien
   p.toggleLight();
   p.release();
   CHECK(!p.canBattle());

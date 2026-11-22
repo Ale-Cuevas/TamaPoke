@@ -218,7 +218,8 @@ struct PetLife {
   uint8_t eggRarity() const;  // rareza del huevo (sin revelar especie)
   // puede combatir: nacido, despierto, sin ceremonia ni evolucion en curso (con un bicho nacido nunca se
   // esta eligiendo inicial)
-  bool canBattle() const { return !isEgg() && !sleeping && !busyEnding() && !evolving(); }
+  // v3.12: dormido tambien pelea (sigue durmiendo); los de viaje no (Pet::teamCanFight)
+  bool canBattle() const { return !isEgg() && !busyEnding() && !evolving(); }
   // stats de combate: base real de gen 1 x genes + nivel + entrenamiento (pet.cpp)
   uint16_t statAt(uint8_t which, uint16_t lv) const;  // ATK (0), DEF (1) o VEL (2) a un nivel dado
   uint16_t atkStat() const;
