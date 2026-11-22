@@ -6,6 +6,17 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.19] - 2026-11-22
+
+### Changed
+
+### Fixed
+
+- **A napping pet no longer wakes up right after leaving the Box.** The Box now remembers whether a pet was
+  asleep for the night or just taking a nap. Before, every sleeping pet came out of the Box as a night sleeper,
+  so one taken out during the day woke itself within a minute. Pets that were already asleep in the Box before
+  this update come out as a nap: they keep sleeping until you wake them (or until night, then wake at 09:00).
+
 ## [3.18] - 2026-11-22
 
 ### Added

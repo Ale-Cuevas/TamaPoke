@@ -25,8 +25,10 @@ enum : uint8_t { BOX_EMPTY = 0, BOX_OK, BOX_DAMAGED };
 // version): descubrio su baya favorita de las 6 (por la forma base de la linea). Todos empiezan sin descubrirla.
 // REC_V3 (v3.4, sin cambiar la version): `medals` ya no son las medallas del bicho (MED_* de antes) sino sus bits
 // "ya contado" para las medallas del jugador (PMB_*, medals.h). Sin el, `medals` se ignora (ver pmLegacyBits)
+// REC_NIGHT (v3.19, sin cambiar la version): con REC_SLEEP, dormia de noche (se despierta solo a las WAKE_HOUR);
+// sin el es una siesta (un registro de antes tambien: una siesta que llega a la noche ya pasa a dormir de noche)
 enum : uint8_t { REC_SHINY = 1 << 0, REC_BERRY = 1 << 1, REC_SLEEP = 1 << 2, REC_CARED = 1 << 3, REC_FAV6 = 1 << 4,
-                 REC_V3 = 1 << 5 };
+                 REC_V3 = 1 << 5, REC_NIGHT = 1 << 6 };
 
 // Un bicho en un hueco de la caja: un putBytes de 55 bytes por hueco (unas 4 entradas de la
 // NVS). Empaquetado y en el orden de la memoria (la placa y el PC son little-endian).
