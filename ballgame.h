@@ -10,7 +10,8 @@
 // no cambiaba nada. Ahora el arco tiene siempre la forma que tenia con 1 punto y lo que sube
 // es la velocidad: un factor que escala el tiempo de toda la fisica. Con 80 puntos la bola va
 // el doble de rapida que con 1 (el mismo camino en la mitad de tiempo), y sigue subiendo al
-// mismo ritmo hasta un tope de 3x (159 puntos).
+// mismo ritmo hasta un tope de 3x (159 puntos). v3.16: empieza a 1,5x (al principio era lenta y aburrida),
+// sube al mismo ritmo (+1x cada 79 puntos) y llega antes al mismo tope de 3x (con 120 puntos).
 
 #define BALL_STEP_MS 85.0f        // un paso de fisica: el periodo de frame con el que se afino
 #define BALL_LATE_MAX 3.0f        // frame anormalmente tardio: como mucho 3 pasos de golpe
@@ -25,17 +26,18 @@
 #define BALL_WALL_DAMP 0.85f      // energia que conserva al rebotar
 #define BALL_SPAWN_Y 96.0f
 #define BALL_FLOOR_Y 384.0f       // por debajo: al suelo (fallo)
-#define BALL_SPEED_DOUBLE_AT 80   // con esta puntuacion va el doble de rapida que con 1
-#define BALL_SPEED_MAX 3.0f       // tope de velocidad (con 159 puntos)
+#define BALL_SPEED_START 1.5f     // v3.16: velocidad con 0 o 1 punto (antes 1x)
+#define BALL_SPEED_PER 79         // puntos para ir 1x mas rapida (1,5x con 1 punto, 2,5x con 80)
+#define BALL_SPEED_MAX 3.0f       // tope de velocidad (con 120 puntos)
 
 struct BallState {
   float x, y, vx, vy;
 };
 
-// velocidad del juego con `score` puntos: 1x con 0 o 1 punto, 2x con 80, tope 3x
+// velocidad del juego con `score` puntos: BALL_SPEED_START con 0 o 1 punto, +1x cada BALL_SPEED_PER, tope 3x
 inline float ballSpeed(uint16_t score) {
-  if (score <= 1) return 1.0f;
-  float s = 1.0f + (float)(score - 1) / (float)(BALL_SPEED_DOUBLE_AT - 1);
+  if (score <= 1) return BALL_SPEED_START;
+  float s = BALL_SPEED_START + (float)(score - 1) / (float)BALL_SPEED_PER;
   return s > BALL_SPEED_MAX ? BALL_SPEED_MAX : s;
 }
 

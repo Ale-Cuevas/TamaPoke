@@ -203,7 +203,7 @@ menu to it. It closes by itself after 30 s untouched.
   already chosen for one pet can't be given to the other). Food is only used up when the pet has eaten it.
 - ⚽ **Play:** a menu with all the games (v3.3: with both home pets awake, it asks **who plays**: two cards with
   their name and level; with only one awake that one plays): the **ball minigame** (+JOY, −ENE; trains **SPEED** and
-  burns weight; the ball keeps speeding up as you score: twice as fast at 80 as at 1, up to 3×),
+  burns weight; the ball keeps speeding up as you score: it starts at 1.5× and gains 1× every 79 points, up to 3×),
   the **battle stages** (+3 JOY for a finished run, at most once an hour; a boss reward can bring an
   item home; see Battles below), the training bag, the
   sled run and the waterfall.
@@ -748,7 +748,7 @@ Bag sits in the yard: tap it to see the time left, shake the board to speed it u
 
 **Coins (v2.0):** each minigame pays 3–8 by result, a stage's first clear 50 and a repeat clear 10 (once per
 stage per day), walk goals 10 / 20 / 40. Games and repeat clears stop at 150 a day. They are spent in the
-Shop: Golden Berry 30, coloured berries 25 each, cake 40, protein / iron / carbos 60, Revive 80, Poké Ball 100 (v2.2), rare candy 150, and backgrounds 150–250.
+Shop: Golden Berry 30, coloured berries 25 each, cake 40, protein / iron / carbos 60, Revive 80, Poké Ball 100 (v2.2), rare candy 150, and backgrounds 150–400.
 Backgrounds are yours, not the pet's: you start with the meadow, and a map you buy works for every pet.
 
 **Touch gestures:**
@@ -989,7 +989,7 @@ as CSV, the `test/data/imu/` format; any key stops it) · `SHAKE` /
 it's locked, with the last team, or the home pet and the Box pets in slot order; the result is logged;
 `BATTLE` is the same as `STAGE 1`) · `STAGEDAY` (today's boss rewards available again) ·
 `BADGES [mask]` (the badge mask, today's paid stages and the last team; with a number 0–255, set the badges) ·
-`BALL <score>` (open the ball game at that score to feel its speed: 1× at 1, 2× at 80;
+`BALL <score>` (open the ball game at that score to feel its speed: 1.5× at 1, 2.5× at 80;
 the result doesn't touch the record or the save) · `FX <effect>` (show a feedback effect without touching the save: `levelup`, `levelup6`,
 `medal`, `streak`, `goal`, `goal3`, `stat`, `bond`, `train`, `deny`, `press`, `oops`,
 `hatch`, `box`) · `PERF` (scene and effects draw time) · `PWR` (a short PWR press: prints the new view,
