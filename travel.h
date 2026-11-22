@@ -19,10 +19,10 @@ static const uint8_t TRV_EVENTS[TRV_TIERS] = { 1, 2, 3 };            // sucesos 
 #define TRV_EVENTS_MAX 3
 
 // objetos que pueden traer (su peso, TRV_POOL_W, en tuning.h, en este mismo orden): baya dorada, tarta, 3
-// vitaminas, caramelo raro, revivir, (v2.2) la Poke Ball y (v3.2) una baya de color: el id de la lista es la
-// primera (10, IT_BERRY_R) y travelRoll le suma el color (0..5), sacado de la semilla
+// vitaminas, caramelo raro, revivir, (v2.2) la Poke Ball, (v3.2) una baya de color: el id de la lista es la
+// primera (10, IT_BERRY_R) y travelRoll le suma el color (0..5), sacado de la semilla; y (v3.14) el Cebo
 static constexpr uint8_t TRV_POOL_ID[TRV_POOL_N] = { 0 /*GOLDEN*/, 7 /*CAKE*/, 1 /*PROTEIN*/, 2 /*IRON*/, 3 /*CARBOS*/,
-                                                 5 /*RARECANDY*/, 8 /*REVIVE*/, 9 /*BALL*/, 10 /*BERRY*/ };
+                                                 5 /*RARECANDY*/, 8 /*REVIVE*/, 9 /*BALL*/, 10 /*BERRY*/, 16 /*LURE*/ };
 #define TRV_POOL_BERRY 10  // IT_BERRY_R: el primero de los seis colores
 #define TRV_BERRY_COLORS 6
 

@@ -6,6 +6,18 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.14] - 2026-11-22
+
+### Added
+
+- **Lure.** A new Backpack item (ES: Cebo) that calls a wild pet: use it and a wild encounter starts at once, straight
+  into the intro and the fighter picker. If you back out, the wild pet waits in the yard for 6 hours like any other.
+  It doesn't use up the day's own encounter. It can't be used while a wild pet is already out (the hint says so), and
+  the Lure is kept. Lures aren't sold: about 1 in 10 boss items and 1 in 10 trip items is a Lure (the other drops
+  are a little rarer to make room). Serial `LURE` (use one) and `LURE n` (set how many you have).
+- Older firmware ignores Lures: if you go back a version you keep your other items, and the Lures come back when
+  you update again. A Lure still wrapped as a gift, or in a trip result you haven't opened, is lost on the way back.
+
 ## [3.13] - 2026-11-22
 
 ### Changed

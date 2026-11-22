@@ -5,7 +5,8 @@
 #include "economy.h"
 
 // los objetos a la venta, en el orden en que aparecen en la tienda (ids de pet.h: IT_GOLDEN=0, PROTEIN,
-// IRON, CARBOS, CHARM, RARECANDY, EGG, CAKE, REVIVE, BALL, BERRY_R..O = 10..15). Solo entran los que cuestan algo.
+// IRON, CARBOS, CHARM, RARECANDY, EGG, CAKE, REVIVE, BALL, BERRY_R..O = 10..15, LURE = 16). Solo entran los que
+// cuestan algo (el Cebo, no).
 static const uint8_t SHOP_ORDER[] = { 0 /*GOLDEN*/, 7 /*CAKE*/, 5 /*RARECANDY*/, 1 /*PROTEIN*/, 2 /*IRON*/, 3 /*CARBOS*/,
                                       8 /*REVIVE*/, 9 /*BALL*/, 10 /*BERRY_R*/, 11 /*BERRY_B*/, 12 /*BERRY_G*/,
                                       13 /*BERRY_Y*/, 14 /*BERRY_P*/, 15 /*BERRY_O*/ };

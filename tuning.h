@@ -300,17 +300,18 @@ static const uint8_t STEP_GOAL_LEVELS[STEP_GOAL_TIERS] = { 1, 1, 2 };  // nivele
 #define STAGE_GROW_MIN 60              // minutos de crecimiento
 #define STAGE_BOND 5                   // vinculo, fuera del tope diario
 // el objeto del jefe (%), suman 100
-#define BDROP_CAKE 22
-#define BDROP_GOLDEN 20
-#define BDROP_VITAMIN 21
+#define BDROP_CAKE 19
+#define BDROP_GOLDEN 18
+#define BDROP_VITAMIN 19
 #define BDROP_RARECANDY 7
 #define BDROP_CHARM 4
 #define BDROP_REVIVE 5
 #define BDROP_EGG 3
-#define BDROP_BALL 8
-#define BDROP_COLORED 10           // v3.2: una baya de color al azar
+#define BDROP_BALL 7
+#define BDROP_COLORED 8            // v3.2: una baya de color al azar
+#define BDROP_LURE 10              // v3.14: el Cebo (solo sale del jefe y de los viajes; no se vende)
 static_assert(BDROP_CAKE + BDROP_GOLDEN + BDROP_VITAMIN + BDROP_RARECANDY + BDROP_CHARM + BDROP_REVIVE + BDROP_EGG +
-                      BDROP_BALL + BDROP_COLORED == 100,
+                      BDROP_BALL + BDROP_COLORED + BDROP_LURE == 100,
               "el botin suma 100");
 
 // --------------------------------------------------------------------------------------------
@@ -388,9 +389,10 @@ static const uint8_t TRV_ITEM_PCT[TRV_TIERS] = { 25, 50, 100 };      // probabil
 static const uint8_t TRV_SOUV_PCT[TRV_TIERS] = { 40, 75, 100 };      // probabilidad de un recuerdo
 #define TRV_DUP_COINS 10          // un recuerdo repetido se cambia por monedas
 // peso de cada objeto que puede traer (suman 100), en el orden de TRV_POOL_ID (travel.h): baya dorada, tarta,
-// proteina, hierro, carburante, caramelo raro, revivir, Poke Ball y (v3.2) una baya de color (cual, al azar de la semilla)
-#define TRV_POOL_N 9              // (estructura)
-static const uint8_t TRV_POOL_W[TRV_POOL_N] = { 24, 11, 10, 10, 10, 10, 5, 10, 10 };
+// proteina, hierro, carburante, caramelo raro, revivir, Poke Ball, (v3.2) una baya de color (cual, al azar de la
+// semilla) y (v3.14) el Cebo
+#define TRV_POOL_N 10             // (estructura)
+static const uint8_t TRV_POOL_W[TRV_POOL_N] = { 20, 10, 9, 9, 9, 9, 5, 9, 10, 10 };
 // peso (%) de recuerdo comun / poco comun / raro por duracion: 1 h sin raros; 3 h pocos; 8 h muchos
 static const uint8_t TRV_RARITY_W[TRV_TIERS][3] = { { 70, 30, 0 }, { 60, 32, 8 }, { 40, 35, 25 } };
 

@@ -861,6 +861,23 @@ def icon_revive():
     ]
 
 
+def icon_lure():
+    # Cebo (v3.14): un pez de cebo naranja colgado de su sedal, con la tripa amarilla, un ojo y el anzuelo
+    # debajo. Hace salir a un salvaje (no es la Poke Ball: nada de rojo y blanco)
+    g = G(16)
+    g.disk(9, 8, 5.4, 3.9, 'o', 'O')       # cuerpo
+    for i in range(4):                     # cola: un abanico que se abre hacia la izquierda
+        g.rect(3 - i, 7 - i, 3 - i, 9 + i, 'o')
+    g.rect(6, 10, 11, 10, 'f')             # tripa
+    g.outline()
+    g.rect(1, 6, 1, 10, 'O'); g.rect(2, 7, 2, 9, 'O')  # la cola, en sombra
+    g.rect(11, 6, 12, 7, 'k'); g.px(11, 6, 'w')  # ojo con brillo
+    g.px(7, 6, 'w'); g.px(6, 7, 'w')       # brillo del lomo
+    g.rect(14, 0, 14, 6, 'S')              # sedal
+    g.rect(9, 12, 9, 14, 'S'); g.px(8, 15, 'S'); g.px(7, 15, 'S'); g.px(6, 14, 'S')  # anzuelo
+    return g.rows()
+
+
 def gift():
     # regalo en el suelo de casa: caja blanca, lazo rojo en cruz y moño
     g = G(16)
@@ -1151,6 +1168,7 @@ SPRITES = {
     "ICON_SHOP": icon_shop(),
     "ICON_CARD": icon_card(),
     "ICON_LETTER": icon_letter(),
+    "ICON_LURE": icon_lure(),
     "BADGE_GRASS": badge_grass(),
     "BADGE_WATER": badge_water(),
     "BADGE_ROCK": badge_rock(),
@@ -1178,6 +1196,7 @@ SPR_NOTE = {
     "ICON_SHOP": "16x16: moneda, el boton Tienda del dock (v3.3)",
     "ICON_CARD": "16x16: ficha, Estado en el menu del bicho (v3.3)",
     "ICON_LETTER": "16x16: carta, Despedirse en el menu del bicho (v3.3)",
+    "ICON_LURE": "16x16: pez de cebo con sedal y anzuelo, el Cebo de la mochila (v3.14)",
 }
 SPR_PRELUDE = {
     "ICON_EGG": "// huevo de la mochila (v1.39): el de la pantalla principal (SPR_EGG) en pequeno",

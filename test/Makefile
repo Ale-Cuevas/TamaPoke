@@ -13,7 +13,7 @@ BUILD    := build
 BIN      := $(BUILD)/tamapoke_tests
 
 SOURCES := main.cpp shim/shim.cpp test_pet.cpp test_dex.cpp test_i18n.cpp test_blit.cpp test_batcurve.cpp test_power.cpp test_roundmask.cpp test_button.cpp \
-           test_steps.cpp test_motion.cpp test_battle.cpp test_wind.cpp test_burnin.cpp test_fx.cpp test_ballgame.cpp test_zengame.cpp test_dashgame.cpp test_growth.cpp test_box.cpp test_eggs.cpp test_volume.cpp test_gifts.cpp test_stagereward.cpp test_stage.cpp test_yard_ui.cpp test_yard_bg.cpp test_yard_panels.cpp test_yard.cpp test_eggtimer.cpp test_economy.cpp test_shop.cpp test_travel.cpp test_travel_ui.cpp test_encounter.cpp test_eggcolor.cpp test_home2.cpp test_food.cpp test_medals.cpp \
+           test_steps.cpp test_motion.cpp test_battle.cpp test_wind.cpp test_burnin.cpp test_fx.cpp test_ballgame.cpp test_zengame.cpp test_dashgame.cpp test_growth.cpp test_box.cpp test_eggs.cpp test_volume.cpp test_gifts.cpp test_stagereward.cpp test_stage.cpp test_yard_ui.cpp test_yard_bg.cpp test_yard_panels.cpp test_yard.cpp test_eggtimer.cpp test_economy.cpp test_shop.cpp test_travel.cpp test_travel_ui.cpp test_encounter.cpp test_eggcolor.cpp test_home2.cpp test_food.cpp test_medals.cpp test_lure.cpp \
            $(SRC_DIR)/pet.cpp $(SRC_DIR)/i18n.cpp
 
 .PHONY: all run clean asan

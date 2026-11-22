@@ -690,6 +690,35 @@ static void travelBack(uint8_t dest, uint32_t souvMask, bool fullBag) {
   pet.startTravel(1, dest, 2);
   pet.travelFinishNow();
 }
+// v3.14: ...the same, with a trip that brings item `it` (the seed is the first random() pair that rolls it)
+static void travelBackItem(uint8_t dest, uint8_t it) {
+  pokemon(25, 13);
+  boxPet(1, 133, 23, true);
+  ownMaps({ 2, 3, 4 });
+  for (uint32_t g = 1; g < 100000; g++) {
+    gHostRandom = g;
+    uint32_t seed = ((uint32_t)random(0x10000) << 16) | (uint32_t)random(0x10000);
+    if (travelRoll(seed, dest, 2, 0).item != it) continue;
+    gHostRandom = g;
+    break;
+  }
+  pet.startTravel(1, dest, 2);
+  pet.travelFinishNow();
+}
+// v3.14: the Backpack with a Lure (and a few other things), optionally an encounter already in the yard
+static void lureBag(bool spanish, bool encWaiting = false) {
+  pokemon(25, 13);
+  if (!pet.uid) pet.uid = 0x7E57u;
+  if (spanish) lang(LANG_ES);
+  if (encWaiting) {
+    pet.encSpawnNow(16);
+    pet.takeEncSound();
+  }
+  pet.items[IT_BALL] = 3;
+  pet.items[IT_CAKE] = 2;
+  pet.items[IT_LURE] = 2;
+  openBag();
+}
 // tap the pet back from its trip (in the yard as p[1]): on its body, or on its "!" bubble
 static void tapTraveller(bool bubble) {
   YardBody b = yardBodyOf(YARD_TRV);  // v3.0: el viajero es p[2]
@@ -1384,6 +1413,8 @@ static const std::vector<Scene> &scenes() {
     { "travel-back-tapbubble", [] { travelBack(2, 0, false); render(); tapTraveller(true); }, 3 },
     { "travel-back-new", [] { travelBack(2, 0, false); render(); tapTraveller(false); }, 3 },
     { "travel-back-new-es", [] { travelBack(4, 0, false); es(); render(); tapTraveller(false); }, 3 },
+    { "travel-back-lure", [] { travelBackItem(2, IT_LURE); render(); tapTraveller(false); }, 3 },
+    { "travel-back-lure-es", [] { travelBackItem(4, IT_LURE); es(); render(); tapTraveller(false); }, 3 },
     { "travel-back-dup", [] { travelBack(2, 0x1FFFFFF, true); render(); tapTraveller(false); }, 3 },
     { "travel-back-dup-es", [] { travelBack(3, 0x1FFFFFF, true); es(); render(); tapTraveller(false); }, 3 },
     { "travel-back-early-tap", [] { travelBack(2, 0, false); render(); tapTraveller(false); render(); onTap(CX, CY); }, 3 },
@@ -1517,6 +1548,20 @@ static const std::vector<Scene> &scenes() {
      } },
     { "enc-shop", [] { pokemon(25, 13); pet.coins = 500; openBag(); bagTab = 1; } },
     { "enc-shop-es", [] { pokemon(25, 13); lang(LANG_ES); pet.coins = 500; openBag(); bagTab = 1; } },
+    // v3.14: the Lure in the Backpack, its "use?" card, the hint when an encounter already waits, and using it
+    { "lure-bag", [] { lureBag(false); } },
+    { "lure-bag-es", [] { lureBag(true); } },
+    { "lure-bag-ask", [] { lureBag(false); bagTapItem(IT_LURE); } },
+    { "lure-bag-ask-es", [] { lureBag(true); bagTapItem(IT_LURE); } },
+    { "lure-bag-busy", [] { lureBag(false, true); bagTapItem(IT_LURE); } },
+    { "lure-bag-busy-es", [] { lureBag(true, true); bagTapItem(IT_LURE); } },
+    { "lure-used-es", [] {
+       lureBag(true);
+       bagTapItem(IT_LURE);
+       int xu, wu, xn, wn;
+       bagAskPills(xu, wu, xn, wn);
+       onTap(xu + wu / 2, BAG_ASK_PILL_Y + 14);
+     }, 30 },
     { "enc-bag-use-ask", [] { pokemon(25, 13); pet.items[IT_CAKE] = 2; openBag(); itemConfirm = IT_CAKE + 1; itemConfirmUntil = millis() + 5000; } },
     // stage select, team picker and the badges page (v1.65)
     { "stages-fresh", [] { pokemon(25, 13); stageSetup(0, 0, false); openStages(); } },

@@ -448,11 +448,12 @@ pre-selected. **Start** begins; tap the title to go back to the list.
 
   | Loot | Odds |
   |---|---|
-  | Cake | 22 % |
-  | Poké Ball (v2.2) | 8 % |
-  | Golden Berry | 20 % |
-  | Coloured berry (v3.2) | 10 % (a random colour) |
-  | Protein / Iron / Carbos | 21 % (7 % each) |
+  | Cake | 19 % |
+  | Golden Berry | 18 % |
+  | Protein / Iron / Carbos | 19 % (about 6 % each) |
+  | Lure (v3.14) | 10 % |
+  | Coloured berry (v3.2) | 8 % (a random colour) |
+  | Poké Ball (v2.2) | 7 % |
   | Rare Candy | 7 % |
   | Revive (v1.59) | 5 % |
   | Shiny Charm | 4 % (a cake if you already hold one) |

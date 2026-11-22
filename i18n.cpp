@@ -40,6 +40,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Est\240 enfadado!", "Qu\202 mareo...",
     "BAYA DORADA", "PROTEINA", "HIERRO", "CARBURANTE", "AMULETO IRIS", "CARAMELO RARO", "HUEVO", "TARTA", "REVIVIR", "POK\220 BALL",
     "BAYA ROJA", "BAYA AZUL", "BAYA VERDE", "BAYA AMARILLA", "BAYA ROSA", "BAYA NARANJA",  // v3.2
+    "CEBO",  // v3.14: el Cebo
     // combate (v1.24)
     "ENTRENAMIENTO", "Es muy eficaz!", "No es muy eficaz...", "No le afecta...", "Golpe cr\241tico!", "Especial!",
     "Toca para cargar!", "Muerte s\243bita!", "Retroceso!", "GANASTE!", "PERDISTE...", "EMPATE", "Felicidad +%u", "Premio: una vez por hora",
@@ -110,6 +111,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "\250Qui\202n juega?", "\250Para qui\202n?",
     // las medallas del jugador (v3.4): los tres tramos, y la 2.a pagina de la ficha
     "Bronce", "Plata", "Oro", "ESTADISTICAS",
+    // v3.14: el Cebo
+    "Hace salir a un salvaje", "Ya hay un salvaje en el patio", "Ahora nadie puede pelear",
   },
   // ---------------- EN ----------------
   {
@@ -144,6 +147,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Grumpy!", "So dizzy...",
     "GOLDEN BERRY", "PROTEIN", "IRON", "CARBOS", "SHINY CHARM", "RARE CANDY", "EGG", "CAKE", "REVIVE", "POK\220 BALL",
     "RED BERRY", "BLUE BERRY", "GREEN BERRY", "YELLOW BERRY", "PINK BERRY", "ORANGE BERRY",  // v3.2
+    "LURE",  // v3.14: el Cebo
     // combate (v1.24)
     "PRACTICE", "Super effective!", "Not very effective...", "No effect...", "Critical hit!", "Special!",
     "Tap to charge!", "Sudden death!", "Recoil!", "YOU WIN!", "YOU LOST...", "DRAW", "Joy +%u", "Reward: once an hour",
@@ -214,6 +218,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Who plays?", "Who gets it?",
     // las medallas del jugador (v3.4): los tres tramos, y la 2.a pagina de la ficha
     "Bronze", "Silver", "Gold", "STATS",
+    // v3.14: el Cebo
+    "Draws out a wild one", "A wild one is already out", "No one can fight now",
   },
   // ---------------- FR ----------------
   {
@@ -248,6 +254,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Grognon!", "Tout \202tourdi...",
     "BAIE DOR\220E", "PROT\220INE", "FER", "CARBONE", "CHARME CHROMA", "SUPER BONBON", "OEUF", "GATEAU", "RANIMER", "POKE BALL",
     "BAIE ROUGE", "BAIE BLEUE", "BAIE VERTE", "BAIE JAUNE", "BAIE ROSE", "BAIE ORANGE",  // v3.2
+    "LEURRE",  // v3.14: el Cebo
     // combate (v1.24)
     "ENTRA\214NEMENT", "Super efficace!", "Pas tr\212s efficace...", "Aucun effet...", "Coup critique!", "Sp\202cial!",
     "Tape pour charger!", "Mort subite !", "Recul !", "GAGN\220!", "PERDU...", "\220GALIT\220", "Bonheur +%u", "Prix: une fois par heure",
@@ -318,6 +325,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Qui joue?", "Pour qui?",
     // las medallas del jugador (v3.4): los tres tramos, y la 2.a pagina de la ficha
     "Bronze", "Argent", "Or", "STATS",
+    // v3.14: el Cebo
+    "Attire un sauvage", "Un sauvage est deja la", "Personne ne peut combattre",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -357,6 +366,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Grummelig!", "Schwindelig...",
     "GOLDBEERE", "PROTEIN", "EISEN", "CARBON", "SCHILLERPIN", "SONDERBONBON", "EI", "KUCHEN", "BELEBER", "POKEBALL",
     "ROTE BEERE", "BLAUE BEERE", "GR\232NE BEERE", "GELBE BEERE", "ROSA BEERE", "ORANGE BEERE",  // v3.2
+    "K\224DER",  // v3.14: el Cebo
     // combate (v1.24)
     "TRAINING", "Sehr effektiv!", "Nicht sehr effektiv...", "Keine Wirkung...", "Volltreffer!", "Spezial!",
     "Tippen zum Laden!", "Sudden Death!", "R\201cksto\341!", "GEWONNEN!", "VERLOREN...", "UNENTSCHIEDEN", "Laune +%u", "Belohnung: 1x pro Stunde",
@@ -427,6 +437,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Wer spielt?", "Fuer wen?",
     // las medallas del jugador (v3.4): los tres tramos, y la 2.a pagina de la ficha
     "Bronze", "Silber", "Gold", "WERTE",
+    // v3.14: el Cebo
+    "Lockt ein wildes an", "Schon ein wildes da", "Niemand kann kampfen",
   },
   // ---------------- IT ----------------
   {
@@ -461,6 +473,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Arrabbiato!", "Che capogiro...",
     "BACCA D'ORO", "PROTEINA", "FERRO", "CARBURANTE", "CROMAMULETO", "CARAMELLA RARA", "UOVO", "TORTA", "RIANIMA", "POKE BALL",
     "BACCA ROSSA", "BACCA BLU", "BACCA VERDE", "BACCA GIALLA", "BACCA ROSA", "BACCA ARANCIO",  // v3.2
+    "ESCA",  // v3.14: el Cebo
     // combate (v1.24)
     "ALLENAMENTO", "Superefficace!", "Non \212 molto efficace...", "Nessun effetto...", "Brutto colpo!", "Speciale!",
     "Tocca per caricare!", "Morte improvvisa!", "Contraccolpo!", "HAI VINTO!", "HAI PERSO...", "PAREGGIO", "Felicit\205 +%u", "Premio: una volta l'ora",
@@ -531,6 +544,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Chi gioca?", "Per chi?",
     // las medallas del jugador (v3.4): los tres tramos, y la 2.a pagina de la ficha
     "Bronzo", "Argento", "Oro", "STATISTICHE",
+    // v3.14: el Cebo
+    "Attira un selvatico", "C'e gia un selvatico", "Nessuno puo lottare",
   },
   // ---------------- PT ----------------
   {
@@ -565,6 +580,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Zangado!", "Que tontura...",
     "BAGA DOURADA", "PROTEINA", "FERRO", "CARBOS", "AMULETO BRILHANTE", "DOCE RARO", "OVO", "BOLO", "REVIVER", "POKE BOLA",
     "BAGA VERMELHA", "BAGA AZUL", "BAGA VERDE", "BAGA AMARELA", "BAGA ROSA", "BAGA LARANJA",  // v3.2
+    "ISCA",  // v3.14: el Cebo
     // combate (v1.24)
     "TREINO", "Super efetivo!", "Pouco efetivo...", "Sem efeito...", "Golpe cr\241tico!", "Especial!",
     "Toque para carregar!", "Morte s\243bita!", "Recuo!", "VENCEU!", "PERDEU...", "EMPATE", "Alegria +%u", "Pr\210mio: 1 vez por hora",
@@ -635,6 +651,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Quem joga?", "Para quem?",
     // las medallas del jugador (v3.4): los tres tramos, y la 2.a pagina de la ficha
     "Bronze", "Prata", "Ouro", "ATRIBUTOS",
+    // v3.14: el Cebo
+    "Atrai um selvagem", "Ja ha um selvagem", "Ninguem pode lutar",
   },
   // ---------------- JA ----------------
   {
@@ -691,6 +709,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "ぷんぷん！", "くらくら...",
     "きんのみ", "プロテイン", "アイアン", "カーボス", "ひかるおまもり", "ふしぎなアメ", "たまご", "ケーキ", "ふっかつ", "モンスターボール",
     "あかいきのみ", "あおいきのみ", "みどりのきのみ", "きいろいきのみ", "ピンクのきのみ", "オレンジのきのみ",  // v3.2
+    "ルアー",  // v3.14: el Cebo
     // combate (v1.24)
     "れんしゅう", "こうかは ばつぐんだ！", "こうかは いまひとつ...", "こうかが ない...", "きゅうしょに あたった！", "ひっさつ！",
     "タッチで ためる！", "サドンデス！", "はんどう！", "かった！", "まけた...", "ひきわけ", "ごきげん +%u", "ごほうびは 1じかんに 1かい",
@@ -761,6 +780,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "だれが あそぶ?", "だれに あげる?",
     // las medallas del jugador (v3.4): los tres tramos, y la 2.a pagina de la ficha
     "ブロンズ", "シルバー", "ゴールド", "のうりょく",
+    // v3.14: el Cebo
+    "やせいを よびよせる", "もう やせいが いる", "いまは だれも たたかえない",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -800,6 +821,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "화났어!", "어지러워...",
     "황금열매", "프로테인", "아이언", "카보스", "빛나는부적", "이상한사탕", "알", "케이크", "부활", "몬스터볼",
     "빨간 열매", "파란 열매", "초록 열매", "노란 열매", "분홍 열매", "주황 열매",  // v3.2
+    "루어",  // v3.14: el Cebo
     // combate (v1.24)
     "연습", "효과가 굉장했다!", "효과가 별로인 듯...", "효과가 없다...", "급소에 맞았다!", "필살기!",
     "탭해서 모으기!", "서든데스!", "반동!", "이겼다!", "졌다...", "무승부", "기분 +%u", "보상은 1시간에 1번",
@@ -870,6 +892,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "누가 놀까?", "누구에게?",
     // las medallas del jugador (v3.4): los tres tramos, y la 2.a pagina de la ficha
     "브론즈", "실버", "골드", "능력치",
+    // v3.14: el Cebo
+    "야생을 불러낸다", "이미 야생이 있다", "지금은 싸울 수 없다",
   },
 };
 
