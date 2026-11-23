@@ -1388,6 +1388,25 @@ void handleSerial() {
     Serial.printf("lure=%u block=%u\n", pet.items[IT_LURE], pet.lureBlock());
     encReport();
     Serial.println("DONE");
+  } else if (line == "UPG" || line.startsWith("UPG ")) {  // v3.20: UPG <linea 0-2> <nivel 0-3> fija una mejora de casa
+    if (line.length() > 4) {
+      String a = line.substring(4);
+      int sp = a.indexOf(' ');
+      if (sp > 0) {
+        pet.dbgSetUpgTier((uint8_t)constrain(a.substring(0, sp).toInt(), 0, 255),
+                          (uint8_t)constrain(a.substring(sp + 1).toInt(), 0, UPG_TIERS));
+      } else {
+        Serial.println("uso: UPG <linea 0=cama 1=gimnasio 2=juguete> <nivel 0-3>");
+      }
+    }
+    Serial.printf("upg bed=%u gym=%u toy=%u day=%lu\n", pet.upgTier(UPG_BED), pet.upgTier(UPG_GYM), pet.upgTier(UPG_TOY),
+                  (unsigned long)(pet.lastSeenEpoch / 86400));
+    for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+      const UpgSlot &u = pet.upgSlotOf(s);
+      Serial.printf("upg slot%u uid=%08lx day=%lu gym=%u toy=%u slept=%u gymMin=%u\n", s, (unsigned long)u.uid,
+                    (unsigned long)u.day, u.gymGains, u.toyPlays, u.sleptMin, pet.gymMinutes(s));
+    }
+    Serial.println("DONE");
   } else if (line == "BALLS" || line.startsWith("BALLS ")) {  // BALLS <n>: Poke Balls en la mochila
     if (line.length() > 6) pet.setBalls((uint8_t)constrain(line.substring(6).toInt(), 0, ITEM_MAX));
     Serial.printf("balls=%u capEggs=%u eggs=%u\n", pet.items[IT_BALL], pet.captureEggs(), pet.items[IT_EGG]);

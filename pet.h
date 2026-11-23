@@ -100,6 +100,8 @@ static inline bool teamIsHome(int8_t k) { return k >= TEAM_HOME0 && k < TEAM_HOM
 static inline uint8_t teamHomeSlot(int8_t k) { return (uint8_t)(k - TEAM_HOME0); }
 static_assert(STAGE_COUNT <= 8, "las medallas de estadio caben en un byte");
 static_assert(TEAM_HOME0 >= BOX_SLOTS, "TEAM_HOME0 no es un hueco de la caja");
+static_assert(UPG_SLOTS == HOME_SLOTS, "\"upg\" guarda un hueco por cada uno de casa");
+static_assert(BED_MORNING_MIN_SLEEP <= 0xFFFF, "UpgSlot::sleptMin es de 16 bits");
 
 // lo que dio el final de un estadio (stageDone)
 struct StageReward {
@@ -346,6 +348,19 @@ public:
   bool takeHomeEvt(HomeEvt &e);   // saca el siguiente evento de casa para la UI; false si no hay
   void dbgSetUpgTier(uint8_t line, uint8_t tier);  // serie UPG
   uint8_t upgTiers[UPG_LINES] = {};  // nivel de cada linea (NVS "upg")
+  // v3.20, fuera del contrato: los contadores de cada hueco de casa (con el uid de su bicho, en "upg"), los minutos
+  // de gimnasio hacia el siguiente punto (solo RAM) y la cola de eventos para la UI
+  UpgSlot upgSlots[HOME_SLOTS] = {};
+  uint8_t gymMin[HOME_SLOTS] = {};
+  HomeEvtRing homeEvts;
+  UpgSave upgSaved = {};             // lo ultimo escrito en "upg" (save() no lo repite)
+  bool upgHave = false;
+  const UpgSlot &upgSlotOf(uint8_t s) const { return upgSlots[s & 1]; }  // serie UPG y pruebas
+  uint8_t gymMinutes(uint8_t s) const { return gymMin[s & 1]; }
+  UpgSlot *upgSlotNow();             // los contadores del foco (de cero si cambio el uid); nullptr sin bicho
+  void upgSleepReset();              // empieza (o se corta) un sueno: la cuenta de la noche, a 0
+  void homeMinute(int h, uint32_t day, bool live);  // gimnasio y juguete: un minuto despierto del foco
+  bool saveUpg();                    // "upg" (si cambio); false si no se pudo escribir
   void chooseMap(uint8_t n);      // 0 = el inicial; un mapa que no es suyo se ignora; guarda
   // el mapa que toca de verdad: el elegido si es suyo, si no el del bioma
   uint8_t yardMapWanted() const { return yardChosen && ownsMap(yardChosen) ? yardChosen : YARD_MAP_START; }
@@ -551,6 +566,7 @@ public:
   void fromRecord(const PetRecord &r) {
     loadRecord(r);
     counted |= pmLegacyBits(pm, r.uid);
+    upgSleepReset();  // v3.20: sale de la caja; su noche (si duerme) empieza ahora
   }
 
 private:
