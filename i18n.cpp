@@ -120,6 +120,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // v3.14: el Cebo
     "Hace salir a un salvaje", "Ya hay un salvaje en el patio", "Ahora nadie puede pelear",
     "Toca la bola!",
+    // v3.20 HOME: la pagina Casa de la tienda (titulo, 3 lineas, 9 niveles, 3 efectos, MAX, comprar)
+    "Casa", "Camas", "Gimnasio", "Juguete",
+    "Cama de paja", "Cama de cojin", "Cama real", "Pesas de tronco", "Mancuernas", "Gimnasio entero", "Pelota de goma", "Cuerda", "Columpio",
+    "Duerme: ENE +%u/min", "Entrena hasta %u", "Juega: Alegria +%u", "MAX", "Comprar %s por %u?",
   },
   // ---------------- EN ----------------
   {
@@ -234,6 +238,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // v3.14: el Cebo
     "Draws out a wild one", "A wild one is already out", "No one can fight now",
     "Tap the ball!",
+    // v3.20 HOME: la pagina Casa de la tienda (titulo, 3 lineas, 9 niveles, 3 efectos, MAX, comprar)
+    "Home", "Beds", "Gym set", "Toy",
+    "Straw bed", "Cushion bed", "Royal bed", "Log weights", "Dumbbells", "Full gym", "Rubber ball", "Tug rope", "Swing set",
+    "Energy +%u/min asleep", "Trains up to %u", "Plays: JOY +%u", "MAX", "Buy %s for %u?",
   },
   // ---------------- FR ----------------
   {
@@ -348,6 +356,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // v3.14: el Cebo
     "Attire un sauvage", "Un sauvage est deja la", "Personne ne peut combattre",
     "Touche la balle!",
+    // v3.20 HOME: la pagina Casa de la tienda (titulo, 3 lineas, 9 niveles, 3 efectos, MAX, comprar)
+    "Maison", "Lits", "Gym", "Jouet",
+    "Lit de paille", "Lit coussin", "Lit royal", "Buches", "Halteres", "Salle complete", "Balle", "Corde", "Balancoire",
+    "Energie +%u/min", "Entraine jusqu'a %u", "Jeu: JOIE +%u", "MAX", "Acheter %s pour %u?",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -467,6 +479,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // v3.14: el Cebo
     "Lockt ein wildes an", "Schon ein wildes da", "Niemand kann kampfen",
     "Tipp den Ball an!",
+    // v3.20 HOME: la pagina Casa de la tienda (titulo, 3 lineas, 9 niveles, 3 efectos, MAX, comprar)
+    "Haus", "Betten", "Sportgeraet", "Spielzeug",
+    "Strohbett", "Kissenbett", "Koenigsbett", "Holzgewichte", "Hanteln", "Ganzes Gym", "Gummiball", "Zugseil", "Schaukel",
+    "Energie +%u/Min Schlaf", "Trainiert bis %u", "Spielt: FREUDE +%u", "MAX", "%s fuer %u kaufen?",
   },
   // ---------------- IT ----------------
   {
@@ -581,6 +597,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // v3.14: el Cebo
     "Attira un selvatico", "C'e gia un selvatico", "Nessuno puo lottare",
     "Tocca la palla!",
+    // v3.20 HOME: la pagina Casa de la tienda (titulo, 3 lineas, 9 niveles, 3 efectos, MAX, comprar)
+    "Casa", "Letti", "Palestra", "Giocattolo",
+    "Letto di paglia", "Letto cuscino", "Letto reale", "Pesi di legno", "Manubri", "Palestra intera", "Palla di gomma", "Corda", "Altalena",
+    "Energia +%u/min", "Allena fino a %u", "Gioca: GIOIA +%u", "MAX", "Comprare %s per %u?",
   },
   // ---------------- PT ----------------
   {
@@ -695,6 +715,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // v3.14: el Cebo
     "Atrai um selvagem", "Ja ha um selvagem", "Ninguem pode lutar",
     "Toque na bola!",
+    // v3.20 HOME: la pagina Casa de la tienda (titulo, 3 lineas, 9 niveles, 3 efectos, MAX, comprar)
+    "Casa", "Camas", "Ginasio", "Brinquedo",
+    "Cama de palha", "Cama de almofada", "Cama real", "Pesos de tronco", "Halteres", "Ginasio inteiro", "Bola de borracha", "Corda", "Balanco",
+    "Energia +%u/min", "Treina ate %u", "Brinca: Alegria +%u", "MAX", "Comprar %s por %u?",
   },
   // ---------------- JA ----------------
   {
@@ -831,6 +855,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // v3.14: el Cebo
     "やせいを よびよせる", "もう やせいが いる", "いまは だれも たたかえない",
     "タップして！",
+    // v3.20 HOME: la pagina Casa de la tienda (titulo, 3 lineas, 9 niveles, 3 efectos, MAX, comprar)
+    "ホーム", "ベッド", "ジム", "おもちゃ",
+    "わらのベッド", "クッションベッド", "ごうかベッド", "まるたのおもり", "ダンベル", "フルジム", "ゴムボール", "ひっぱりなわ", "ブランコ",
+    "ねるとエネルギー +%u/ふん", "きたえる じょうげん %u", "あそぶ: うれしさ +%u", "MAX", "%s を %u で かう？",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -950,6 +978,10 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     // v3.14: el Cebo
     "야생을 불러낸다", "이미 야생이 있다", "지금은 싸울 수 없다",
     "공을 터치!",
+    // v3.20 HOME: la pagina Casa de la tienda (titulo, 3 lineas, 9 niveles, 3 efectos, MAX, comprar)
+    "집", "침대", "운동기구", "장난감",
+    "짚 침대", "쿠션 침대", "왕실 침대", "통나무 역기", "덤벨", "풀 헬스장", "고무공", "줄다리기 밧줄", "그네",
+    "수면 에너지 +%u/분", "최대 %u까지 훈련", "놀이: 기쁨 +%u", "MAX", "%s을(를) %u에 살까요?",
   },
 };
 
