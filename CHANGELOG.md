@@ -6,6 +6,30 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.20] - 2026-11-23
+
+### Added
+
+- **Home upgrades: beds, a gym set and a toy.** Swipe past the item pages in the Shop to reach the new **Home**
+  page. Each line has 3 tiers bought in order (beds 600/1000/1500, gym 800/1200/1800, toy 500/800/1200) and you
+  keep them forever, for every pet. Beds make sleep restore energy faster (+7/+8/+10 a minute instead of +6) and
+  give a good-morning JOY bonus (+5/+10/+15) after a full night that ends with the 09:00 wake-up. The gym set lets
+  awake, well-cared-for pets train on their own: the lowest stat goes up by 1 every 60/45/30 minutes, up to
+  25/40/60 and at most 4/6/8 points a day, for a little energy. The toy lets a pet that could be happier play on
+  its own now and then (JOY +3/+4/+5, a few times a day). It all works with the screen off and while you're away.
+- **Furniture in the yard.** What you buy shows up on every map: two beds side by side (one per pet), the gym and
+  the toy. Pets walk to their bed when they fall asleep with the yard on screen and are found in it later, go
+  work out at the gym (with the "ATK +1" popup), play with the toy, and stretch in the morning.
+- Serial: `UPG` (tiers and today's counters), `UPG <line> <tier>`, `HOMESHOP` (opens the Home page), `HEVT <kind>
+  <slot> <a>` (plays a yard visit).
+
+### Fixed
+
+- **Medal banners now show, and the poop sound plays.** Since the player medals arrived in v3.4 their banner was never shown (the coins
+  were still paid), and the sound for a new poop almost never played.
+
+Start a new save with this version: older saves aren't converted for these features.
+
 ## [3.19] - 2026-11-22
 
 ### Changed
