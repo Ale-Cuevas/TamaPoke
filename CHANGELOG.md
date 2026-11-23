@@ -6,6 +6,30 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.22] - 2026-11-23
+
+### Added
+
+- **Your two pets now interact in the yard.** While you watch the yard, they greet each other when they meet
+  (a heart, a note or a "!"), and two or three times an hour they play together: chase, hop in sync, nuzzle,
+  kick the ball to each other if you own the toy, or the bigger one walks beside a much smaller friend. A happy
+  pet cheers up a sad one, a pet sits by the other's egg or next to a friend napping in the evening, and two
+  sleepers without beds curl up side by side (with beds, one sometimes rolls toward the other). Play scenes give
+  both pets +3 JOY (4 a day each) and a cheer-up gives the sad one +8 JOY (2 a day). Sparkles take the colour
+  and shape of the pet's type.
+- **Harmless squabbles, now and then.** At most about once an hour: both want the same berry, an awake pet bumps
+  a friend napping during the day (it stays asleep, just grumpy for a second), or both tug at the toy. They
+  always make up with a heart a few seconds later, and nothing is lost.
+- **New medal: Playmates** ("Companeros"), for play scenes and cheer-ups seen (10 / 50 / 200).
+- Serial: `PAL` (director state), `PAL <scene>` (greet chase hop nuzzle toypass escort cheer eggsit sit sleep
+  wait berry bump tug), `PALC` / `PALC seen` (perk counters, Playmates).
+
+### Changed
+
+- **Event-medal counters restart** (evolutions, farewells, marathon days, wild wins, captures, trips) because the
+  medal data grew for Playmates. The tiers you already reached and the coins they paid are kept and are never
+  paid twice.
+
 ## [3.21] - 2026-11-23
 
 ### Changed
