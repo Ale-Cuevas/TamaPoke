@@ -236,9 +236,9 @@ logic wake-up.** Each one ends with a make-up heart within about `PAL_MAKEUP_S` 
   cloud for a moment and dozes on. It must **not** call `wakeGrumpy` or change `sleeping`: no JOY loss.
 - **Toy tug** (only with a HOME toy): both reach the toy at once, a 2 s tug, then they take turns.
 
-### FR-PALS.8 The Friends medal
+### FR-PALS.8 The Playmates medal
 
-- A new player medal, **Best friends**: an *event* medal that counts play scenes and cheer-ups seen (greetings
+- A new player medal, **Playmates** ("Compañeros de juego"; "Best friends" is already the bond-100 medal): an *event* medal that counts play scenes and cheer-ups seen (greetings
   and squabbles don't count). Tiers `MEDAL_T` **10 / 50 / 200**, paying the usual `MEDAL_COINS` 25 / 75 / 200.
 - **Save layout.** `PlayerMedals` (`medals.h`) sizes `tier[]` and `cnt[]` by `MEDAL_COUNT`, and `PM_VER` is 1.
   Adding a 20th medal changes the blob: bump `PM_VER` to 2 and don't migrate v1 (see *Rules*: the user starts a
@@ -338,3 +338,27 @@ Then, in order: merge H1 → H2 → H3 into `feature/home` (fix conflicts, swap 
 H2 sprites), full host tests + i18n check + firmware build + renders, the `reviewer` on the whole diff, release
 v3.20 with the `tamapoke-release` skill (CHANGELOG, GAME_LOGIC header, PENDING_TESTS rows), flash, and start a
 new save on the board.
+
+---
+
+## Build plan: phase 2 (PALS, v3.22)
+
+Branch `feature/pals` from main v3.21. Contract commit `643cc4d`: the PAL numbers in `tuning.h`, the `Pet` perk API
+(`palPlayPerk(slot)`, `palCheerPerk(slot)`, `palSceneSeen()`, stubs) and `pal_fx.h` (`PalEmote` kinds).
+
+User choices made while planning (2026-11-23): the medal is **Playmates** ("Compañeros de juego"); the `PM_VER`
+bump resets event-medal counters on the current save (no conversion; tiers and coins already earned stay).
+
+Facts that shape it: the yard has no per-scene exception to `YARD_MIN_DIST` (only bed tasks); a `YT_SCENE` task
+blocks gym/toy visits for free (`yardPetFree` needs `YT_NONE`); `yardTick` only runs with the yard on screen;
+`bedSnap` marks a reopened yard; PALS emotes must be yard-local (a `PetLife::emote` holds the pet); there is no
+evolution-stage index (walk `DEX_TBL[base].evolvesTo`); no music-note or cloud sprite yet; yard code uses
+`YardWorld.rng`.
+
+| Task | Agent | Owns |
+|---|---|---|
+| **P1 logic** | implementer, Sonnet | perks with daily caps (`uid`, day) in a new NVS key `pal`, `MD_PLAYMATES` (event medal, `PM_VER` 2, `MEDAL_T` row, names in all 8 rows), tests, GAME_LOGIC §4/§13 |
+| **P2 director + yard** | implementer, Opus | `pals.h` pure scene director + `YT_SCENE` in `yard.h`, hook in `yardTick`, every scene/squabble, sleep together, egg-sitting, waiting at food, big & small, emote drawing, serial `PAL`, `test/test_pals.cpp`, renders, GAME_LOGIC §7/§16 |
+| **P3 emote art** | implementer, Sonnet | sprites (note, cloud, grumpy cloud, dots, sparkle and type particles) in `tools/sprites.py` → `species.h`, `pal_fx.h` sprite table, type-tint and float/burst motion helpers, `test/test_pal_fx.cpp` |
+
+Then merge P1 → P3 → P2, refresh pointers, tests + build + renders, reviewer, release v3.22, flash.

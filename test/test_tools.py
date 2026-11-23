@@ -304,6 +304,7 @@ class TestBuffersDeTexto(unittest.TestCase):
         'S_DYING_FMT': ('nombre_o_apodo',),  # v1.60 (S_RUNAWAY_BTN ya no tiene %s)
         'S_USE_FMT': ('objeto',),
         'S_BUY_FMT': ('objeto',),
+        'S_BUY_UPG_FMT': ('mejora',),  # v3.20: el nombre de un nivel de mueble (S_UPG_BED1..S_UPG_TOY3)
         # la caja (v1.37): S_NOW_FMT tambien recibe "HUEVO", mas corto que cualquier nombre
         'S_STORE_Q_FMT': ('nombre_o_apodo',),
         'S_WAKE_Q_FMT': ('nombre_o_apodo',),
@@ -383,6 +384,9 @@ class TestBuffersDeTexto(unittest.TestCase):
             elif arg == 'baya':
                 total += max(self.bytes_literal(self.LIT[b][li]) for b in self.LIT
                              if b == 'S_BERRY_UNK' or b.startswith('S_IT_BERRY_'))
+            elif arg == 'mejora':  # v3.20: el nombre de un nivel de cama, gimnasio o juguete
+                total += max(self.bytes_literal(self.LIT[o][li]) for o in self.LIT
+                             if o.startswith('S_UPG_') and o[-1].isdigit())
             elif arg == 'objeto':  # nombre de un objeto de la mochila
                 total += max(self.bytes_literal(self.LIT[o][li]) for o in self.LIT if o.startswith('S_IT_'))
         return total

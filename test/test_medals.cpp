@@ -109,11 +109,11 @@ TEST(medals, los_tramos_salen_de_tuning) {
 
 // la tabla del plan: 19 medallas, 7 de bichos, 6 de evento y 6 derivadas (pinta la promesa a proposito)
 TEST(medals, las_fuentes_de_cada_medalla) {
-  CHECK_EQ((int)MEDAL_COUNT, 19);
+  CHECK_EQ((int)MEDAL_COUNT, 20);
   int n[3] = { 0, 0, 0 };
   for (uint8_t i = 0; i < MEDAL_COUNT; i++) n[medalSource(i)]++;
   CHECK_EQ(n[MSRC_PET], 7);
-  CHECK_EQ(n[MSRC_EVENT], 6);
+  CHECK_EQ(n[MSRC_EVENT], 7);
   CHECK_EQ(n[MSRC_DERIVED], 6);
   for (uint8_t i = 0; i < PMB_COUNT; i++) CHECK_EQ(medalSource(i), (uint8_t)MSRC_PET);
 }
@@ -512,6 +512,81 @@ TEST(medals, uno_de_la_caja_de_antes_no_cuenta_dos_veces_al_despertar) {
   CHECK(w.store(2, 1));
   CHECK(w.wake(2, 1));
   CHECK_EQ(w.medalValue(MD_LV10), v[MD_LV10] + 1);
+}
+
+// v3.22: un "pm" de la v1 (19 medallas, 109 bytes) ya no se carga (PM_VER 2): se recuenta SIN pagar. Los tramos
+// que ya cobro se quedan (aunque su contador de evento vuelva a 0) y no se pagan otra vez al volver a alcanzarlos;
+// un tramo mas alto si paga. Companeros de juego empieza a 0. (Promesa de diseno: lo cobrado nunca se pierde ni
+// se cobra dos veces)
+TEST(medals, un_pm_v1_conserva_sus_tramos_sin_pagar) {
+  struct __attribute__((packed)) PmV1 {
+    uint8_t ver;
+    uint8_t tier[19];
+    uint16_t cnt[19];
+    uint32_t wildId, catchId;
+    uint8_t legN;
+    uint32_t legUid[PM_LEGACY_MAX];
+    uint8_t legBits[PM_LEGACY_MAX];
+    uint16_t crc;
+  };
+  static_assert(sizeof(PmV1) == PM_V1_SIZE, "el pm de la v1");
+  static_assert(MEDAL_COUNT == 20 && MD_PLAYMATES == 19, "Companeros de juego va al final");
+  for (int bad = 0; bad < 2; bad++) {  // 0: v1 bueno; 1: v1 con el CRC malo (danado: se recuenta del todo)
+    mLegacySave();
+    Pet a;
+    a.begin();
+    uint32_t lv10 = a.medalValue(MD_LV10);
+    uint16_t coins = a.coins;
+    CHECK(lv10 > 0);
+    CHECK_EQ(a.medalTierPaid(MD_WILD), (uint8_t)0);
+    {
+      Preferences x;
+      x.begin("tamapoke", false);
+      PlayerMedals m;
+      CHECK_EQ(x.getBytes("pm", &m, sizeof(m)), sizeof(m));
+      PmV1 o;
+      memset(&o, 0, sizeof(o));
+      o.ver = 1;
+      memcpy(o.tier, m.tier, 19);
+      memcpy(o.cnt, m.cnt, sizeof(o.cnt));
+      o.tier[MD_WILD] = 2;  // Plata ya cobrada en la v1...
+      o.cnt[MD_WILD] = 50;  // ...con un contador de evento que no sobrevive
+      o.legN = m.legN;
+      memcpy(o.legUid, m.legUid, sizeof(o.legUid));
+      memcpy(o.legBits, m.legBits, sizeof(o.legBits));
+      o.crc = crc16((const uint8_t *)&o, offsetof(PmV1, crc));
+      if (bad) o.crc ^= 1;
+      x.putBytes("pm", &o, sizeof(o));
+    }
+    Pet b;
+    b.begin();
+    CHECK(b.medalsMigratedNow());
+    CHECK_EQ(b.coins, coins);  // sin pagar
+    CHECK_EQ(b.medalNewsPending(), (uint8_t)0);
+    CHECK_EQ(b.medalValue(MD_LV10), lv10);  // lo de los bichos se recuenta
+    CHECK_EQ(b.medalValue(MD_WILD), (uint32_t)0);
+    CHECK_EQ(b.medalValue(MD_PLAYMATES), (uint32_t)0);
+    CHECK_EQ(b.medalTierPaid(MD_PLAYMATES), (uint8_t)0);
+    CHECK_EQ(b.medalTierPaid(MD_WILD), (uint8_t)(bad ? 0 : 2));
+    for (uint8_t i = 0; i < MEDAL_COUNT; i++)
+      if (i != MD_WILD) CHECK_EQ(b.medalTierPaid(i), medalTierOf(i, b.medalValue(i)));
+    Pet c;
+    c.begin();
+    CHECK(!c.medalsMigratedNow());
+    CHECK_EQ(c.coins, coins);
+    CHECK_EQ(c.medalTierPaid(MD_WILD), (uint8_t)(bad ? 0 : 2));
+    if (bad) continue;
+    // volver a llegar a Bronce y a Plata no paga; Oro si (lo suyo, una vez)
+    c.dbgMedalCount(MD_WILD, (uint16_t)MEDAL_T[MD_WILD][0]);
+    c.dbgMedalCount(MD_WILD, (uint16_t)MEDAL_T[MD_WILD][1]);
+    CHECK_EQ(c.coins, coins);
+    CHECK_EQ(c.medalNewsPending(), (uint8_t)0);
+    CHECK_EQ(c.medalTierPaid(MD_WILD), (uint8_t)2);
+    c.dbgMedalCount(MD_WILD, (uint16_t)MEDAL_T[MD_WILD][2]);
+    CHECK_EQ(c.medalTierPaid(MD_WILD), (uint8_t)3);
+    CHECK_EQ(c.medalNewsPending(), (uint8_t)1);
+    CHECK_EQ(c.coins, (uint16_t)(coins + medalPayout(2, 3)));
+  }
 }
 
 // un "pm" danado (CRC, version, tamano): se vuelve a contar como una migracion, sin romper nada

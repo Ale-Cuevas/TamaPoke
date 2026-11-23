@@ -149,7 +149,7 @@ enum StrId : uint16_t {
   S_LURE_HINT, S_LURE_BUSY, S_LURE_NOFIGHT,
   // v3.17: la pista del minijuego de la bola
   S_TAP_BALL,
-  // v3.20 HOME: la pagina Casa de la tienda: titulo, las 3 lineas, los 9 niveles (S_UPG_BED1 + 3 * linea + nivel - 1),
+  // v3.20 HOME: la pagina Casa de la tienda: titulo, las 3 lineas, los 9 niveles (el de la cama 1 + 3 * linea + nivel - 1),
   // los 3 efectos (%u), MAX y "Comprar %s por %u?"
   S_HOME, S_UPG_BED, S_UPG_GYM, S_UPG_TOY,
   S_UPG_BED1, S_UPG_BED2, S_UPG_BED3, S_UPG_GYM1, S_UPG_GYM2, S_UPG_GYM3, S_UPG_TOY1, S_UPG_TOY2, S_UPG_TOY3,

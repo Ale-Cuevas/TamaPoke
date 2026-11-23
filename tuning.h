@@ -411,6 +411,82 @@ static const uint8_t TOY_DAY_MAX[UPG_TIERS + 1] = { 0, 3, 5, 7 };      // veces 
 #define HOME_VISIT_WAIT_MS 8000   // si el gimnasio o el juguete estan ocupados por el otro, espera hasta esto
 
 // --------------------------------------------------------------------------------------------
+// Los dos bichos juntos (v3.22, docs/HOME_AND_PALS.md, tarea PALS): escenas solas en el patio, solo con el patio
+// en pantalla. Las riñas nunca cambian nada del bicho.
+// --------------------------------------------------------------------------------------------
+#define PAL_GREET_DIST 90         // px: a esta distancia se saludan (pies a pies)
+#define PAL_GREET_COOLDOWN_S 180  // s entre dos saludos de la pareja
+#define PAL_SCENE_GAP_MIN_S 720   // s de patio en pantalla entre dos escenas de juego (al azar entre min y max:
+#define PAL_SCENE_GAP_MAX_S 1680  //   ~3 por hora)
+#define PAL_PLAY_JOY 3            // JOY a cada uno tras una escena de juego
+#define PAL_PLAY_PAY_DAY 4        // escenas que pagan al dia por bicho (las demas se ven igual, sin premio)
+#define PAL_CHEER_BELOW 25        // animar: el triste tiene JOY < esto
+#define PAL_CHEER_FROM 50         //   y el contento JOY >= esto
+#define PAL_CHEER_JOY 8           // JOY para el triste
+#define PAL_CHEER_DAY 2           // veces que paga al dia por bicho
+#define PAL_BIG_LEVEL_GAP 20      // "grande y pequeno": una etapa de evolucion mas, o esta diferencia de nivel
+#define PAL_SQUABBLE_GAP_S 3600   // s de patio en pantalla entre dos riñas (como mucho 1 por hora)
+#define PAL_MAKEUP_S 3            // s hasta el corazon de las paces tras una riña
+// lo que se ve (pals.h): duraciones y distancias de cada escena
+#define PAL_REST_S 30             // s de patio tras una escena antes de otra (y del saludo)
+#define PAL_GREET_MS 1500         // el saludo: quietos, mirandose, con su icono
+#define PAL_APPROACH_MS 7000      // lo que puede tardar en llegar junto al otro (si no, la escena se deja sin premio)
+#define PAL_NEAR_PX 30            // en una escena se acercan hasta esto (fuera de ellas, YARD_MIN_DIST 64)
+#define PAL_BESIDE_PX 70          // "al lado" para empezar lo de juntos (pies a pies)
+#define PAL_SIDE_PX 56            // junto al huevo o al que duerme por la tarde: no mas cerca (sin taparlo)
+#define PAL_CHASE_MS 7000         // la persecucion: dos carreras, cambiando de papel a la mitad
+#define PAL_CHASE_PCT 150         //   a esta velocidad (% del paseo)
+#define PAL_HOP_MS 5000           // saltos a la vez
+#define PAL_NUZZLE_MS 5000        // juntos: el toque de cabezas y los corazones
+#define PAL_TOY_MS 6000           // pasarse el juguete, por turnos
+#define PAL_ESCORT_MS 8000        // el grande acompana al pequeno, despacio
+#define PAL_ESCORT_PCT 60         //   a esta velocidad (% del paseo)
+#define PAL_CHEER_MS 5000         // animar: el carino junto al triste
+#define PAL_EGGSIT_MS 6000        // sentado junto al huevo
+#define PAL_SIT_MS 9000           // sentado junto al que duerme por la tarde
+#define PAL_TUG_MS 2000           // el tira y afloja del juguete (rina)
+#define PAL_TURN_MS 2000          //   y despues, el turno de cada uno
+#define PAL_BUMP_MS 1500          // la nube gris del que despertaron de la siesta (sigue dormido)
+#define PAL_ROLL_EVERY_S 45       // con camas y los dos dormidos: cada tanto uno se gira hacia el otro
+#define PAL_ROLL_MS 2400
+#define PAL_ROLL_PX 10
+#define PAL_RETRY_S 60            // s de patio hasta volver a probar la escena de la hora o la riña si no pudo empezar
+// los detalles de cada escena (lo que se ve, en ms y px)
+#define PAL_HOLD_MS 1000          // quieto mientras la escena lo lleva o espera al otro (se renueva)
+#define PAL_RELEASE_MS 600        // quieto un momento al soltarlo
+#define PAL_SETTLE_MS 500         // lo que la pose dura de mas sobre su fase (que no acabe antes)
+#define PAL_CLOSE_PX 26           // "al lado": no mas cerca que esto (pies a pies)
+#define PAL_FOLLOW_MS 600         // el que sigue re-apunta a donde esta el que guia cada tanto
+#define PAL_CHASE_DELAY_MS 400    // el que persigue sale un poco despues...
+#define PAL_ESCORT_DELAY_MS 200   //   ...y el que acompana
+#define PAL_CHASE_FOLLOW_PX 40    // lo cerca que va el que persigue...
+#define PAL_ESCORT_FOLLOW_PX 48   //   ...y el que acompana
+#define PAL_CHASE_CELLS_MIN 4     // cada carrera de la persecucion, a 4-8 celdas
+#define PAL_CHASE_CELLS_MAX 8
+#define PAL_ESCORT_CELLS_MIN 3    // la del paseo, a 3-5
+#define PAL_ESCORT_CELLS_MAX 5
+#define PAL_FLEE_PX 40            // el que corre va a donde quede al menos esto mas lejos del que lo sigue
+#define PAL_TOY_SIDES_PX 60       // las dos celdas junto al juguete, separadas al menos esto...
+#define PAL_TOY_REACH_PX 90       //   ...y a esto del juguete como mucho (si no llegan, la escena se deja)
+#define PAL_TOY_TURN_MS 1000      // cada pase del juguete (PAL_TOY_MS / esto pases)
+#define PAL_TOY_ACT_PAD_MS 300    //   y lo que el gesto dura de mas
+#define PAL_TUG_PAUSE_MS 600      // tras las paces del tira y afloja, hasta los turnos
+#define PAL_TOUCH_MS 1200         // el toque de cabezas (juntos, animar)...
+#define PAL_HEARTS_MS 2400        //   ...y sus corazones
+#define PAL_EMOTE_MS 1500         // los iconos de empezar (corazon, nota, sorpresa)
+#define PAL_CUE_MS 1200           // los iconos cortos: la sorpresa de la baya, la nota de esperar, el final de una carrera
+#define PAL_END_HOLD_MS 1500      // quietos, mirandose, al acabar una carrera
+#define PAL_POUT_MS 2000          // enfurrunados por la baya; y quietos mientras hacen las paces
+#define PAL_MAKEUP_MS 1400        // los corazones de las paces
+#define PAL_MAKEUP_LEAD_MS 1600   // lo que tardan las paces desde que se acaba la baya (cabe en PAL_MAKEUP_S)
+#define PAL_DOTS_MS 900           // el toque que despierta al de la siesta, y el "..." de despues
+#define PAL_BERRY_DOTS_MS 1000    // el "..." cuando el otro se comio la baya
+#define PAL_BERRY_HOLD_MS 2500    //   quieto mientras tanto
+// peso de cada escena de juego al sortearla: persecucion, saltos, carantonas, juguete (con juguete), paseo
+// (grande y pequeno)
+static const uint8_t PAL_PLAY_W[5] = { 3, 2, 3, 3, 3 };
+
+// --------------------------------------------------------------------------------------------
 // Viajes (travel.h): 1, 3 u 8 h de tiempo real
 // --------------------------------------------------------------------------------------------
 #define TRV_TIERS 3               // (estructura)
@@ -460,4 +536,5 @@ static const uint32_t MEDAL_T[][3] = {
   { 1, 5, 15 },             // Cazador: capturas
   { 3, 15, 50 },            // Trotamundos: viajes completados
   { 5, 20, 45 },            // Coleccionista: recuerdos (el Oro, todos: SOUV_COUNT)
+  { 10, 50, 200 },          // Companeros de juego: escenas de juego y animos vistos (v3.22; de evento)
 };

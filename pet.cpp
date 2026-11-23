@@ -811,13 +811,19 @@ void Pet::medalsMigrate() {
     // habia un "pm" pero no se pudo leer (danado o de otra version): se recuenta, pero lo ya alcanzado se da por
     // pagado (sin monedas ni banners). Solo una partida sin "pm" (la de antes de la v3.4) cobra lo atrasado
     for (uint8_t i = 0; i < MEDAL_COUNT; i++) pm.tier[i] = medalTierOf(i, medalValue(i));
-    Serial.println("medals: pm danado, recontado sin pagar");
+    // v3.22: de un "pm" de la v1, los tramos que ya cobro se quedan aunque sus contadores de evento vuelvan a 0
+    // (asi no se pagan otra vez al volver a alcanzarlos). Companeros de juego (nueva) empieza en 0
+    if (pmV1Have)
+      for (uint8_t i = 0; i < PM_V1_MEDALS; i++)
+        if (pmV1Tier[i] > pm.tier[i]) pm.tier[i] = pmV1Tier[i];
+    Serial.println(pmV1Have ? "medals: pm de la v1, recontado sin pagar" : "medals: pm danado, recontado sin pagar");
   }
   Serial.printf("medals: migracion, %u bichos de caja apuntados\n", pm.legN);
   save();  // medalsUpdate paga (sin "pm" antes); "pm" antes que "cn"
   // con "pm" ya escrito, las claves de las medallas de cada bicho (hasta la v3.3) sobran: se borran una vez
   if (pmHave) {
     pmKeyBad = false;
+    pmV1Have = false;
     if (prefs.isKey("medal")) prefs.remove("medal");
     if (prefs.isKey("tmedal")) prefs.remove("tmedal");
   }
@@ -1814,6 +1820,49 @@ bool Pet::takeHomeEvt(HomeEvt &e) {
   return homeEvts.pop(e);
 }
 
+// ---------- los dos bichos juntos (v3.22) ----------
+// Premios sin bono de vinculo, ni cuidado, ni monedas: solo JOY, con tope diario por bicho (uid + dia). Se actua
+// sobre el hueco con slotRef (sin mover el foco: nunca anida un FocusGuard)
+uint8_t Pet::palPerk(uint8_t slot, uint8_t joyGain, uint8_t dayMax, bool cheer) {
+  uint32_t day = today();
+  PetLife &l = slotRef(slot);
+  if (!day || l.vacant || !l.uid || l.isEgg() || l.sleeping || l.busyEnding()) return 0;
+  PalSlot &c = palSlots[slot & 1];
+  palRoll(c, l.uid, day);
+  uint8_t &paid = cheer ? c.cheersPaid : c.playsPaid;
+  if (paid >= dayMax) return 0;
+  uint8_t before = l.joy;
+  l.joy = clamp100(l.joy + joyGain);
+  if (paid < 255) paid++;
+  pendingSave = true;
+  return (uint8_t)(l.joy - before);
+}
+
+uint8_t Pet::palPlayPerk(uint8_t slot) { return palPerk(slot, PAL_PLAY_JOY, PAL_PLAY_PAY_DAY, false); }
+
+uint8_t Pet::palCheerPerk(uint8_t slot) { return palPerk(slot, PAL_CHEER_JOY, PAL_CHEER_DAY, true); }
+
+// una escena de juego o un animo vistos (cuenten o no para el premio): la medalla Companeros de juego
+void Pet::palSceneSeen() {
+  pmBump(pm, MD_PLAYMATES);
+  pendingSave = true;
+}
+
+// "pal" si cambio (los contadores diarios de cada hueco)
+bool Pet::savePal() {
+  PalSave u;
+  memset(&u, 0, sizeof(u));
+  memcpy(u.slot, palSlots, sizeof(u.slot));
+  palSeal(u);
+  if (palHave && memcmp(&u, &palSaved, sizeof(u)) == 0) return true;
+  static const PalSlot zero[PAL_SLOTS] = {};
+  if (!palHave && !memcmp(u.slot, zero, sizeof(zero))) return true;  // nada que contar y nada escrito
+  if (prefs.putBytes("pal", &u, sizeof(u)) != sizeof(u)) return false;
+  palSaved = u;
+  palHave = true;
+  return true;
+}
+
 void Pet::dbgSetUpgTier(uint8_t line, uint8_t tier) {
   if (line >= UPG_LINES) return;
   upgTiers[line] = tier > UPG_TIERS ? UPG_TIERS : tier;
@@ -2523,6 +2572,11 @@ void Pet::save() {
     Serial.println("save: upg no se pudo escribir");
     pendingSave = true;
   }
+  // v3.22: los contadores diarios de los premios de la pareja, como "upg": si no llega, se reintenta
+  if (!savePal()) {
+    Serial.println("save: pal no se pudo escribir");
+    pendingSave = true;
+  }
   {  // regalos (v1.55), despues de la mochila: [cuantos, objetos...]
     uint8_t g[GIFT_MAX + 1] = { giftN };
     memcpy(g + 1, gifts, giftN);
@@ -2757,6 +2811,20 @@ void Pet::load() {
       Serial.println("upg: danado, sin mejoras de casa");
     }
   }
+  // v3.22: los contadores diarios de los premios de la pareja. Sin "pal", o danado: nada cobrado hoy
+  memset(palSlots, 0, sizeof(palSlots));
+  palHave = false;
+  if (prefs.isKey("pal")) {
+    PalSave u;
+    memset(&u, 0, sizeof(u));
+    if (prefs.getBytes("pal", &u, sizeof(u)) == sizeof(u) && palValid(u)) {
+      memcpy(palSlots, u.slot, sizeof(palSlots));
+      palSaved = u;
+      palHave = true;
+    } else {
+      Serial.println("pal: danado, nada cobrado hoy");
+    }
+  }
   // la coleccion. v3.15 (migracion): sin "souv2" se lee la vieja "souv" (u32, los 25 primeros) en los bits bajos;
   // sin ninguna (un guardado de antes del Y5), sin recuerdos
   souvOwned = souvLoadMask(prefs.isKey("souv2"), prefs.getULong64("souv2", 0), prefs.getUInt("souv", 0));
@@ -2827,11 +2895,22 @@ void Pet::load() {
   pmReady = pmHave = false;
   pmClear(pm);
   pmKeyBad = false;
+  pmV1Have = false;
+  memset(pmV1Tier, 0, sizeof(pmV1Tier));
   if (prefs.isKey("pm")) {
     pmKeyBad = true;  // (hasta ver que se puede cargar)
     PlayerMedals m;
     memset(&m, 0, sizeof(m));
-    if (prefs.getBytes("pm", &m, sizeof(m)) == sizeof(m) && pmValid(m)) {
+    if (prefs.getBytesLength("pm") == PM_V1_SIZE) {
+      // v3.22: un "pm" de la v1 (19 medallas). Se recuenta, pero con sus tramos ya pagados (medalsMigrate)
+      uint8_t v1[PM_V1_SIZE];
+      if (prefs.getBytes("pm", v1, sizeof(v1)) == sizeof(v1) && pmV1Tiers(v1, sizeof(v1), pmV1Tier)) {
+        pmV1Have = true;
+        Serial.println("pm: de la v1, se recuenta conservando sus tramos");
+      } else {
+        Serial.println("pm: danado, se vuelven a contar las medallas");
+      }
+    } else if (prefs.getBytes("pm", &m, sizeof(m)) == sizeof(m) && pmValid(m)) {
       pm = m;
       pmSaved = m;
       pmReady = pmHave = true;

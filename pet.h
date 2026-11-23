@@ -11,6 +11,7 @@
 #include "homerec.h" // v3.0: el segundo hueco de casa en la NVS ("hm1")
 #include "medals.h"  // v3.4: las medallas del jugador ("pm")
 #include "upgrade.h" // v3.20: las mejoras de casa (camas, gimnasio, juguete)
+#include "pal_perks.h" // v3.22: los premios de los dos bichos juntos (contadores diarios, "pal")
 
 // Los niveles ya no son las horas de edad (v1.35): ver growth.h. Con la curva nueva
 // CHARMANDER llega al nivel 16 a las ~8 h de juego con cuidado perfecto.
@@ -100,6 +101,7 @@ static inline bool teamIsHome(int8_t k) { return k >= TEAM_HOME0 && k < TEAM_HOM
 static inline uint8_t teamHomeSlot(int8_t k) { return (uint8_t)(k - TEAM_HOME0); }
 static_assert(STAGE_COUNT <= 8, "las medallas de estadio caben en un byte");
 static_assert(TEAM_HOME0 >= BOX_SLOTS, "TEAM_HOME0 no es un hueco de la caja");
+static_assert(PAL_SLOTS == HOME_SLOTS, "\"pal\" guarda un hueco por cada uno de casa");
 static_assert(UPG_SLOTS == HOME_SLOTS, "\"upg\" guarda un hueco por cada uno de casa");
 static_assert(BED_MORNING_MIN_SLEEP <= 0xFFFF, "UpgSlot::sleptMin es de 16 bits");
 
@@ -345,6 +347,19 @@ public:
   // v3.20 mejoras de casa (upgrade.h, docs/HOME_AND_PALS.md): contrato que usan el patio y la tienda
   uint8_t upgTier(uint8_t line) const { return line < UPG_LINES ? upgTiers[line] : 0; }  // 0..UPG_TIERS
   bool buyUpgrade(uint8_t line);  // el siguiente nivel; false si upgCheck no da UB_OK (no toca nada); guarda
+  // v3.22 los dos bichos juntos (docs/HOME_AND_PALS.md, PALS): el patio decide las escenas; aqui solo los premios,
+  // con su tope diario por bicho (uid + dia). Devuelven el JOY dado (0 si ya cobro hoy, sin reloj, o el hueco no
+  // es un bicho despierto).
+  uint8_t palPlayPerk(uint8_t slot);   // tras una escena de juego: PAL_PLAY_JOY, PAL_PLAY_PAY_DAY al dia
+  uint8_t palCheerPerk(uint8_t slot);  // al animado (el triste): PAL_CHEER_JOY, PAL_CHEER_DAY al dia
+  void palSceneSeen();                 // una escena de juego o un animo vistos: cuenta para la medalla Companeros
+  // v3.22, fuera del contrato: los contadores diarios de cada hueco (con el uid de su bicho, NVS "pal")
+  PalSlot palSlots[HOME_SLOTS] = {};
+  PalSave palSaved = {};  // lo ultimo escrito en "pal" (save() no lo repite)
+  bool palHave = false;
+  const PalSlot &palSlotOf(uint8_t s) const { return palSlots[s & 1]; }  // serie PALC y pruebas
+  uint8_t palPerk(uint8_t slot, uint8_t joyGain, uint8_t dayMax, bool cheer);  // palPlayPerk / palCheerPerk
+  bool savePal();                 // "pal" (si cambio); false si no se pudo escribir
   bool takeHomeEvt(HomeEvt &e);   // saca el siguiente evento de casa para la UI; false si no hay
   void dbgSetUpgTier(uint8_t line, uint8_t tier);  // serie UPG
   uint8_t upgTiers[UPG_LINES] = {};  // nivel de cada linea (NVS "upg")
@@ -694,6 +709,8 @@ private:
   bool pmReady = false;
   bool pmMigrated = false;
   bool pmKeyBad = false;            // habia "pm" pero no se pudo cargar: se recuenta sin pagar
+  bool pmV1Have = false;            // v3.22: era un "pm" de la v1 valido; sus tramos pagados se conservan
+  uint8_t pmV1Tier[PM_V1_MEDALS] = { 0 };
   MedalNews medalNewsQ[MEDAL_COUNT] = {};
   uint8_t medalNewsN = 0;
   // lo que medalsUpdate puede cambiar, para deshacerlo con el bicho cuando "hm1" no llega (store / wake)
