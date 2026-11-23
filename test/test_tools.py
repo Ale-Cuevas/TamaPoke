@@ -740,6 +740,27 @@ class TestPackYard(unittest.TestCase):
         self.assertEqual(bit(0, 0), 1)   # fuera del circulo
         self.assertEqual(bit(9, 9), 0)   # hierba libre
 
+    def test_sitios_de_los_muebles(self):
+        # v3.20: la tabla de yard_spots.h, una fila por mapa mas el suelo liso, y la imagen --spots
+        tabla = self.py.read_spots()
+        with open(os.path.join(ROOT, 'tuning.h')) as fh:
+            mapas = int(re.search(r'#define YARD_MAPS (\d+)', fh.read()).group(1))
+        self.assertEqual(len(tabla), mapas + 1)
+        for fila in tabla:
+            self.assertEqual(fila['B1'], (fila['B0'][0] + 1, fila['B0'][1]))
+            for x, y in fila.values():
+                self.assertTrue(1 <= x <= 13 and 1 <= y <= 13)
+        if not _pil_ok():
+            return
+        from PIL import Image
+        img = Image.new('RGB', (240, 240), (90, 180, 90))
+        data, _ = self.py.encode_tpy1(img, [[0] * 15 for _ in range(15)])
+        with open(os.path.join(self.tmp, '01-test.bin'), 'wb') as fh:
+            fh.write(data)
+        hechas = self.py.spots_images(self.tmp)
+        self.assertEqual([p.name for p in hechas], ['01-test_spots.png'])
+        self.assertTrue(os.path.exists(hechas[0]))
+
     def test_tpy1_corto_o_con_otra_firma(self):
         with self.assertRaises(ValueError):
             self.py.decode_tpy1(b'TPY2' + bytes(100))

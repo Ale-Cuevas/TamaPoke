@@ -743,7 +743,8 @@ def add_mock_hud(im, sprites):
         im.paste(spr, xy, spr)
 
 
-def debug_image(canvas, blocked):
+def debug_image(canvas, blocked, spots=None):
+    """La imagen de depuracion: celdas bloqueadas en rojo, marco/HUD en azul y (v3.20) los muebles de casa."""
     from PIL import Image, ImageDraw
     dbg = canvas.copy().convert('RGBA')
     ov = Image.new('RGBA', dbg.size, (0, 0, 0, 0))
@@ -760,8 +761,58 @@ def debug_image(canvas, blocked):
         e = src_to_canvas(i * TILE)
         d.line((e, 0, e, CANVAS), fill=(0, 0, 0, 50))
         d.line((0, e, CANVAS, e), fill=(0, 0, 0, 50))
+    if spots:
+        draw_spots(d, spots)
     dbg.alpha_composite(ov)
     return round_mask(dbg.convert('RGB'))
+
+
+# v3.20: los muebles de casa (yard_spots.h): la pareja de camas, el gimnasio y el juguete de cada mapa, en celdas
+SPOTS_H = HERE.parent / 'yard_spots.h'
+SPOT_COLS = {'B0': (40, 90, 255), 'B1': (40, 90, 255), 'G': (255, 140, 0), 'T': (0, 200, 90)}
+
+
+def read_spots(path=SPOTS_H):
+    """La tabla YARD_SPOTS de yard_spots.h: lista por mapa (0 = suelo liso) de {'B0': (x, y), 'B1', 'G', 'T'}."""
+    text = Path(path).read_text()
+    body = text[text.index('YARD_SPOTS['):]
+    body = body[body.index('{') + 1:body.index('};')]
+    out = []
+    num = r'\s*(\d+)\s*'
+    for m in re.finditer(r'\{' + ','.join([num] * 6) + r'\}', body):
+        bx, by, gx, gy, tx, ty = (int(v) for v in m.groups())
+        out.append({'B0': (bx, by), 'B1': (bx + 1, by), 'G': (gx, gy), 'T': (tx, ty)})
+    return out
+
+
+def draw_spots(d, spots):
+    """Los sitios de los muebles sobre la imagen de depuracion: un recuadro de color con su nombre."""
+    for name, (x, y) in spots.items():
+        box = cell_box(x, y)
+        col = SPOT_COLS[name]
+        d.rectangle(box, outline=col + (255,), width=3, fill=col + (70,))
+        d.text((box[0] + 4, box[1] + 3), name, fill=(255, 255, 255, 255))
+
+
+def spots_images(out, spots_h=SPOTS_H):
+    """--spots: los sitios de los muebles sobre los .bin ya hechos de out/ (NN-name_spots.png), sin el paquete de
+    baldosas. La mascara es la del .bin (con el marco ya puesto; las celdas sueltas no se quitan)."""
+    from PIL import Image
+    table = read_spots(spots_h)
+    done = []
+    for b in sorted(Path(out).glob('[0-9][0-9]-*.bin')):
+        n = int(b.name[:2])
+        if n >= len(table):
+            raise MapError(f'{b.name}: no row {n} in {spots_h}')
+        pal, walk, px = decode_tpy1(b.read_bytes())
+        rgb = [(((c >> 11) & 31) << 3, ((c >> 5) & 63) << 2, (c & 31) << 3) for c in pal]
+        img = Image.new('RGB', (SRC, SRC))
+        img.putdata([rgb[i] for i in px])
+        blocked = [[(walk[(y * GRID + x) // 8] >> ((y * GRID + x) % 8)) & 1 for x in range(GRID)] for y in range(GRID)]
+        path = Path(out) / f'{b.stem}_spots.png'
+        debug_image(to_canvas(img), blocked, table[n]).save(path)
+        done.append(path)
+    return done
 
 
 def scale_sprites(yard_dir, tilesets, legend_name):
@@ -800,11 +851,18 @@ def main(argv=None):
     ap.add_argument('--tilesets', help='folder with the unzipped packs (default: <yard>/tilesets)')
     ap.add_argument('--out', help='output folder (default: <yard>/out)')
     ap.add_argument('--no-preview', action='store_true', help='only write the .bin files')
+    ap.add_argument('--spots', action='store_true',
+                    help='only draw the home furniture spots (yard_spots.h) over the .bin files already in --out')
     args = ap.parse_args(argv)
     yard = Path(args.yard)
     tilesets = Path(args.tilesets) if args.tilesets else yard / 'tilesets'
     out = Path(args.out) if args.out else yard / 'out'
     out.mkdir(parents=True, exist_ok=True)
+    if args.spots:
+        for path in spots_images(out):
+            print(path)
+        return
+    table = read_spots() if SPOTS_H.exists() else []
     for mp in map_files(yard, args.maps):
         meta, img, blocked = compose(mp, yard, tilesets)
         data, colours = encode_tpy1(img, blocked)
@@ -814,7 +872,8 @@ def main(argv=None):
             prev = canvas.copy()
             add_mock_hud(prev, scale_sprites(yard, tilesets, meta['legend']))
             round_mask(prev).save(out / f'{mp.stem}_preview.png')
-            debug_image(canvas, blocked).save(out / f'{mp.stem}_debug.png')
+            n = int(mp.stem[:2])
+            debug_image(canvas, blocked, table[n] if n < len(table) else None).save(out / f'{mp.stem}_debug.png')
         print(f'{mp.stem}: {meta["name"]}  {colours} colours  {len(data)} bytes')
 
 

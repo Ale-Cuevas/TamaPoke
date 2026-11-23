@@ -52,6 +52,7 @@
 #include "yard_ui.h"  // el patio (v2.0): paleta, geometria y toques del kit de interfaz nuevo (logica pura)
 #include "yardbg.h"   // fondos del patio (v2.0): lector de TPY1, mascara de paso y tinte (logica pura)
 #include "yard.h"     // el patio (v2.0, Y2): los bichos que pasean por el mapa (logica pura)
+#include "yard_spots.h"  // v3.20: donde va cada mueble de casa en cada mapa (logica pura)
 #include "shop.h"     // la tienda de la mochila y el selector de fondos (v2.0, Y4b): logica pura
 #include "travel_ui.h"      // los viajes y la coleccion (v2.0, Y5b): geometria y logica pura de las pantallas
 #include "souvenir_icons.h"  // los 45 recuerdos y la maleta (generado por tools/souvenirs.py)
@@ -112,6 +113,13 @@ uint8_t yardHeartSlot = 0;                         // el que se comio la comida 
 #define YARD_EGG_MID (13 * YARD_EGG_S)  // de sus pies al centro del sprite
 int yardFeedFront(uint8_t s, uint8_t kind);  // (en la seccion del patio) 1 come, 0 ya tiene una, -1 sin patio
 const uint8_t *yardWalkNow();         // la mascara de paso con el huevo (seccion del patio)
+const uint8_t *yardWalkObj();         // v3.20: la del mapa con los muebles de casa (seccion del patio)
+// v3.20: lo que hace cada bicho de casa con los muebles (pet.takeHomeEvt): la visita en curso (YV_*), la que espera
+// a que el otro deje libre el mueble y hasta cuando
+enum : uint8_t { YV_NONE = 0, YV_GYM, YV_TOY, YV_MORNING };
+uint8_t yardVisitKind[HOME_SLOTS] = { YV_NONE, YV_NONE };
+uint8_t yardVisitWait[HOME_SLOTS] = { YV_NONE, YV_NONE };
+uint32_t yardVisitWaitUntil[HOME_SLOTS] = { 0, 0 };
 // como se dibuja cada bicho del patio (aqui arriba: el conversor .ino pone los prototipos antes que
 // el resto): el PMD a escala fija, el sprite B/N, el de flash o la miniatura de la caja
 enum : uint8_t { YB_NONE = 0, YB_PMD, YB_TPK1, YB_FLASH, YB_THUMB };
@@ -1056,6 +1064,24 @@ void handleSerial() {
     if (line.length() > 7) yardForceMap((uint8_t)line.substring(7).toInt());
     wakeUI();
     yardReport();
+    Serial.println("DONE");
+  } else if (line.startsWith("HEVT ")) {  // HEVT <kind> <slot> <a> (v3.20): un evento de casa (HE_*) al patio, como de Pet
+    int k = 0, sl = 0, a = 0;
+    sscanf(line.c_str() + 5, "%d %d %d", &k, &sl, &a);
+    HomeEvt e;
+    e.kind = (uint8_t)k;
+    e.slot = (uint8_t)(sl & 1);
+    e.a = (uint8_t)a;
+    wakeUI();
+    yardHomeEvt(e, millis());
+    Serial.println("DONE");
+  } else if (line.startsWith("HTIER ")) {  // HTIER <linea> <nivel> (v3.20): pone un nivel de mejora (0 camas, 1 gimnasio, 2 juguete)
+    int ln = -1, t = 0;
+    sscanf(line.c_str() + 6, "%d %d", &ln, &t);
+    if (ln >= 0 && ln < UPG_LINES) pet.upgTiers[ln] = (uint8_t)(t < 0 ? 0 : t > UPG_TIERS ? UPG_TIERS : t);
+    wakeUI();
+    Serial.printf("htier bed=%u gym=%u toy=%u map=%u\n", pet.upgTier(UPG_BED), pet.upgTier(UPG_GYM), pet.upgTier(UPG_TOY),
+                  yardMapNow());
     Serial.println("DONE");
   } else if (line.startsWith("YARDFULL")) {  // YARDFULL 0|1: el patio a toda la pantalla (v2.5) o en su circulo negro
     if (line.length() > 9) gYardFull = line.substring(9).toInt() != 0;
@@ -4381,6 +4407,10 @@ void fxCollect(uint32_t now) {
   uint8_t tier = pet.takeGoalBanner(&goalLv, &goalCoins);
   // b = niveles que dieron (v1.36): "+N Lv"; en los 4 bits de abajo, y encima (<< 4) las monedas (Y4)
   if (tier) fxq.push(FXB_GOAL, tier, (uint16_t)((goalLv & 15) | (goalCoins << 4)));
+  // v3.20: lo que la casa le cuenta al patio (buenos dias en la cama, gimnasio, juguete): se ve si el patio esta a
+  // la vista; si no, se deja (la logica ya lo aplico)
+  HomeEvt he;
+  while (pet.takeHomeEvt(he)) yardHomeEvt(he, now);
   fxo.step(now, false);  // caducan los que no llegan a verse
 }
 
@@ -4397,6 +4427,9 @@ bool fxScreenBusy() {
 void fxPoseSlot(uint8_t s, uint8_t act, uint32_t now, uint32_t minMs) {
   PmdMon &m = homeMon[s & 1];
   if (!m.has(act)) return;
+  // v3.20: de visita al gimnasio o al juguete (el "ATK +1" del gimnasio llega mientras va): que siga lo suyo
+  const YardPet &yp = yardW.p[s & 1];
+  if (yp.task == YT_VISIT || (yp.mode == YM_GESTURE && yp.loopAct)) return;
   uint32_t ms = pmdActTotalMs(m.acts[act]);
   yardGesture(yardW, s & 1, act, ms < minMs ? minMs : ms, now);  // el del patio, igual
 }
@@ -9026,6 +9059,15 @@ bool yardPickGesture(uint8_t i, uint8_t *act, uint32_t *ms) {
   return true;
 }
 
+// v3.20: la mascara del mapa con los muebles de casa que se tienen bloqueados (yard_spots.h): nadie pasea por
+// encima y nada cae ahi (cacas, regalos, el huevo, el encuentro). Cada bicho tiene su cama libre (yardBedWalk)
+const uint8_t *yardWalkObj() {
+  static uint8_t w[YBG_WALK_BYTES];
+  memcpy(w, yardWalk, sizeof(w));
+  yardBlockObjects(w, yardMapNow(), pet.upgTier(UPG_BED) > 0, pet.upgTier(UPG_GYM) > 0, pet.upgTier(UPG_TOY) > 0);
+  return w;
+}
+
 // quien esta en el patio: los dos de casa (los nacidos) y el que vuelve de viaje (cargando su sprite si cambio)
 void yardSyncPets() {
   yardW.n = 3;
@@ -9041,8 +9083,9 @@ void yardSyncPets() {
       h = YardPet{};
       h.on = true;
       // recien nacido, donde estaba su huevo; si no, abajo del centro (el segundo, a un lado)
-      int c = yardEggX[s] >= 0 ? yardNearestFreeCell(yardWalk, yardEggX[s], yardEggY[s])
-                               : yardNearestFreeCell(yardWalk, CX + (s ? 90 : 0), PET_GROUND);
+      const uint8_t *wo = yardWalkObj();  // (v3.20: no encima de un mueble)
+      int c = yardEggX[s] >= 0 ? yardNearestFreeCell(wo, yardEggX[s], yardEggY[s])
+                               : yardNearestFreeCell(wo, CX + (s ? 90 : 0), PET_GROUND);
       if (c >= 0 && yardSpotAway(yardW, s, (float)yardCellCenter(yardCellCX(c)), (float)yardCellCenter(yardCellCY(c)))) {
         h.x = (float)yardCellCenter(yardCellCX(c));
         h.y = (float)yardCellCenter(yardCellCY(c));
@@ -9082,13 +9125,14 @@ void yardSyncPets() {
 }
 
 // la mascara de paso de ahora: la del mapa y, con huevos en el suelo (Y3), sus celdas bloqueadas (los
-// bichos pasean a su alrededor, no por encima)
+// bichos pasean a su alrededor, no por encima). v3.20: y los muebles de casa (yardWalkObj)
 const uint8_t *yardWalkNow() {
   bool egg = false, enc = yardEncX >= 0;  // v2.2: lo que se mueve, tambien
   for (uint8_t s = 0; s < HOME_SLOTS; s++) egg |= pet.home(s).isEgg() && !pet.home(s).isVacant() && yardEggX[s] >= 0;
-  if (!egg && !enc) return yardWalk;
+  const uint8_t *base = yardWalkObj();
+  if (!egg && !enc) return base;
   static uint8_t w[YBG_WALK_BYTES];
-  memcpy(w, yardWalk, sizeof(w));
+  memcpy(w, base, sizeof(w));
   for (uint8_t s = 0; s < HOME_SLOTS; s++) {
     if (!pet.home(s).isEgg() || pet.home(s).isVacant() || yardEggX[s] < 0) continue;
     int c = yardCellAt(yardEggX[s], yardEggY[s] - YBG_CELL / 2);
@@ -9127,10 +9171,111 @@ uint8_t yardHoldOf(uint8_t s, uint32_t now) {
   return YH_NONE;
 }
 
+// ---- los muebles de casa (v3.20, docs/HOME_AND_PALS.md FR-HOME.5): las visitas que cuenta pet.takeHomeEvt ----
+// el patio esta a la vista: la pantalla encendida y el ultimo paso del patio es de ahora mismo
+bool yardOnScreen(uint32_t now) {
+  return fxScreenAwake() && yardLastStep && now - yardLastStep <= frameIntervalMs(powerCtx(now)) + 300;
+}
+
+// el primero de los gestos acts[] que tiene el sprite del bicho s, o PMD_NACTS si ninguno
+uint8_t yardPickAct(uint8_t s, const uint8_t *acts, int n) {
+  for (int i = 0; i < n; i++)
+    if (homeMon[s & 1].has(acts[i])) return acts[i];
+  return PMD_NACTS;
+}
+
+// el bicho s puede ir a un mueble: esta en el patio, despierto y nada lo tiene (el menu, la comida, una emocion,
+// otra visita). inBed: tambien vale tumbado en su cama (los buenos dias le llegan alli)
+bool yardPetFree(uint8_t s, uint32_t now, bool inBed) {
+  const PetLife &l = pet.home(s);
+  const YardPet &p = yardW.p[s];
+  if (!p.on || l.isEgg() || l.busyEnding() || petMenuOpen || yardFood[s].phase != YF_NONE) return false;
+  if (inBed && yardBedTask(p.task)) return true;
+  if (l.sleeping || yardHoldOf(s, now) != YH_NONE || pet.home(s).mood() == MOOD_SAD) return false;
+  return p.task == YT_NONE && !(p.mode == YM_GESTURE && p.loopAct);
+}
+
+// el gesto del ejercicio o del juego y la visita al mueble (YV_GYM / YV_TOY)
+void yardStartVisit(uint8_t s, uint8_t vk, uint32_t now) {
+  static const uint8_t GYM_ACTS[] = { PMD_ATTACK, PMD_HOP, PMD_POSE, PMD_NOD };
+  static const uint8_t TOY_ACTS[] = { PMD_HOP, PMD_POSE, PMD_NOD, PMD_BREATH };
+  bool gym = vk == YV_GYM;
+  uint8_t act = gym ? yardPickAct(s, GYM_ACTS, 4) : yardPickAct(s, TOY_ACTS, 4);
+  if (act >= PMD_NACTS) return;  // sin gestos (un sprite viejo): nada que ensenar
+  int ox, oy;
+  yardObjFoot(yardMapNow(), gym ? YOBJ_GYM : YOBJ_TOY, &ox, &oy);
+  yardVisit(yardW, yardWalkNow(), s, (float)ox, (float)oy, act, gym ? HOME_WORKOUT_MS : HOME_TOY_PLAY_MS, true, now);
+  yardVisitKind[s] = vk;
+  Serial.printf("HOME visit slot=%u %s act=%u task=%u\n", s, gym ? "gym" : "toy", act, yardW.p[s].task);
+}
+
+// el otro bicho esta usando (o va a usar) ese mueble
+static bool yardVisitBusy(uint8_t s, uint8_t vk) {
+  uint8_t o = s ^ 1;
+  const YardPet &p = yardW.p[o];
+  return yardVisitKind[o] == vk && (p.task == YT_VISIT || p.mode == YM_GESTURE);
+}
+
+// un evento de casa (Pet::takeHomeEvt, o HEVT por serie): con el patio a la vista, la alegria sale en un "+N"
+// sobre el bicho, el estiron de buenos dias al salir de la cama, o la visita al gimnasio o al juguete. El
+// "ATK +1" del gimnasio ya sale solo (fxTrainW). Sin patio a la vista, o con el bicho ocupado, se deja
+void yardHomeEvt(const HomeEvt &e, uint32_t now) {
+  uint8_t s = e.slot & 1;
+  bool seen = yardOnScreen(now) && yardW.p[s].on;
+  Serial.printf("HOME evt kind=%u slot=%u a=%u seen=%d\n", e.kind, s, e.a, seen ? 1 : 0);
+  if (!seen) return;
+  if ((e.kind == HE_MORNING || e.kind == HE_TOY) && e.a) fxo.push(FXO_STAT, 1, (int16_t)e.a, now, s);  // "+N" de alegria
+  if (e.kind == HE_MORNING) {
+    static const uint8_t ACTS[] = { PMD_POSE, PMD_BREATH, PMD_NOD };
+    uint8_t act = yardPickAct(s, ACTS, 3);
+    if (act >= PMD_NACTS || !yardPetFree(s, now, true)) return;
+    uint32_t ms = pmdActTotalMs(homeMon[s].acts[act]);
+    yardAfterBed(yardW, s, act, ms < HOME_MORNING_MIN_MS ? HOME_MORNING_MIN_MS : ms, now);
+    yardVisitKind[s] = YV_MORNING;
+    return;
+  }
+  if (e.kind != HE_GYM && e.kind != HE_TOY) return;
+  uint8_t vk = e.kind == HE_GYM ? YV_GYM : YV_TOY;
+  if (!pet.upgTier(vk == YV_GYM ? UPG_GYM : UPG_TOY) || !yardPetFree(s, now, false)) return;
+  if (yardVisitBusy(s, vk)) {  // el otro lo esta usando: espera un poco
+    yardVisitWait[s] = vk;
+    yardVisitWaitUntil[s] = now + HOME_VISIT_WAIT_MS;
+    return;
+  }
+  yardStartVisit(s, vk, now);
+}
+
+// cada paso del patio: la visita que esperaba empieza si el mueble quedo libre; la que acabo se olvida
+void yardVisitTick(uint32_t now) {
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    const YardPet &p = yardW.p[s];
+    if (yardVisitKind[s] && p.task != YT_VISIT && p.mode != YM_GESTURE && !p.arriveMs) yardVisitKind[s] = YV_NONE;
+    if (!yardVisitWait[s]) continue;
+    if ((int32_t)(now - yardVisitWaitUntil[s]) >= 0) {
+      yardVisitWait[s] = YV_NONE;
+    } else if (!yardVisitBusy(s, yardVisitWait[s]) && yardPetFree(s, now, false)) {
+      uint8_t vk = yardVisitWait[s];
+      yardVisitWait[s] = YV_NONE;
+      yardStartVisit(s, vk, now);
+    }
+  }
+}
+
 // un paso del planificador: lo que pide el juego (dormir, comer, triste, el menu del bicho...) y la inclinacion
 void yardTick(uint32_t now) {
   uint32_t dt = yardLastStep ? now - yardLastStep : 100;
   uint32_t cap = frameIntervalMs(powerCtx(now)) + 100;  // otra pantalla de por medio no es un paso largo
+  // v3.20: el patio se acaba de ver (o vuelve de otra pantalla): el que ya dormia aparece en su cama
+  yardW.bedSnap = !yardLastStep || dt > cap;
+  bool beds = pet.upgTier(UPG_BED) > 0;
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    int bx, by;
+    yardObjFoot(yardMapNow(), s ? YOBJ_BED1 : YOBJ_BED0, &bx, &by);
+    yardW.bed[s].on = beds;
+    yardW.bed[s].x = (float)bx;
+    yardW.bed[s].y = (float)by;
+  }
+  yardVisitTick(now);
   if (dt > cap) {
     for (YardFood &f : yardFood) f.t0 += dt - cap;  // fuera del patio la comida espera, en la misma fase
     dt = cap;
@@ -9246,7 +9391,7 @@ void yardDrawPet(int i, uint32_t now) {
     } else if (p.mode == YM_WALK) act = yardWalkAct(m, p);
     else if (p.mode == YM_GESTURE) {
       act = p.act;
-      loop = false;
+      loop = p.loopAct;  // v3.20: el ejercicio y el juego se repiten
     }
     if (!m.has(act)) act = PMD_IDLE;
     drawPmdActF(m, act, x, y, now - p.t0, loop || act == PMD_IDLE, false, b.s * YARD_PET_SCALE10);
@@ -9284,6 +9429,15 @@ void yardDrawPet(int i, uint32_t now) {
   uint8_t e = l->emote();
   if (e == EMOTE_ANGRY) drawAngerMark(x + b.w / 2 + 6, head + 4);
   else if (e == EMOTE_DIZZY) drawDizzyStars(x, head - 8, now);
+  // v3.20: el ejercicio en el gimnasio suda (una gota que cae junto a la cabeza); los buenos dias, un sol
+  if (p.mode == YM_GESTURE && yardVisitKind[i] == YV_GYM) {
+    int dx = x + (p.face < 0 ? 1 : -1) * (b.w / 2 + 2), dy = y - b.h * 2 / 3 + (int)((now / 60) % 14);  // (detras: delante va el golpe)
+    gfx->fillCircle(dx, dy, 4, 0x5DDF);
+    gfx->fillTriangle(dx - 3, dy - 1, dx + 3, dy - 1, dx, dy - 8, 0x5DDF);
+    gfx->fillCircle(dx - 1, dy - 1, 1, UI_WHITE);
+  } else if (p.mode == YM_GESTURE && yardVisitKind[i] == YV_MORNING) {
+    drawMap(SPR_ICON_SUN, 16, x - b.w / 2 - 30, head - 6 + (int)(3 * sinf(now * 0.008f)), 2, false);  // (al lado: encima va el globo)
+  }
 }
 
 // ---- la comida y el huevo (fase Y3) ----
@@ -9352,20 +9506,61 @@ void yardDrawEggBubble(uint8_t s, uint32_t now) {
   yardBubbleAt(yardEggX[s], tip, opts[yardCycleIndex(n, since, 900)]);
 }
 
-// lo del suelo que se ordena con los bichos (el huevo y la comida de cada hueco): su y, o INT32_MAX si no hay
+// ---- los muebles de casa (v3.20): camas, gimnasio y juguete, del nivel comprado y tintados con la hora ----
+// un mapa de caracteres con los colores del sprite tintados como el mapa del patio (yardTint565)
+void drawMapYardTint(const char *const *map, int n, int x, int y, int s, YardTint t) {
+  for (int r = 0; r < n; r++) {
+    const char *row = map[r];
+    forRuns(n, [&](int c) { return charKey(row[c], false); },
+            [&](int c0, int len, int k) { gfx->fillRect(x + c0 * s, y + r * s, len * s, s, yardTint565(spriteColor((char)k), t)); });
+  }
+}
+
+// la linea (UPG_*) del mueble k (YOBJ_*)
+static uint8_t yardObjLine(uint8_t k) { return k <= YOBJ_BED1 ? UPG_BED : k == YOBJ_GYM ? UPG_GYM : UPG_TOY; }
+
+// el mueble k a su nivel (nada si no se tiene). El juguete bota mientras alguien juega con el
+void yardDrawFurniture(uint8_t k, uint32_t now) {
+  static const char *const *const SPR[UPG_LINES][UPG_TIERS] = {
+    { SPR_BED1, SPR_BED2, SPR_BED3 }, { SPR_GYM1, SPR_GYM2, SPR_GYM3 }, { SPR_TOY1, SPR_TOY2, SPR_TOY3 }
+  };
+  uint8_t line = yardObjLine(k), t = pet.upgTier(line);
+  if (!t) return;
+  int x, y;
+  yardObjFoot(yardMapNow(), k, &x, &y);
+  int dy = 0;
+  if (k == YOBJ_TOY && t < UPG_TIERS)  // (el columpio no bota)
+    for (uint8_t s = 0; s < HOME_SLOTS; s++)
+      if (yardVisitKind[s] == YV_TOY && yardW.p[s].mode == YM_GESTURE) dy = -(int)(fabsf(sinf(now * 0.01f)) * 10);
+  bool bed = line == UPG_BED;
+  yardShadow(x, y + (bed ? 4 : 0), bed ? 60 : 54);
+  drawMapYardTint(SPR[line][t - 1], 32, x - 32, y - (bed ? 52 : 58) + dy, 2, yardTintAt((uint8_t)sceneHour(), pet.sleeping));
+}
+
+// lo del suelo que se ordena con los bichos (el huevo y la comida de cada hueco; v3.20: los muebles): su y, o
+// INT32_MAX si no hay. La cama va un px por detras de sus pies: el que duerme en ella se pinta encima
+#define YARD_OBJ_FURN (2 * HOME_SLOTS)  // desde aqui, los muebles (YOBJ_*)
 static int32_t yardObjY(int k) {
   if (k < HOME_SLOTS) {
     const PetLife &l = pet.home(k);
     return (l.isEgg() && !l.isVacant() && yardEggX[k] >= 0) ? yardEggY[k] : INT32_MAX;
+  }
+  if (k >= YARD_OBJ_FURN) {
+    uint8_t o = (uint8_t)(k - YARD_OBJ_FURN);
+    if (!pet.upgTier(yardObjLine(o))) return INT32_MAX;
+    int x, y;
+    yardObjFoot(yardMapNow(), o, &x, &y);
+    return o <= YOBJ_BED1 ? y - 1 : y;
   }
   const YardFood &f = yardFood[k - HOME_SLOTS];
   return f.phase != YF_NONE ? f.y : INT32_MAX;
 }
 static void yardDrawObj(int k, uint32_t now) {
   if (k < HOME_SLOTS) yardDrawEgg((uint8_t)k, now);
+  else if (k >= YARD_OBJ_FURN) yardDrawFurniture((uint8_t)(k - YARD_OBJ_FURN), now);
   else yardDrawFood((uint8_t)(k - HOME_SLOTS), now);
 }
-#define YARD_OBJS (2 * HOME_SLOTS)
+#define YARD_OBJS (YARD_OBJ_FURN + YOBJ_N)
 
 void yardDrawPets(uint32_t now) {
   uint8_t order[YARD_PETS_MAX];
@@ -9451,6 +9646,7 @@ static int yardThings(int16_t *ox, int16_t *oy, int skip) {
 
 void yardSyncThings() {
   int16_t ox[YARD_THINGS_MAX + HOME_SLOTS], oy[YARD_THINGS_MAX + HOME_SLOTS];
+  const uint8_t *yardWalk = yardWalkObj();  // v3.20: nada cae sobre un mueble de casa (tapa la del mapa aqui)
   for (uint8_t s = 0; s < HOME_SLOTS; s++) {
     uint8_t m = pet.home(s).poopSlots();
     for (int i = 0; i < POOP_MAX; i++) {
