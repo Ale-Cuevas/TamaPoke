@@ -36,7 +36,8 @@
 enum : uint8_t { YM_IDLE = 0, YM_WALK, YM_GESTURE, YM_SLEEP, YM_STAY };
 // v3.20 (mejoras de casa): lo que hace por su cuenta, encima del modo. Ir a la cama dormido, tumbado en ella,
 // saliendo de ella al despertar, o de visita al gimnasio o al juguete (al llegar, su gesto)
-enum : uint8_t { YT_NONE = 0, YT_BED_WALK, YT_BED, YT_BED_LEAVE, YT_VISIT };
+// v3.22 (PALS, pals.h): YT_SCENE = lo lleva el director de escenas de los dos bichos (yardDecide no lo toca)
+enum : uint8_t { YT_NONE = 0, YT_BED_WALK, YT_BED, YT_BED_LEAVE, YT_VISIT, YT_SCENE };
 #define YARD_BEDS 2  // una cama por hueco de casa (p[0] y p[1])
 // lo que el juego le pide en este paso: nada (el planificador decide), dormir, o quedarse quieto
 // (comiendo, triste, banandose, mareado...: el dibujo elige la accion)
@@ -71,6 +72,10 @@ struct YardPet {
   uint32_t arriveMs = 0;   // 0 = ninguno
   bool arriveLoop = false;
   int16_t lookX = -1;      // hacia donde mira al llegar (el mueble); -1 = da igual
+  // v3.22 (PALS): solo con task == YT_SCENE. sceneDist = cuanto puede acercarse a los otros (0: YARD_MIN_DIST);
+  // scenePct = su velocidad al andar, en % del paseo (0: la normal)
+  uint8_t sceneDist = 0;
+  uint8_t scenePct = 0;
 };
 
 // v3.20: la cama de un hueco de casa en el patio: los pies del bicho tumbado (su celda, bloqueada en la mascara
@@ -407,7 +412,8 @@ inline void yardGesture(YardWorld &w, int i, uint8_t act, uint32_t ms, uint32_t 
   p.tilting = false;
   p.loopAct = false;
   p.arriveMs = 0;
-  if (p.task == YT_VISIT) p.task = YT_NONE;  // (la cama la sigue llevando yardStep)
+  if (p.task == YT_VISIT || p.task == YT_SCENE) p.task = YT_NONE;  // (la cama la sigue llevando yardStep; v3.22: un
+                                                                   //  gesto del juego corta la escena)
 }
 
 // avanza a i por su camino dt ms a `speed` px/s. false si se paro (llego, bloqueado o pegado a otro)
@@ -432,7 +438,8 @@ inline bool yardAdvance(YardWorld &w, const uint8_t *walk, int i, uint32_t dt, f
       if (j == i || !w.p[j].on) continue;
       if (yardBedTask(p.task) && yardBedTask(w.p[j].task)) continue;  // v3.20: las camas van juntas
       float now = yardDist(nx, ny, w.p[j].x, w.p[j].y), before = yardDist(p.x, p.y, w.p[j].x, w.p[j].y);
-      if (now < YARD_MIN_DIST && now < before) return false;  // se acercaria demasiado: se para
+      float minD = (p.task == YT_SCENE && p.sceneDist) ? (float)p.sceneDist : (float)YARD_MIN_DIST;  // v3.22: escenas
+      if (now < minD && now < before) return false;  // se acercaria demasiado: se para
     }
     if (dx > 0.5f) p.face = 1;
     else if (dx < -0.5f) p.face = -1;
@@ -677,7 +684,8 @@ inline void yardStep(YardWorld &w, const uint8_t *walk, uint32_t now, uint32_t d
       p.until = now + YARD_TILT_REST_MS;
     }
     if (p.mode == YM_WALK) {
-      if (!yardAdvance(w, wk, i, dt, YARD_SPEED) || (int32_t)(now - p.until) >= 0) {
+      float sp = (p.task == YT_SCENE && p.scenePct) ? YARD_SPEED * p.scenePct / 100.0f : YARD_SPEED;  // v3.22: escenas
+      if (!yardAdvance(w, wk, i, dt, sp) || (int32_t)(now - p.until) >= 0) {
         p.mode = YM_IDLE;
         p.pathN = p.pathI = 0;
         p.t0 = now;
@@ -697,7 +705,7 @@ inline void yardStep(YardWorld &w, const uint8_t *walk, uint32_t now, uint32_t d
       }
       continue;
     }
-    if ((int32_t)(now - p.until) >= 0) yardDecide(w, walk, i, now);
+    if ((int32_t)(now - p.until) >= 0 && p.task != YT_SCENE) yardDecide(w, walk, i, now);  // (la escena decide)
   }
 }
 

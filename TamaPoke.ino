@@ -53,6 +53,7 @@
 #include "yardbg.h"   // fondos del patio (v2.0): lector de TPY1, mascara de paso y tinte (logica pura)
 #include "yard.h"     // el patio (v2.0, Y2): los bichos que pasean por el mapa (logica pura)
 #include "yard_spots.h"  // v3.20: donde va cada mueble de casa en cada mapa (logica pura)
+#include "pals.h"     // v3.22: los dos bichos juntos, el director de escenas del patio (logica pura)
 #include "shop.h"     // la tienda de la mochila y el selector de fondos (v2.0, Y4b): logica pura
 #include "travel_ui.h"      // los viajes y la coleccion (v2.0, Y5b): geometria y logica pura de las pantallas
 #include "souvenir_icons.h"  // los 45 recuerdos y la maleta (generado por tools/souvenirs.py)
@@ -121,6 +122,8 @@ enum : uint8_t { YV_NONE = 0, YV_GYM, YV_TOY, YV_MORNING };
 uint8_t yardVisitKind[HOME_SLOTS] = { YV_NONE, YV_NONE };
 uint8_t yardVisitWait[HOME_SLOTS] = { YV_NONE, YV_NONE };
 uint32_t yardVisitWaitUntil[HOME_SLOTS] = { 0, 0 };
+// v3.22 (PALS, pals.h): las escenas de los dos bichos (solo RAM; el patio a la vista las mueve, yardTick)
+PalsState pals;
 // como se dibuja cada bicho del patio (aqui arriba: el conversor .ino pone los prototipos antes que
 // el resto): el PMD a escala fija, el sprite B/N, el de flash o la miniatura de la caja
 enum : uint8_t { YB_NONE = 0, YB_PMD, YB_TPK1, YB_FLASH, YB_THUMB };
@@ -1075,6 +1078,23 @@ void handleSerial() {
     e.a = (uint8_t)a;
     wakeUI();
     yardHomeEvt(e, millis());
+    Serial.println("DONE");
+  } else if (line == "PAL" || line.startsWith("PAL ")) {  // PAL (v3.22): el director de escenas; PAL <escena>: la fuerza
+    wakeUI();
+    if (line.length() > 4) {
+      String n = line.substring(4);
+      n.trim();
+      int sc = palsSceneByName(n.c_str());
+      if (sc < 0) {
+        Serial.printf("PAL unknown scene '%s':", n.c_str());
+        for (int k = 1; k < PS_COUNT; k++) Serial.printf(" %s", PALS_NAME[k]);
+        Serial.println();
+      } else {
+        palsForce(pals, (uint8_t)sc);  // en el proximo paso del patio: "PAL start ..." o "PAL refused ...: motivo"
+        Serial.printf("PAL force %s (next yard frame)\n", PALS_NAME[sc]);
+      }
+    }
+    palsReport();
     Serial.println("DONE");
   } else if (line.startsWith("YARDFULL")) {  // YARDFULL 0|1: el patio a toda la pantalla (v2.5) o en su circulo negro
     if (line.length() > 9) gYardFull = line.substring(9).toInt() != 0;
@@ -4827,6 +4847,65 @@ void drawExclaim(int bx, int by) {
   setSize(3);
   setCur(bx - 7, by - 11);
   printT("!");
+}
+
+// v3.22 (PALS): el icono de una escena de los dos centrado en (x, y), tMs ms despues de salir; tint = el color del
+// primer tipo del bicho (las chispas). TODO(P3 sprites): con SPR_ICON_NOTE/DOTS/POUT/GRUMPY/SPARK y los ayudantes
+// de pal_fx.h (palEmoteSprite, palParticleOf, palTypeTint, palFloat, palBurst) solo cambia el cuerpo de esta funcion
+void yardDrawPalEmote(PalEmote k, int x, int y, uint16_t tint, uint32_t tMs) {
+  y -= tMs < 400 ? (int)(tMs * 10 / 400) : 10;  // sale subiendo un poco
+  y += (int)(2 * sinf(tMs * 0.008f));
+  switch (k) {
+    case PE_HEART:
+      drawMap(SPR_HEART, 32, x - 16, y - 16, 1, false);
+      break;
+    case PE_EXCLAIM:
+      drawExclaim(x + 4, y);
+      break;
+    case PE_NOTE:  // una corchea del color de su tipo, con sombra
+      for (int sh = 1; sh >= 0; sh--) {
+        uint16_t c = sh ? Y_SHADOW : tint;
+        int o = sh * 2;
+        gfx->fillCircle(x - 4 + o, y + 8 + o, 6, c);
+        gfx->fillRect(x + 1 + o, y - 12 + o, 3, 20, c);
+        gfx->fillTriangle(x + 4 + o, y - 12 + o, x + 13 + o, y - 5 + o, x + 4 + o, y - 4 + o, c);
+      }
+      break;
+    case PE_DOTS: {  // "..." en un globo pequeno, punto a punto
+      gfx->fillRoundRect(x - 20 + 2, y - 10 + 2, 40, 20, 9, Y_SHADOW);
+      gfx->fillRoundRect(x - 20, y - 10, 40, 20, 9, UI_WHITE);
+      int n = 1 + (int)((tMs / 250) % 3);
+      for (int d = 0; d < n; d++) gfx->fillCircle(x - 10 + d * 10, y, 3, UI_INK);
+      break;
+    }
+    case PE_POUT:  // nubecita blanca con la marca de enfado
+    case PE_GRUMPY: {  // nube gris con un rayo
+      uint16_t c = k == PE_POUT ? UI_WHITE : C565(0x7a, 0x7e, 0x8a);
+      static const int8_t P[4][3] = { { -10, 2, 10 }, { 10, 2, 10 }, { 0, -5, 12 }, { 0, 5, 9 } };
+      for (auto &q : P) gfx->fillCircle(x + q[0] + 2, y + q[1] + 2, q[2], Y_SHADOW);
+      for (auto &q : P) gfx->fillCircle(x + q[0], y + q[1], q[2], c);
+      if (k == PE_POUT) {
+        drawAngerMark(x, y);
+      } else {
+        uint16_t bolt = C565(0xff, 0xd9, 0x4a);
+        gfx->fillTriangle(x + 2, y + 10, x - 6, y + 22, x + 1, y + 20, bolt);
+        gfx->fillTriangle(x + 1, y + 18, x + 6, y + 18, x - 4, y + 30, bolt);
+      }
+      break;
+    }
+    case PE_SPARKLE:  // chispas del color de su tipo que giran
+      for (int j = 0; j < 3; j++) {
+        float a = tMs * 0.004f + j * 2.094f;
+        int sx = x + (int)(16 * cosf(a)), sy = y + (int)(10 * sinf(a));
+        int sz = 3 + (int)((tMs / 90 + j * 2) % 4);
+        gfx->fillRect(sx - sz, sy - 1, 2 * sz + 1, 3, tint);
+        gfx->fillRect(sx - 1, sy - sz, 3, 2 * sz + 1, tint);
+        gfx->fillRect(sx - 1, sy - 1, 3, 3, UI_WHITE);
+      }
+      break;
+    default:
+      break;
+  }
 }
 
 // efectos pequenos de la pantalla principal (la casa del patio)
@@ -9335,6 +9414,14 @@ uint8_t yardPickAct(uint8_t s, const uint8_t *acts, int n) {
   return PMD_NACTS;
 }
 
+// v3.22 (PALS): el primero de acts[] que tiene el sprite del bicho s, como gesto de escena (o PAL_ACT_NONE)
+uint8_t palsActOf(uint8_t s, const uint8_t *acts, int n) {
+  uint8_t k = yardPickAct(s, acts, n);
+  return k >= PMD_NACTS ? (uint8_t)PAL_ACT_NONE : k;
+}
+// segundos de patio a la vista que faltan hasta at (0 si ya)
+uint32_t palsLeftS(uint32_t at) { return (int32_t)(at - pals.watch) > 0 ? (at - pals.watch) / 1000 : 0; }
+
 // el bicho s puede ir a un mueble: esta en el patio, despierto y nada lo tiene (el menu, la comida, una emocion,
 // otra visita). inBed: tambien vale tumbado en su cama (los buenos dias le llegan alli)
 bool yardPetFree(uint8_t s, uint32_t now, bool inBed) {
@@ -9412,6 +9499,112 @@ void yardVisitTick(uint32_t now) {
   }
 }
 
+// ---- los dos bichos juntos (v3.22, docs/HOME_AND_PALS.md tarea PALS; pals.h) ----
+// lo que el director sabe de los dos este paso. hold = lo que yardTick pide a cada paseante (YH_*), tilt = la
+// inclinacion. Las escenas solo pasan con el patio a la vista, sin nada encima (FR-PALS.1)
+PalsCtx palsCtxNow(const uint8_t *hold, int8_t tilt, uint32_t now) {
+  PalsCtx c;
+  c.modal = fxBan || foundShown || confirmUntil || choiceKind || returnBannerShown || !fxScreenAwake();
+  c.menuSlot = petMenuOpen ? (int8_t)(petMenuOpen - 1) : (int8_t)-1;
+  c.tilt = tilt;
+  c.beds = pet.upgTier(UPG_BED) > 0;
+  if (pet.upgTier(UPG_TOY)) {
+    int x, y;
+    yardObjFoot(yardMapNow(), YOBJ_TOY, &x, &y);
+    c.toy = true;
+    c.toyX = (float)x;
+    c.toyY = (float)y;
+  }
+  c.hour = (uint8_t)sceneHour();
+  static const uint8_t HOP[] = { PMD_HOP, PMD_POSE, PMD_NOD };
+  static const uint8_t BUMP[] = { PMD_ATTACK, PMD_NOD, PMD_HOP };
+  static const uint8_t SIT[] = { PMD_SIT, PMD_BREATH };
+  static const uint8_t JOY[] = { PMD_POSE, PMD_HOP, PMD_NOD };
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    const PetLife &l = pet.home(s);
+    const YardFood &f = yardFood[s];
+    PalsSlot &p = c.s[s];
+    p.pet = l.hatched() && yardW.p[s].on;
+    p.egg = l.isEgg() && !l.isVacant() && yardEggX[s] >= 0;
+    p.eggX = yardEggX[s];
+    p.eggY = yardEggY[s];
+    p.asleep = l.sleeping;
+    p.nap = l.sleeping && !l.nightSlept();
+    p.busy = l.evolving() || fxHatchHidesPetSlot(s, now) || l.busyEnding();
+    p.hold = hold[s];
+    p.sadPose = hold[s] == YH_STAY && yardHoldOf(s, now) == YH_NONE && f.phase == YF_NONE && petMenuOpen != s + 1 &&
+                l.mood() == MOOD_SAD;
+    p.food = f.phase;
+    p.foodX = f.phase == YF_EAT ? f.x : (int16_t)yardW.p[s].x;  // (la que espera aun no esta en el suelo)
+    p.foodY = f.phase == YF_EAT ? f.y : (int16_t)yardW.p[s].y;
+    if (!l.hatched()) continue;
+    p.joy = l.joy;
+    p.level = l.level();
+    p.stage = palsStageOf(l.speciesId);
+    p.actHop = palsActOf(s, HOP, 3);
+    p.actBump = palsActOf(s, BUMP, 3);
+    p.actSit = palsActOf(s, SIT, 2);
+    p.actJoy = palsActOf(s, JOY, 3);
+  }
+  return c;
+}
+
+// lo que dejo el paso del director: el aviso por la serie, la alegria (con sus topes diarios, en Pet; el "+N" solo
+// si dio algo) y la cuenta de la medalla Companeros de juego
+void palsApply(const PalsOut &o, uint32_t now) {
+  if (o.aborted) Serial.printf("PAL abort %s\n", PALS_NAME[o.aborted]);
+  if (o.refused) Serial.printf("PAL refused %s: %s\n", PALS_NAME[o.refused], o.why ? o.why : "?");
+  if (o.started) Serial.printf("PAL start %s a=%u b=%u\n", PALS_NAME[o.started], pals.a, pals.b);
+  if (o.ended) Serial.printf("PAL end %s\n", PALS_NAME[o.ended]);
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    if (!o.play[s]) continue;
+    uint8_t j = pet.palPlayPerk(s);
+    Serial.printf("PAL perk play slot=%u joy=%u\n", s, j);
+    if (j) fxo.push(FXO_STAT, 1, (int16_t)j, now, s);  // "+N" de alegria
+  }
+  if (o.cheer >= 0) {
+    uint8_t s = (uint8_t)o.cheer, j = pet.palCheerPerk(s);
+    Serial.printf("PAL perk cheer slot=%u joy=%u\n", s, j);
+    if (j) fxo.push(FXO_STAT, 1, (int16_t)j, now, s);
+  }
+  if (o.seen) pet.palSceneSeen();
+}
+
+// el color del primer tipo del bicho del hueco s (los de los huevos, v2.4): tine las chispas de sus escenas
+uint16_t palsTint(uint8_t s) {
+  const PetLife &l = pet.home(s);
+  uint8_t t = l.hatched() ? DEX_TBL[l.speciesId].type1 : (uint8_t)TY_NORMAL;
+  return TYPE_EGG_BASE[t < TY_COUNT ? t : TY_NORMAL];
+}
+
+// PAL: el director, sus esperas y lo que ve de cada uno
+void palsReport() {
+  uint8_t hold[YARD_PETS_MAX] = { YH_NONE, YH_NONE, YH_NONE };
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) hold[s] = yardHoldOf(s, millis());
+  PalsCtx c = palsCtxNow(hold, 0, millis());
+  Serial.printf("PAL scene=%s phase=%u a=%u b=%u watch=%lus\n", PALS_NAME[pals.scene < PS_COUNT ? pals.scene : 0],
+                pals.phase, pals.a, pals.b, (unsigned long)(pals.watch / 1000));
+  Serial.printf("PAL next play=%lus squabble=%lus greet=%lus rest=%lus force=%s armed=%s\n",
+                (unsigned long)palsLeftS(pals.playAt), (unsigned long)palsLeftS(pals.squabbleAt),
+                (unsigned long)palsLeftS(pals.greetAt), (unsigned long)palsLeftS(pals.restAt), PALS_NAME[pals.force],
+                PALS_NAME[pals.armed]);
+  if (pals.lastRefused)
+    Serial.printf("PAL last refused %s: %s\n", PALS_NAME[pals.lastRefused], pals.lastWhy ? pals.lastWhy : "?");
+  Serial.print("PAL started");
+  for (int k = 1; k < PS_COUNT; k++) Serial.printf(" %s=%u", PALS_NAME[k], pals.count[k]);
+  Serial.println();
+  const char *blk = palsBlocked(c);
+  Serial.printf("PAL blocked=%s big=%d beds=%u toy=%u hour=%u\n", blk ? blk : "no", palsBigOf(c), c.beds, c.toy, c.hour);
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    const PalsSlot &p = c.s[s];
+    const YardPet &y = yardW.p[s];
+    Serial.printf("PAL slot%u pet=%u egg=%u asleep=%u nap=%u busy=%u hold=%u food=%u joy=%u lv=%u stage=%u task=%u "
+                  "mode=%u at %d,%d\n",
+                  s, p.pet, p.egg, p.asleep, p.nap, p.busy, p.hold, p.food, p.joy, p.level, p.stage, y.task, y.mode,
+                  (int)y.x, (int)y.y);
+  }
+}
+
 // un paso del planificador: lo que pide el juego (dormir, comer, triste, el menu del bicho...) y la inclinacion
 void yardTick(uint32_t now) {
   uint32_t dt = yardLastStep ? now - yardLastStep : 100;
@@ -9468,7 +9661,14 @@ void yardTick(uint32_t now) {
   hold[YARD_TRV] = YH_NONE;  // el viajero espera quieto (no pasea)
   bool still = pet.home(0).emote() != EMOTE_NONE || pet.home(1).emote() != EMOTE_NONE;
   int8_t tilt = (imuPresent() && !still && !foodOn[0] && !foodOn[1]) ? imuTiltSide() : 0;
+  // v3.22 (PALS): el director de escenas de los dos, con lo que pide el juego y la inclinacion de este paso
+  PalsCtx pc = palsCtxNow(hold, tilt, now);
+  PalsOut po;
+  palsStep(pals, yardW, walk, now, dt, pc, po);
+  for (uint8_t s = 0; s < HOME_SLOTS; s++)
+    if (po.holdFree[s]) hold[s] = YH_NONE;  // dormido, pero se acerca al otro (dormir juntos, solo se ve)
   yardStep(yardW, walk, now, dt, hold, tilt);
+  palsApply(po, now);
   for (uint8_t s = 0; s < HOME_SLOTS; s++) {
     YardFood &f = yardFood[s];
     if (!foodOn[s]) continue;
@@ -9520,7 +9720,7 @@ void yardDrawPet(int i, uint32_t now) {
   YardBody b = yardBodyOf(i);
   bool home = i < HOME_SLOTS;
   const PetLife *l = home ? &pet.home((uint8_t)i) : nullptr;
-  int x = (int)p.x + (home ? dizzyWobbleOf(*l, now) : 0), y = (int)p.y;
+  int x = (int)p.x + (home ? dizzyWobbleOf(*l, now) + palsRollDx(pals, yardW, i, now) : 0), y = (int)p.y;
   yardShadow(x, y, b.w);
   if (home && petMenuOpen == i + 1) {  // v3.3: el que tiene el menu abierto, con un anillo a sus pies
     int rx = b.w / 2 + 6, ry;
@@ -9588,6 +9788,19 @@ void yardDrawPet(int i, uint32_t now) {
     gfx->fillCircle(dx - 1, dy - 1, 1, UI_WHITE);
   } else if (p.mode == YM_GESTURE && yardVisitKind[i] == YV_MORNING) {
     drawMap(SPR_ICON_SUN, 16, x - b.w / 2 - 30, head - 6 + (int)(3 * sinf(now * 0.008f)), 2, false);  // (al lado: encima va el globo)
+  }
+}
+
+// v3.22 (PALS): los iconos de las escenas, encima de los dos bichos (el de uno no queda tapado por el otro) y de los
+// globos (duran un momento): junto a la cabeza, del lado contrario al otro bicho
+void yardDrawPalEmotes(uint32_t now) {
+  for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+    const PalsEmote &pe = pals.emo[s];
+    const YardPet &p = yardW.p[s], &o = yardW.p[s ^ 1];
+    if (pe.kind == PE_NONE || !p.on) continue;
+    int w = yardBodyOf(s).w, side = (o.on && o.x > p.x) ? -1 : 1;
+    int x = (int)p.x + palsRollDx(pals, yardW, s, now) + side * (w / 2 + 8);
+    yardDrawPalEmote((PalEmote)pe.kind, x, yardPetHeadY(s) + 14, palsTint(s), now - pe.t0);
   }
 }
 
@@ -9682,7 +9895,8 @@ void yardDrawFurniture(uint8_t k, uint32_t now) {
   int dy = 0;
   if (k == YOBJ_TOY && t < UPG_TIERS)  // (el columpio no bota)
     for (uint8_t s = 0; s < HOME_SLOTS; s++)
-      if (yardVisitKind[s] == YV_TOY && yardW.p[s].mode == YM_GESTURE) dy = -(int)(fabsf(sinf(now * 0.01f)) * 10);
+      if ((yardVisitKind[s] == YV_TOY && yardW.p[s].mode == YM_GESTURE) || palsToyBusy(pals, yardW))  // (v3.22: escenas)
+        dy = -(int)(fabsf(sinf(now * 0.01f)) * 10);
   bool bed = line == UPG_BED;
   yardShadow(x, y + (bed ? 4 : 0), bed ? 60 : 54);
   drawMapYardTint(SPR[line][t - 1], 32, x - 32, y - (bed ? 52 : 58) + dy, 2, yardTintAt((uint8_t)sceneHour(), pet.sleeping));
@@ -10122,6 +10336,12 @@ void yardDrawBubble(uint32_t now) {
     txt[s] = yardBubbleText(s, now);
   }
   bool both = txt[0] && txt[1] && fabsf(yardW.p[0].x - yardW.p[1].x) < 200 && fabsf(yardW.p[0].y - yardW.p[1].y) < 90;
+  // v3.22 (PALS, FR-PALS.5): durmiendo juntos (en sus camas o uno al lado del otro), un solo "Zzz" para los dos
+  if (both && pet.home(0).sleeping && pet.home(1).sleeping && txt[0] == txt[1] && palsZzzTogether(yardW)) {
+    int h0 = yardPetHeadY(0), h1 = yardPetHeadY(1);
+    yardBubbleAt((int)(yardW.p[0].x + yardW.p[1].x) / 2, (h0 < h1 ? h0 : h1) - 4, txt[0]);
+    return;
+  }
   int turn = both ? (int)((now / (Y_BUBBLE_CYCLE_MS * 2)) % 2) : -1;
   for (uint8_t s = 0; s < HOME_SLOTS; s++) {
     if (pet.home(s).isEgg()) {  // Y3: el huevo en el patio
@@ -10218,6 +10438,7 @@ void renderYardHome(uint32_t now) {
   yardDrawPets(now);
   drawBoxAppear(now);       // recien guardado o despertado: sale de una luz
   yardDrawBubble(now);
+  yardDrawPalEmotes(now);   // v3.22: los iconos de las escenas de los dos (encima de todo, son un momento)
   yardDrawFoodFx(now);     // Y3: el corazon al acabarse la comida
   yardDrawHud();
 }
@@ -10301,6 +10522,7 @@ void yardTap(int16_t x, int16_t y) {
     if (abs(x - bx) < 34 && abs(y - by) < 34) who = YARD_TRV;
   }
   if (who >= 0 && who < HOME_SLOTS) {  // v3.3: uno de casa: pasa a tener el foco y se abre su menu
+    palsCancel(pals, yardW, millis());  // v3.22: un toque corta la escena de los dos (FR-PALS.1)
     if (!openPetMenu((uint8_t)who)) {
       sfxPlay(SFX_DENY);
       return;

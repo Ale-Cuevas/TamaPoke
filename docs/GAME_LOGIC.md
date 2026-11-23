@@ -75,6 +75,7 @@ To tune the game, change it there (see §17, "Tuning").
 | Travel and souvenirs | `travel.h` (`travelRoll` `:83`), `Pet::startTravel` `pet.cpp:1943`, `travelComplete` `:1977` |
 | Yard movement, food walking | `yard.h` (`yardStep` `:614`, BFS paths, food phases); `renderYardHome` `TamaPoke.ino:10213` |
 | Yard maps / backgrounds | `yardbg.h` (TPY1), `yardEnsureMap` `TamaPoke.ino:9006`, `tools/pack_yard.py` |
+| Pals scenes (the two pets together) | `pals.h` (`palsStep`, `palsStart`, `palsSceneStep`), hooked in `yardTick`; `palsCtxNow` / `palsApply` / `yardDrawPalEmote` `TamaPoke.ino` (§7) |
 | Yard furniture (beds, gym, toy) | `yard_spots.h` (spots per map), `yardDrawFurniture` / `yardHomeEvt` `TamaPoke.ino`, sleep in bed and visits in `yard.h` (§7) |
 | A screen's drawing or taps | §3 table; everything UI is in `TamaPoke.ino` |
 | A string / translation | `i18n.h` (`StrId`), `i18n.cpp` (8 rows), `tools/test_i18n_formats.py` |
@@ -166,6 +167,7 @@ flowchart TB
 | `travel.h` / `travel_ui.h` | 248 / 198 | Trips and souvenirs; travel screen geometry, Collection pages, Bag tabs |
 | `yard.h` / `yardbg.h` / `yard_ui.h` / `yard_panels.h` | 950 / 131 / 133 / 71 | Yard walk planner, food in front, menu step-aside, sleep in bed and furniture visits (v3.20); TPY1 maps; HUD and dock kit; Play panel, pet menu, food list and pet picker geometry |
 | `yard_spots.h` | 70 | Home furniture spots per yard map (v3.20), the cells they block |
+| `pals.h` | 1097 | The two home pets together (v3.22): scene director, timers, blockers, scenes, perks out |
 | `fx.h` | 348 | Celebration queue, "+N" overlays, change watchers |
 | `power.h` / `burnin.h` | 133 / 69 | Dim, saver, frame pacing, light sleep; AMOLED orbit and saver path |
 | `steps.h` / `motion.h` / `imu.h` / `imu.cpp` | 101 / 292 / 42 / 250 | Software step counter; shake, face-down, tilt; IMU reader |
@@ -744,6 +746,50 @@ bubble, food fx → `yardDrawHud` (`:8589`)
     (Pose, else Breath/Nod, at least `HOME_MORNING_MIN_MS`) with a sun once it is out of bed (`yardAfterBed`). If the
     other pet is using the same object, the visit waits up to `HOME_VISIT_WAIT_MS` (`yardVisitTick`); anything else
     drops it. Serial (UI side, for testing): `HEVT <kind> <slot> <a>` feeds an event; `UPG <line> <tier>` sets a tier.
+- **Pals scenes (v3.22, `docs/HOME_AND_PALS.md` FR-PALS.1-7).** `pals.h` is a pure scene director for the two home
+  pets (host tests `test/test_pals.cpp`). `yardTick` (`:9609`) builds a `PalsCtx` from Pet (`palsCtxNow` `:9505`:
+  hatched/egg, asleep, day nap vs night, busy = evolving/hatch/ceremony/dying, this frame's hold, sad pose, food phase,
+  JOY, level, evolution stage via `palsStageOf`, gestures the sprite has, beds, toy foot, hour, and the blockers: a
+  modal/banner/found/traveller notice/dark screen, the open pet menu, the tilt) and calls `palsStep` (`pals.h:925`)
+  right before `yardStep`; it only runs with the yard on screen, so nothing happens in the pocket or offline, and
+  `bedSnap` (yard just reopened) drops any scene. A scene takes its walkers with the task `YT_SCENE` (`yard.h:40`):
+  `yardDecide` skips them, `yardAdvance` lets them come within their `sceneDist` (`PAL_NEAR_PX` 30) instead of
+  `YARD_MIN_DIST` 64, `scenePct` sets their speed, and a game gesture (`yardGesture`) clears the task, which aborts
+  the scene. `yardPetFree` needs `YT_NONE`, so scenes block gym/toy visits, and a scene never starts during a visit
+  or a bed task. Every end, abort or cancel releases both walkers (`palsRelease`: `YT_NONE`, idle 600 ms).
+  - Timers count yard-on-screen ms (`PalsState.watch`). A play slot comes every `PAL_SCENE_GAP_MIN_S`-`MAX_S`
+    (12-28 min, ~3/h); at it the director tries, in order, cheer-up, a weighted play scene (`PAL_PLAY_W`: chase, hop,
+    nuzzle, toy pass with a toy, escort with big & small), egg-sitting, then sitting by a sleeper. Squabbles (bump,
+    tug) wait `PAL_SQUABBLE_GAP_S`-1.5x (at most 1/h). Greeting: both awake, one walking, within `PAL_GREET_DIST` 90,
+    `PAL_GREET_COOLDOWN_S` 180 s. After any scene, `PAL_REST_S` 30 s before the next (and the greeting waits its
+    cooldown). Event scenes skip the slot: sleep together (the second pet falls asleep without beds) and food scenes.
+  - Blockers (`palsBlocked`): modal, tilt, either pet busy, a pet menu open (except the food owner's menu during a
+    food scene, since food is chosen there), food in flight (except food scenes). Abort (`palsKeepGoing`) also when a
+    walker is taken by something else, stops being free, or the other pet's condition goes (woke, egg hatched...).
+    A tap on a pet cancels the scene (`palsCancel` in `yardTap`) before its menu opens.
+  - Scenes (`PS_*`, durations in `tuning.h`): greet (both stop, face, heart/note/"!", `PAL_GREET_MS`); chase (two
+    legs at `PAL_CHASE_PCT`, roles swap, `PAL_CHASE_MS`); hop (both loop Hop together, `PAL_HOP_MS`); nuzzle (walk up,
+    bump, hearts, `PAL_NUZZLE_MS`); toy pass (both to the toy's sides, kicks in turns, the ball bounces,
+    `PAL_TOY_MS`); escort (big & small: the small leads at `PAL_ESCORT_PCT`, the big follows, `PAL_ESCORT_MS`); cheer
+    (a pet with JOY < `PAL_CHEER_BELOW`, the other ≥ `PAL_CHEER_FROM`: the happy one walks over and nuzzles, hearts and
+    type sparkles, `PAL_CHEER_MS`; a sad-pose pet is not moved); egg-sit (sits `PAL_SIDE_PX` from the other slot's
+    egg, `PAL_EGGSIT_MS`); sit (from `EVENING_HOUR`, by a sleeper, `PAL_SIT_MS`); sleep together (no beds: the
+    second sleeper walks beside the first, `PalsOut.holdFree` lets it walk while asleep; cosmetic); wait (big & small:
+    food for the small one, the big walks over and waits). Squabbles: berry (food for A when the squabble slot is due
+    and not big & small: B trots over with "!", pouts if in time, "..." when it's eaten, make-up hearts within
+    `PAL_MAKEUP_S`; the food goes through `yardFoodEaten` untouched); bump (day nap only, `WAKE_HOUR`-`EVENING_HOUR`:
+    a bump, a grumpy cloud for `PAL_BUMP_MS` while it keeps sleeping, "...", hearts; no Pet field changes); tug (toy:
+    `PAL_TUG_MS` tug with pouts, make-up hearts, then a `PAL_TURN_MS` turn each). Big & small (`palsBigOf`): a higher
+    evolution stage, or `PAL_BIG_LEVEL_GAP` levels more.
+  - Perks: the director never touches Pet. A finished play scene sets `PalsOut.play[]` for both, a finished cheer-up
+    `PalsOut.cheer` for the sad one; `palsApply` (`:9554`) calls `pet.palPlayPerk` / `palCheerPerk` (daily caps in
+    Pet), shows a JOY "+N" (`FXO_STAT`) only if it gave something, and `pet.palSceneSeen()` once per finished play
+    scene or cheer-up (Playmates medal). Greetings, care-without-perk scenes and squabbles pay nothing.
+  - Drawing: emotes (`PalsState.emo[]`, `PalEmote` from `pal_fx.h`) are yard-local, never `PetLife::emote`.
+    `yardDrawPalEmotes` (`:9796`, after the bubbles) draws each beside the head, on the side away from the other pet,
+    through `yardDrawPalEmote` (`:4855`; placeholder shapes until P3's sprites, tinted with the first type's egg colour
+    `palsTint`). With beds and both asleep in them, every `PAL_ROLL_EVERY_S` one rolls `PAL_ROLL_PX` toward the other
+    with a heart (`palsRollDx`); two sleepers together (`palsZzzTogether`) share one "Zzz" bubble.
 - **Pet menu (v3.3).** Tapping a hatched pet opens a column on the right (`openPetMenu`): Sleep/Wake, Food, Care
   (heart), Status (card), plus Evolve or Farewell when ready. The pet steps out from under the column and holds
   still (`yardMenuHold` `yard.h:946`, retried from geometry; it wins over the sad pose); `avoidX` keeps walks and
@@ -1257,6 +1303,7 @@ to test on the board: `~/.platformio/penv/bin/python tools/board.py cmd STATS ..
 | Battles | `BATTLE`, `STAGE n`, `STAGEDAY` (re-arm today's boss rewards), `BADGES mask` |
 | Encounters | `ENC?`, `ENC [dex]`, `ENCEND`, `BALLS n`, `LURE` (use one and open the encounter), `LURE n` (set the count) |
 | Home upgrades (v3.20) | `UPG` (the 3 tiers and each slot's counters: uid, day, gym, toy, slept, gymMin), `UPG <line> <tier>` (0 bed, 1 gym, 2 toy; sets the tier, saved with the next flush) |
+| Pals scenes (v3.22) | `PAL` (director state: scene, phase, roles, watched time, seconds to the next play slot / squabble / greeting / rest, forced and armed scenes, the last refusal, scenes started, blocker, big & small, each slot's view), `PAL <scene>` (greet chase hop nuzzle toypass escort cheer eggsit sit sleep wait berry bump tug: forced on the next yard frame, ignoring the gaps but not the blockers; prints `PAL start …` or `PAL refused <scene>: <why>`; `berry`/`wait` without food are armed for the next feeding). Logs `PAL start/end/abort`, `PAL perk play\|cheer slot= joy=` |
 | Economy and travel | `COINS [n]`, `SHOP`, `BUY id`, `BUYMAP n`, `GIFTS`, `GIFT item`, `TRAVEL [slot map tier]`, `TRAVELT m`, `TRAVELEND`, `SOUV [mask]` (64-bit mask, `0x..` or decimal; printed as `%llX`) |
 | Steps and IMU | `STEPS n`, `IMU`, `IMULOG s`, `SHAKE`, `FACEDOWN [0]` |
 | Pet menu (v3.3) | `MENU s` (open the menu for slot s; `MENU` prints the rows with their tap points), `PICK s` (choose in the pet picker); actions print `MENU s food\|care\|…`, `FOOD front …`, `PLAY <game> slot=s`, `ITEM <id> slot=s` |

@@ -263,6 +263,7 @@ static void resetUi() {
   // v3.20: sin muebles de casa ni visitas
   for (uint8_t &t : pet.upgTiers) t = 0;
   for (int s = 0; s < HOME_SLOTS; s++) yardVisitKind[s] = yardVisitWait[s] = YV_NONE;
+  pals = PalsState{};  // v3.22: ninguna escena de los dos a medias
   if (gLang != LANG_EN) { setLang(LANG_EN); applyLangFont(); }
 }
 
@@ -844,6 +845,34 @@ static void gymVisit(uint8_t map, uint8_t tier, uint8_t slot) {
   fxCollect(millis());
 }
 
+// v3.22 (PALS): two pets on the yard, standing still at cells (ax, ay) and (bx, by) (the nearest free ones), then
+// the scene `sc` forced (PAL <scene>): the frames of the scene step it
+static void palsPlace(int ax, int ay, int bx, int by) {
+  render();  // the first yard frame places the walkers (and the egg)
+  const int cell[2][2] = { { ax, ay }, { bx, by } };
+  for (int i = 0; i < 2; i++) {
+    YardPet &p = yardW.p[i];
+    if (!p.on) continue;
+    int c = yardNearestFreeCell(yardWalkNow(), (float)yardCellCenter(cell[i][0]), (float)yardCellCenter(cell[i][1]));
+    if (c < 0) continue;
+    p.x = (float)yardCellCenter(yardCellCX(c));
+    p.y = (float)yardCellCenter(yardCellCY(c));
+    p.mode = YM_IDLE;
+    p.pathN = p.pathI = 0;
+    p.until = millis() + 60000;
+  }
+}
+static void palsScene(uint8_t sc, int ax = 5, int ay = 7, int bx = 9, int by = 7) {
+  palsPlace(ax, ay, bx, by);
+  palsForce(pals, sc);
+}
+// Pikachu Lv.15 and Squirtle Lv.14 on the meadow at `hour`
+static void palsTwo(int hour = 13) {
+  pokemon(25, hour);
+  yardForceMap(1);
+  secondPet(7, 14);
+}
+
 struct Scene {
   const char *name;
   std::function<void()> setup;
@@ -923,6 +952,36 @@ static const std::vector<Scene> &scenes() {
     // toy play (slot 1): "+4" JOY, the ball bounces
     { "yard-toy-play", [] { furniture(1, 1); render(); homeEvt(HE_TOY, 1, 4); }, 60 },
     { "yard-toy-swing-m8", [] { furniture(8, 3); render(); homeEvt(HE_TOY, 0, 5); }, 60 },
+    // v3.22 (PALS): the two pets together. A frame mid-scene of each (EN: no text in them)
+    { "pals-greet", [] { palsTwo(); palsScene(PS_GREET, 6, 7, 8, 7); }, 8 },
+    { "pals-nuzzle", [] { palsTwo(); palsScene(PS_NUZZLE); }, 52 },
+    { "pals-chase", [] { palsTwo(); palsScene(PS_CHASE); }, 24 },
+    { "pals-hop", [] { palsTwo(); palsScene(PS_HOP, 6, 7, 8, 7); }, 10 },
+    { "pals-toypass", [] { palsTwo(); pet.upgTiers[UPG_TOY] = 1; palsScene(PS_TOYPASS); }, 62 },
+    { "pals-tug", [] { palsTwo(); pet.upgTiers[UPG_TOY] = 1; palsScene(PS_TUG); }, 64 },
+    { "pals-cheer", [] { palsTwo(); pet.slotRef(1).joy = 10; palsScene(PS_CHEER); }, 55 },
+    { "pals-cheer-sparkle", [] { palsTwo(); pet.slotRef(1).joy = 10; palsScene(PS_CHEER); }, 75 },
+    { "pals-eggsit", [] { pokemon(25, 13); yardForceMap(1); secondEgg(145, 60); palsScene(PS_EGGSIT); }, 75 },
+    { "pals-sit-evening", [] { palsTwo(20); pet.slotRef(1).sleeping = true; palsScene(PS_SIT); }, 70 },
+    // sleeping together: without beds the second one to fall asleep walks over (half way, then beside the first)
+    { "pals-sleep-walk", [] { palsTwo(23); pet.sleeping = true; palsPlace(5, 7, 9, 7); pet.slotRef(1).sleeping = true; }, 22 },
+    { "pals-sleep-together", [] { palsTwo(23); pet.sleeping = true; palsPlace(5, 7, 9, 7); pet.slotRef(1).sleeping = true; }, 70 },
+    // with beds: both in them, one Zzz for the two, and one rolls toward the other
+    { "pals-sleep-beds", [] { palsTwo(23); pet.upgTiers[UPG_BED] = 2; pet.sleeping = true; pet.slotRef(1).sleeping = true;
+                              render(); pals.rollAt = pals.watch; pals.restAt = 0; }, 14 },
+    // squabbles: the same berry (B trots over, then "..." and the make-up heart), bumped awake from a day nap
+    { "pals-berry", [] { palsTwo(); pet.uid = 0x7E57u; palsPlace(4, 8, 8, 6); tapPet(0); menuTap(PM_FOOD); palsForce(pals, PS_BERRY);
+                         foodRowTap(0); }, 8 },
+    { "pals-berry-dots", [] { palsTwo(); pet.uid = 0x7E57u; palsPlace(4, 8, 8, 6); tapPet(0); menuTap(PM_FOOD); palsForce(pals, PS_BERRY);
+                              foodRowTap(0); }, 40 },
+    { "pals-berry-makeup", [] { palsTwo(); pet.uid = 0x7E57u; palsPlace(4, 8, 8, 6); tapPet(0); menuTap(PM_FOOD); palsForce(pals, PS_BERRY);
+                                foodRowTap(0); }, 58 },
+    { "pals-bump", [] { palsTwo(15); pet.slotRef(1).sleeping = true; palsScene(PS_BUMP, 5, 7, 8, 7); }, 42 },
+    { "pals-bump-makeup", [] { palsTwo(15); pet.slotRef(1).sleeping = true; palsScene(PS_BUMP, 5, 7, 8, 7); }, 66 },
+    // big & small: Charizard walks slowly beside a little Charmander; and waits by its food
+    { "pals-escort", [] { pokemon(6, 13); yardForceMap(1); secondPet(4, 8); palsScene(PS_ESCORT, 6, 7, 8, 7); }, 50 },
+    { "pals-wait", [] { pokemon(6, 13); yardForceMap(1); secondPet(4, 8); palsPlace(5, 7, 8, 8); tapPet(1); menuTap(PM_FOOD);
+                        foodRowTap(0); }, 40 },
     { "yard-tap-pet2", [] { pokemon(25, 13); yardForceMap(1); secondPet(4, 14); render(); tapPet(1); } },
     { "yard-home-poop", [] { pokemon(1, 10); pet.dbgSetPoops(3); } },
     { "yard-poop-tap", [] { pokemon(1, 10); pet.dbgSetPoops(3); render();

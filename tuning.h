@@ -427,6 +427,32 @@ static const uint8_t TOY_DAY_MAX[UPG_TIERS + 1] = { 0, 3, 5, 7 };      // veces 
 #define PAL_BIG_LEVEL_GAP 20      // "grande y pequeno": una etapa de evolucion mas, o esta diferencia de nivel
 #define PAL_SQUABBLE_GAP_S 3600   // s de patio en pantalla entre dos riñas (como mucho 1 por hora)
 #define PAL_MAKEUP_S 3            // s hasta el corazon de las paces tras una riña
+// lo que se ve (pals.h): duraciones y distancias de cada escena
+#define PAL_REST_S 30             // s de patio tras una escena antes de otra (y del saludo)
+#define PAL_GREET_MS 1500         // el saludo: quietos, mirandose, con su icono
+#define PAL_APPROACH_MS 7000      // lo que puede tardar en llegar junto al otro (si no, la escena se deja sin premio)
+#define PAL_NEAR_PX 30            // en una escena se acercan hasta esto (fuera de ellas, YARD_MIN_DIST 64)
+#define PAL_BESIDE_PX 70          // "al lado" para empezar lo de juntos (pies a pies)
+#define PAL_SIDE_PX 56            // junto al huevo o al que duerme por la tarde: no mas cerca (sin taparlo)
+#define PAL_CHASE_MS 7000         // la persecucion: dos carreras, cambiando de papel a la mitad
+#define PAL_CHASE_PCT 150         //   a esta velocidad (% del paseo)
+#define PAL_HOP_MS 5000           // saltos a la vez
+#define PAL_NUZZLE_MS 5000        // juntos: el toque de cabezas y los corazones
+#define PAL_TOY_MS 6000           // pasarse el juguete, por turnos
+#define PAL_ESCORT_MS 8000        // el grande acompana al pequeno, despacio
+#define PAL_ESCORT_PCT 60         //   a esta velocidad (% del paseo)
+#define PAL_CHEER_MS 5000         // animar: el carino junto al triste
+#define PAL_EGGSIT_MS 6000        // sentado junto al huevo
+#define PAL_SIT_MS 9000           // sentado junto al que duerme por la tarde
+#define PAL_TUG_MS 2000           // el tira y afloja del juguete (rina)
+#define PAL_TURN_MS 2000          //   y despues, el turno de cada uno
+#define PAL_BUMP_MS 1500          // la nube gris del que despertaron de la siesta (sigue dormido)
+#define PAL_ROLL_EVERY_S 45       // con camas y los dos dormidos: cada tanto uno se gira hacia el otro
+#define PAL_ROLL_MS 2400
+#define PAL_ROLL_PX 10
+// peso de cada escena de juego al sortearla: persecucion, saltos, carantonas, juguete (con juguete), paseo
+// (grande y pequeno)
+static const uint8_t PAL_PLAY_W[5] = { 3, 2, 3, 3, 3 };
 
 // --------------------------------------------------------------------------------------------
 // Viajes (travel.h): 1, 3 u 8 h de tiempo real
