@@ -5,7 +5,7 @@
 > `feature/full-yard`, 2026-11-17), v2.6 hungry-pet food fix (branch `fix/hungry-food`, 2026-11-17) and v3.0 two
 > live home pets (`84b2acf`) and v3.1 no hygiene, stale poops drain JOY (`6e10c31`), v3.2 coloured berries (`b7f7d9c`),
 > v3.3 pet menu, Play/Bag/Shop dock (`c8015f8`) and v3.4 player medals, USER page (branch `feature/two-homes`,
-> 2026-11-18), v3.5 yard 2.4x, v3.6 4.4x yard rolled back in v3.7, v3.8 pets 2.6x + pet-menu need bars, v3.9 in a box, v3.10 bigger labels, v3.11 tuning pass (`feature/tuning-v311`), v3.12 sleeping pets fight, v3.13 slower night, v3.14 Lure, v3.15 four new maps and 45 souvenirs (branch `feature/new-maps`), v3.16 faster ball game, v3.17 ball 3.5x at 100 + hint + SPD on the result, v3.18 ball miss thud + dust, v3.19 Box keeps night sleep vs nap (branch `fix/box-night-sleep`) (2026-11-22), v3.20 home upgrades: beds, gym set, toy, Shop Home page, yard furniture, medal-banner fix (branch `feature/home`, 2026-11-23).**
+> 2026-11-18), v3.5 yard 2.4x, v3.6 4.4x yard rolled back in v3.7, v3.8 pets 2.6x + pet-menu need bars, v3.9 in a box, v3.10 bigger labels, v3.11 tuning pass (`feature/tuning-v311`), v3.12 sleeping pets fight, v3.13 slower night, v3.14 Lure, v3.15 four new maps and 45 souvenirs (branch `feature/new-maps`), v3.16 faster ball game, v3.17 ball 3.5x at 100 + hint + SPD on the result, v3.18 ball miss thud + dust, v3.19 Box keeps night sleep vs nap (branch `fix/box-night-sleep`) (2026-11-22), v3.20 home upgrades: beds, gym set, toy, Shop Home page, yard furniture, medal-banner fix (branch `feature/home`, 2026-11-23), v3.21 purchase sound `SFX_BUY` (branch `fix/buy-sound`).**
 > If `FW_VERSION` in `TamaPoke.ino` or `git log` is past this, sections may be stale. The rule (CLAUDE.md) is that
 > every commit that changes game logic updates this guide in the same commit, including this line.
 
@@ -990,7 +990,8 @@ flowchart TD
   Candy 150. Maps 2-9 cost 150, 150, 200, 250, 250, 300, 350, 400 (owned mask NVS `"ybgO"`, u16: 9 maps fit). Purchases check, in order: not sold, then
   full (`have + pack > itemCap`), then not enough coins (`shopCheckItem`). Each Shop card (`shopCell`) shows
   the amount a purchase gives (x5 berries, x1 the rest), not how many you own; it turns warning-yellow when a
-  purchase would not fit.
+  purchase would not fit. Every successful purchase (item, map or home upgrade) shows the "Purchased!" toast and
+  plays `SFX_BUY` (v3.21, a rising coin "cha-ching"; it was the level-up jingle before); a refused one plays `SFX_DENY`.
 - **Home page (v3.20, HOME).** The Shop pager has a third page, `Home` (`SHOP_PAGES` 3, `shopPageIsHome`, `shop.h`), reached by
   swiping past the item pages (the title changes from Shop to Home; the pager reads "3/3"). Three full-width cards
   (`homeCard`, `TamaPoke.ino`), one per line (`UPG_BED/GYM/TOY`): the next tier's icon (`upgIconDraw`), its name

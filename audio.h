@@ -30,6 +30,7 @@ enum Sfx : uint8_t {
   SFX_WILD,     // algo se mueve en el patio (v2.2): un encuentro salvaje, un aviso nervioso y una fanfarria
   SFX_NEED,     // alarma de necesidad critica (v3.11): dos pitidos agudos (SFX_ALERT son tres)
   SFX_MISS,     // la bola cae al suelo en el minijuego (v3.18): un golpe sordo que cae, mas grave que HIT y OOPS
+  SFX_BUY,      // compra hecha en la tienda (v3.21): "cha-ching" de monedas, distinto de la subida de nivel
   SFX_COUNT
 };
 
