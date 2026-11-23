@@ -55,9 +55,9 @@ To tune the game, change it there (see §17, "Tuning").
 | **The two home pets** (which one an action hits, focus, slot 1 save) | §4 "Two home pets"; `Pet::focus` `pet.cpp:10`, `FocusGuard` `:19`, `uiFocus` `TamaPoke.ino:539`, `homeFocusTick` `:550`; `petlife.h`, `homerec.h` |
 | **Player medals** (19 × Bronze/Silver/Gold, coins) | `medals.h` (table, tiers, `pm` blob); `Pet::medalValue` `pet.cpp:700`, `medalsUpdate` `:741`, `medalsMigrate` `:780`; thresholds `MEDAL_T` and coins `MEDAL_COINS` in `tuning.h` |
 | **Any balance number** (a rate, timer, probability, reward or price) | **`tuning.h`**, grouped by system. Not there: the level curve (`growth.h`), minigame physics (`ballgame.h`, `zengame.h`, `dashgame.h`), the 8 stages (`stage.h`) |
-| How fast needs drain, poops, slip-ups, neglect | `Pet::tick` `pet.cpp:440`, `sleepMinute` `pet.cpp:1151`, numbers in `tuning.h` |
+| How fast needs drain, poops, slip-ups, neglect | `Pet::tick` `pet.cpp:448`, `sleepMinute` `pet.cpp:1161`, numbers in `tuning.h` |
 | Level curve / growth | `growth.h` (`levelCost`, `levelFor`, `addLevels`); `growMin` in `Pet` |
-| Night / sleep schedule | `Pet::nightMinute` `pet.cpp:1181`, `goToBed` `pet.cpp:1168`, hours in `tuning.h` |
+| Night / sleep schedule | `Pet::nightMinute` `pet.cpp:1196`, `goToBed` `pet.cpp:1182`, hours in `tuning.h` |
 | Feeding, cake, poops, pet it | `feedFood` `pet.cpp:1011` (gate `canFeed` `:1003`; foods, favourite and effects in `food.h`), `eatCake` `:1032`, `cleanPoop` `:1227`, `clearPoops` (waterfall), `caress` `:1246`; stale poops: `stalePoops` `petlife.h:197` |
 | Egg odds, shiny odds, genes | `pickEggSpecies` `pet.cpp:590`, `shinyOdds` `:337`, `hatch` `:939`, `newEgg` `:130` |
 | Evolution rules | `canEvolveNow` `pet.cpp:970`, `evolve` `:977` |
@@ -396,7 +396,7 @@ slot** (`pet.focusSlot`). The other slot is `pet.other`.
   Shake and face-down act on both. Hourly stage JOY goes to both home pets; wild-win JOY to the one that fought.
 - Existing v2.x saves have no `hm1`: slot 1 starts vacant.
 
-### One tick — `Pet::tick` `pet.cpp:440`, per slot in `tickHome` `:458`
+### One tick — `Pet::tick` `pet.cpp:448`, per slot in `tickHome` `:466`
 
 ```mermaid
 flowchart TD
@@ -412,8 +412,8 @@ flowchart TD
   F -- yes --> F1["hatch if yard timer is done"] --> Z
   F -- no --> G["growMin++; nightMinute(hour)"]
   G --> H{"asleep?"}
-  H -- yes --> H1["sleepMinute: ENE +6, slow drain with floors; weight -1 per 30 min"] --> Z
-  H -- no --> I["FOOD -1 (not while cake-full); every 2 min ENE -1 (-2 if weight > 50); 5 % poop if FOOD > 40; weight -1 per 15 min; every 2 min JOY -1, plus -1 every min if FOOD < 30; every POOP_JOY_EVERY 3 min JOY -= POOP_JOY_DRAIN[stale poops] (0/1/2/4; stale = older than 5 min)"]
+  H -- yes --> H1["sleepMinute: ENE +6 (+7/8/10 with a bed), slow drain with floors; weight -1 per 30 min"] --> Z
+  H -- no --> HM["homeMinute (v3.20): gym and toy, if owned"] --> I["FOOD -1 (not while cake-full); every 2 min ENE -1 (-2 if weight > 50); 5 % poop if FOOD > 40; weight -1 per 15 min; every 2 min JOY -1, plus -1 every min if FOOD < 30; every POOP_JOY_EVERY 3 min JOY -= POOP_JOY_DRAIN[stale poops] (0/1/2/4; stale = older than 5 min)"]
   I --> J["goodTicks: 720 min with every need >= 40 gives DEF +1"]
   J --> K{"lowest need <= 10 and cooldown 0?"}
   K -- yes --> K1["slip-up: careMistakes++, cooldown 60, bond -1"]
@@ -425,29 +425,59 @@ flowchart TD
   M -- no --> M3["reset neglect counters (lost bond stays lost)"]
 ```
 
-**Sleep drain** (`sleepMinute`, `pet.cpp:917`): ENE +6/min.
+**Sleep drain** (`sleepMinute`, `pet.cpp:1161`): ENE +6/min (`SLEEP_ENE_GAIN`), or `BED_ENE_GAIN[bed tier]` =
+7 / 8 / 10 with a bed (v3.20, naps too).
 
 | | FOOD, JOY |
 |---|---|
 | Day nap | −1 every 4 min (`NAP_FOOD_JOY_EVERY`), floors 30 / 35 |
 | Night (22:00–09:00) | −1 every 16 min (`NIGHT_FOOD_JOY_EVERY`, v3.13), floor 50 |
 
-`dropTo(v, d, floor)` (`pet.cpp:350`) applies the floors. No poops, stale-poop drain, slip-ups or neglect happen while asleep.
+`dropTo(v, d, floor)` (`pet.cpp:356`) applies the floors. No poops, stale-poop drain, slip-ups or neglect happen while asleep.
 
 ### Sleep and night (needs the clock)
 
 Constants are in `tuning.h`: `EVENING_HOUR` 20, `SLEEPY_HOUR` 22, `BED_HOUR` 23, `WAKE_HOUR` 9 (v3.11; was 8),
 `NIGHT_RESLEEP_MIN` 30, `BED_BOND` 3.
 
-- **22:00** `sleepy()` (`pet.h:210`): a "zzz" bubble. Putting the pet to bed now gives **+3 bond**, once a night
-  (`goToBed`, `pet.cpp:1168`).
-- **23:00** auto-sleep (`nightMinute`, `pet.cpp:1181`). If it is woken before 09:00, it sleeps again after 30 min
+- **22:00** `sleepy()` (`pet.h:213`): a "zzz" bubble. Putting the pet to bed now gives **+3 bond**, once a night
+  (`goToBed`, `pet.cpp:1182`).
+- **23:00** auto-sleep (`nightMinute`, `pet.cpp:1196`). If it is woken before 09:00, it sleeps again after 30 min
   awake. `nightHold` delays this while a game, battle, evolution or Box move is open.
 - **09:00** a night sleep (`nightSleep`, set for bedtimes 20:00–08:59) wakes by itself and plays `SFX_MORNING`. A
   nap is not woken. A nap that reaches bed hours (23:00–08:59) becomes a night sleep. The Box keeps the
   difference (`REC_NIGHT`, v3.19; home slots use `nslp` / `HRF_NIGHT`): a napping pet woken out of the Box in the
   day keeps napping, a night sleeper woken out of it after 09:00 wakes on the next minute.
-- Shaking the board while the pet sleeps calls `wakeGrumpy()` (`pet.cpp:1580`): −5 JOY.
+- Shaking the board while the pet sleeps calls `wakeGrumpy()` (`pet.cpp:1607`): −5 JOY.
+- **Good-morning bonus (v3.20, beds).** `UpgSlot::sleptMin` (in `"upg"`, so a reboot mid-night keeps it) counts
+  the minutes slept while `nightSleep`, saturating at `BED_MORNING_MIN_SLEEP` 360. Every sleep start (`goToBed`,
+  the 23:00 auto-sleep, a pet coming out of the Box via `fromRecord`) and every wake (`toggleLight`, `wakeGrumpy`,
+  any awake `nightMinute`) resets it. When the 09:00 auto-wake fires with the counter at 360 and a bed owned, the
+  pet gets `BED_MORNING_JOY[tier]` = +5 / +10 / +15 JOY and the counter goes back to 0 (once a night). Live, it
+  pushes `HE_MORNING` (a = JOY actually added) to the home event queue; offline it pays silently. A nap, a
+  manual early wake or a shake wake pay nothing.
+
+### Home upgrades in the tick (v3.20)
+
+`Pet::homeMinute(h, day, live)` (`pet.cpp:1845`) runs once per awake minute of each home slot: from `tickHome`
+right after the sleep branch (with `today()`), and from `syncHome`'s offline awake branch with the **replayed
+minute's day** (`(seen + (i+1)*60) / 86400`), so the daily caps roll over correctly in a long replay. It does
+nothing without a clock, at night (`nightHour`: 22:00–08:59), asleep, for an egg/vacant slot, during an ending,
+an evolution or the starter pick, and (live only) while `nightHold` is set (game, battle, encounter, Box move).
+It is not care: no streak, bond or coins.
+
+- **Per-slot counters** `UpgSlot {uid, day, gymGains, toyPlays, sleptMin}` (`upgrade.h`), keyed by the pet's
+  `uid`: `upgSlotNow()` (`pet.cpp:1824`) wipes them when the slot holds another pet. `day` resets `gymGains` and
+  `toyPlays`, not `sleptMin`.
+- **Gym** (tier g): each minute with every need ≥ `GYM_NEED_MIN` 40 adds 1 to the RAM-only `gymMin[slot]`; at
+  `GYM_EVERY_MIN[g]` 60 / 45 / 30 the lowest of `trAtk/trDef/trSpe` still below `GYM_CAP[g]` 25 / 40 / 60 gets +1
+  (`gymPick`, ties ATK → DEF → SPD; a stat above the cap is never lowered), ENE −`GYM_ENE_COST` 3 (`dropTo`, floor
+  `GAME_FLOOR`), at most `GYM_DAY_MAX[g]` 4 / 6 / 8 a day. Live it pushes `HE_GYM` (a = 0/1/2); the "+1 ATK"
+  popup already comes from `fxTrainW`.
+- **Toy** (tier t): with JOY < `TOY_JOY_BELOW` 70, `random(100) < TOY_PLAY_CHANCE` 2 → +`TOY_JOY[t]` 3 / 4 / 5
+  JOY, at most `TOY_DAY_MAX[t]` 3 / 5 / 7 a day. Live it pushes `HE_TOY` (a = JOY added).
+- **Events** go to a RAM ring of `HOME_EVT_Q` 8 (`HomeEvtRing`, oldest dropped); the UI drains it with
+  `takeHomeEvt` (`pet.cpp:1813`).
 
 ### Care actions
 
@@ -458,7 +488,7 @@ Constants are in `tuning.h`: `EVENING_HOUR` 20, `SLEEPY_HOUR` 22, `BED_HOUR` 23,
 | Cake | `eatCake` `:910` (= `feedFood(FOOD_CAKE)`) | FOOD 100 and kept full for 180 min (`satedUntil`), +12 JOY, +12 weight |
 | Tap a poop | `cleanPoop` `:1103` | Removes that poop (the only way, besides the waterfall); counts as the day's care; works asleep |
 | Pet it (heart) | `caress` `:1125` | +20 JOY (`CARESS_JOY`); bond +1 at most every 15 min; awake only |
-| Light | `toggleLight` `:906` | Sleep or wake |
+| Light | `toggleLight` `:1145` | Sleep or wake |
 | Item | `useItem` `:1306` (gate `canUseItem` `:1293`) | Foods go through `feedFood` (Golden Berry +50 FOOD +15 JOY); vitamins +3 training; Rare Candy +1 level |
 
 In the yard, food is not applied when tapped. It **drops, the pet walks to it and eats it**, and only then does
@@ -916,6 +946,11 @@ flowchart TD
 - **Storage.** `Pet::coins`, NVS `"cn"`, max 9 999. The daily cap counter is `coinToday`/`coinDay`.
 - **Functions.** `addCoins(n, capped)` (`pet.cpp:1724`) only marks a pending save. `spendCoins` and `buyItem`
   (`:1750`, `:1464`) and `buyMap` save at once.
+- **Home upgrades (v3.20, `upgrade.h`).** Three lines (beds, gym, toy), 3 tiers each, player-wide, prices
+  `UPG_PRICE` in `tuning.h` (600/1000/1500, 800/1200/1800, 500/800/1200). `upgCheck(line, tier, coins)` checks
+  bad line, then MAX, then coins; `buyUpgrade(line)` (`pet.cpp:1805`) buys the next tier only (tier 2 needs tier
+  1), spends the coins and saves at once. `save()` writes `"cn"` before `"upg"`, so a power cut in between loses
+  the tier, never gives it free. Tiers are read with `upgTier(line)`.
 - **Prices** (`ECO_ITEM_PRICE` `economy.h:39`, values in `tuning.h`): Golden Berry 30, coloured berries 25 for a pack of `BERRY_PACK` 5 (v3.11, `shopPackOf`), cake 40, vitamins 60, Revive 80, Poké Ball 100, Rare
   Candy 150. Maps 2-9 cost 150, 150, 200, 250, 250, 300, 350, 400 (owned mask NVS `"ybgO"`, u16: 9 maps fit). Purchases check, in order: not sold, then
   full (`have + pack > itemCap`), then not enough coins (`shopCheckItem`). Each Shop card (`shopCell`) shows
@@ -1023,6 +1058,11 @@ stateDiagram-v2
   - Favourite berry known: `fk` for slot 0 (v3.2; the old `bk` is ignored); `REC_FAV6` in the record for slot 1 and the Box.
   - Progress: `dexreg`, `bdg`.
   - Coins and yard: `cn`, `ybg`, `ybgO`.
+  - Home upgrades (v3.20): `upg`, one `UpgSave` blob (`upgrade.h`, 30 B: `ver`, 3 tiers, per home slot
+    `{uid u32, day u32, gymGains u8, toyPlays u8, sleptMin u16}`, CRC-16). Written right after `cn`, only when
+    it changed (`saveUpg`, copy in `upgSaved`); a failed write sets `pendingSave` and stops the save there.
+    Missing, another version, bad CRC or a tier > 3 = nothing owned (no migration: a new save is expected). The
+    gym's minute counter `gymMin` is RAM-only.
   - Systems: `trv`, `trvR`, `enc`, `souv2` (v3.15, u64; replaces the u32 `souv`, migrated on load), `souvD`, `team`, `cegg`.
   - Box: `box0-5`, `boxT`, `boxTs` (v3.0), `eggH`, `vac`.
   - Home slot 1 (v3.0): `hm1`, one `HomeRec` blob (`homerec.h`, 97 B, version + CRC): kind (vacant/egg/pet), the
@@ -1051,6 +1091,9 @@ stateDiagram-v2
     above the need alarm's 15)
   - One poop per 240 awake minutes, made inside the replay so its stamp is right; the stale-poop JOY drain runs
     there too, with the same floor (v3.1).
+  - Home upgrades (v3.20): the bed's ENE and morning bonus come through `sleepMinute`/`nightMinute`; the gym and
+    toy run in the awake branch through `homeMinute(h, day of that minute, false)`. Offline minutes push no
+    events.
   - **Not applied offline:** evolution (left ready for the user), slip-ups, neglect, death, weight burn and the
     12 h DEF bonus.
 
@@ -1163,6 +1206,7 @@ to test on the board: `~/.platformio/penv/bin/python tools/board.py cmd STATS ..
 | Games | `BALL [n]`, `DASH? / DASH [s] / STEER deg\|OFF`, `ZEN? / ZEN [s] / HOLD 1\|0\|OFF` (`DASH`/`ZEN`/`BALL` here pay nothing) |
 | Battles | `BATTLE`, `STAGE n`, `STAGEDAY` (re-arm today's boss rewards), `BADGES mask` |
 | Encounters | `ENC?`, `ENC [dex]`, `ENCEND`, `BALLS n`, `LURE` (use one and open the encounter), `LURE n` (set the count) |
+| Home upgrades (v3.20) | `UPG` (the 3 tiers and each slot's counters: uid, day, gym, toy, slept, gymMin), `UPG <line> <tier>` (0 bed, 1 gym, 2 toy; sets the tier, saved with the next flush) |
 | Economy and travel | `COINS [n]`, `SHOP`, `BUY id`, `BUYMAP n`, `GIFTS`, `GIFT item`, `TRAVEL [slot map tier]`, `TRAVELT m`, `TRAVELEND`, `SOUV [mask]` (64-bit mask, `0x..` or decimal; printed as `%llX`) |
 | Steps and IMU | `STEPS n`, `IMU`, `IMULOG s`, `SHAKE`, `FACEDOWN [0]` |
 | Pet menu (v3.3) | `MENU s` (open the menu for slot s; `MENU` prints the rows with their tap points), `PICK s` (choose in the pet picker); actions print `MENU s food\|care\|…`, `FOOD front …`, `PLAY <game> slot=s`, `ITEM <id> slot=s` |
