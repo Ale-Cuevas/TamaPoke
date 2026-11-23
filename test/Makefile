@@ -20,7 +20,7 @@ SOURCES := main.cpp shim/shim.cpp test_pet.cpp test_dex.cpp test_i18n.cpp test_b
 all: run
 
 $(BIN): $(SOURCES) framework.h shim/Arduino.h shim/Preferences.h ../roundmask.h ../ui_frame.h ../board_amoled_216.h ../button.h \
-        ../steps.h ../motion.h imu_data.h ../battle.h ../stage.h ../dex.h ../wind.h ../burnin.h ../fx.h ../ballgame.h ../zengame.h ../dashgame.h ../growth.h ../box.h ../volume.h ../yard_ui.h ../yard_panels.h ../yardbg.h ../yard.h ../eggtimer.h ../economy.h ../shop.h ../travel.h ../travel_ui.h ../encounter.h ../eggcolor.h ../pet.h ../petlife.h ../homerec.h ../food.h ../medals.h ../tuning.h
+        ../steps.h ../motion.h imu_data.h ../battle.h ../stage.h ../dex.h ../wind.h ../burnin.h ../fx.h ../ballgame.h ../zengame.h ../dashgame.h ../growth.h ../box.h ../volume.h ../yard_ui.h ../yard_panels.h ../yardbg.h ../yard.h ../eggtimer.h ../economy.h ../shop.h ../upgrade.h ../travel.h ../travel_ui.h ../encounter.h ../eggcolor.h ../pet.h ../petlife.h ../homerec.h ../food.h ../medals.h ../tuning.h
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) -I shim -o $@ $(SOURCES) $(LDFLAGS)
 

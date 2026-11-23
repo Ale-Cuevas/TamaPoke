@@ -1437,6 +1437,12 @@ void handleSerial() {
     Serial.printf("coins=%u earnedToday=%u/%u owned=0x%X chosen=%u\n", pet.coins, pet.coinsEarnedToday(),
                   ECO_DAILY_CAP, pet.yardOwned, pet.yardChosen);
     Serial.println("DONE");
+  } else if (line == "HOMESHOP") {  // v3.20: abre la tienda en la pagina Casa (pruebas)
+    openShop();
+    bagPage = SHOP_PAGES - 1;
+    wakeUI();
+    Serial.printf("homeshop coins=%u bed=%u gym=%u toy=%u\n", pet.coins, pet.upgTier(UPG_BED), pet.upgTier(UPG_GYM), pet.upgTier(UPG_TOY));
+    Serial.println("DONE");
   } else if (line == "SHOP" || line.startsWith("BUY")) {  // SHOP: la tienda; BUY <idObjeto> / BUYMAP <n>: comprar (pruebas)
     if (line.startsWith("BUYMAP") && line.length() > 7) {
       uint8_t n = (uint8_t)line.substring(7).toInt();
@@ -1450,7 +1456,7 @@ void handleSerial() {
       Serial.printf("buy %u -> %s\n", id, ok ? "ok" : r == SB_FULL ? "full" : r == SB_NOT_SOLD ? "not sold" : "no coins");
     }
     wakeUI();
-    Serial.printf("coins=%u tab=%u\n", pet.coins, bagTab);
+    Serial.printf("coins=%u tab=%u page=%u upg=%u/%u/%u\n", pet.coins, bagTab, bagPage, pet.upgTier(UPG_BED), pet.upgTier(UPG_GYM), pet.upgTier(UPG_TOY));
     for (int k = 0; k < SHOP_ITEMS; k++) {
       uint8_t id = SHOP_ORDER[k];
       Serial.printf("  item %u %s price=%u have=%u\n", id, T((StrId)(S_IT_GOLDEN + id)), priceOfItem(id), pet.items[id]);
@@ -2676,7 +2682,7 @@ static uint32_t screenKey() {
     for (uint32_t v : { (uint32_t)pet.eggsOwned(), (uint32_t)itemConfirm, (uint32_t)pet.sleeping, (uint32_t)gLang,
                         (uint32_t)(timeLeft(bagReviveHintUntil) > 0), (uint32_t)bagHintItem, (uint32_t)pet.encShown(),
                         // v2.0 (Y4b): pestana, tienda, aviso, selector de fondos y lo que lo cambia
-                        (uint32_t)bagTab | ((uint32_t)bagPage << 8), (uint32_t)shopBuyId, (uint32_t)shopToast, (uint32_t)yardMapPreview,
+                        (uint32_t)bagTab | ((uint32_t)bagPage << 8), (uint32_t)shopBuyId, (uint32_t)pet.upgTier(0) | ((uint32_t)pet.upgTier(1) << 4) | ((uint32_t)pet.upgTier(2) << 8), (uint32_t)shopToast, (uint32_t)yardMapPreview,
                         (uint32_t)pet.coins, (uint32_t)pet.yardOwned, (uint32_t)pet.yardChosen,
                         (uint32_t)pet.yardMapWanted(), (uint32_t)(yardMapPreview ? sceneHour() : 0),
                         (uint32_t)gLang })
@@ -5125,6 +5131,9 @@ static const uint8_t BAG_ORDER[] = { IT_GOLDEN, IT_CAKE, IT_RARECANDY, IT_PROTEI
 #define BAG_SLOTS (sizeof(BAG_ORDER) / sizeof(BAG_ORDER[0]))
 #define BAG_PAGE0 11   // casillas de la 1.a pagina (de 12); el resto (las 6 bayas de colores) van en la 2.a
 #define BAG_PAGES 2
+// v3.20 HOME: la Tienda tiene una pagina mas, Casa (SHOP_PAGES de shop.h); la mochila sigue con 2
+static int bagPages() { return bagTab == 1 ? SHOP_PAGES : BAG_PAGES; }
+#define SHOP_UPG_ASK 100  // shopBuyId > 100: "comprar mejora?" de la linea shopBuyId - 101 (los objetos van de 1 a IT_COUNT)
 #define BAG_PAGER_X (CX + 104)  // el "1/2" a la derecha de las monedas
 #define BAG_PAGER_Y (BAG_COIN_Y + 2)
 static_assert(BAG_SLOTS == IT_COUNT, "cada objeto tiene su casilla en la mochila");
@@ -5181,7 +5190,7 @@ void closeBag() {
 // la cabecera: v3.4, sin pestanas (la Coleccion se fue a la pagina del jugador). La mochila se titula
 // "Mochila" y la Tienda (v3.3, su boton del dock) "Tienda"; debajo, las monedas
 static void drawBagTabs() {
-  yTitle(T(bagTab == 1 ? S_SHOP : S_BACKPACK), nullptr);
+  yTitle(T(bagTab == 1 ? (shopPageIsHome(bagPage) ? S_HOME : S_SHOP) : S_BACKPACK), nullptr);
   yCoinBadge(CX, BAG_COIN_Y, pet.coins, false);
 }
 
@@ -5200,7 +5209,7 @@ static void shopPrice(int cx, int y, uint16_t price, uint16_t col) {
 // v3.2: "1/2" de las paginas de Objetos y Tienda (tocarlo pasa de pagina)
 static void bagPager() {
   char s[12];
-  snprintf(s, sizeof(s), "%d/%d", bagPage + 1, BAG_PAGES);
+  snprintf(s, sizeof(s), "%d/%d", bagPage + 1, bagPages());
   gfx->setTextColor(Y_TEXT_DIM);
   setSize(2);
   setCur(BAG_PAGER_X - textW(s, 2) / 2, BAG_PAGER_Y);
@@ -5263,7 +5272,101 @@ static void shopAskPills(const char *yes, int &xY, int &wY, int &xN, int &wN) {
   xN = xY + wY + BAG_ASK_PILL_GAP;
 }
 
+// ---------- pagina Casa de la tienda (v3.20, HOME): 3 tarjetas de ancho completo, una por linea ----------
+#define HOME_CARD_X BAG_ASK_X
+#define HOME_CARD_W BAG_ASK_W
+#define HOME_CARD_H 78
+#define HOME_CARD_GAP 6
+#define HOME_ICON 48  // el icono ocupa 48 x 48 (3 x un sprite de 16)
+static int homeCardY(int line) { return BAG_Y + line * (HOME_CARD_H + HOME_CARD_GAP); }
+
+// El icono de la mejora de la linea "line" al nivel "tier" (0..UPG_TIERS-1), en un cuadro de 48 x 48 con la esquina
+// arriba a la izquierda en x, y.
+// TODO(H2 sprites): ahora es un marcador (un cuadro de color por linea con tantos puntos como nivel); H2 lo cambia
+// por SPR_BED1..3 / SPR_GYM1..3 / SPR_TOY1..3 con drawMap(..., 16, x, y, 3, false). Es lo unico que hay que tocar.
+static void upgIconDraw(uint8_t line, uint8_t tier, int x, int y) {
+  static const uint32_t COL[UPG_LINES] = { 0x6E8BD8, 0xD8745C, 0x58B87C };
+  gfx->fillRoundRect(x, y, HOME_ICON, HOME_ICON, 8, yRgb(COL[line < UPG_LINES ? line : 0]));
+  for (uint8_t k = 0; k <= tier && k < UPG_TIERS; k++) gfx->fillCircle(x + 12 + k * 12, y + HOME_ICON - 12, 4, Y_TEXT);
+}
+
+static void homeCard(uint8_t line) {
+  uint8_t tier = pet.upgTier(line), shown = upgShownTier(tier);
+  UpgCard kind = upgCardKind(line, tier, pet.coins);
+  int x = HOME_CARD_X, y = homeCardY(line), w = HOME_CARD_W;
+  yCard(x, y, w, HOME_CARD_H, false);
+  upgIconDraw(line, shown, x + 10, y + (HOME_CARD_H - HOME_ICON) / 2);
+  setSize(2);
+  gfx->setTextColor(Y_TEXT);
+  setCur(x + 68, y + 16);
+  printT(T((StrId)(S_UPG_BED1 + line * UPG_TIERS + shown)));
+  char fx[40];
+  snprintf(fx, sizeof(fx), T((StrId)(S_UPG_BED_FX + line)), (unsigned)upgEffectNum(line, shown));
+  gfx->setTextColor(Y_TEXT_DIM);
+  setCur(x + 68, y + 46);
+  printT(fx);
+  if (kind == UC_MAX) {  // al maximo: MAX en dorado, sin precio
+    const char *m = T(S_MAX);
+    gfx->setTextColor(Y_COIN);
+    setSize(2);
+    setCur(x + w - 12 - textW(m, 2), y + 16);
+    printT(m);
+  } else {
+    char s[8];
+    snprintf(s, sizeof(s), "%u", (unsigned)upgPriceNext(line, tier));
+    shopPrice(x + w - 12 - (14 + 5 + textW(s, 2)) / 2, y + 16, upgPriceNext(line, tier), kind == UC_BUY ? Y_TEXT : SHOP_PRICE_OFF);
+  }
+}
+
+// "comprar mejora?": la misma tarjeta que la de objetos, con el icono del nivel, "Comprar X por N?" (en dos
+// renglones si no cabe) y las pastillas Comprar / NO
+static void homeAsk(uint8_t line) {
+  uint8_t tier = pet.upgTier(line), shown = upgShownTier(tier);
+  uint16_t pr = upgPriceNext(line, tier);
+  bool can = upgCheck(line, tier, pet.coins) == UB_OK;
+  yCard(BAG_ASK_X, BAG_ASK_Y, BAG_ASK_W, BAG_ASK_H, true);
+  upgIconDraw(line, shown, CX - HOME_ICON / 2, BAG_ASK_Y + 26);
+  char q[64];
+  snprintf(q, sizeof(q), T(S_BUY_UPG_FMT), T((StrId)(S_UPG_BED1 + line * UPG_TIERS + shown)), (unsigned)pr);
+  gfx->setTextColor(Y_TEXT);
+  setSize(2);
+  if (textW(q, 2) <= BAG_ASK_W - 16) {
+    setCur(centerX(q, 2), BAG_ASK_Y + 92);
+    printT(q);
+  } else {  // parte por el espacio mas cercano a la mitad
+    int n = (int)strlen(q), cut = -1;
+    for (int i = 0; i < n; i++)
+      if (q[i] == ' ' && (cut < 0 || abs(i - n / 2) < abs(cut - n / 2))) cut = i;
+    if (cut > 0) q[cut] = 0;
+    setCur(centerX(q, 2), BAG_ASK_Y + 84);
+    printT(q);
+    if (cut > 0) {
+      setCur(centerX(q + cut + 1, 2), BAG_ASK_Y + 104);
+      printT(q + cut + 1);
+    }
+  }
+  shopPrice(CX, BAG_ASK_Y + 134, pr, can ? Y_TEXT : SHOP_PRICE_OFF);
+  int xy, wy, xn, wn;
+  shopAskPills(T(S_BUY), xy, wy, xn, wn);
+  yPill(xy, BAG_ASK_PILL_Y, T(S_BUY), can ? Y_ACCENT_GO : SHOP_PRICE_OFF);
+  yPill(xn, BAG_ASK_PILL_Y, T(S_NO), Y_ACCENT_BAD);
+}
+
 static void renderShop() {
+  if (shopPageIsHome(bagPage)) {
+    for (uint8_t l = 0; l < UPG_LINES; l++) homeCard(l);
+    if (!shopBuyId) bagPager();
+    if (shopToast) {
+      shopDrawToast(BAG_HINT_Y - 8);
+    } else {
+      setSize(2);
+      gfx->setTextColor(Y_TEXT_DIM);
+      setCur(centerX(T(S_SHOP_HINT), 2), BAG_HINT_Y);
+      printT(T(S_SHOP_HINT));
+    }
+    if (shopBuyId > SHOP_UPG_ASK) homeAsk((uint8_t)(shopBuyId - SHOP_UPG_ASK - 1));
+    return;
+  }
   for (int k = 0; k < SHOP_ITEMS; k++)
     if (k >= SHOP_PAGE0 ? bagPage == 1 : bagPage == 0) shopCell(k >= SHOP_PAGE0 ? k - SHOP_PAGE0 : k, SHOP_ORDER[k]);
   if (bagPage == 0) shopBgCell();
@@ -5408,10 +5511,21 @@ static void pickerTap(int16_t x, int16_t y) {
 static void shopTap(int16_t x, int16_t y) {
   if (shopBuyId) {  // solo la pastilla de Comprar compra; cualquier otro toque es NO
     uint8_t it = shopBuyId - 1;
+    bool upg = shopBuyId > SHOP_UPG_ASK;
     shopBuyId = 0;
     int xy, wy, xn, wn;
     shopAskPills(T(S_BUY), xy, wy, xn, wn);
     if (!timeLeft(shopBuyUntil) || !yPillHit(x, y, xy, BAG_ASK_PILL_Y, wy)) return;
+    if (upg) {  // v3.20: una mejora de casa (it = SHOP_UPG_ASK + linea)
+      if (pet.buyUpgrade((uint8_t)(it - SHOP_UPG_ASK))) {
+        shopSetToast(SHT_OK);
+        sfxPlay(SFX_LEVELUP);
+      } else {
+        shopSetToast(SHT_BROKE);
+        sfxPlay(SFX_DENY);
+      }
+      return;
+    }
     ShopBuy r = shopCheckItem(it, pet.coins, pet.items[it], itemCap(it));
     if (r == SB_OK && pet.buyItem(it)) {
       shopSetToast(SHT_OK);
@@ -5419,6 +5533,17 @@ static void shopTap(int16_t x, int16_t y) {
     } else {
       shopSetToast(r == SB_FULL ? SHT_FULL : SHT_BROKE);
       sfxPlay(SFX_DENY);
+    }
+    return;
+  }
+  if (shopPageIsHome(bagPage)) {  // v3.20: una tarjeta de Casa pregunta; la de MAX no
+    for (uint8_t l = 0; l < UPG_LINES; l++) {
+      if (!yInRect(x, y, HOME_CARD_X, homeCardY(l), HOME_CARD_W, HOME_CARD_H) || !upgCardAsks(l, pet.upgTier(l))) continue;
+      shopBuyId = (uint8_t)(SHOP_UPG_ASK + l + 1);
+      shopBuyUntil = millis() + 10000;
+      shopToast = 0;
+      sfxPlay(SFX_TAP);
+      return;
     }
     return;
   }
@@ -5457,7 +5582,7 @@ void bagSwipe(int dir) {
   if (itemConfirm || shopBuyId) return;  // con una pregunta abierta, no
   int d = dir > 0 ? -1 : 1;  // derecha = la anterior, izquierda = la siguiente
   int p = (int)bagPage + d;  // v3.2: Objetos y Tienda, sus 2 paginas (v3.4: la Coleccion ya no va detras)
-  if (p >= 0 && p < BAG_PAGES) {
+  if (p >= 0 && p < bagPages()) {
     bagPage = (uint8_t)p;
     shopToast = 0;
   }
@@ -5724,7 +5849,7 @@ void bagTap(int16_t x, int16_t y) {
     return;
   }
   if (yInRect(x, y, BAG_PAGER_X - 36, BAG_PAGER_Y - 8, 72, BAG_Y - (BAG_PAGER_Y - 8))) {  // v3.2: el "1/2" cambia de pagina
-    bagPage = (uint8_t)((bagPage + 1) % BAG_PAGES);
+    bagPage = (uint8_t)((bagPage + 1) % bagPages());
     shopToast = 0;
     sfxPlay(SFX_TAP);
     return;

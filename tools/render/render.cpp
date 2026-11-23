@@ -647,6 +647,18 @@ static void shopToastNow(uint8_t kind) {
   shopToast = kind;
   shopToastUntil = millis() + 1000;
 }
+// v3.20 HOME: the Shop's Home page with the three upgrade tiers given
+static void homeOpen(uint16_t coins, uint8_t bed = 0, uint8_t gym = 0, uint8_t toy = 0) {
+  shopOpen(coins);
+  pet.upgTiers[UPG_BED] = bed;
+  pet.upgTiers[UPG_GYM] = gym;
+  pet.upgTiers[UPG_TOY] = toy;
+  bagPage = SHOP_PAGES - 1;
+}
+static void upgAskNow(uint8_t line) {
+  shopBuyId = SHOP_UPG_ASK + line + 1;
+  shopBuyUntil = millis() + 10000;
+}
 // the background picker on map n
 static void pickerOpen(uint8_t n, uint16_t coins, uint16_t owned = 0) {
   shopOpen(coins);
@@ -1322,6 +1334,18 @@ static const std::vector<Scene> &scenes() {
        shopAskPills(T(S_BUY), xy, wy, xn, wn);
        onTap(xy + wy / 2, BAG_ASK_PILL_Y + 14);
      } },
+    // v3.20 HOME: the Shop's Home page
+    { "shop-home", [] { homeOpen(2000); } },
+    { "shop-home-es", [] { homeOpen(2000); es(); } },
+    { "shop-home-broke", [] { homeOpen(550); } },
+    { "shop-home-broke-es", [] { homeOpen(550); es(); } },
+    { "shop-home-mixed", [] { homeOpen(1000, 1, 3, 0); } },
+    { "shop-home-mixed-es", [] { homeOpen(1000, 1, 3, 0); es(); } },
+    { "shop-home-confirm", [] { homeOpen(2000, 1, 0, 0); upgAskNow(UPG_BED); } },
+    { "shop-home-confirm-es", [] { homeOpen(2000, 1, 0, 0); upgAskNow(UPG_BED); es(); } },
+    { "shop-home-confirm-gym-es", [] { homeOpen(2000, 0, 2, 0); upgAskNow(UPG_GYM); es(); } },
+    { "shop-home-bought", [] { homeOpen(2000, 1, 0, 0); shopToastNow(SHT_OK); } },
+    { "shop-home-bought-es", [] { homeOpen(2000, 1, 0, 0); shopToastNow(SHT_OK); es(); } },
     { "picker-missing", [] { pickerOpen(4, 300); } },
     { "picker-missing-es", [] { pickerOpen(4, 300); es(); } },
     { "picker-owned", [] { pickerOpen(2, 50, 1 << 2); } },
