@@ -60,7 +60,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "3.20"
+#define FW_VERSION "3.21"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
@@ -5544,7 +5544,7 @@ static void pickerTap(int16_t x, int16_t y) {
     if (pet.buyMap(n)) {
       pet.chooseMap(n);
       shopSetToast(SHT_OK);
-      sfxPlay(SFX_LEVELUP);
+      sfxPlay(SFX_BUY);
     } else {
       shopSetToast(SHT_BROKE);
       sfxPlay(SFX_DENY);
@@ -5567,7 +5567,7 @@ static void shopTap(int16_t x, int16_t y) {
     if (upg) {  // v3.20: una mejora de casa (it = SHOP_UPG_ASK + linea)
       if (pet.buyUpgrade((uint8_t)(it - SHOP_UPG_ASK))) {
         shopSetToast(SHT_OK);
-        sfxPlay(SFX_LEVELUP);
+        sfxPlay(SFX_BUY);
       } else {
         shopSetToast(SHT_BROKE);
         sfxPlay(SFX_DENY);
@@ -5577,7 +5577,7 @@ static void shopTap(int16_t x, int16_t y) {
     ShopBuy r = shopCheckItem(it, pet.coins, pet.items[it], itemCap(it));
     if (r == SB_OK && pet.buyItem(it)) {
       shopSetToast(SHT_OK);
-      sfxPlay(SFX_LEVELUP);
+      sfxPlay(SFX_BUY);
     } else {
       shopSetToast(r == SB_FULL ? SHT_FULL : SHT_BROKE);
       sfxPlay(SFX_DENY);

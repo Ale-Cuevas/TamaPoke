@@ -6,6 +6,13 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.21] - 2026-11-23
+
+### Changed
+
+- **Buying something in the Shop has its own sound.** Every purchase (items, yard maps and home upgrades) now plays
+  a short coin "cha-ching" instead of the level-up jingle, so a confirmed purchase is easy to tell apart.
+
 ## [3.20] - 2026-11-23
 
 ### Added
