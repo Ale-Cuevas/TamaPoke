@@ -49,6 +49,8 @@ size_t mockNvsKeyCount(const char *ns);
 // corte de luz (caja, v1.37): tras n escrituras mas (put*, remove, clear) las siguientes no
 // llegan a la NVS, como si la placa se hubiera apagado; -1 = sin corte. mockNvsReset() lo quita.
 void mockNvsCutAfter(long n);
+// una clave que no se puede escribir (put* devuelve 0, el resto sigue); nullptr la quita. mockNvsReset() lo quita.
+void mockNvsFailKey(const char *key);
 long mockNvsWrites();       // escrituras hechas desde el ultimo mockNvsReset()
 // foto de toda la NVS, para repetir un movimiento desde el mismo estado
 void mockNvsSnapshot();

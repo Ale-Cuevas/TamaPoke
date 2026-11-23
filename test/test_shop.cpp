@@ -89,3 +89,33 @@ TEST(shop, paquetes_de_bayas_y_topes) {
   CHECK_EQ(shopCheckItem(IT_GOLDEN, 999, ITEM_MAX - 1, itemCap(IT_GOLDEN)), SB_OK);
   CHECK_EQ(shopCheckItem(IT_GOLDEN, 999, ITEM_MAX, itemCap(IT_GOLDEN)), SB_FULL);
 }
+
+// v3.20 HOME: la pagina Casa de la tienda
+TEST(shop, casa_es_la_ultima_pagina) {
+  CHECK_EQ(SHOP_PAGES, SHOP_ITEM_PAGES + 1);
+  CHECK(!shopPageIsHome(0));
+  CHECK(!shopPageIsHome(SHOP_ITEM_PAGES - 1));
+  CHECK(shopPageIsHome(SHOP_PAGES - 1));
+}
+
+TEST(shop, tarjeta_de_casa_segun_nivel_y_monedas) {
+  for (uint8_t l = 0; l < UPG_LINES; l++) {
+    CHECK_EQ(upgCardKind(l, 0, UPG_PRICE[l][0]), UC_BUY);
+    CHECK_EQ(upgCardKind(l, 0, UPG_PRICE[l][0] - 1), UC_BROKE);
+    CHECK_EQ(upgCardKind(l, UPG_TIERS - 1, 0xFFFF), UC_BUY);
+    // el nivel 3 es MAX: nunca pregunta, ni con todo el dinero
+    CHECK_EQ(upgCardKind(l, UPG_TIERS, 0xFFFF), UC_MAX);
+    CHECK(!upgCardAsks(l, UPG_TIERS));
+    CHECK(upgCardAsks(l, 0));
+    CHECK_EQ(upgShownTier(UPG_TIERS), (uint8_t)(UPG_TIERS - 1));  // al maximo se dibuja el icono del nivel 3
+    CHECK_EQ(upgShownTier(0), (uint8_t)0);
+  }
+}
+
+TEST(shop, efecto_de_la_tarjeta_sale_de_tuning) {
+  for (uint8_t t = 0; t < UPG_TIERS; t++) {
+    CHECK_EQ(upgEffectNum(UPG_BED, t), BED_ENE_GAIN[t + 1]);
+    CHECK_EQ(upgEffectNum(UPG_GYM, t), GYM_CAP[t + 1]);
+    CHECK_EQ(upgEffectNum(UPG_TOY, t), TOY_JOY[t + 1]);
+  }
+}

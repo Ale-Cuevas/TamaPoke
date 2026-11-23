@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "yardbg.h"
+#include "tuning.h"  // v3.20: BED_WALK_MAX_MS (el paseo hasta la cama)
 
 #define YARD_PETS_MAX 3          // el bicho de casa + 1 de la caja (y sitio para otro de casa)
 #define YARD_SPEED 30.0f         // px/s, como el paseo de la escena de lado
@@ -33,6 +34,10 @@
 
 // modo de un bicho
 enum : uint8_t { YM_IDLE = 0, YM_WALK, YM_GESTURE, YM_SLEEP, YM_STAY };
+// v3.20 (mejoras de casa): lo que hace por su cuenta, encima del modo. Ir a la cama dormido, tumbado en ella,
+// saliendo de ella al despertar, o de visita al gimnasio o al juguete (al llegar, su gesto)
+enum : uint8_t { YT_NONE = 0, YT_BED_WALK, YT_BED, YT_BED_LEAVE, YT_VISIT };
+#define YARD_BEDS 2  // una cama por hueco de casa (p[0] y p[1])
 // lo que el juego le pide en este paso: nada (el planificador decide), dormir, o quedarse quieto
 // (comiendo, triste, banandose, mareado...: el dibujo elige la accion)
 enum : uint8_t { YH_NONE = 0, YH_SLEEP, YH_STAY };
@@ -59,6 +64,20 @@ struct YardPet {
   uint32_t until = 0;     // fin del estado de ahora
   uint8_t path[YARD_PATH_MAX];
   uint8_t pathN = 0, pathI = 0;
+  // v3.20: la cama y las visitas (YT_*)
+  uint8_t task = YT_NONE;
+  bool loopAct = false;    // el gesto de ahora se repite (el ejercicio, el juego) en vez de quedarse en su final
+  uint8_t arriveAct = 0;   // el gesto al acabar el paseo de la visita (o al salir de la cama: el estiron)
+  uint32_t arriveMs = 0;   // 0 = ninguno
+  bool arriveLoop = false;
+  int16_t lookX = -1;      // hacia donde mira al llegar (el mueble); -1 = da igual
+};
+
+// v3.20: la cama de un hueco de casa en el patio: los pies del bicho tumbado (su celda, bloqueada en la mascara
+// para los demas, se le deja libre a el para entrar y salir)
+struct YardBed {
+  bool on = false;
+  float x = 0, y = 0;
 };
 
 // gesto al azar del bicho i: true y la accion y su duracion, o false si no tiene ninguno
@@ -70,7 +89,11 @@ struct YardWorld {
   YardRng rng;
   YardGestureFn pickGesture = nullptr;
   int16_t avoidX = 32767;  // v3.3: ni los paseos al azar ni la inclinacion llevan mas a la derecha (el menu)
+  YardBed bed[YARD_BEDS];  // v3.20: la cama de p[0] y la de p[1] (on = false: sin cama, como siempre)
+  bool bedSnap = false;    // v3.20: el patio acaba de verse: el que ya dormia aparece en su cama, sin paseo
 };
+
+inline bool yardBedTask(uint8_t t) { return t == YT_BED_WALK || t == YT_BED || t == YT_BED_LEAVE; }
 
 // ---------- celdas ----------
 inline int yardCellIdx(int cx, int cy) { return cy * YBG_GRID + cx; }
@@ -356,6 +379,7 @@ inline void yardDecide(YardWorld &w, const uint8_t *walk, int i, uint32_t now) {
   YardPet &p = w.p[i];
   p.t0 = now;
   p.tilting = false;
+  p.loopAct = false;
   int r = w.rng.below(100);
   if (r < 45 && p.walks && yardWander(w, walk, i, now)) return;
   if (r >= 45 && r < 70 && w.pickGesture) {
@@ -381,6 +405,9 @@ inline void yardGesture(YardWorld &w, int i, uint8_t act, uint32_t ms, uint32_t 
   p.until = now + ms;
   p.pathN = p.pathI = 0;
   p.tilting = false;
+  p.loopAct = false;
+  p.arriveMs = 0;
+  if (p.task == YT_VISIT) p.task = YT_NONE;  // (la cama la sigue llevando yardStep)
 }
 
 // avanza a i por su camino dt ms a `speed` px/s. false si se paro (llego, bloqueado o pegado a otro)
@@ -403,6 +430,7 @@ inline bool yardAdvance(YardWorld &w, const uint8_t *walk, int i, uint32_t dt, f
     if (!yardSpotOk(walk, nx, ny)) return false;  // (no deberia pasar: el camino va por celdas libres)
     for (int j = 0; j < w.n; j++) {
       if (j == i || !w.p[j].on) continue;
+      if (yardBedTask(p.task) && yardBedTask(w.p[j].task)) continue;  // v3.20: las camas van juntas
       float now = yardDist(nx, ny, w.p[j].x, w.p[j].y), before = yardDist(p.x, p.y, w.p[j].x, w.p[j].y);
       if (now < YARD_MIN_DIST && now < before) return false;  // se acercaria demasiado: se para
     }
@@ -416,19 +444,203 @@ inline bool yardAdvance(YardWorld &w, const uint8_t *walk, int i, uint32_t dt, f
   return p.pathI < p.pathN;
 }
 
+// ---------- la cama y las visitas (v3.20, mejoras de casa) ----------
+// Con cama (w.bed[i].on), el bicho que se duerme con el patio a la vista anda hasta ella (si llega en
+// BED_WALK_MAX_MS; si no, o si el patio se acaba de abrir, aparece ya tumbado) y duerme alli. Al despertar sale a
+// la celda libre mas cercana. Solo se ve: el sueno de la logica empieza y acaba cuando toca. Sin cama, nada cambia.
+
+inline void yardReachable(const uint8_t *walk, int from, bool *seen);  // (mas abajo, con la comida)
+
+// la mascara con la celda de la cama del bicho i libre (para entrar y salir de ella); buf es del que llama
+inline const uint8_t *yardBedWalk(const YardWorld &w, const uint8_t *walk, int i, uint8_t *buf) {
+  if (i >= YARD_BEDS || !w.bed[i].on) return walk;
+  int c = yardCellAt(w.bed[i].x, w.bed[i].y);
+  if (c < 0) return walk;
+  memcpy(buf, walk, YBG_WALK_BYTES);
+  buf[c >> 3] &= (uint8_t)~(1 << (c & 7));
+  return buf;
+}
+
+// tumbado en su cama ya
+inline void yardIntoBed(YardWorld &w, int i, uint32_t now) {
+  YardPet &p = w.p[i];
+  if (p.task != YT_BED) p.t0 = now;
+  p.x = w.bed[i].x;
+  p.y = w.bed[i].y;
+  p.mode = YM_SLEEP;
+  p.task = YT_BED;
+  p.pathN = p.pathI = 0;
+  p.tilting = false;
+  p.loopAct = false;
+  p.until = now;
+}
+
+// el gesto que esperaba al final del paseo (la visita, o el estiron al salir de la cama), mirando al mueble
+inline void yardArrive(YardWorld &w, int i, uint32_t now) {
+  YardPet &p = w.p[i];
+  if (!p.arriveMs) return;
+  if (p.lookX >= 0) p.face = p.lookX > p.x ? 1 : -1;
+  p.mode = YM_GESTURE;
+  p.act = p.arriveAct;
+  p.loopAct = p.arriveLoop;
+  p.t0 = now;
+  p.until = now + p.arriveMs;
+  p.arriveMs = 0;
+  p.pathN = p.pathI = 0;
+}
+
+// un paso del bicho i dormido y con cama: andando hacia ella, o tumbado
+inline void yardSleepStep(YardWorld &w, const uint8_t *walk, int i, uint32_t now, uint32_t dt) {
+  YardPet &p = w.p[i];
+  if (p.task == YT_BED) {  // pegado a su cama (tambien si cambio el mapa)
+    yardIntoBed(w, i, now);
+    return;
+  }
+  uint8_t buf[YBG_WALK_BYTES];
+  const uint8_t *bw = yardBedWalk(w, walk, i, buf);
+  if (p.task == YT_BED_WALK) {
+    // llego (o algo se puso en medio, o se acabo el tiempo): los ultimos px hasta la cama, de golpe
+    if (!yardAdvance(w, bw, i, dt, YARD_SPEED) || (int32_t)(now - p.until) >= 0) yardIntoBed(w, i, now);
+    return;
+  }
+  // se acaba de dormir: andando solo si se ve venir y llega a tiempo
+  p.arriveMs = 0;
+  int from = yardCellAt(p.x, p.y), to = yardCellAt(w.bed[i].x, w.bed[i].y);
+  if (w.bedSnap || !p.walks || from < 0 || to < 0 || from == to) {
+    yardIntoBed(w, i, now);
+    return;
+  }
+  uint8_t path[YARD_PATH_MAX];
+  int n = yardPath(bw, from, to, path, YARD_PATH_MAX);
+  if (!n || n >= YARD_PATH_MAX || (uint32_t)(n * YBG_CELL * 1000.0f / YARD_SPEED) > BED_WALK_MAX_MS) {
+    yardIntoBed(w, i, now);
+    return;
+  }
+  memcpy(p.path, path, (size_t)n);
+  p.pathN = (uint8_t)n;
+  p.pathI = 0;
+  p.mode = YM_WALK;
+  p.task = YT_BED_WALK;
+  p.tilting = false;
+  p.loopAct = false;
+  p.t0 = now;
+  p.until = now + BED_WALK_MAX_MS;
+}
+
+// se desperto en la cama (o yendo a ella): sale andando a la celda libre mas cercana. stay = algo lo quiere
+// quieto (una emocion, la inclinacion...): entonces aparece ya fuera
+inline void yardLeaveBed(YardWorld &w, const uint8_t *walk, int i, bool stay, uint32_t now) {
+  YardPet &p = w.p[i];
+  p.loopAct = false;
+  p.tilting = false;
+  p.pathN = p.pathI = 0;
+  p.mode = YM_IDLE;
+  p.t0 = now;
+  p.until = now + 600;
+  p.task = YT_NONE;
+  if (yardSpotOk(walk, p.x, p.y)) {  // aun no habia llegado a la cama: ya esta fuera
+    yardArrive(w, i, now);
+    return;
+  }
+  int to = yardNearestFreeCell(walk, p.x, p.y);
+  if (to < 0) return;  // (yardStep lo recoloca)
+  uint8_t buf[YBG_WALK_BYTES];
+  if (!stay && p.walks && yardWalkTo(w, yardBedWalk(w, walk, i, buf), i, to, now)) {
+    p.task = YT_BED_LEAVE;
+    return;
+  }
+  p.x = (float)yardCellCenter(yardCellCX(to));
+  p.y = (float)yardCellCenter(yardCellCY(to));
+  yardArrive(w, i, now);  // (si algo lo quiere quieto, yardStep lo deja en nada)
+}
+
+// la celda a la que ir para usar el mueble con los pies en (ox, oy): la alcanzable mas cercana, mejor a un lado
+// que delante o detras (asi no lo tapa ni queda tapado). -1 si no hay
+inline int yardVisitCell(const uint8_t *walk, int from, float ox, float oy) {
+  if (from < 0 || !yardFree(walk, from)) return -1;
+  bool seen[YARD_CELLS];
+  yardReachable(walk, from, seen);
+  int best = -1;
+  float bd = 1e9f;
+  for (int k = -1; k < YARD_CELLS; k++) {  // (la suya primero y con 2 px de ventaja: las celdas miden 38 o 39 px)
+    int c = k < 0 ? from : k;
+    if (!seen[c]) continue;
+    float cx = (float)yardCellCenter(yardCellCX(c)), cy = (float)yardCellCenter(yardCellCY(c));
+    float d = yardDist(cx, cy, ox, oy) + (fabsf(cy - oy) > 4 ? 12.0f : 0.0f) - (c == from ? 2.0f : 0.0f);
+    if (d < bd) {
+      bd = d;
+      best = c;
+    }
+  }
+  return best;
+}
+
+// el bicho i va al mueble con los pies en (ox, oy) y al llegar hace act durante ms (en bucle si loop). Si ya
+// esta al lado, no puede andar o no hay camino, lo hace donde esta. true si echo a andar
+inline bool yardVisit(YardWorld &w, const uint8_t *walk, int i, float ox, float oy, uint8_t act, uint32_t ms, bool loop,
+                      uint32_t now) {
+  YardPet &p = w.p[i];
+  p.arriveAct = act;
+  p.arriveMs = ms ? ms : 1;
+  p.arriveLoop = loop;
+  p.lookX = (int16_t)ox;
+  p.tilting = false;
+  p.loopAct = false;
+  int from = yardCellAt(p.x, p.y), to = yardVisitCell(walk, from, ox, oy);
+  if (p.walks && to >= 0 && to != from && yardWalkTo(w, walk, i, to, now)) {
+    p.task = YT_VISIT;
+    return true;
+  }
+  p.task = YT_NONE;
+  yardArrive(w, i, now);
+  return false;
+}
+
+// el gesto a hacer en cuanto salga de la cama (el estiron de buenos dias); si no esta en ella, ya
+inline void yardAfterBed(YardWorld &w, int i, uint8_t act, uint32_t ms, uint32_t now) {
+  YardPet &p = w.p[i];
+  p.arriveAct = act;
+  p.arriveMs = ms ? ms : 1;
+  p.arriveLoop = false;
+  p.lookX = -1;
+  if (!yardBedTask(p.task)) {
+    p.task = YT_NONE;
+    p.tilting = false;
+    yardArrive(w, i, now);
+  }
+}
+
 // un paso de dt ms para todos. hold[i] = YH_* que pide el juego; tilt = lado inclinado (-1, 0, 1)
 inline void yardStep(YardWorld &w, const uint8_t *walk, uint32_t now, uint32_t dt, const uint8_t *hold, int8_t tilt) {
   for (int i = 0; i < w.n; i++) {
     YardPet &p = w.p[i];
     if (!p.on) continue;
-    if (!yardSpotOk(walk, p.x, p.y)) yardPlace(w, walk, i);  // el mapa cambio bajo sus pies
     uint8_t h = hold ? hold[i] : YH_NONE;
+    // v3.20: la cama (sin ella, todo como antes)
+    bool bedOn = i < YARD_BEDS && w.bed[i].on;
+    if (yardBedTask(p.task) && !bedOn) p.task = YT_NONE;  // se quito la cama (HTIER 0): yardPlace si hace falta
+    if (bedOn && h == YH_SLEEP) {
+      yardSleepStep(w, walk, i, now, dt);
+      continue;
+    }
+    if (p.task == YT_BED || p.task == YT_BED_WALK) yardLeaveBed(w, walk, i, h != YH_NONE || tilt, now);  // se desperto
+    if (p.task == YT_BED_LEAVE && h != YH_NONE) yardLeaveBed(w, walk, i, true, now);  // otra cosa lo quiere quieto
+    uint8_t bedBuf[YBG_WALK_BYTES];
+    const uint8_t *wk = p.task == YT_BED_LEAVE ? yardBedWalk(w, walk, i, bedBuf) : walk;
+    if (!yardSpotOk(wk, p.x, p.y)) {  // el mapa cambio bajo sus pies
+      yardPlace(w, walk, i);
+      p.task = YT_NONE;
+      p.arriveMs = 0;
+    }
     if (h == YH_SLEEP || h == YH_STAY) {
       uint8_t m = h == YH_SLEEP ? YM_SLEEP : YM_STAY;
       if (p.mode != m) p.t0 = now;
       p.mode = m;
       p.pathN = p.pathI = 0;
       p.tilting = false;
+      p.loopAct = false;
+      p.arriveMs = 0;  // (una visita que esperaba se deja)
+      if (p.task == YT_VISIT) p.task = YT_NONE;
       p.until = now;  // al soltarlo, decide enseguida
       continue;
     }
@@ -437,8 +649,12 @@ inline void yardStep(YardWorld &w, const uint8_t *walk, uint32_t now, uint32_t d
       p.until = now + 600;
       p.t0 = now;
     }
-    if (tilt && p.walks && p.mode != YM_GESTURE) {
-      // inclinada: hacia el lado bajo, por la mascara
+    if (tilt && p.walks && p.mode != YM_GESTURE && p.task != YT_BED_LEAVE) {
+      // inclinada: hacia el lado bajo, por la mascara (v3.20: la visita se deja)
+      if (p.task == YT_VISIT) {
+        p.task = YT_NONE;
+        p.arriveMs = 0;
+      }
       if (!p.tilting || p.tiltSide != tilt) {
         int from = yardCellAt(p.x, p.y), to = yardTiltTargetSide(walk, from, tilt, w.avoidX);  // (v3.3: no bajo el menu)
         p.tilting = true;
@@ -461,11 +677,23 @@ inline void yardStep(YardWorld &w, const uint8_t *walk, uint32_t now, uint32_t d
       p.until = now + YARD_TILT_REST_MS;
     }
     if (p.mode == YM_WALK) {
-      if (!yardAdvance(w, walk, i, dt, YARD_SPEED) || (int32_t)(now - p.until) >= 0) {
+      if (!yardAdvance(w, wk, i, dt, YARD_SPEED) || (int32_t)(now - p.until) >= 0) {
         p.mode = YM_IDLE;
         p.pathN = p.pathI = 0;
         p.t0 = now;
         p.until = now + YARD_IDLE_MS / 2 + (uint32_t)w.rng.below(YARD_IDLE_RAND_MS);
+        // v3.20: al final de la visita (o de salir de la cama), su gesto; si se quedo en la cama, fuera ya
+        if (p.task == YT_BED_LEAVE && !yardSpotOk(walk, p.x, p.y)) {
+          int c = yardNearestFreeCell(walk, p.x, p.y);
+          if (c >= 0) {
+            p.x = (float)yardCellCenter(yardCellCX(c));
+            p.y = (float)yardCellCenter(yardCellCY(c));
+          }
+        }
+        if (p.task == YT_VISIT || p.task == YT_BED_LEAVE) {
+          p.task = YT_NONE;
+          yardArrive(w, i, now);
+        }
       }
       continue;
     }

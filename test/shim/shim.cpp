@@ -73,6 +73,7 @@ bool audioEnabled() { return gAudioOn; }
 typedef std::map<std::string, std::vector<uint8_t> > KV;
 static std::map<std::string, KV> gStore;
 
+static std::string gFailKey;  // una clave que no se puede escribir (mockNvsFailKey)
 static long gCutBudget = -1;  // escrituras que aun llegan (-1 = todas)
 static long gWrites = 0;
 static std::map<std::string, KV> gSnap;
@@ -80,7 +81,9 @@ void mockNvsReset() {
   gStore.clear();
   gCutBudget = -1;
   gWrites = 0;
+  gFailKey.clear();
 }
+void mockNvsFailKey(const char *key) { gFailKey = key ? key : ""; }
 void mockNvsCutAfter(long n) { gCutBudget = n; }
 long mockNvsWrites() { return gWrites; }
 void mockNvsSnapshot() { gSnap = gStore; }
@@ -121,7 +124,7 @@ bool Preferences::remove(const char *key) {
 
 static size_t rawPut(std::map<std::string, KV> &store, const std::string &ns, bool open,
                      bool ro, const char *k, const void *v, size_t len) {
-  if (!open || ro || !writeLands()) return 0;
+  if (!open || ro || (!gFailKey.empty() && gFailKey == k) || !writeLands()) return 0;
   const uint8_t *p = (const uint8_t *)v;
   store[ns][k].assign(p, p + len);
   return len;

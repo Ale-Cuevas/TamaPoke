@@ -3,6 +3,7 @@
 // Que se vende y en que orden, si una compra sale o por que no, y que pastilla lleva cada mapa.
 #include <stdint.h>
 #include "economy.h"
+#include "upgrade.h"
 
 // los objetos a la venta, en el orden en que aparecen en la tienda (ids de pet.h: IT_GOLDEN=0, PROTEIN,
 // IRON, CARBOS, CHARM, RARECANDY, EGG, CAKE, REVIVE, BALL, BERRY_R..O = 10..15, LURE = 16). Solo entran los que
@@ -54,3 +55,28 @@ inline uint8_t pickerStep(uint8_t n, int dir) {
   int m = (int)n + dir;
   return m < 1 || m > YARD_MAPS ? 0 : (uint8_t)m;
 }
+
+// ---------- la pagina Casa de la tienda (v3.20, HOME): 3 tarjetas, una por linea de mejoras ----------
+#define SHOP_ITEM_PAGES 2                       // paginas de objetos (la 2.a, las bayas de colores)
+#define SHOP_PAGES (SHOP_ITEM_PAGES + 1)        // + la pagina Casa, la ultima (se llega deslizando)
+inline bool shopPageIsHome(uint8_t page) { return page == SHOP_ITEM_PAGES; }
+
+// lo que ensena la tarjeta de una linea con "tier" comprado (0..UPG_TIERS)
+enum UpgCard : uint8_t {
+  UC_BUY = 0,  // siguiente nivel a la venta y alcanza el dinero
+  UC_BROKE,    // a la venta, pero precio en gris
+  UC_MAX       // ya esta al maximo: pone MAX, con el icono del nivel 3, y no pregunta
+};
+inline UpgCard upgCardKind(uint8_t line, uint8_t tier, uint16_t coins) {
+  UpgBuy r = upgCheck(line, tier, coins);
+  return r == UB_OK ? UC_BUY : r == UB_BROKE ? UC_BROKE : UC_MAX;
+}
+// nivel que se dibuja (0..UPG_TIERS-1: el siguiente a comprar; al maximo, el ultimo)
+inline uint8_t upgShownTier(uint8_t tier) { return tier >= UPG_TIERS ? UPG_TIERS - 1 : tier; }
+// el numero de la linea de efecto de ese nivel dibujado (BED_ENE_GAIN, GYM_CAP o TOY_JOY de tuning.h)
+inline uint8_t upgEffectNum(uint8_t line, uint8_t shown) {
+  uint8_t t = shown + 1;
+  return line == UPG_BED ? BED_ENE_GAIN[t] : line == UPG_GYM ? GYM_CAP[t] : TOY_JOY[t];
+}
+// una tarjeta abre la pregunta de compra solo si se puede comprar o falta dinero (la de MAX no)
+inline bool upgCardAsks(uint8_t line, uint8_t tier) { return upgCheck(line, tier, 0xFFFF) == UB_OK; }

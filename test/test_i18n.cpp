@@ -91,6 +91,10 @@ static const ExpectedFmt EXPECTED[] = {
   { S_CAPTURED_FMT,    "%s" },
   { S_WILD_LEFT_FMT,   "%s" },
   { S_WILD_FLED_FMT,   "%s" },
+  { S_UPG_BED_FX,      "%u" },  // v3.20 HOME
+  { S_UPG_GYM_FX,      "%u" },
+  { S_UPG_TOY_FX,      "%u" },
+  { S_BUY_UPG_FMT,     "%s,%u" },
 };
 static const int NUM_EXPECTED = (int)(sizeof(EXPECTED) / sizeof(EXPECTED[0]));
 

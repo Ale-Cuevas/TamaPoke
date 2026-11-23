@@ -564,3 +564,222 @@ TEST(yard, inclinar_no_lleva_debajo_del_menu) {
   }
   CHECK(w.p[0].x <= 224 + 1);
 }
+
+// ---------- v3.20: la cama y las visitas a los muebles (yard.h) ----------
+// la mascara de respaldo con la pareja de camas en (9, 6)-(10, 6) bloqueada, como hace yardBlockObjects
+static void bedWorld(uint8_t *walk, YardWorld &w, int n) {
+  yardFallbackWalk(walk);
+  block(walk, 9, 6);
+  block(walk, 10, 6);
+  w = YardWorld{};
+  w.n = n;
+  for (int i = 0; i < n; i++) {
+    w.p[i].on = true;
+    w.bed[i].on = true;
+    w.bed[i].x = (float)(yardCellCenter(9 + i) + (i ? 14 : -14));
+    w.bed[i].y = (float)yardCellCenter(6);
+  }
+}
+
+TEST(yard, sin_cama_se_duerme_donde_esta) {
+  uint8_t walk[YBG_WALK_BYTES];
+  YardWorld w;
+  bedWorld(walk, w, 1);
+  w.bed[0].on = false;  // sin cama: como siempre
+  w.p[0].x = yardCellCenter(8);
+  w.p[0].y = yardCellCenter(6);
+  uint8_t hold[YARD_PETS_MAX] = { YH_SLEEP };
+  yardStep(w, walk, 100, 100, hold, 0);
+  CHECK_EQ((int)w.p[0].mode, (int)YM_SLEEP);
+  CHECK_EQ((int)w.p[0].task, (int)YT_NONE);
+  CHECK_EQ(w.p[0].x, (float)yardCellCenter(8));
+}
+
+TEST(yard, dormido_al_abrir_el_patio_ya_esta_en_su_cama) {
+  uint8_t walk[YBG_WALK_BYTES];
+  YardWorld w;
+  bedWorld(walk, w, 2);
+  w.p[0].x = yardCellCenter(4);
+  w.p[0].y = yardCellCenter(9);
+  w.p[1].x = yardCellCenter(8);  // al lado de la cama: aun asi, sin paseo
+  w.p[1].y = yardCellCenter(6);
+  w.bedSnap = true;
+  uint8_t hold[YARD_PETS_MAX] = { YH_SLEEP, YH_SLEEP };
+  yardStep(w, walk, 100, 100, hold, 0);
+  for (int i = 0; i < 2; i++) {
+    CHECK_EQ((int)w.p[i].task, (int)YT_BED);
+    CHECK_EQ((int)w.p[i].mode, (int)YM_SLEEP);
+    CHECK_EQ(w.p[i].x, w.bed[i].x);
+    CHECK_EQ(w.p[i].y, w.bed[i].y);
+  }
+  // y se quedan (tambien inclinando la placa)
+  w.bedSnap = false;
+  for (int f = 0; f < 50; f++) yardStep(w, walk, 200 + f * 100, 100, hold, 1);
+  CHECK_EQ(w.p[0].x, w.bed[0].x);
+  CHECK_EQ(w.p[1].x, w.bed[1].x);
+}
+
+TEST(yard, se_duerme_cerca_y_anda_hasta_su_cama) {
+  uint8_t walk[YBG_WALK_BYTES];
+  YardWorld w;
+  bedWorld(walk, w, 1);
+  w.p[0].x = yardCellCenter(7);  // a dos celdas (76 px: llega en ~2,5 s)
+  w.p[0].y = yardCellCenter(6);
+  uint8_t hold[YARD_PETS_MAX] = { YH_SLEEP };
+  uint32_t now = 100;
+  yardStep(w, walk, now, 100, hold, 0);
+  CHECK_EQ((int)w.p[0].task, (int)YT_BED_WALK);
+  CHECK_EQ((int)w.p[0].mode, (int)YM_WALK);
+  uint32_t t0 = now;
+  while (w.p[0].task != YT_BED && now - t0 < BED_WALK_MAX_MS + 500) {
+    now += 85;
+    yardStep(w, walk, now, 85, hold, 0);
+    // por celdas libres o por la de su cama, nunca por la de la otra
+    CHECK(yardCellAt(w.p[0].x, w.p[0].y) != yardCellIdx(10, 6));
+  }
+  CHECK_EQ((int)w.p[0].task, (int)YT_BED);
+  CHECK(now - t0 <= BED_WALK_MAX_MS);
+  CHECK_EQ(w.p[0].x, w.bed[0].x);
+}
+
+TEST(yard, lejos_de_la_cama_aparece_en_ella) {
+  uint8_t walk[YBG_WALK_BYTES];
+  YardWorld w;
+  bedWorld(walk, w, 1);
+  w.p[0].x = yardCellCenter(3);  // demasiado lejos para BED_WALK_MAX_MS
+  w.p[0].y = yardCellCenter(10);
+  uint8_t hold[YARD_PETS_MAX] = { YH_SLEEP };
+  yardStep(w, walk, 100, 100, hold, 0);
+  CHECK_EQ((int)w.p[0].task, (int)YT_BED);
+  CHECK_EQ(w.p[0].x, w.bed[0].x);
+}
+
+TEST(yard, al_despertar_sale_de_la_cama_a_una_celda_libre) {
+  uint8_t walk[YBG_WALK_BYTES];
+  YardWorld w;
+  bedWorld(walk, w, 1);
+  w.bedSnap = true;
+  uint8_t hold[YARD_PETS_MAX] = { YH_SLEEP };
+  yardStep(w, walk, 100, 100, hold, 0);
+  CHECK_EQ((int)w.p[0].task, (int)YT_BED);
+  w.bedSnap = false;
+  hold[0] = YH_NONE;
+  uint32_t now = 200;
+  yardStep(w, walk, now, 100, hold, 0);
+  CHECK_EQ((int)w.p[0].task, (int)YT_BED_LEAVE);
+  for (int f = 0; f < 60 && w.p[0].task == YT_BED_LEAVE; f++) yardStep(w, walk, now += 85, 85, hold, 0);
+  CHECK_EQ((int)w.p[0].task, (int)YT_NONE);
+  CHECK(yardSpotOk(walk, w.p[0].x, w.p[0].y));  // fuera: la cama vuelve a estar bloqueada para el
+  CHECK(yardDist(w.p[0].x, w.p[0].y, w.bed[0].x, w.bed[0].y) < 2 * YBG_CELL);
+}
+
+TEST(yard, despertar_con_algo_que_lo_tiene_quieto_lo_deja_ya_fuera) {
+  uint8_t walk[YBG_WALK_BYTES];
+  YardWorld w;
+  bedWorld(walk, w, 1);
+  w.bedSnap = true;
+  uint8_t hold[YARD_PETS_MAX] = { YH_SLEEP };
+  yardStep(w, walk, 100, 100, hold, 0);
+  hold[0] = YH_STAY;  // p. ej. una emocion al despertar
+  yardStep(w, walk, 200, 100, hold, 0);
+  CHECK_EQ((int)w.p[0].task, (int)YT_NONE);
+  CHECK_EQ((int)w.p[0].mode, (int)YM_STAY);
+  CHECK(yardSpotOk(walk, w.p[0].x, w.p[0].y));
+}
+
+TEST(yard, dos_bichos_entran_en_camas_vecinas) {
+  // las camas estan a menos de YARD_MIN_DIST de paso: yendo a la cama no se paran el uno por el otro
+  uint8_t walk[YBG_WALK_BYTES];
+  YardWorld w;
+  bedWorld(walk, w, 2);
+  w.p[0].x = yardCellCenter(9);
+  w.p[0].y = yardCellCenter(7);
+  w.p[1].x = yardCellCenter(10);
+  w.p[1].y = yardCellCenter(7);
+  w.p[1].mode = YM_SLEEP;
+  uint8_t hold[YARD_PETS_MAX] = { YH_SLEEP, YH_SLEEP };
+  uint32_t now = 100;
+  for (int f = 0; f < 60; f++) yardStep(w, walk, now += 85, 85, hold, 0);
+  CHECK_EQ((int)w.p[0].task, (int)YT_BED);
+  CHECK_EQ((int)w.p[1].task, (int)YT_BED);
+  CHECK(yardDist(w.p[0].x, w.p[0].y, w.p[1].x, w.p[1].y) >= YARD_MIN_DIST);
+}
+
+TEST(yard, visita_anda_al_mueble_y_hace_su_gesto) {
+  uint8_t walk[YBG_WALK_BYTES];
+  YardWorld w;
+  bedWorld(walk, w, 1);
+  w.bed[0].on = false;
+  block(walk, 4, 8);  // el gimnasio
+  w.p[0].x = yardCellCenter(9);
+  w.p[0].y = yardCellCenter(9);
+  float gx = (float)yardCellCenter(4), gy = (float)yardCellCenter(8);
+  uint32_t now = 100;
+  CHECK(yardVisit(w, walk, 0, gx, gy, 7, 3000, true, now));
+  CHECK_EQ((int)w.p[0].task, (int)YT_VISIT);
+  for (int f = 0; f < 400 && w.p[0].task == YT_VISIT; f++) {
+    now += 85;
+    yardStep(w, walk, now, 85, nullptr, 0);
+    CHECK(yardSpotOk(walk, w.p[0].x, w.p[0].y));
+  }
+  CHECK_EQ((int)w.p[0].mode, (int)YM_GESTURE);
+  CHECK_EQ((int)w.p[0].act, 7);
+  CHECK(w.p[0].loopAct);
+  CHECK(yardDist(w.p[0].x, w.p[0].y, gx, gy) <= YBG_CELL + 1);  // al lado
+  CHECK_EQ((int)w.p[0].face, gx > w.p[0].x ? 1 : -1);           // mirandolo
+  uint32_t t = now;
+  while (w.p[0].mode == YM_GESTURE && now - t < 5000) yardStep(w, walk, now += 85, 85, nullptr, 0);
+  CHECK(now - t >= 3000);
+  CHECK(!w.p[0].loopAct);  // el gesto en bucle se acaba con la visita
+}
+
+TEST(yard, visita_al_lado_hace_el_gesto_ya_y_un_hold_la_deja) {
+  uint8_t walk[YBG_WALK_BYTES];
+  YardWorld w;
+  bedWorld(walk, w, 1);
+  w.bed[0].on = false;
+  block(walk, 4, 8);
+  w.p[0].x = yardCellCenter(5);  // ya al lado
+  w.p[0].y = yardCellCenter(8);
+  CHECK(!yardVisit(w, walk, 0, (float)yardCellCenter(4), (float)yardCellCenter(8), 7, 3000, true, 100));
+  CHECK_EQ((int)w.p[0].mode, (int)YM_GESTURE);
+  CHECK_EQ((int)w.p[0].face, -1);
+  // de lejos, y algo lo para (comida, el menu...): la visita se deja
+  w.p[0].x = yardCellCenter(10);
+  w.p[0].y = yardCellCenter(10);
+  w.p[0].mode = YM_IDLE;
+  CHECK(yardVisit(w, walk, 0, (float)yardCellCenter(4), (float)yardCellCenter(8), 7, 3000, true, 200));
+  uint8_t hold[YARD_PETS_MAX] = { YH_STAY };
+  yardStep(w, walk, 300, 100, hold, 0);
+  CHECK_EQ((int)w.p[0].task, (int)YT_NONE);
+  CHECK_EQ(w.p[0].arriveMs, 0u);
+  hold[0] = YH_NONE;
+  for (int f = 0; f < 100; f++) yardStep(w, walk, 400 + f * 85, 85, hold, 0);
+  CHECK(!w.p[0].loopAct);
+}
+
+TEST(yard, estiron_al_salir_de_la_cama) {
+  uint8_t walk[YBG_WALK_BYTES];
+  YardWorld w;
+  bedWorld(walk, w, 1);
+  w.bedSnap = true;
+  uint8_t hold[YARD_PETS_MAX] = { YH_SLEEP };
+  yardStep(w, walk, 100, 100, hold, 0);
+  yardAfterBed(w, 0, 9, 1500, 150);  // los buenos dias llegan aun en la cama: espera a salir
+  CHECK_EQ((int)w.p[0].mode, (int)YM_SLEEP);
+  w.bedSnap = false;
+  hold[0] = YH_NONE;
+  uint32_t now = 200;
+  for (int f = 0; f < 60 && w.p[0].mode != YM_GESTURE; f++) yardStep(w, walk, now += 85, 85, hold, 0);
+  CHECK_EQ((int)w.p[0].mode, (int)YM_GESTURE);
+  CHECK_EQ((int)w.p[0].act, 9);
+  CHECK(yardSpotOk(walk, w.p[0].x, w.p[0].y));
+  // sin cama: ya mismo
+  YardWorld w2;
+  bedWorld(walk, w2, 1);
+  w2.bed[0].on = false;
+  w2.p[0].x = yardCellCenter(7);
+  w2.p[0].y = yardCellCenter(8);
+  yardAfterBed(w2, 0, 9, 1500, 100);
+  CHECK_EQ((int)w2.p[0].mode, (int)YM_GESTURE);
+}

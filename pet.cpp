@@ -65,6 +65,12 @@ void Pet::begin() {
   pmMigrated = false;
   medalNewsN = 0;
   cnHave = false;
+  // v3.20: las mejoras de casa empiezan sin nada (una partida nueva; load() lee "upg" si la hay)
+  memset(upgTiers, 0, sizeof(upgTiers));
+  memset(upgSlots, 0, sizeof(upgSlots));
+  memset(gymMin, 0, sizeof(gymMin));
+  homeEvts.clear();
+  upgHave = false;
   prefs.begin("tamapoke", false);
   if (!prefs.getBool("init", false)) {
     other = vacantPetLife();  // v3.0: el segundo hueco de una partida nueva empieza vacio
@@ -402,6 +408,8 @@ void Pet::syncHome(uint32_t seen, uint32_t mins) {
       sleepMinute(full, h);
       continue;
     }
+    // v3.20: el gimnasio y el juguete tambien apagada, con los topes del dia de ESTE minuto (no el de hoy)
+    homeMinute(h, (seen + (i + 1) * 60) / 86400, false);
     if (!full) fullness = dropTo(fullness, FOOD_DRAIN, OFFLINE_FLOOR);
     if (ageMinutes % ENE_DRAIN_EVERY == 0) energy = dropTo(energy, ENE_DRAIN, OFFLINE_FLOOR);
     if (ageMinutes % JOY_DRAIN_EVERY == 0) joy = dropTo(joy, JOY_DRAIN, OFFLINE_FLOOR);
@@ -496,6 +504,7 @@ bool Pet::tickHome() {
     if (weight > 0 && ageMinutes % WEIGHT_BURN_SLEEP_MIN == 0) weight--;
     return true;  // (las medallas, al final de tick(): aun puede cruzar un nivel por edad mientras duerme)
   }
+  homeMinute(h, today(), true);  // v3.20: el gimnasio y el juguete (con las necesidades de antes de este minuto)
   // la subida de nivel ya no suena aqui: la detecta la UI (fx.h) por cualquier via (minuto,
   // tiempo apagado, Caramelo Raro, LVL) y la anuncia con su propio sonido
 
@@ -1139,6 +1148,7 @@ void Pet::toggleLight() {
   if (sleeping) {
     sleeping = false;
     wokeUp();
+    upgSleepReset();  // v3.20: despertarlo a mano no da los buenos dias
   } else {
     goToBed();
   }
@@ -1149,7 +1159,11 @@ void Pet::toggleLight() {
 // un minuto dormido: la energia vuelve y las necesidades bajan lento y con suelo. De dia (una
 // siesta) la comida baja NAP_FOOD_JOY_EVERY veces mas lento que despierto; de noche, NIGHT_FOOD_JOY_EVERY, con suelos mas altos
 void Pet::sleepMinute(bool full, int h) {
-  energy = clamp100(energy + SLEEP_ENE_GAIN);
+  energy = clamp100(energy + BED_ENE_GAIN[upgTier(UPG_BED)]);  // v3.20: la cama (nivel 0 = SLEEP_ENE_GAIN)
+  // v3.20: los minutos de esta noche, para los buenos dias de la cama (con tope: pasado el minimo ya no cambia)
+  if (nightSleep)
+    if (UpgSlot *u = upgSlotNow())
+      if (u->sleptMin < BED_MORNING_MIN_SLEEP) u->sleptMin++;
   if (nightHour(h)) {
     if (ageMinutes % NIGHT_FOOD_JOY_EVERY == 0) {
       if (!full) fullness = dropTo(fullness, 1, NIGHT_FOOD_FLOOR);
@@ -1168,6 +1182,7 @@ void Pet::sleepMinute(bool full, int h) {
 void Pet::goToBed() {
   sleeping = true;
   nightAwakeMin = 0;
+  upgSleepReset();  // v3.20: la noche empieza a contar ahora
   int h = localHour();
   nightSleep = h >= EVENING_HOUR || (h >= 0 && h < WAKE_HOUR);
   uint32_t n = nightId(lastSeenEpoch);
@@ -1181,6 +1196,7 @@ void Pet::goToBed() {
 void Pet::nightMinute(int h, bool live) {
   int prev = lastTickHour;
   lastTickHour = (int8_t)h;
+  if (!sleeping) upgSleepReset();  // v3.20: despierto (por lo que sea), la noche de la cama no sigue contando
   if (h < 0 || isEgg() || busyEnding() || starterPick) {
     nightAwakeMin = 0;
     return;
@@ -1191,6 +1207,16 @@ void Pet::nightMinute(int h, bool live) {
     // por la mañana: se despierta solo (una siesta de tarde no). Solo de WAKE_HOUR a EVENING_HOUR:
     // acostado a las 20-21 ya es dormir de noche y no debe despertarse al minuto siguiente
     if (nightSleep && h >= WAKE_HOUR && h < EVENING_HOUR) {
+      // v3.20: los buenos dias de la cama, tras una noche entera (BED_MORNING_MIN_SLEEP), una vez: la cuenta
+      // vuelve a 0. Despertado a mano o agitandolo no llega aqui
+      uint8_t bt = upgTier(UPG_BED);
+      UpgSlot *u = upgSlotNow();
+      if (bt && u && u->sleptMin >= BED_MORNING_MIN_SLEEP) {
+        uint8_t before = joy;
+        joy = clamp100(joy + BED_MORNING_JOY[bt]);
+        if (live) homeEvts.push(HE_MORNING, focusSlot & 1, (uint8_t)(joy - before));
+      }
+      if (u) u->sleptMin = 0;
       sleeping = false;
       nightSleep = false;
       if (live) morningWake = true;
@@ -1210,6 +1236,7 @@ void Pet::nightMinute(int h, bool live) {
   sleeping = true;
   nightSleep = true;
   nightAwakeMin = 0;
+  upgSleepReset();     // v3.20: la noche empieza a contar ahora
   pendingSave = true;  // sin vinculo: no lo acostaste tu
 }
 
@@ -1585,6 +1612,7 @@ void Pet::wakeGrumpy() {
     if (isEgg() || !sleeping || busyEnding()) continue;
     sleeping = false;
     wokeUp();
+    upgSleepReset();  // v3.20: agitarlo tampoco
     uint32_t now = millis();
     if (!grumpied || now - lastGrumpy >= GRUMPY_COOLDOWN_MS) {
       joy = clamp100(joy - GRUMPY_JOY);
@@ -1768,6 +1796,101 @@ bool Pet::buyMap(uint8_t n) {
   coins -= p;
   yardOwned |= (uint16_t)(1u << n);
   save();
+  return true;
+}
+
+// ---------- mejoras de casa (v3.20, upgrade.h, docs/HOME_AND_PALS.md) ----------
+// el siguiente nivel de una linea: primero lo que no se arregla (linea mala, al maximo), luego las monedas. save()
+// escribe "cn" antes que "upg": un corte entre las dos pierde el nivel, nunca lo regala
+bool Pet::buyUpgrade(uint8_t line) {
+  if (upgCheck(line, upgTier(line), coins) != UB_OK) return false;
+  coins -= upgPriceNext(line, upgTiers[line]);
+  upgTiers[line]++;
+  save();
+  return true;
+}
+
+bool Pet::takeHomeEvt(HomeEvt &e) {
+  return homeEvts.pop(e);
+}
+
+void Pet::dbgSetUpgTier(uint8_t line, uint8_t tier) {
+  if (line >= UPG_LINES) return;
+  upgTiers[line] = tier > UPG_TIERS ? UPG_TIERS : tier;
+  pendingSave = true;
+}
+
+// los contadores del hueco del foco. Son de un bicho (su uid): si el hueco tiene otro, empiezan de cero
+UpgSlot *Pet::upgSlotNow() {
+  if (isEgg() || !uid) return nullptr;
+  uint8_t s = focusSlot & 1;
+  UpgSlot &u = upgSlots[s];
+  if (u.uid != uid) {
+    memset(&u, 0, sizeof(u));
+    u.uid = uid;
+    gymMin[s] = 0;
+  }
+  return &u;
+}
+
+// la cuenta de la noche vuelve a 0: se duerme, o se despierta (sin tocar los contadores de otro bicho)
+void Pet::upgSleepReset() {
+  UpgSlot &u = upgSlots[focusSlot & 1];
+  if (uid && u.uid == uid) u.sleptMin = 0;
+}
+
+// un minuto despierto del foco con el gimnasio y el juguete (FR-HOME.2 y .3), en vivo (tick) o apagado (syncHome,
+// live = false: sin eventos). day = el dia de ese minuto (0 sin reloj: nada). No es cuidado: ni racha, ni
+// vinculo, ni monedas
+void Pet::homeMinute(int h, uint32_t day, bool live) {
+  uint8_t g = upgTier(UPG_GYM), t = upgTier(UPG_TOY);
+  if (!g && !t) return;
+  if (!day || h < 0 || nightHour(h)) return;  // ni sin reloj ni de noche (de SLEEPY_HOUR a WAKE_HOUR)
+  if (isEgg() || vacant || sleeping || busyEnding() || evolving() || starterPick) return;
+  if (live && nightHold) return;  // un juego, combate, encuentro o movimiento de la caja abierto
+  UpgSlot *u = upgSlotNow();
+  if (!u) return;
+  if (u->day != day) {  // dia nuevo: los topes vuelven a 0
+    u->day = day;
+    u->gymGains = 0;
+    u->toyPlays = 0;
+  }
+  uint8_t s = focusSlot & 1;
+  // gimnasio: cuenta los minutos con todo >= GYM_NEED_MIN; cada GYM_EVERY_MIN, +1 al mas bajo bajo el techo
+  if (g && u->gymGains < GYM_DAY_MAX[g] && lowestStat() >= GYM_NEED_MIN) {
+    int8_t st = gymPick(trAtk, trDef, trSpe, GYM_CAP[g]);
+    if (st >= 0 && ++gymMin[s] >= GYM_EVERY_MIN[g]) {
+      gymMin[s] = 0;
+      uint8_t &tr = st == 0 ? trAtk : st == 1 ? trDef : trSpe;
+      uint16_t v = (uint16_t)tr + 1;
+      tr = v > 100 ? 100 : (uint8_t)v;
+      energy = dropTo(energy, GYM_ENE_COST, GAME_FLOOR);
+      u->gymGains++;
+      pendingSave = true;
+      if (live) homeEvts.push(HE_GYM, s, (uint8_t)st);  // (el "+1 ATK" ya lo pone fxTrainW)
+    }
+  }
+  // juguete: con poca alegria, de vez en cuando juega solo
+  if (t && u->toyPlays < TOY_DAY_MAX[t] && joy < TOY_JOY_BELOW && random(100) < TOY_PLAY_CHANCE) {
+    uint8_t before = joy;
+    joy = clamp100(joy + TOY_JOY[t]);
+    u->toyPlays++;
+    pendingSave = true;
+    if (live) homeEvts.push(HE_TOY, s, (uint8_t)(joy - before));
+  }
+}
+
+// "upg" si cambio (los niveles y los contadores de cada hueco)
+bool Pet::saveUpg() {
+  UpgSave u;
+  memset(&u, 0, sizeof(u));
+  memcpy(u.tier, upgTiers, sizeof(u.tier));
+  memcpy(u.slot, upgSlots, sizeof(u.slot));
+  upgSeal(u);
+  if (upgHave && memcmp(&u, &upgSaved, sizeof(u)) == 0) return true;
+  if (prefs.putBytes("upg", &u, sizeof(u)) != sizeof(u)) return false;
+  upgSaved = u;
+  upgHave = true;
   return true;
 }
 
@@ -2393,6 +2516,13 @@ void Pet::save() {
   putPack();
   prefs.putUShort("ybgO", yardOwned);  // los mapas comprados (despues que "cn": un corte pierde el mapa, no las monedas)
   prefs.putUChar("ybg", yardChosen);
+  // v3.20: las mejoras de casa, despues de las monedas (comprar un nivel nunca sale gratis) y de la mochila (la
+  // ventana uid / "hm1" -> mochila no se alarga cada minuto de noche). Si no llega, se reintenta pero lo de
+  // despues se guarda igual
+  if (!saveUpg()) {
+    Serial.println("save: upg no se pudo escribir");
+    pendingSave = true;
+  }
   {  // regalos (v1.55), despues de la mochila: [cuantos, objetos...]
     uint8_t g[GIFT_MAX + 1] = { giftN };
     memcpy(g + 1, gifts, giftN);
@@ -2611,6 +2741,22 @@ void Pet::load() {
   cnSaved = coins;
   cnDSaved = coinDay;
   cnTSaved = coinToday;
+  // v3.20: las mejoras de casa. Sin "upg", o con uno de otra version o danado: nada comprado (sin migraciones)
+  memset(upgTiers, 0, sizeof(upgTiers));
+  memset(upgSlots, 0, sizeof(upgSlots));
+  upgHave = false;
+  if (prefs.isKey("upg")) {
+    UpgSave u;
+    memset(&u, 0, sizeof(u));
+    if (prefs.getBytes("upg", &u, sizeof(u)) == sizeof(u) && upgValid(u)) {
+      memcpy(upgTiers, u.tier, sizeof(upgTiers));
+      memcpy(upgSlots, u.slot, sizeof(upgSlots));
+      upgSaved = u;
+      upgHave = true;
+    } else {
+      Serial.println("upg: danado, sin mejoras de casa");
+    }
+  }
   // la coleccion. v3.15 (migracion): sin "souv2" se lee la vieja "souv" (u32, los 25 primeros) en los bits bajos;
   // sin ninguna (un guardado de antes del Y5), sin recuerdos
   souvOwned = souvLoadMask(prefs.isKey("souv2"), prefs.getULong64("souv2", 0), prefs.getUInt("souv", 0));
