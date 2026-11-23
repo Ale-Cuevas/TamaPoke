@@ -1771,6 +1771,26 @@ bool Pet::buyMap(uint8_t n) {
   return true;
 }
 
+// ---------- mejoras de casa (v3.20) ----------
+// CONTRATO: version minima para que el patio y la tienda compilen; la tarea de logica la completa (NVS "upg",
+// efectos en el tick, cola de eventos)
+bool Pet::buyUpgrade(uint8_t line) {
+  if (upgCheck(line, upgTier(line), coins) != UB_OK) return false;
+  coins -= upgPriceNext(line, upgTiers[line]);
+  upgTiers[line]++;
+  save();
+  return true;
+}
+
+bool Pet::takeHomeEvt(HomeEvt &e) {
+  (void)e;
+  return false;
+}
+
+void Pet::dbgSetUpgTier(uint8_t line, uint8_t tier) {
+  if (line < UPG_LINES) upgTiers[line] = tier > UPG_TIERS ? UPG_TIERS : tier;
+}
+
 void Pet::chooseMap(uint8_t n) {
   if (n && !ownsMap(n)) return;
   yardChosen = n;

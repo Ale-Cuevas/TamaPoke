@@ -381,6 +381,30 @@ static const uint16_t ECO_MAP_PRICE[] = { 0, 150, 150, 200, 250, 250, 300, 350, 
 static_assert(sizeof(ECO_MAP_PRICE) / sizeof(ECO_MAP_PRICE[0]) == YARD_MAPS, "ECO_MAP_PRICE: un precio por mapa");
 
 // --------------------------------------------------------------------------------------------
+// Mejoras de casa (v3.20, docs/HOME_AND_PALS.md, tarea HOME): camas, gimnasio y juguete, 3 niveles cada una.
+// Se compran una vez y son del jugador. Los arrays por nivel van de 0 (sin comprar) a UPG_TIERS.
+// --------------------------------------------------------------------------------------------
+#define UPG_TIERS 3               // (estructura: niveles por linea; "upg" guarda 0..UPG_TIERS)
+// precio de cada nivel [linea][nivel - 1]: camas, gimnasio, juguete (~una semana de monedas por nivel)
+static const uint16_t UPG_PRICE[3][UPG_TIERS] = { { 600, 1000, 1500 }, { 800, 1200, 1800 }, { 500, 800, 1200 } };
+// camas (FR-HOME.1): ENE por minuto dormido y JOY de buenos dias tras una noche entera
+static const uint8_t BED_ENE_GAIN[UPG_TIERS + 1] = { SLEEP_ENE_GAIN, 7, 8, 10 };
+static const uint8_t BED_MORNING_JOY[UPG_TIERS + 1] = { 0, 5, 10, 15 };
+#define BED_MORNING_MIN_SLEEP 360 // minutos dormidos de noche para el bonus (lo despierta el de las 9:00)
+#define BED_WALK_MAX_MS 4000      // el paseo hasta la cama (solo se ve): si tarda mas, aparece en ella
+// gimnasio (FR-HOME.2): +1 de entrenamiento (el mas bajo) cada N minutos despierto con todo >= GYM_NEED_MIN
+static const uint8_t GYM_EVERY_MIN[UPG_TIERS + 1] = { 0, 60, 45, 30 };
+static const uint8_t GYM_CAP[UPG_TIERS + 1] = { 0, 25, 40, 60 };      // techo: no sube mas alla solo
+static const uint8_t GYM_DAY_MAX[UPG_TIERS + 1] = { 0, 4, 6, 8 };     // puntos al dia por bicho
+#define GYM_ENE_COST 3            // ENE por cada punto (dropTo, suelo GAME_FLOOR)
+#define GYM_NEED_MIN 40           // las tres necesidades al menos asi para entrenar
+// juguete (FR-HOME.3): juega solo de vez en cuando si le falta alegria
+#define TOY_JOY_BELOW 70          // solo si JOY < 70
+#define TOY_PLAY_CHANCE 2         // % por minuto despierto
+static const uint8_t TOY_JOY[UPG_TIERS + 1] = { 0, 3, 4, 5 };
+static const uint8_t TOY_DAY_MAX[UPG_TIERS + 1] = { 0, 3, 5, 7 };      // veces al dia por bicho
+
+// --------------------------------------------------------------------------------------------
 // Viajes (travel.h): 1, 3 u 8 h de tiempo real
 // --------------------------------------------------------------------------------------------
 #define TRV_TIERS 3               // (estructura)
