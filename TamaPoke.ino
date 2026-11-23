@@ -4422,7 +4422,8 @@ void fxCollect(uint32_t now) {
   // v3.4: las medallas del jugador (un banner por medalla, con sus monedas). Esperan en Pet mientras la cola
   // este llena (la migracion puede dejar muchas a la vez)
   MedalNews mn;
-  while (fxq.n < FX_QUEUE - 2 && pet.takeMedalNews(&mn))  // (deja sitio a lo demas: subidas, hitos, metas) fxq.push(FXB_MEDAL, mn.medal, mn.tier, false, 0, mn.coins);
+  while (fxq.n < FX_QUEUE - 2 && pet.takeMedalNews(&mn))  // (deja sitio a lo demas: subidas, hitos, metas)
+    fxq.push(FXB_MEDAL, mn.medal, mn.tier, false, 0, mn.coins);
   if (poopSfx) sfxPlay(SFX_POOP);
   if (emptySfx) sfxPlay(SFX_ALERT);  // uno solo aunque se vacien varias a la vez (o en los dos)
   uint16_t days = pet.takeMilestone();

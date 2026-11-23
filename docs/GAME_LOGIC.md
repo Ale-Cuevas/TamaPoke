@@ -53,35 +53,35 @@ To tune the game, change it there (see §17, "Tuning").
 | I want to change… | Look at |
 |---|---|
 | **The two home pets** (which one an action hits, focus, slot 1 save) | §4 "Two home pets"; `Pet::focus` `pet.cpp:10`, `FocusGuard` `:19`, `uiFocus` `TamaPoke.ino:547`, `homeFocusTick` `:558`; `petlife.h`, `homerec.h` |
-| **Player medals** (19 × Bronze/Silver/Gold, coins) | `medals.h` (table, tiers, `pm` blob); `Pet::medalValue` `pet.cpp:700`, `medalsUpdate` `:741`, `medalsMigrate` `:780`; thresholds `MEDAL_T` and coins `MEDAL_COINS` in `tuning.h` |
+| **Player medals** (19 × Bronze/Silver/Gold, coins) | `medals.h` (table, tiers, `pm` blob); `Pet::medalValue` `pet.cpp:709`, `medalsUpdate` `:750`, `medalsMigrate` `:789`; thresholds `MEDAL_T` and coins `MEDAL_COINS` in `tuning.h` |
 | **Any balance number** (a rate, timer, probability, reward or price) | **`tuning.h`**, grouped by system. Not there: the level curve (`growth.h`), minigame physics (`ballgame.h`, `zengame.h`, `dashgame.h`), the 8 stages (`stage.h`) |
 | How fast needs drain, poops, slip-ups, neglect | `Pet::tick` `pet.cpp:448`, `sleepMinute` `pet.cpp:1161`, numbers in `tuning.h` |
 | Level curve / growth | `growth.h` (`levelCost`, `levelFor`, `addLevels`); `growMin` in `Pet` |
 | Night / sleep schedule | `Pet::nightMinute` `pet.cpp:1196`, `goToBed` `pet.cpp:1182`, hours in `tuning.h` |
-| Feeding, cake, poops, pet it | `feedFood` `pet.cpp:1011` (gate `canFeed` `:1003`; foods, favourite and effects in `food.h`), `eatCake` `:1032`, `cleanPoop` `:1227`, `clearPoops` (waterfall), `caress` `:1246`; stale poops: `stalePoops` `petlife.h:197` |
-| Egg odds, shiny odds, genes | `pickEggSpecies` `pet.cpp:590`, `shinyOdds` `:337`, `hatch` `:939`, `newEgg` `:130` |
-| Evolution rules | `canEvolveNow` `pet.cpp:970`, `evolve` `:977` |
-| Farewell / release / death / Revive | `canFarewellNow` `pet.cpp:854`, `release` `:929`, `startDying` `:872`, `revive` `:889`, `letGo` `:906`, `endLife` `:255` |
-| Box store/wake and power-cut safety | `Pet::store` `pet.cpp:2990`, `wake` `:3025`, `boxBoot` `:3106`, `box.h` |
-| A minigame's rules | `ballgame.h`, `zengame.h`, `dashgame.h` (pure); the bag is only in `TamaPoke.ino` (`startSack` `:3041`) |
-| A minigame's reward | `Pet::playResult` `pet.cpp:1036`, `trainStrength` `:1057`, `zenResult` `:1083`, `dashResult` `:1104` |
+| Feeding, cake, poops, pet it | `feedFood` `pet.cpp:1020` (gate `canFeed` `:1012`; foods, favourite and effects in `food.h`), `eatCake` `:1041`, `cleanPoop` `:1254`, `clearPoops` (waterfall), `caress` `:1273`; stale poops: `stalePoops` `petlife.h:197` |
+| Egg odds, shiny odds, genes | `pickEggSpecies` `pet.cpp:599`, `shinyOdds` `:343`, `hatch` `:948`, `newEgg` `:136` |
+| Evolution rules | `canEvolveNow` `pet.cpp:979`, `evolve` `:986` |
+| Farewell / release / death / Revive | `canFarewellNow` `pet.cpp:863`, `release` `:938`, `startDying` `:881`, `revive` `:898`, `letGo` `:915`, `endLife` `:261` |
+| Box store/wake and power-cut safety | `Pet::store` `pet.cpp:3116`, `wake` `:3151`, `boxBoot` `:3232`, `box.h` |
+| A minigame's rules | `ballgame.h`, `zengame.h`, `dashgame.h` (pure); the bag is only in `TamaPoke.ino` (`startSack` `:3086`) |
+| A minigame's reward | `Pet::playResult` `pet.cpp:1045`, `trainStrength` `:1066`, `zenResult` `:1092`, `dashResult` `:1113` |
 | Battle damage / types / special | `battle.h` (`hitDamage` `:113`, `TYPE_CHART` `:39`, `SpecialMeter` `:245`) |
 | Stages, foes, team | `stage.h` (`STAGES` `:49`, `stageRollFoes` `:88`, `StageRun` `:115`) |
-| Stage rewards / loot | `Pet::stageDone` `pet.cpp:1959`, `rollBattleItem` `:1647`, `BDROP_*` in `tuning.h` |
-| Wild encounters | `encounter.h` (rolls, level, species), `Pet::encCheck` `pet.cpp:2069`, `encounterDone` `:2184`, `captureWild` `:2240` |
-| Coins, prices, daily cap | `economy.h`; `Pet::addCoins` `pet.cpp:1724`, `spendCoins` `:1743`, `buyItem` `:1750` |
-| Items, Backpack, gifts | `IT_*` enum `pet.h:61`, `useItem` `pet.cpp:1558`, `giveGift` `:1432`, `openGift` `:1475` |
-| Steps and walk rewards | `steps.h` (counter), `Pet::addSteps` `pet.cpp:1287`, `goalReward` `:1380` |
-| Travel and souvenirs | `travel.h` (`travelRoll` `:83`), `Pet::startTravel` `pet.cpp:1840`, `travelComplete` `:1874` |
-| Yard movement, food walking | `yard.h` (`yardStep` `:614`, BFS paths, food phases); `renderYardHome` `TamaPoke.ino:10055` |
-| Yard maps / backgrounds | `yardbg.h` (TPY1), `yardEnsureMap` `TamaPoke.ino:8866`, `tools/pack_yard.py` |
+| Stage rewards / loot | `Pet::stageDone` `pet.cpp:2062`, `rollBattleItem` `:1675`, `BDROP_*` in `tuning.h` |
+| Wild encounters | `encounter.h` (rolls, level, species), `Pet::encCheck` `pet.cpp:2172`, `encounterDone` `:2287`, `captureWild` `:2343` |
+| Coins, prices, daily cap | `economy.h`; `Pet::addCoins` `pet.cpp:1752`, `spendCoins` `:1771`, `buyItem` `:1778` |
+| Items, Backpack, gifts | `IT_*` enum `pet.h:61`, `useItem` `pet.cpp:1585`, `giveGift` `:1459`, `openGift` `:1502` |
+| Steps and walk rewards | `steps.h` (counter), `Pet::addSteps` `pet.cpp:1314`, `goalReward` `:1407` |
+| Travel and souvenirs | `travel.h` (`travelRoll` `:83`), `Pet::startTravel` `pet.cpp:1943`, `travelComplete` `:1977` |
+| Yard movement, food walking | `yard.h` (`yardStep` `:614`, BFS paths, food phases); `renderYardHome` `TamaPoke.ino:10200` |
+| Yard maps / backgrounds | `yardbg.h` (TPY1), `yardEnsureMap` `TamaPoke.ino:9011`, `tools/pack_yard.py` |
 | Yard furniture (beds, gym, toy) | `yard_spots.h` (spots per map), `yardDrawFurniture` / `yardHomeEvt` `TamaPoke.ino`, sleep in bed and visits in `yard.h` (§7) |
 | A screen's drawing or taps | §3 table; everything UI is in `TamaPoke.ino` |
 | A string / translation | `i18n.h` (`StrId`), `i18n.cpp` (8 rows), `tools/test_i18n_formats.py` |
 | Species data | `tools/dex_data.py` + `tools/gen_dex.py` → `dex.h` (generated) |
-| Save format / NVS keys | `Pet::save` `pet.cpp:2275`, `Pet::load` `:2458` |
+| Save format / NVS keys | `Pet::save` `pet.cpp:2378`, `Pet::load` `:2568` |
 | Brightness, dim, saver, PWR | `power.h`, `burnin.h`, `pwrPress` `TamaPoke.ino:~724`, `updateBrightness` `:~754` |
-| Celebrations / "+N" floaters | `fx.h`, `fxCollect` `TamaPoke.ino:4331`, `fxFrame` `:4412` |
+| Celebrations / "+N" floaters | `fx.h`, `fxCollect` `TamaPoke.ino:4376`, `fxFrame` `:4464` |
 | Sounds | `audio.h` (`Sfx` enum), `sfxPlay` |
 
 ---
@@ -221,11 +221,11 @@ flowchart TD
   N -- no --> P["idleWait: light sleep only off USB with the screen off or in the saver"]
 ```
 
-**Game time.** One game minute is one real minute. `Pet::update` (`pet.cpp:423`) calls `tick()` every `PET_TICK_MS =
+**Game time.** One game minute is one real minute. `Pet::update` (`pet.cpp:431`) calls `tick()` every `PET_TICK_MS =
 60000` (`pet.h:11`) using `millis()`, and loops to catch up. The RTC is used only for offline catch-up, the
 real-time timers (yard egg, travel, Revive window, encounters, cake) and the hour of day.
 
-**Render.** `render()` (`TamaPoke.ino:2725`) does three things:
+**Render.** `render()` (`TamaPoke.ino:2770`) does three things:
 
 - It expires dialog timers, then dispatches by priority (§3).
 - "Static" screens (Box, menus) hash a `screenKey()` (`:2395`) and redraw only when it changes.
@@ -323,7 +323,7 @@ press), and an idle ladder: dim at 90 s, saver at 120 s.
 | Clock / settings | `clockOpen` | `renderClock` `:3860` | `clockTap` `:3919` (time, brightness, language, volume) |
 | Pet menu + food list (v3.3) | `petMenuOpen` (slot + 1), `petMenuView` | `drawPetMenu` `:7680` (inside the yard frame) | `openPetMenu` `:7520`, `petMenuTap` `:7810`, `petMenuCheck` `:7554` (closes it when the pet can't use it any more), `closePetMenu` `:7536`; food → `yardFeedFront` |
 | Pet picker (v3.3) | `petPick` (game or item) | `renderPetPick` `:7402` | `openPetPick` `:7391`, `petPickTap` `:7445`; then `uiFocus` + the game, or `bagUseOn` `:5544` |
-| Play / Travel panel | `panelKind` (`TamaPoke.ino:226`; kinds in `yard_panels.h`) | `renderPlayPanel` `:7758`, `renderTravelSetup` `:8457`, `renderTravelTrip` `:8539` | `playPanelTap` `:7795`, `travelTap` `:8610` |
+| Play / Travel panel | `panelKind` (`TamaPoke.ino:234`; kinds in `yard_panels.h`) | `renderPlayPanel` `:7811`, `renderTravelSetup` `:8510`, `renderTravelTrip` `:8592` | `playPanelTap` `:7848`, `travelTap` `:8663` |
 | Bag / Shop | `bagOpen`, `bagTab` (0 items, 1 shop) | `renderBag` `:5439`, `renderShop` `:4962`, `renderPicker` `:5035` | `bagTap` `:5546`, `shopTap` `:5095`, `pickerTap` `:5057` |
 | Stages / team | `stagesOpen`, `teamOpen`, `teamWild` | `renderStages` `:6438`, `renderTeam` `:6545` | `openStages` `:6337`, `openTeam` `:6346`, `teamTap` `:6574` |
 | Battle | `bt.phase` (`BT_INTRO/FIGHT/SWAP/END`, `:9360`) | `renderBattle` `:10106` | `battleTap` `:9631`; `closeBattle` `:9481` |
@@ -336,18 +336,18 @@ press), and an idle ladder: dim at 90 s, saver at 120 s.
 
 ### Input routing
 
-- **Touch.** `handleTouch` (`TamaPoke.ino:1633`) is polled every 20 ms and gated by the INT line. Coordinates are
+- **Touch.** `handleTouch` (`TamaPoke.ino:1678`) is polled every 20 ms and gated by the INT line. Coordinates are
   shifted by the orbit offset.
   - Some screens take raw presses first: bag (every press is a hit), waterfall (finger held), sled (header only),
     battle (any press charges the meter).
   - Everything else goes through a gesture machine:
-    - a horizontal swipe (|dx| > 80, < 800 ms) → `onSwipe` `:1779`;
-    - a vertical swipe → `onSwipeV` `:1757`;
-    - a tap (< 1500 ms, < 40 px) → `onTap` `:1954`;
+    - a horizontal swipe (|dx| > 80, < 800 ms) → `onSwipe` `:1824`;
+    - a vertical swipe → `onSwipeV` `:1802`;
+    - a tap (< 1500 ms, < 40 px) → `onTap` `:1999`;
     - a 3 s still hold on the pet → the release dialog.
   - A touch on a dim or dark screen only wakes it (`swallowGesture`).
-- **USER key** = back. `onBack` (`:1872`) peels the topmost layer. Quitting a game or battle with USER pays nothing.
-- **BOOT key** = brightness. `onBootKey` (`:1862`) → `cycleBright` (4 levels, NVS `"bri"`).
+- **USER key** = back. `onBack` (`:1917`) peels the topmost layer. Quitting a game or battle with USER pays nothing.
+- **BOOT key** = brightness. `onBootKey` (`:1907`) → `cycleBright` (4 levels, NVS `"bri"`).
 - **PWR short.** `pwrPress` (`:~724`) cycles game → saver → off. Entering saver or off abandons a battle, an
   encounter, the waterfall and the sled. **PWR long (4 s)** is a hardware power-off; the RTC keeps time.
 - **IMU.** In `imuTick`:
@@ -485,7 +485,7 @@ It is not care: no streak, bond or coins.
 
 | Action | Code | Effect |
 |---|---|---|
-| Plain berry | `feedFood(FOOD_PLAIN)` `pet.cpp:1011` | Free and unlimited: +20 FOOD (`PLAIN_BERRY_FOOD`) |
+| Plain berry | `feedFood(FOOD_PLAIN)` `pet.cpp:1020` | Free and unlimited: +20 FOOD (`PLAIN_BERRY_FOOD`) |
 | Coloured berry (6, v3.2) | `feedFood(FOOD_BERRY0..5)` | Spends one `IT_BERRY_*`: +30 FOOD, +3 JOY. The line's favourite (`favBerryOf(dex)` in `food.h`, from the **base form**, so it survives evolution) gives +35 FOOD, +12 JOY, bond +2 and reveals it (`berryKnown`) |
 | Cake | `eatCake` `:910` (= `feedFood(FOOD_CAKE)`) | FOOD 100 and kept full for 180 min (`satedUntil`), +12 JOY, +12 weight |
 | Tap a poop | `cleanPoop` `:1103` | Removes that poop (the only way, besides the waterfall); counts as the day's care; works asleep |
@@ -494,7 +494,7 @@ It is not care: no streak, bond or coins.
 | Item | `useItem` `:1306` (gate `canUseItem` `:1293`) | Foods go through `feedFood` (Golden Berry +50 FOOD +15 JOY); vitamins +3 training; Rare Candy +1 level |
 
 In the yard, food is not applied when tapped. It **drops, the pet walks to it and eats it**, and only then does
-`yardFoodEaten` (`TamaPoke.ino:9229`) call `feedFood`, which spends the item only then, never on the drop (§7).
+`yardFoodEaten` (`TamaPoke.ino:9293`) call `feedFood`, which spends the item only then, never on the drop (§7).
 
 ### Bond, streak, medals
 
@@ -521,7 +521,7 @@ Per-pet medals are gone. 19 player medals (`medals.h`), each with Bronze / Silve
 - **NVS `pm`** (`PlayerMedals`, version + CRC): tier paid per medal, counters, encounter ids, and a list of
   `{uid, bits}` recorded at migration for Box pets. Written before `cn`, so a power cut can lose a payout but never
   pay twice. If `pm` fails to write, `save()` stops there with `pendingSave`.
-- **Migration** (`medalsMigrate` `:780`, in `begin()`): with **no** `pm` key, count both home pets and every Box
+- **Migration** (`medalsMigrate` `:789`, in `begin()`): with **no** `pm` key, count both home pets and every Box
   record once, pay every reached tier in full and queue the banners, then remove the old `medal`/`tmedal` keys. An
   **existing but unreadable** `pm` is recounted without paying (tiers set to those reached). Any `PM_VER` bump needs a
   real migration.
@@ -534,7 +534,7 @@ Per-pet medals are gone. 19 player medals (`medals.h`), each with Bronze / Silve
   (20 → 120 min, log curve), and 120 min from 90.
 - **Jumps:** `addLevels` keeps the bar fill. It is used by Rare Candy, walk goals (+1/+1/+2) and, via growth
   minutes, by stage bosses and wild wins (+60 min).
-- **Migration:** `gcv` is the curve version. `migrateGrowthCurve` (`pet.cpp:2783`) converts the home pet, every Box
+- **Migration:** `gcv` is the curve version. `migrateGrowthCurve` (`pet.cpp:2909`) converts the home pet, every Box
   slot and `boxT`, staged through `gmig` so it survives a power cut.
 - **Level-up detection lives in the UI, not in `Pet`.** `fxLevelW` watches the level, `fxCollect` plays the jingle
   at once, and queues the banner for when the screen is visible.
@@ -571,10 +571,10 @@ stateDiagram-v2
 
 ### Eggs
 
-- **`newEgg()`** (`pet.cpp:63`) picks the species (`pickEggSpecies` `:590`) and rolls the shiny, spending the Shiny
+- **`newEgg()`** (`pet.cpp:63`) picks the species (`pickEggSpecies` `:599`) and rolls the shiny, spending the Shiny
   Charm if held. `placeEgg()` then puts it in the yard. With 0 registered species, the starter pick runs instead.
 - **Yard egg timer** (`eggtimer.h`): `EGG_HATCH_MIN` 120 real minutes from `eggPlaced`, running with the board off.
-  Each shake (`Pet::shaken` `pet.cpp:1605`) takes 5 min off, at most once per 30 s and 60 min in total. Crack stages
+  Each shake (`Pet::shaken` `pet.cpp:1633`) takes 5 min off, at most once per 30 s and 60 min in total. Crack stages
   come from `eggCracksFor`.
 - **Rarity** (`pickEggSpecies`):
   - After a death, only Common.
@@ -583,10 +583,10 @@ stateDiagram-v2
   - Inside a tier it prefers lines with unregistered members.
   - Tiers are `R_EVO/R_COMUN/R_RARO/R_LEGENDARIO/R_ENCUENTRO` (`dex.h:33`). `R_ENCUENTRO` species (Omanyte, Kabuto,
     Aerodactyl, Dratini, Mew) never come from eggs.
-- **Shiny** (`shinyOdds` `pet.cpp:337`): 1 in (48 − careBonus), 1 in 24 after a farewell, never better than 1 in 8.
+- **Shiny** (`shinyOdds` `pet.cpp:343`): 1 in (48 − careBonus), 1 in 24 after a farewell, never better than 1 in 8.
   The charm divides the odds by 3.
 - **Colour (v2.4, `eggcolor.h`):** an egg is painted with the type colours of the species it holds.
-  `drawEggAt(cx, cy, s, cracks, dex)` (`TamaPoke.ino:4709`) walks `SPR_EGG` and asks `eggCellColor()` for each
+  `drawEggAt(cx, cy, s, cracks, dex)` (`TamaPoke.ino:4761`) walks `SPR_EGG` and asks `eggCellColor()` for each
   body cell (`y` body, `Y` shade, `g` spots; the outline keeps `spriteColor`). One type: all its colour. Two
   types: `type1` upper-left, `type2` lower-right, mixed over `EGG_BLEND_HALF` cells either side of the diagonal
   `col + row == EGG_DIAG_MID`. Spots are the colour under them mixed 50 % with white. `dex 0` = the classic
@@ -614,7 +614,7 @@ stateDiagram-v2
 
 ### Endings
 
-All endings go through `endLife(cer)` (`pet.cpp:255`), for the slot that ends (the other pet is not touched). It
+All endings go through `endLife(cer)` (`pet.cpp:261`), for the slot that ends (the other pet is not touched). It
 moves that slot's waiting incubator egg to the Backpack, adds the gift egg if needed, and leaves the slot
 **vacant**. With two slots (v3.0):
 
@@ -624,7 +624,7 @@ moves that slot's waiting incubator egg to the Backpack, adds the gift egg if ne
 - When an egg moves to the Backpack, `saveBag()` writes `bpack`/`cegg` **before** the slot's own save, so a power
   cut leaves at most an extra egg, never a lost one.
 
-A vacant slot is filled with "Hatch an egg (N)" (`hatchFromBag` `pet.cpp:305`) or a Box wake.
+A vacant slot is filled with "Hatch an egg (N)" (`hatchFromBag` `pet.cpp:311`) or a Box wake.
 `eggsOwned()` counts the Backpack plus both slots' incubator eggs.
 
 | Ending | Trigger | Code |
@@ -678,20 +678,20 @@ free.
 
 A failed commit keeps `boxT`/`boxTs`, so the next boot finishes or undoes the move.
 
-`boxBoot()` (`pet.cpp:3106`, per slot in `boxBootSlot` `:3133`) reconciles at boot. It reads `boxTs`, finishes or
+`boxBoot()` (`pet.cpp:3232`, per slot in `boxBootSlot` `:3259`) reconciles at boot. It reads `boxTs`, finishes or
 undoes a cut move in that slot, makes a Box copy win over a duplicate in either home slot, vacates slot 1 if it
 duplicates slot 0 (bringing a waiting egg home), and clears stray keys and egg-held flags per slot.
 
-**UI.** `boxTap` (`TamaPoke.ino:6859`) → `boxStartMove` (`:6837`, `BOXMV_STORE/WAKE/SWAP`). Storing with two
+**UI.** `boxTap` (`TamaPoke.ino:6912`) → `boxStartMove` (`:6890`, `BOXMV_STORE/WAKE/SWAP`). Storing with two
 hatched pets asks which one goes in; a wake goes to the first vacant slot, then into an egg's slot (the egg waits in
 its incubator), and otherwise asks which pet to swap with. The light animation
-plays for 600 ms, then `boxTick` (`:6922`) calls `pet.store()` or `pet.wake()` while the last frame is on screen.
+plays for 600 ms, then `boxTick` (`:6975`) calls `pet.store()` or `pet.wake()` while the last frame is on screen.
 
 ---
 
 ## 7. The yard (home screen)
 
-Since v2.0 the home is a top-down 466×466 yard. `renderYardHome` (`TamaPoke.ino:9984`) does update and draw in one
+Since v2.0 the home is a top-down 466×466 yard. `renderYardHome` (`TamaPoke.ino:10200`) does update and draw in one
 call, every frame:
 
 `yardSyncPets` (`:7874`) → `yardTick` (`:7960`) → `yardSyncThings` (`:8244`) → draw things, pets, Box appear,
@@ -710,7 +710,7 @@ bubble, food fx → `yardDrawHud` (`:8589`)
 - **Walk mask.** The map's 15×15 grid of cells (38.4 px since v3.5; `yardWalk`, `:8833`) keeps only the largest
   connected region. On load, `yardMaskFrame` (`yard.h`) re-blocks cells outside the circle or under the clock/dock
   with the current map scale, so `.bin` masks made for another scale stay safe. Cells 0 and 14 are off-canvas.
-  `yardWalkObj()` (`:9064`, v3.20) adds the owned furniture cells; `yardWalkNow()` (`:9129`) starts from it and also
+  `yardWalkObj()` (`:9209`, v3.20) adds the owned furniture cells; `yardWalkNow()` (`:9274`) starts from it and also
   blocks the egg and the wild-encounter cells. `yardSyncThings` and the pet spawn use `yardWalkObj()`, so poops,
   gifts, the egg and the encounter never land on furniture.
 - **Home furniture (v3.20, `docs/HOME_AND_PALS.md` FR-HOME.5).** Beds, gym and toy (`pet.upgTier(UPG_*)`, 0-3) are
@@ -721,7 +721,7 @@ bubble, food fx → `yardDrawHud` (`:8589`)
   `TAMAPOKE_YARD_OUT`, skipped when missing, plus the fallback) with every combination of furniture: one walkable
   region, at least 30 free cells, a free neighbour for each object. `python3 tools/pack_yard.py --spots` draws the
   spots over the built `.bin` files (`NN-name_spots.png`); the packer's `_debug.png` shows them too.
-  - Drawing: `yardDrawFurniture` (`:9523`) draws the owned tier's sprite (`SPR_BED1..3`, `SPR_GYM1..3`,
+  - Drawing: `yardDrawFurniture` (`:9668`) draws the owned tier's sprite (`SPR_BED1..3`, `SPR_GYM1..3`,
     `SPR_TOY1..3`, 32×32 at scale 2, feet at the cell centre) tinted by the hour like the map
     (`drawMapYardTint` + `yardTint565`), y-sorted with the pets through `YARD_OBJS` (a bed sorts 1 px above its
     feet, so its sleeper draws on top). The ball bounces while someone plays with it.
@@ -732,7 +732,7 @@ bubble, food fx → `yardDrawHud` (`:8589`)
     nearest free cell (`yardLeaveBed` `:532`; with an emote or a tilt it appears there). `yardAdvance` lets two pets
     in bed tasks pass closer than `YARD_MIN_DIST`. Without a bed nothing changes, and the logic sleep is never
     delayed (all of it is cosmetic).
-  - **Visits.** `fxCollect` drains `pet.takeHomeEvt` every loop into `yardHomeEvt` (`:9222`). Only with the yard on
+  - **Visits.** `fxCollect` drains `pet.takeHomeEvt` every loop into `yardHomeEvt` (`:9367`). Only with the yard on
     screen (`yardOnScreen`) and the pet free (`yardPetFree`: no menu, food, emote, sad pose, sleep or other visit):
     `HE_GYM` walks to the gym (`yardVisit` `yard.h:580`, the free side cell nearest the object) and loops a workout
     gesture (Attack, else Hop/Pose/Nod) for `HOME_WORKOUT_MS` with a sweat drop; the "ATK +1" popup comes from
@@ -757,18 +757,18 @@ bubble, food fx → `yardDrawHud` (`:8589`)
   food is placed in front of the pet (`yardFoodFront` `yard.h:881`, else the other side, else at its feet) and goes
   straight to `YF_EAT`, or waits until the step-aside ends. One food per slot (`yardFood[slot]`, tagged with the
   pet's uid); a chosen food not yet eaten is reserved, so the other pet can't be served the last one.
-  `yardFoodEaten` (`:9229`) applies `onSlot(owner, feedFood)`, the only place the item is spent. The food waits while
+  `yardFoodEaten` (`:9293`) applies `onSlot(owner, feedFood)`, the only place the item is spent. The food waits while
   something else holds the pet (evolving, hatch, an emote, the eating pose) and is cancelled if the pet sleeps,
   leaves or changes.
 - **Poops, gifts, egg.** Counts are saved in NVS; positions are RAM-only and re-scattered at boot. Up to 3 gift boxes
   are shown out of 8 held.
   - A poop tap calls `pet.cleanPoop`.
-  - A gift tap calls `openGiftTap` (`:10602`).
+  - A gift tap calls `openGiftTap` (`:10818`).
   - An egg tap shows the time left (the starter egg needs 3 taps instead).
-- **Bubbles.** `yardEventMsg` (`:9812`) picks a recent event; otherwise `yardNeedList` (`:9825`) lists needs below
+- **Bubbles.** `yardEventMsg` (`:10028`) picks a recent event; otherwise `yardNeedList` (`:10041`) lists needs below
   25 in rotation. The neglect text replaces all of them.
-- **HUD.** Battery, coins, and the dock: Play (amber), Bag (blue), Shop (pink, v3.3; `openShop()` opens the Bag screen on its Shop tab) (`yDock` `:7614`; `yardDockOff`
-  `:9958` greys buttons for an egg or sleep).
+- **HUD.** Battery, coins, and the dock: Play (amber), Bag (blue), Shop (pink, v3.3; `openShop()` opens the Bag screen on its Shop tab) (`yDock` `:7667`; `yardDockOff`
+  `:10174` greys buttons for an egg or sleep).
 - **Panels** (`yard_panels.h`):
   - The Care panel is gone (v3.3): care is the pet menu.
   - Play: ball, battle, bag, sled, waterfall, travel. A minigame asks "Who plays?" (pet picker) when both home
@@ -787,7 +787,7 @@ bubble, food fx → `yardDrawHud` (`:8589`)
   `static_assert` there). Maps 6-9 use the packer's v3.15 extras (several `hue:` lines, `sky:` void, a `decal:`
   layer of procedural painters). `MAP_BIOME` in `battleBiome` (`TamaPoke.ino`) gives a wild battle the backdrop of
   the map: volcano 3, power plant 6, sky tower 4 (mountain), toxic district 7 (swamp).
-  - `yardEnsureMap` (`:8958`) chooses, in order: the serial override, the shop preview, the travel preview, then
+  - `yardEnsureMap` (`:9011`) chooses, in order: the serial override, the shop preview, the travel preview, then
     `pet.yardMapWanted()`. Without the SD it falls back to map 1, then to a plain floor.
   - The palette is tinted by hour (`yardTintAt`), and the result is cached in PSRAM.
 
@@ -795,7 +795,7 @@ bubble, food fx → `yardDrawHud` (`:8589`)
 
 ## 8. Minigames
 
-All four games are launched from the Play panel (`playPanelTap` `TamaPoke.ino:7795`). Each needs the pet awake and
+All four games are launched from the Play panel (`playPanelTap` `TamaPoke.ino:7848`). Each needs the pet awake and
 not an egg or ending; the sled also needs the IMU.
 
 ```mermaid
@@ -810,10 +810,10 @@ flowchart LR
 
 | Game | Stat | Logic | Rules | Reward (`pet.cpp`) |
 |---|---|---|---|---|
-| Ball | SPD | `ballgame.h`; `startGame` `:2961`, `stepGame` `:2998` | Tap the ball to keep it up; 3 floor misses end it. Each non-final miss plays `SFX_MISS` (a low 190 ms falling thump) and a 450 ms UI animation (`BALL_MISS_MS`: dust puffs and a squashed ball at the floor, the lost life dot blinks; `missX`/`missTime`, UI constants, not balance); the final miss keeps the game-over sound. Speed 1.5× at 1 point (v3.16), rising linearly to 3.5× at 100 points (`BALL_SPEED_TOP_AT`, v3.17), 3.5× is the cap. "Tap the ball!" hint (`S_TAP_BALL`) until the first hit; the result shows the SPD gain (`gameGainShown`, from `playResult`'s return value; `BALL <n>` shows what it would give) | `playResult` `:1036`: SPD += score/5 (no per-session cap), JOY +5…+35, ENE down, weight −score/2, coins |
+| Ball | SPD | `ballgame.h`; `startGame` `:3006`, `stepGame` `:3043` | Tap the ball to keep it up; 3 floor misses end it. Each non-final miss plays `SFX_MISS` (a low 190 ms falling thump) and a 450 ms UI animation (`BALL_MISS_MS`: dust puffs and a squashed ball at the floor, the lost life dot blinks; `missX`/`missTime`, UI constants, not balance); the final miss keeps the game-over sound. Speed 1.5× at 1 point (v3.16), rising linearly to 3.5× at 100 points (`BALL_SPEED_TOP_AT`, v3.17), 3.5× is the cap. "Tap the ball!" hint (`S_TAP_BALL`) until the first hit; the result shows the SPD gain (`gameGainShown`, from `playResult`'s return value; `BALL <n>` shows what it would give) | `playResult` `:1045`: SPD += score/5 (no per-session cap), JOY +5…+35, ENE down, weight −score/2, coins |
 | Training bag | ATK | `.ino` only; `startSack` `:2768` | 10 s of tapping | `trainStrength` `:827`: ATK += hits/4, cap 18, JOY +6, weight −hits/10, coins |
-| Sled | SPD | `dashgame.h`; `startDash` `:3472` | Tilt to dodge rows. 2 s calibration takes the current angle as straight. Speed 1 + t/40 s, cap 3×. 3 hits end it | `dashResult` `:1104`: SPD += rows/6, cap 18, JOY +5…+35, weight −rows/8, coins |
-| Waterfall | DEF | `zengame.h`; `startZen` `:3172` | Hold to raise the gauge, release to lower it; stay in the band for 45 s. The band narrows; from 30 s it drifts (bonus time). Surges push it down | `zenResult` `:1083`: DEF += min(8, t/3.5 s) + bonus min(3, …), **clears all poops of the pet that played** (v3.1), no weight burn, coins. **Only a full session pays** |
+| Sled | SPD | `dashgame.h`; `startDash` `:3517` | Tilt to dodge rows. 2 s calibration takes the current angle as straight. Speed 1 + t/40 s, cap 3×. 3 hits end it | `dashResult` `:1113`: SPD += rows/6, cap 18, JOY +5…+35, weight −rows/8, coins |
+| Waterfall | DEF | `zengame.h`; `startZen` `:3217` | Hold to raise the gauge, release to lower it; stay in the band for 45 s. The band narrows; from 30 s it drifts (bonus time). Surges push it down | `zenResult` `:1092`: DEF += min(8, t/3.5 s) + bonus min(3, …), **clears all poops of the pet that played** (v3.1), no weight burn, coins. **Only a full session pays** |
 
 **Coins** (`economy.h`): `coinsForGame` gives 0 if the metric is 0, else 3 + metric/div, at most 8. The divisors
 are ball 10, bag 8, sled 10, waterfall 2. Paid with `addCoins(n, capped=true)`, which counts toward
@@ -828,7 +828,7 @@ skipped while cake-full.
 
 ### Engine (`battle.h`, pure, deterministic for a given seed)
 
-- **Stats** (`makeFighter` `:90`, same formula as `Pet::calcStat` `pet.cpp:823`):
+- **Stats** (`makeFighter` `:90`, same formula as `Pet::calcStat` `pet.cpp:832`):
   - `maxHp = baseHp + L + 10`;
   - ATK/DEF/SPD = `base × gene/100 + L + training`;
   - L is capped at 100.
@@ -845,8 +845,8 @@ skipped while cake-full.
 - **Special** (`SpecialMeter` `:245`): 5 taps arm it, it adds +30 % power, then rests for 2 attacks. The player
   charges it by tapping during `BT_FIGHT`. The AI gets `aiTaps` per attack: minion 1 has 0, minion 2 has 1, the
   boss has 2, a wild foe has 1.
-- **How the `.ino` drives it** (`TamaPoke.ino:9360-9700`): `battleStep` (`:11002`) calls `run.attack()` once every
-  `ATTACK_MS` 1300. After a KO, `battleAfterKo` (`:10980`) calls `run.advance()`. Phases are `BT_INTRO` (VS card) →
+- **How the `.ino` drives it** (`TamaPoke.ino:9360-9700`): `battleStep` (`:11218`) calls `run.attack()` once every
+  `ATTACK_MS` 1300. After a KO, `battleAfterKo` (`:11196`) calls `run.advance()`. Phases are `BT_INTRO` (VS card) →
   `BT_FIGHT` ↔ `BT_SWAP` → `BT_END` (7 s; taps ignored for the first 1.8 s).
 
 ### Stages (`stage.h`)
@@ -859,7 +859,7 @@ skipped while cake-full.
   belongs to the player.
 - **Team.** 1–4 fighters from the home pets (awake or asleep since v3.12; a sleeping one stays asleep) and the Box
   pets that are not travelling (`teamCanFight`
-  `pet.cpp:1706`). The last team is pre-selected.
+  `pet.cpp:1734`). The last team is pre-selected.
 
 ```mermaid
 flowchart TD
@@ -879,11 +879,11 @@ flowchart TD
   F -. "USER, PWR, dying" .-> Q["closeBattle: nothing paid"]
 ```
 
-- **Rewards.** `Pet::stageDone` (`pet.cpp:1959`) pays once. It writes in a fixed order for power-cut safety: badge
+- **Rewards.** `Pet::stageDone` (`pet.cpp:2062`) pays once. It writes in a fixed order for power-cut safety: badge
   → daily mask → Box records → `save()`.
   - The daily boss mask is `stM`/`stD`, one bit per stage per day.
   - Box team members get their growth through `writeSlot`; they evolve once woken.
-- **Loot** (`rollBattleItem` `:1647`, `BDROP_*` in `tuning.h`): cake 19, Golden Berry 18, vitamins 19, Lure 10 (v3.14), a coloured berry 8,
+- **Loot** (`rollBattleItem` `:1675`, `BDROP_*` in `tuning.h`): cake 19, Golden Berry 18, vitamins 19, Lure 10 (v3.14), a coloured berry 8,
   Poké Ball 7, Rare Candy 7, Revive 5, charm 4, egg 3. It arrives as a wrapped gift, or straight into the Backpack when the home
   is vacant.
 
@@ -914,7 +914,7 @@ flowchart TD
   U -. "6 h pass" .-> E1["vanishes"]
 ```
 
-- **Rolls.** `Pet::encCheck` (`pet.cpp:2069`) is called from `tick`, `syncClock` and `addSteps`. It needs the clock
+- **Rolls.** `Pet::encCheck` (`pet.cpp:2172`) is called from `tick`, `syncClock` and `addSteps`. It needs the clock
   set and someone able to fight.
 - **Species.** `encPickBase` takes a common or rare base form (×3 weight if its type fits the map) or, 5 % of the
   time, an exclusive: Omanyte, Kabuto, Aerodactyl, Dratini (24 each), Mew (4).
@@ -926,7 +926,7 @@ flowchart TD
   beach Water, volcano Fire/Rock, power plant Electric, sky tower Flying, toxic district Poison.
 - **Drops** (`WDROP_*` in `tuning.h`): cake 25, Golden Berry 25, a coloured berry 10, vitamins 21, Rare Candy 8, Revive 7, charm 4. A wild
   win never gives coins or Poké Balls.
-- **Capture** (`captureBlock` `pet.cpp:2231`, `captureWild` `:2240`) fails only with no ball or no room (Backpack
+- **Capture** (`captureBlock` `pet.cpp:2334`, `captureWild` `:2343`) fails only with no ball or no room (Backpack
   eggs at 9, or 4 captured eggs queued). You start with 3 balls (`BALL_START`); the Shop sells them for 100.
 
 ---
@@ -941,11 +941,11 @@ flowchart TD
 - **`Pet::addSteps`** (`pet.cpp:1064`) never writes flash; it only marks a pending save. It gives:
   - Walk care, only if the pet is hatched and awake: +1 JOY per 100 steps (max 30 a day), −1 weight and +1 bond
     per 1 000.
-  - Finds every 800–1 200 rewarded steps, up to 5 a day (`findItem` `:1417`): Golden Berry 28, cake 17, a coloured berry 10, vitamin
+  - Finds every 800–1 200 rewarded steps, up to 5 a day (`findItem` `:1444`): Golden Berry 28, cake 17, a coloured berry 10, vitamin
     30, charm 10, Revive 5. They arrive as **wrapped gifts**.
   - An egg every 8 000–15 000 steps. All steps count, even asleep. It goes straight home if the home is vacant,
     otherwise it is wrapped.
-  - Goals 3 000 / 6 000 / 10 000 (`goalReward` `:1380`) give levels +1/+1/+2, JOY +10/+10/+15, bond 0/+2/+3,
+  - Goals 3 000 / 6 000 / 10 000 (`goalReward` `:1407`) give levels +1/+1/+2, JOY +10/+10/+15, bond 0/+2/+3,
     coins 10/20/40, a find on the first two, and a Marathon medal day on the third. Coins are always paid; the rest
     needs the pet awake.
   - Then `encCheck()`.
@@ -970,15 +970,15 @@ flowchart TD
   worst leave one Lure too many. Not sold; drops from bosses (10 %) and trips (weight 10 of 100).
 - **Not used by hand:** the charm (it boosts the next egg's shiny odds), eggs, the Revive (offered at death) and the
   Poké Ball (thrown after a wild win).
-- **Gifts:** `giveGift` (`pet.cpp:1432`) holds up to 8 wrapped gifts (NVS `"gifts"`); beyond that an item goes
-  straight to the Backpack. `openGift` (`:1475`) opens the first gift that fits. `unwrapGifts` (`:1498`) empties
+- **Gifts:** `giveGift` (`pet.cpp:1459`) holds up to 8 wrapped gifts (NVS `"gifts"`); beyond that an item goes
+  straight to the Backpack. `openGift` (`:1502`) opens the first gift that fits. `unwrapGifts` (`:1525`) empties
   them into the Backpack when the home is freed.
 
 ### Coins and the Shop
 
 - **Storage.** `Pet::coins`, NVS `"cn"`, max 9 999. The daily cap counter is `coinToday`/`coinDay`.
-- **Functions.** `addCoins(n, capped)` (`pet.cpp:1724`) only marks a pending save. `spendCoins` and `buyItem`
-  (`:1750`, `:1464`) and `buyMap` save at once.
+- **Functions.** `addCoins(n, capped)` (`pet.cpp:1752`) only marks a pending save. `spendCoins` and `buyItem`
+  (`:1778`, `:1464`) and `buyMap` save at once.
 - **Home upgrades (v3.20, `upgrade.h`).** Three lines (beds, gym, toy), 3 tiers each, player-wide, prices
   `UPG_PRICE` in `tuning.h` (600/1000/1500, 800/1200/1800, 500/800/1200). `upgCheck(line, tier, coins)` checks
   bad line, then MAX, then coins; `buyUpgrade(line)` (`pet.cpp:1805`) buys the next tier only (tier 2 needs tier
@@ -1024,8 +1024,8 @@ flowchart LR
 
 - **Rules.** Only a Box pet travels (never the home pet), one trip at a time, to an owned map. Trips run on real RTC
   time, also with the board off, and need the clock set.
-- **Code.** `canTravel` `pet.cpp:1826`, `startTravel` `:1840` (one 16-byte NVS record `"trv"` with a fixed seed),
-  `travelCheck` `:1861` (from tick and syncClock), `travelComplete` `:1874`, `takeTravelResult` `:1913`.
+- **Code.** `canTravel` `pet.cpp:1929`, `startTravel` `:1943` (one 16-byte NVS record `"trv"` with a fixed seed),
+  `travelCheck` `:1964` (from tick and syncClock), `travelComplete` `:1977`, `takeTravelResult` `:2016`.
 - **Outcome.** `travelRoll` (`travel.h:83`) computes everything from the saved seed, so the result is the same
   whenever it is evaluated.
 
@@ -1082,16 +1082,16 @@ stateDiagram-v2
   Back --> Home: tap the suitcase, banner, takeTravelResult
 ```
 
-**UI.** `openTravel` (`TamaPoke.ino:8382`) opens `PANEL_TRAVEL`. A running trip shows a countdown and a log
-(`travelEvent`) and cannot be cancelled. The returned pet is found by `trvBackSlot` (`:8680`); the banner is
-`drawReturnBanner` (`:8695`).
+**UI.** `openTravel` (`TamaPoke.ino:8435`) opens `PANEL_TRAVEL`. A running trip shows a countdown and a log
+(`travelEvent`) and cannot be cancelled. The returned pet is found by `trvBackSlot` (`:8733`); the banner is
+`drawReturnBanner` (`:8748`).
 
 ---
 
 ## 13. Persistence and offline catch-up
 
-- **NVS namespace `"tamapoke"`** holds one key per field, not a single struct. See `Pet::save` (`pet.cpp:2275`) and
-  `Pet::load` (`:2458`) for the full list. Common keys:
+- **NVS namespace `"tamapoke"`** holds one key per field, not a single struct. See `Pet::save` (`pet.cpp:2378`) and
+  `Pet::load` (`:2568`) for the full list. Common keys:
   - Needs: `full`, `joy`, `ene`, `poop`, `poopA` (slot 0's poop stamps, v3.1; missing = fresh). `hyg` is still written (100) but ignored.
   - Growth and time: `age`, `grow`, `seen`.
   - Care: `bond`, `strk`.
@@ -1173,8 +1173,8 @@ stateDiagram-v2
     visible, and merges consecutive level-ups.
   - `FxOverlays fxo` draws the small "+N", heart, "ATK +3", deny shake and similar.
   - `FxWatch` watchers detect changes from any source.
-  - Code: `fxCollect` (`TamaPoke.ino:4331`) every loop, `fxFrame` (`:4412`), `drawFxBanner` (`:4581`),
-    `drawFxOverlays` (`:4787`).
+  - Code: `fxCollect` (`TamaPoke.ino:4376`) every loop, `fxFrame` (`:4464`), `drawFxBanner` (`:4633`),
+    `drawFxOverlays` (`:4839`).
 - **Audio** (`audio.h`): `sfxPlay(Sfx)` queues a non-blocking sound to a FreeRTOS task on core 0. Ids include TAP,
   EAT, HATCH, EVOLVE, LEVELUP, MEDAL, DENY, BATTLE, HIT, WIN, LOSE, MORNING, WILD, …. There are 4 volume levels
   including off (`volume.h`, NVS `"vol"`).
@@ -1230,7 +1230,7 @@ flowchart LR
     run `python3 tools/test_i18n_formats.py`. A short row compiles but crashes at runtime. Only EN and ES need care
     (CLAUDE.md).
   - **Latin-script text** uses single-byte CP437 octal escapes, not UTF-8, because centring uses `strlen*6`.
-  - **JA and KO** use UTF-8 with U8g2 fonts (`applyLangFont` `TamaPoke.ino:2573`).
+  - **JA and KO** use UTF-8 with U8g2 fonts (`applyLangFont` `TamaPoke.ino:2618`).
 
 ---
 
