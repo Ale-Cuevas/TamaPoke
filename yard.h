@@ -438,7 +438,8 @@ inline bool yardAdvance(YardWorld &w, const uint8_t *walk, int i, uint32_t dt, f
       if (j == i || !w.p[j].on) continue;
       if (yardBedTask(p.task) && yardBedTask(w.p[j].task)) continue;  // v3.20: las camas van juntas
       float now = yardDist(nx, ny, w.p[j].x, w.p[j].y), before = yardDist(p.x, p.y, w.p[j].x, w.p[j].y);
-      float minD = (p.task == YT_SCENE && p.sceneDist) ? (float)p.sceneDist : (float)YARD_MIN_DIST;  // v3.22: escenas
+      // v3.22: en una escena se acerca mas, pero solo al otro de casa (0 y 1): al viajero (2), como siempre
+      float minD = (p.task == YT_SCENE && p.sceneDist && j < 2) ? (float)p.sceneDist : (float)YARD_MIN_DIST;
       if (now < minD && now < before) return false;  // se acercaria demasiado: se para
     }
     if (dx > 0.5f) p.face = 1;

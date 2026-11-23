@@ -166,6 +166,26 @@ inline bool pmValid(const PlayerMedals &m) {
   return true;
 }
 
+// El "pm" de la version 1 (hasta la v3.21: 19 medallas, 109 bytes). No se carga, pero sus tramos ya pagados se
+// conservan al recontar (medalsMigrate): lo cobrado no se pierde ni se paga otra vez. Sus contadores no se copian
+#define PM_V1_MEDALS 19
+#define PM_V1_SIZE (1 + PM_V1_MEDALS + 2 * PM_V1_MEDALS + 8 + 1 + 4 * PM_LEGACY_MAX + PM_LEGACY_MAX + 2)
+static_assert(PM_V1_SIZE == 109, "el pm de la v1 mide 109 bytes");
+static_assert(MEDAL_COUNT > PM_V1_MEDALS, "las medallas de la v1 van delante");
+
+// los tramos de un "pm" de la v1 (b, n bytes) en out; false si no es uno valido (tamano, version, CRC, valores)
+inline bool pmV1Tiers(const uint8_t *b, size_t n, uint8_t out[PM_V1_MEDALS]) {
+  if (!b || n != PM_V1_SIZE || b[0] != 1) return false;
+  uint16_t crc;
+  memcpy(&crc, b + PM_V1_SIZE - 2, sizeof(crc));
+  if (crc != crc16(b, PM_V1_SIZE - 2)) return false;
+  if (b[1 + PM_V1_MEDALS + 2 * PM_V1_MEDALS + 8] > PM_LEGACY_MAX) return false;  // legN
+  for (uint8_t i = 0; i < PM_V1_MEDALS; i++)
+    if (b[1 + i] > MEDAL_TIERS) return false;
+  memcpy(out, b + 1, PM_V1_MEDALS);
+  return true;
+}
+
 // los bits con que se conto al migrar un registro de antes de la v3.4 (0 si no se apunto)
 inline uint8_t pmLegacyBits(const PlayerMedals &m, uint32_t uid) {
   if (!uid) return 0;

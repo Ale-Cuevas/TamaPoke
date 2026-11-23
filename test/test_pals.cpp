@@ -418,17 +418,29 @@ TEST(pals, las_rinas_no_pagan_ni_despiertan) {
   CHECK_EQ(s.w.p[1].y, y1);
   CHECK_EQ(s.play[0] + s.play[1] + s.cheer[0] + s.cheer[1] + s.seen, 0);
   CHECK(s.released());
-  // la misma baya
+  // la misma baya. Como en el juego: la del menu espera (YF_QUEUED, a los pies del otro) y se pone en el suelo
+  // despues (YF_EAT), en otro sitio; el que viene va junto a la baya, no a donde estaba el otro
   Sim b;
   b.step();
-  b.c.s[0].food = YF_EAT;
-  b.c.s[0].foodX = (int16_t)(b.w.p[0].x + 28);
+  b.c.s[0].food = YF_QUEUED;
+  b.c.s[0].foodX = (int16_t)b.w.p[0].x;
   b.c.s[0].foodY = (int16_t)b.w.p[0].y;
   b.c.menuSlot = 0;
   CHECK(b.force(PS_BERRY) == nullptr);
   CHECK_EQ((int)b.st.a, 1);
-  b.run(900);
+  b.run(300);
+  b.place(0, 4, 10);  // se aparto del menu...
+  b.c.s[0].hold = YH_STAY;
+  b.c.s[0].food = YF_EAT;  // ...y la baya, delante de el
+  b.c.s[0].foodX = (int16_t)(b.w.p[0].x - 28);
+  b.c.s[0].foodY = (int16_t)(b.w.p[0].y + 2);
+  float bx = b.c.s[0].foodX, by = b.c.s[0].foodY;
+  for (int k = 0; k < 120 && (b.w.p[1].mode == YM_WALK || b.st.phase == 0); k++) b.step();
+  CHECK_EQ((int)b.st.scene, (int)PS_BERRY);
+  CHECK(yardDist(b.w.p[1].x, b.w.p[1].y, bx, by) <= PAL_BESIDE_PX);  // junto a la baya
+  CHECK_EQ(b.st.tx, (int16_t)bx);
   b.c.s[0].food = YF_NONE;
+  b.c.s[0].hold = YH_NONE;
   uint32_t gone = b.now, heart = 0;
   while (b.st.scene != PS_NONE) {
     b.step();
@@ -580,26 +592,87 @@ TEST(pals, cada_escena_suelta_a_los_dos_al_acabar) {
   }
 }
 
+// una escena que no puede empezar (sin sitio junto al huevo, sin el otro lado del juguete) no toca a los bichos y no
+// se vuelve a probar en cada frame (PAL_RETRY_S): siguen paseando. Antes los tomaba, los soltaba quietos y repetia
+TEST(pals, una_escena_que_no_puede_empezar_no_los_congela) {
+  auto block = [](Sim &s, int cx, int cy) { s.walk[yardCellIdx(cx, cy) >> 3] |= (uint8_t)(1 << (yardCellIdx(cx, cy) & 7)); };
+  for (int kind = 0; kind < 2; kind++) {
+    Sim s(31 + kind);
+    s.step();
+    if (kind == 0) {  // el huevo entre rocas: ninguna celda libre a su lado
+      s.c.s[1].pet = false;
+      s.w.p[1].on = false;
+      s.c.s[1].egg = true;
+      s.c.s[1].eggX = (float)yardCellCenter(9);
+      s.c.s[1].eggY = (float)yardCellCenter(8);
+      for (int dx = -2; dx <= 2; dx++)
+        for (int dy = -2; dy <= 2; dy++) block(s, 9 + dx, 8 + dy);
+      CHECK(s.force(PS_EGGSIT) != nullptr);
+    } else {  // el juguete con un solo lado libre (y a mano): no hay donde ponerse el otro
+      s.c.toy = true;
+      s.c.toyX = (float)yardCellCenter(7);
+      s.c.toyY = (float)yardCellCenter(5);
+      for (int dx = -2; dx <= 2; dx++)
+        for (int dy = -2; dy <= 2; dy++)
+          if (dx * dx + dy * dy <= 5 && !(dx == -2 && dy == 0)) block(s, 7 + dx, 5 + dy);
+      CHECK(s.force(PS_TUG) != nullptr);
+      CHECK(s.force(PS_TOYPASS) != nullptr);
+    }
+    CHECK(s.released());
+    s.st.playAt = s.st.squabbleAt = s.st.watch;
+    s.st.restAt = 0;
+    s.step();
+    CHECK(s.st.scene == PS_NONE || palsIsPlay(s.st.scene) || s.st.scene == PS_GREET);
+    if (s.st.scene == PS_NONE && kind == 0) {
+      CHECK(s.st.playAt >= s.st.watch + PAL_RETRY_S * 1000u - 100);  // se vuelve a probar dentro de un rato
+    }
+    if (kind == 1) CHECK(s.st.squabbleTry >= s.st.watch + PAL_RETRY_S * 1000u - 100 || s.st.scene != PS_NONE);
+    int walked[2] = { 0, 0 };
+    for (int k = 0; k < 1000; k++) {
+      s.step();
+      for (int i = 0; i < 2; i++) walked[i] += s.w.p[i].on && s.w.p[i].mode == YM_WALK;
+    }
+    CHECK(walked[0] > 50);
+    if (kind == 1) CHECK(walked[1] > 50);
+    CHECK_EQ(s.started[PS_EGGSIT] + s.started[PS_TUG] + s.started[PS_TOYPASS], 0);
+  }
+}
+
+// lo de "al lado" no lleva bajo el menu abierto (w.avoidX)
+TEST(pals, al_lado_no_bajo_el_menu) {
+  Sim s;
+  s.step();
+  float tx = (float)yardCellCenter(10), ty = (float)yardCellCenter(7);
+  int free = palsBesideCell(s.w, s.walk, 0, tx, ty);
+  CHECK(free >= 0);
+  s.w.avoidX = (int16_t)yardCellCenter(9);
+  int c = palsBesideCell(s.w, s.walk, 0, tx, ty);
+  CHECK(c >= 0);
+  CHECK(yardCellCenter(yardCellCX(c)) <= s.w.avoidX);
+}
+
 // ---------- la distancia minima (yard.h) ----------
 
+// scene 2: en escena, pero el otro es el viajero (p[2]): con el, la distancia de siempre
 TEST(pals, solo_en_escena_se_acercan_mas) {
-  for (int scene = 0; scene < 2; scene++) {
+  for (int scene = 0; scene < 3; scene++) {
     uint8_t walk[YBG_WALK_BYTES];
     yardFallbackWalk(walk);
     YardWorld w;
-    w.n = 2;
-    w.p[0].on = w.p[1].on = true;
+    int o = scene == 2 ? 2 : 1;
+    w.n = o + 1;
+    w.p[0].on = w.p[o].on = true;
     w.p[0].x = (float)yardCellCenter(5);
-    w.p[1].x = (float)yardCellCenter(8);
-    w.p[0].y = w.p[1].y = (float)yardCellCenter(7);
-    w.p[1].until = 1u << 30;
+    w.p[o].x = (float)yardCellCenter(8);
+    w.p[0].y = w.p[o].y = (float)yardCellCenter(7);
+    w.p[o].until = 1u << 30;
     w.p[0].sceneDist = PAL_NEAR_PX;  // sin la escena no sirve de nada
-    if (scene) w.p[0].task = w.p[1].task = YT_SCENE;
+    if (scene) w.p[0].task = w.p[o].task = YT_SCENE;
     CHECK(yardWalkTo(w, walk, 0, yardCellIdx(7, 7), 0));
     uint8_t hold[YARD_PETS_MAX] = {};
     for (uint32_t t = 85; t < 6000; t += 85) yardStep(w, walk, t, 85, hold, 0);
-    float d = yardDist(w.p[0].x, w.p[0].y, w.p[1].x, w.p[1].y);
-    if (scene) CHECK(d < YARD_MIN_DIST);
+    float d = yardDist(w.p[0].x, w.p[0].y, w.p[o].x, w.p[o].y);
+    if (scene == 1) CHECK(d < YARD_MIN_DIST);
     else CHECK(d >= YARD_MIN_DIST - 1);
   }
 }

@@ -450,6 +450,38 @@ static const uint8_t TOY_DAY_MAX[UPG_TIERS + 1] = { 0, 3, 5, 7 };      // veces 
 #define PAL_ROLL_EVERY_S 45       // con camas y los dos dormidos: cada tanto uno se gira hacia el otro
 #define PAL_ROLL_MS 2400
 #define PAL_ROLL_PX 10
+#define PAL_RETRY_S 60            // s de patio hasta volver a probar la escena de la hora o la riña si no pudo empezar
+// los detalles de cada escena (lo que se ve, en ms y px)
+#define PAL_HOLD_MS 1000          // quieto mientras la escena lo lleva o espera al otro (se renueva)
+#define PAL_RELEASE_MS 600        // quieto un momento al soltarlo
+#define PAL_SETTLE_MS 500         // lo que la pose dura de mas sobre su fase (que no acabe antes)
+#define PAL_CLOSE_PX 26           // "al lado": no mas cerca que esto (pies a pies)
+#define PAL_FOLLOW_MS 600         // el que sigue re-apunta a donde esta el que guia cada tanto
+#define PAL_CHASE_DELAY_MS 400    // el que persigue sale un poco despues...
+#define PAL_ESCORT_DELAY_MS 200   //   ...y el que acompana
+#define PAL_CHASE_FOLLOW_PX 40    // lo cerca que va el que persigue...
+#define PAL_ESCORT_FOLLOW_PX 48   //   ...y el que acompana
+#define PAL_CHASE_CELLS_MIN 4     // cada carrera de la persecucion, a 4-8 celdas
+#define PAL_CHASE_CELLS_MAX 8
+#define PAL_ESCORT_CELLS_MIN 3    // la del paseo, a 3-5
+#define PAL_ESCORT_CELLS_MAX 5
+#define PAL_FLEE_PX 40            // el que corre va a donde quede al menos esto mas lejos del que lo sigue
+#define PAL_TOY_SIDES_PX 60       // las dos celdas junto al juguete, separadas al menos esto...
+#define PAL_TOY_REACH_PX 90       //   ...y a esto del juguete como mucho (si no llegan, la escena se deja)
+#define PAL_TOY_TURN_MS 1000      // cada pase del juguete (PAL_TOY_MS / esto pases)
+#define PAL_TOY_ACT_PAD_MS 300    //   y lo que el gesto dura de mas
+#define PAL_TUG_PAUSE_MS 600      // tras las paces del tira y afloja, hasta los turnos
+#define PAL_TOUCH_MS 1200         // el toque de cabezas (juntos, animar)...
+#define PAL_HEARTS_MS 2400        //   ...y sus corazones
+#define PAL_EMOTE_MS 1500         // los iconos de empezar (corazon, nota, sorpresa)
+#define PAL_CUE_MS 1200           // los iconos cortos: la sorpresa de la baya, la nota de esperar, el final de una carrera
+#define PAL_END_HOLD_MS 1500      // quietos, mirandose, al acabar una carrera
+#define PAL_POUT_MS 2000          // enfurrunados por la baya; y quietos mientras hacen las paces
+#define PAL_MAKEUP_MS 1400        // los corazones de las paces
+#define PAL_MAKEUP_LEAD_MS 1600   // lo que tardan las paces desde que se acaba la baya (cabe en PAL_MAKEUP_S)
+#define PAL_DOTS_MS 900           // el toque que despierta al de la siesta, y el "..." de despues
+#define PAL_BERRY_DOTS_MS 1000    // el "..." cuando el otro se comio la baya
+#define PAL_BERRY_HOLD_MS 2500    //   quieto mientras tanto
 // peso de cada escena de juego al sortearla: persecucion, saltos, carantonas, juguete (con juguete), paseo
 // (grande y pequeno)
 static const uint8_t PAL_PLAY_W[5] = { 3, 2, 3, 3, 3 };

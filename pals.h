@@ -115,6 +115,7 @@ struct PalsState {
   int16_t tx = 0, ty = 0;          // el punto de la escena (el juguete, la comida, el huevo)
   // relojes en ms de patio en pantalla (watch solo avanza mientras el patio se ve)
   uint32_t watch = 0, playAt = 0, squabbleAt = 0, greetAt = 0, restAt = 0, rollAt = 0;
+  uint32_t squabbleTry = 0;        // la rina de la siesta o del juguete no pudo: no se prueba otra vez hasta esto
   bool wasAsleep[2] = { false, false };
   uint8_t wasFood[2] = { YF_NONE, YF_NONE };
   PalsEmote emo[2];
@@ -225,7 +226,7 @@ inline void palsTake(PalsState &st, YardWorld &w, int i, uint32_t now) {
   p.tilting = false;
   p.loopAct = false;
   st.own[i] = true;
-  palsStill(p, now, 1000);
+  palsStill(p, now, PAL_HOLD_MS);
 }
 
 inline void palsRelease(PalsState &st, YardWorld &w, int i, uint32_t now) {
@@ -239,16 +240,17 @@ inline void palsRelease(PalsState &st, YardWorld &w, int i, uint32_t now) {
   p.pathN = p.pathI = 0;
   p.mode = YM_IDLE;
   p.t0 = now;
-  p.until = now + 600;
+  p.until = now + PAL_RELEASE_MS;
 }
 
 // lo mas lejos que cuenta como "al lado" si no puede acercarse mas que minD
-inline int palsBesideMax(int minD) { return minD + 38 > 64 ? minD + 38 : 64; }
+inline int palsBesideMax(int minD) { return minD + YBG_CELL > YARD_MIN_DIST ? minD + YBG_CELL : YARD_MIN_DIST; }  // (una celda mas)
 
 // una celda alcanzable desde la del bicho i para quedarse al lado de (tx, ty): su centro a minD-palsBesideMax px, mejor
-// en la misma fila y cerca del bicho. avoid = otra celda que no vale (la del otro bicho). -1 si no hay
+// en la misma fila y cerca del bicho, y no a la derecha de w.avoidX (el menu abierto). avoid = otra celda que no vale
+// (la del otro bicho). -1 si no hay
 inline int palsBesideCell(const YardWorld &w, const uint8_t *walk, int i, float tx, float ty, int avoid = -1,
-                          int minD = 26) {
+                          int minD = PAL_CLOSE_PX) {
   const YardPet &p = w.p[i];
   int from = yardCellAt(p.x, p.y);
   if (from < 0 || !yardFree(walk, from)) from = yardNearestFreeCell(walk, p.x, p.y);
@@ -260,6 +262,7 @@ inline int palsBesideCell(const YardWorld &w, const uint8_t *walk, int i, float 
   for (int c = 0; c < YARD_CELLS; c++) {
     if (!seen[c] || c == avoid) continue;
     float cx = (float)yardCellCenter(yardCellCX(c)), cy = (float)yardCellCenter(yardCellCY(c));
+    if (cx > w.avoidX) continue;  // (no bajo el menu abierto)
     float d = yardDist(cx, cy, tx, ty);
     if (d < minD || d > palsBesideMax(minD)) continue;
     float sc = fabsf(cy - ty) + 0.2f * yardDist(cx, cy, p.x, p.y);
@@ -271,18 +274,34 @@ inline int palsBesideCell(const YardWorld &w, const uint8_t *walk, int i, float 
   return best;
 }
 
-// el bicho i va al lado de (tx, ty). 1 = ya esta (a PAL_BESIDE_PX o menos), 0 = echo a andar, -1 = no hay como.
-// minD: no mas cerca que esto (junto a un huevo o al que duerme, sin pisarlo)
-inline int palsGoBeside(YardWorld &w, const uint8_t *walk, int i, float tx, float ty, uint32_t now, int avoid = -1,
-                        int minD = 26) {
-  YardPet &p = w.p[i];
+// lo que haria palsGoBeside, sin mover a nadie: 1 = ya esta al lado, 0 = tiene a donde ir (*cell), -1 = no hay
+// como. Asi una escena que no puede empezar no toca a ningun bicho (antes de palsTake)
+inline int palsBesideCheck(const YardWorld &w, const uint8_t *walk, int i, float tx, float ty, int *cell, int avoid = -1,
+                           int minD = PAL_CLOSE_PX) {
+  const YardPet &p = w.p[i];
+  *cell = -1;
   float d = yardDist(p.x, p.y, tx, ty);
-  if (d <= (minD > 26 ? palsBesideMax(minD) : PAL_BESIDE_PX) && d >= minD) return 1;
+  if (d <= (minD > PAL_CLOSE_PX ? palsBesideMax(minD) : PAL_BESIDE_PX) && d >= minD) return 1;
   if (!p.walks) return -1;
   int to = palsBesideCell(w, walk, i, tx, ty, avoid, minD);
   if (to < 0) return -1;
   if (to == yardCellAt(p.x, p.y)) return 1;
-  return yardWalkTo(w, walk, i, to, now) ? 0 : -1;
+  *cell = to;
+  return 0;
+}
+
+// echa a andar a la celda que dio palsBesideCheck (si habia que andar); false si no hay camino
+inline bool palsGoCell(YardWorld &w, const uint8_t *walk, int i, int r, int cell, uint32_t now) {
+  return r != 0 || yardWalkTo(w, walk, i, cell, now);
+}
+
+// el bicho i va al lado de (tx, ty). 1 = ya esta (a PAL_BESIDE_PX o menos), 0 = echo a andar, -1 = no hay como.
+// minD: no mas cerca que esto (junto a un huevo o al que duerme, sin pisarlo)
+inline int palsGoBeside(YardWorld &w, const uint8_t *walk, int i, float tx, float ty, uint32_t now, int avoid = -1,
+                        int minD = PAL_CLOSE_PX) {
+  int cell, r = palsBesideCheck(w, walk, i, tx, ty, &cell, avoid, minD);
+  if (r != 0) return r;
+  return yardWalkTo(w, walk, i, cell, now) ? 0 : -1;
 }
 
 // una celda alcanzable a entre minG y maxG celdas del bicho i (al azar), sin pasar de avoidX y alejandose del bicho
@@ -301,7 +320,7 @@ inline int palsFarCell(YardWorld &w, const uint8_t *walk, int i, int minG, int m
     if (away < 0) return true;
     const YardPet &o = w.p[away];
     float cx = (float)yardCellCenter(yardCellCX(c)), cy = (float)yardCellCenter(yardCellCY(c));
-    return yardDist(cx, cy, o.x, o.y) >= yardDist(p.x, p.y, o.x, o.y) + 40;
+    return yardDist(cx, cy, o.x, o.y) >= yardDist(p.x, p.y, o.x, o.y) + PAL_FLEE_PX;
   };
   for (int c = 0; c < YARD_CELLS; c++) n += ok(c);
   if (!n) return -1;
@@ -312,7 +331,6 @@ inline int palsFarCell(YardWorld &w, const uint8_t *walk, int i, int minG, int m
 }
 
 // el que sigue (i) re-apunta a donde esta el que guia cada PAL_FOLLOW_MS
-#define PAL_FOLLOW_MS 600
 inline void palsFollow(PalsState &st, YardWorld &w, const uint8_t *walk, int i, int lead, uint32_t now) {
   if (!palsReached(now, st.next)) return;
   st.next = now + PAL_FOLLOW_MS;
@@ -381,10 +399,10 @@ inline void palsBegin(PalsState &st, uint8_t scene, int a, int b, uint32_t now) 
   if (scene < PS_COUNT) st.count[scene]++;
 }
 
-// el juguete: las dos celdas a sus lados (a y b). false si no hay
-inline bool palsToyCells(const PalsState &st, YardWorld &w, const uint8_t *walk, const PalsCtx &c, int *ca, int *cb) {
+// el juguete: las dos celdas a sus lados (la del bicho a y la del b). false si no hay
+inline bool palsToyCells(const YardWorld &w, const uint8_t *walk, const PalsCtx &c, int a, int b, int *ca, int *cb) {
   bool seen[YARD_CELLS];
-  int fa = yardCellAt(w.p[st.a].x, w.p[st.a].y);
+  int fa = yardCellAt(w.p[a].x, w.p[a].y);
   if (fa < 0 || !yardFree(walk, fa)) return false;
   *ca = yardVisitCell(walk, fa, c.toyX, c.toyY);
   if (*ca < 0) return false;
@@ -395,7 +413,7 @@ inline bool palsToyCells(const PalsState &st, YardWorld &w, const uint8_t *walk,
   for (int k = 0; k < YARD_CELLS; k++) {  // al otro lado del juguete: lejos de la de a
     if (!seen[k] || k == *ca) continue;
     float kx = (float)yardCellCenter(yardCellCX(k)), ky = (float)yardCellCenter(yardCellCY(k));
-    if (yardDist(kx, ky, ax, ay) < 60) continue;
+    if (yardDist(kx, ky, ax, ay) < PAL_TOY_SIDES_PX) continue;
     float d = yardDist(kx, ky, c.toyX, c.toyY) + (fabsf(ky - c.toyY) > 4 ? 12.0f : 0.0f);
     if (d < bd) {
       bd = d;
@@ -403,12 +421,12 @@ inline bool palsToyCells(const PalsState &st, YardWorld &w, const uint8_t *walk,
     }
   }
   *cb = best;
-  if (best < 0 || bd >= 90) return false;
+  if (best < 0 || bd >= PAL_TOY_REACH_PX) return false;
   // cada uno a la celda de su lado (que no se crucen)
   auto far = [&](int i, int cell) {
     return yardDist(w.p[i].x, w.p[i].y, (float)yardCellCenter(yardCellCX(cell)), (float)yardCellCenter(yardCellCY(cell)));
   };
-  if (far(st.a, *ca) + far(st.b, *cb) > far(st.a, *cb) + far(st.b, *ca)) {
+  if (far(a, *ca) + far(b, *cb) > far(a, *cb) + far(b, *ca)) {
     int t = *ca;
     *ca = *cb;
     *cb = t;
@@ -417,7 +435,8 @@ inline bool palsToyCells(const PalsState &st, YardWorld &w, const uint8_t *walk,
 }
 
 // intenta empezar la escena sc ahora (las condiciones de la escena y las de FR-PALS.1; no mira las esperas entre
-// escenas: eso lo hace palsStep). nullptr si empezo; si no, por que no
+// escenas: eso lo hace palsStep). nullptr si empezo; si no, por que no. Todo lo que puede fallar (a donde ir, las
+// celdas del juguete) se mira ANTES de tomar a ningun bicho: una escena que no empieza no los para
 inline const char *palsStart(PalsState &st, YardWorld &w, const uint8_t *walk, uint32_t now, const PalsCtx &c,
                              uint8_t sc, PalsOut &out) {
   if (sc == PS_NONE || sc >= PS_COUNT) return "unknown";
@@ -438,11 +457,11 @@ inline const char *palsStart(PalsState &st, YardWorld &w, const uint8_t *walk, u
     YardPet &p = w.p[o];
     if (sc == PS_BERRY) {
       p.scenePct = PAL_CHASE_PCT;  // trota
-      palsEmote(st, o, PE_EXCLAIM, now, 1200);
+      palsEmote(st, o, PE_EXCLAIM, now, PAL_CUE_MS);
     } else {
-      palsEmote(st, o, PE_HEART, now, 1500);
+      palsEmote(st, o, PE_HEART, now, PAL_EMOTE_MS);
     }
-    if (palsGoBeside(w, walk, o, st.tx, st.ty, now, -1, sc == PS_WAIT ? PAL_SIDE_PX : 26) < 0) palsFace(p, st.tx);
+    if (palsGoBeside(w, walk, o, st.tx, st.ty, now, -1, sc == PS_WAIT ? PAL_SIDE_PX : PAL_CLOSE_PX) < 0) palsFace(p, st.tx);
     out.started = sc;
     return nullptr;
   }
@@ -454,11 +473,14 @@ inline const char *palsStart(PalsState &st, YardWorld &w, const uint8_t *walk, u
       if (!palsCanStart(c, w, pet)) return "pet busy";
       if (!w.p[pet].walks) return "can't walk";
       int egg = pet ^ 1;
+      int16_t ex = (int16_t)c.s[egg].eggX, ey = (int16_t)c.s[egg].eggY;
+      int cell, r = palsBesideCheck(w, walk, pet, ex, ey, &cell, -1, PAL_SIDE_PX);
+      if (r < 0) return "no room";
       palsBegin(st, sc, pet, egg, now);
-      st.tx = (int16_t)c.s[egg].eggX;
-      st.ty = (int16_t)c.s[egg].eggY;
+      st.tx = ex;
+      st.ty = ey;
       palsTake(st, w, pet, now);
-      if (palsGoBeside(w, walk, pet, st.tx, st.ty, now, -1, PAL_SIDE_PX) < 0) {
+      if (!palsGoCell(w, walk, pet, r, cell, now)) {
         palsUndo(st, w, now);
         return "no room";
       }
@@ -472,14 +494,15 @@ inline const char *palsStart(PalsState &st, YardWorld &w, const uint8_t *walk, u
       // el que anda: el que se acaba de dormir (palsStep lo pone en st.b); forzado, el hueco 1
       int b = st.b <= 1 ? st.b : 1, a = b ^ 1;
       if (!w.p[b].walks || w.p[b].task != YT_NONE) return "can't walk";
+      int cell, r = palsBesideCheck(w, walk, b, w.p[a].x, w.p[a].y, &cell);
+      if (r != 0) return r > 0 ? "already together" : "no room";  // ya al lado, o no hay camino: se queda donde esta
       palsBegin(st, sc, a, b, now);
       palsTake(st, w, b, now);
       out.holdFree[b] = true;
-      int r = palsGoBeside(w, walk, b, w.p[a].x, w.p[a].y, now);
-      if (r != 0) {  // ya al lado, o no hay camino: se queda donde esta
+      if (!yardWalkTo(w, walk, b, cell, now)) {
         palsUndo(st, w, now);
         out.holdFree[b] = false;
-        return r > 0 ? "already together" : "no room";
+        return "no room";
       }
       out.started = sc;
       return nullptr;
@@ -495,9 +518,11 @@ inline const char *palsStart(PalsState &st, YardWorld &w, const uint8_t *walk, u
       if (sc == PS_SIT && c.hour < EVENING_HOUR) return "not evening";
       if (sc == PS_BUMP && (!c.s[b].nap || c.hour < WAKE_HOUR || c.hour >= EVENING_HOUR)) return "not a day nap";
       if (!w.p[a].walks) return "can't walk";
+      int cell, r = palsBesideCheck(w, walk, a, w.p[b].x, w.p[b].y, &cell, -1, sc == PS_SIT ? PAL_SIDE_PX : PAL_CLOSE_PX);
+      if (r < 0) return "no room";
       palsBegin(st, sc, a, b, now);
       palsTake(st, w, a, now);
-      if (palsGoBeside(w, walk, a, w.p[b].x, w.p[b].y, now, -1, sc == PS_SIT ? PAL_SIDE_PX : 26) < 0) {
+      if (!palsGoCell(w, walk, a, r, cell, now)) {
         palsUndo(st, w, now);
         return "no room";
       }
@@ -518,10 +543,12 @@ inline const char *palsStart(PalsState &st, YardWorld &w, const uint8_t *walk, u
     const PalsSlot &ss = c.s[sad];
     if (ss.asleep || ss.food != YF_NONE || (ss.hold != YH_NONE && !ss.sadPose)) return "sad one busy";
     if (!palsCanStart(c, w, a)) return "happy one busy";
+    int cell, r = palsBesideCheck(w, walk, a, w.p[sad].x, w.p[sad].y, &cell);
+    if (r < 0) return "no room";
     palsBegin(st, sc, a, sad, now);
     palsTake(st, w, a, now);
     if (ss.hold == YH_NONE && w.p[sad].task == YT_NONE) palsTake(st, w, sad, now);  // (con la pose triste no se le toca)
-    if (palsGoBeside(w, walk, a, w.p[sad].x, w.p[sad].y, now) < 0) {
+    if (!palsGoCell(w, walk, a, r, cell, now)) {
       palsUndo(st, w, now);
       return "no room";
     }
@@ -536,6 +563,16 @@ inline const char *palsStart(PalsState &st, YardWorld &w, const uint8_t *walk, u
     b = big;
     a = big ^ 1;
   }
+  // lo que puede fallar, antes de tomarlos
+  int cell = -1, r = 0, ca = -1, cb = -1;
+  if (sc == PS_NUZZLE) {
+    r = palsBesideCheck(w, walk, a, w.p[b].x, w.p[b].y, &cell);
+    if (r < 0) return "no room";
+  } else if (sc == PS_TOYPASS || sc == PS_TUG) {
+    if (!palsToyCells(w, walk, c, a, b, &ca, &cb)) return "no room";
+  } else if (sc != PS_GREET && sc != PS_HOP && sc != PS_CHASE && sc != PS_ESCORT) {
+    return "unknown";
+  }
   palsBegin(st, sc, a, b, now);
   palsTake(st, w, a, now);
   palsTake(st, w, b, now);
@@ -545,8 +582,8 @@ inline const char *palsStart(PalsState &st, YardWorld &w, const uint8_t *walk, u
       static const uint8_t K[3] = { PE_HEART, PE_NOTE, PE_EXCLAIM };
       palsFace(pa, pb.x);
       palsFace(pb, pa.x);
-      palsStill(pa, now, PAL_GREET_MS + 500);
-      palsStill(pb, now, PAL_GREET_MS + 500);
+      palsStill(pa, now, PAL_GREET_MS + PAL_SETTLE_MS);
+      palsStill(pb, now, PAL_GREET_MS + PAL_SETTLE_MS);
       palsEmote(st, a, K[w.rng.below(3)], now, PAL_GREET_MS);
       palsEmote(st, b, K[w.rng.below(3)], now, PAL_GREET_MS);
       st.phase = 1;
@@ -559,7 +596,7 @@ inline const char *palsStart(PalsState &st, YardWorld &w, const uint8_t *walk, u
       st.until = now;
       break;
     case PS_NUZZLE:
-      if (palsGoBeside(w, walk, a, pb.x, pb.y, now) < 0) {
+      if (!palsGoCell(w, walk, a, r, cell, now)) {
         palsUndo(st, w, now);
         return "no room";
       }
@@ -571,11 +608,6 @@ inline const char *palsStart(PalsState &st, YardWorld &w, const uint8_t *walk, u
       break;
     case PS_TOYPASS:
     case PS_TUG: {
-      int ca, cb;
-      if (!palsToyCells(st, w, walk, c, &ca, &cb)) {
-        palsUndo(st, w, now);
-        return "no room";
-      }
       st.tx = (int16_t)c.toyX;
       st.ty = (int16_t)c.toyY;
       if (ca != yardCellAt(pa.x, pa.y)) yardWalkTo(w, walk, a, ca, now);
@@ -636,7 +668,7 @@ inline void palsSceneStep(PalsState &st, YardWorld &w, const uint8_t *walk, uint
     YardPet &p = w.p[i];
     if (p.mode == YM_IDLE) {
       palsFace(p, x);
-      p.until = now + 1000;
+      p.until = now + PAL_HOLD_MS;
     }
   };
   auto approachFailed = [&](float tx, float ty, int maxD = PAL_BESIDE_PX) {  // llego mal o se le acabo el tiempo
@@ -654,21 +686,21 @@ inline void palsSceneStep(PalsState &st, YardWorld &w, const uint8_t *walk, uint
         if (palsArrived(w, a, pb.x, pb.y)) {
           palsFace(pa, pb.x);
           if (st.own[b]) palsFace(pb, pa.x);
-          palsAct(pa, sa.actBump, false, now, 1200);
-          if (st.own[b]) palsAct(pb, st.scene == PS_NUZZLE ? sb.actBump : PAL_ACT_NONE, false, now, 1200);
-          palsEmote(st, a, PE_HEART, now, 2400);
-          palsEmote(st, b, PE_HEART, now, 2400);
+          palsAct(pa, sa.actBump, false, now, PAL_TOUCH_MS);
+          if (st.own[b]) palsAct(pb, st.scene == PS_NUZZLE ? sb.actBump : PAL_ACT_NONE, false, now, PAL_TOUCH_MS);
+          palsEmote(st, a, PE_HEART, now, PAL_HEARTS_MS);
+          palsEmote(st, b, PE_HEART, now, PAL_HEARTS_MS);
           st.phase = 1;
-          st.until = now + 1200;
+          st.until = now + PAL_TOUCH_MS;
         } else if (approachFailed(pb.x, pb.y)) {
           palsEnd(st, w, now, out, false);
         }
         return;
       }
       if (st.phase == 1 && due) {  // los corazones (el animado, chispas de su tipo)
-        uint32_t rest = (st.scene == PS_NUZZLE ? PAL_NUZZLE_MS : PAL_CHEER_MS) - 1200;
-        palsStill(pa, now, rest + 500);
-        if (st.own[b]) palsStill(pb, now, rest + 500);
+        uint32_t rest = (st.scene == PS_NUZZLE ? PAL_NUZZLE_MS : PAL_CHEER_MS) - PAL_TOUCH_MS;
+        palsStill(pa, now, rest + PAL_SETTLE_MS);
+        if (st.own[b]) palsStill(pb, now, rest + PAL_SETTLE_MS);
         if (st.scene == PS_CHEER) {
           palsEmote(st, b, PE_SPARKLE, now, (uint16_t)rest);
           palsEmote(st, a, PE_NOTE, now, (uint16_t)rest);
@@ -694,8 +726,8 @@ inline void palsSceneStep(PalsState &st, YardWorld &w, const uint8_t *walk, uint
       if (st.phase == 1 && due) {  // a la vez: el mismo t0
         palsFace(pa, pb.x);
         palsFace(pb, pa.x);
-        palsAct(pa, sa.actHop, true, now, PAL_HOP_MS + 500);
-        palsAct(pb, sb.actHop, true, now, PAL_HOP_MS + 500);
+        palsAct(pa, sa.actHop, true, now, PAL_HOP_MS + PAL_SETTLE_MS);
+        palsAct(pb, sb.actHop, true, now, PAL_HOP_MS + PAL_SETTLE_MS);
         palsEmote(st, a, PE_NOTE, now, PAL_HOP_MS);
         palsEmote(st, b, PE_NOTE, now, PAL_HOP_MS);
         st.phase = 2;
@@ -712,18 +744,19 @@ inline void palsSceneStep(PalsState &st, YardWorld &w, const uint8_t *walk, uint
       int run = chase && st.leg == 1 ? b : a, fol = run ^ 1;
       YardPet &pr = w.p[run], &pf = w.p[fol];
       if (st.phase == 1 && due) {  // una carrera: el que corre a una celda lejos, el otro detras
-        int to = palsFarCell(w, walk, run, chase ? 4 : 3, chase ? 8 : 5, fol);
-        if (to < 0) to = palsFarCell(w, walk, run, chase ? 4 : 3, chase ? 8 : 5);  // (arrinconado: a donde sea)
+        int gMin = chase ? PAL_CHASE_CELLS_MIN : PAL_ESCORT_CELLS_MIN, gMax = chase ? PAL_CHASE_CELLS_MAX : PAL_ESCORT_CELLS_MAX;
+        int to = palsFarCell(w, walk, run, gMin, gMax, fol);
+        if (to < 0) to = palsFarCell(w, walk, run, gMin, gMax);  // (arrinconado: a donde sea)
         if (to < 0 || !yardWalkTo(w, walk, run, to, now)) {
           palsEnd(st, w, now, out, st.leg > 0);
           return;
         }
         uint8_t pct = chase ? PAL_CHASE_PCT : PAL_ESCORT_PCT;
         pr.scenePct = pf.scenePct = pct;
-        pf.sceneDist = chase ? 40 : 48;
-        st.next = now + (chase ? 400 : 200);  // (sale un poco despues)
-        palsEmote(st, run, chase ? PE_NOTE : PE_NONE, now, 1500);
-        palsEmote(st, fol, chase ? PE_EXCLAIM : PE_HEART, now, 1500);
+        pf.sceneDist = chase ? PAL_CHASE_FOLLOW_PX : PAL_ESCORT_FOLLOW_PX;
+        st.next = now + (chase ? PAL_CHASE_DELAY_MS : PAL_ESCORT_DELAY_MS);  // (sale un poco despues)
+        palsEmote(st, run, chase ? PE_NOTE : PE_NONE, now, PAL_EMOTE_MS);
+        palsEmote(st, fol, chase ? PE_EXCLAIM : PE_HEART, now, PAL_EMOTE_MS);
         st.phase = 2;
         st.until = now + (chase ? total / 2 : total);
         return;
@@ -731,22 +764,22 @@ inline void palsSceneStep(PalsState &st, YardWorld &w, const uint8_t *walk, uint
       if (st.phase == 2) {
         palsFollow(st, w, walk, fol, run, now);
         if (pr.mode != YM_WALK || due) {
-          if (pr.mode == YM_WALK) palsStill(pr, now, 1000);
+          if (pr.mode == YM_WALK) palsStill(pr, now, PAL_HOLD_MS);
           if (chase && st.leg == 0) {  // cambian los papeles
             st.leg = 1;
             st.phase = 1;
             st.until = now;
-            palsStill(pf, now, 1000);
+            palsStill(pf, now, PAL_HOLD_MS);
             return;
           }
-          palsStill(pr, now, 1500);
-          palsStill(pf, now, 1500);
+          palsStill(pr, now, PAL_END_HOLD_MS);
+          palsStill(pf, now, PAL_END_HOLD_MS);
           palsFace(pr, pf.x);
           palsFace(pf, pr.x);
-          palsEmote(st, a, PE_NOTE, now, 1200);
-          palsEmote(st, b, PE_NOTE, now, 1200);
+          palsEmote(st, a, PE_NOTE, now, PAL_CUE_MS);
+          palsEmote(st, b, PE_NOTE, now, PAL_CUE_MS);
           st.phase = 3;
-          st.until = now + 1200;
+          st.until = now + PAL_CUE_MS;
         }
         return;
       }
@@ -761,15 +794,15 @@ inline void palsSceneStep(PalsState &st, YardWorld &w, const uint8_t *walk, uint
         if (pa.mode == YM_WALK || pb.mode == YM_WALK) {
           if (!due) return;
         }
-        if (yardDist(pa.x, pa.y, st.tx, st.ty) > 90 || yardDist(pb.x, pb.y, st.tx, st.ty) > 90) {
+        if (yardDist(pa.x, pa.y, st.tx, st.ty) > PAL_TOY_REACH_PX || yardDist(pb.x, pb.y, st.tx, st.ty) > PAL_TOY_REACH_PX) {
           palsEnd(st, w, now, out, false);
           return;
         }
         palsFace(pa, st.tx);
         palsFace(pb, st.tx);
         if (tug) {  // tira y afloja: los dos a la vez, enfurrunados
-          palsAct(pa, sa.actBump, true, now, PAL_TUG_MS + 500);
-          palsAct(pb, sb.actBump, true, now, PAL_TUG_MS + 500);
+          palsAct(pa, sa.actBump, true, now, PAL_TUG_MS + PAL_SETTLE_MS);
+          palsAct(pb, sb.actBump, true, now, PAL_TUG_MS + PAL_SETTLE_MS);
           palsEmote(st, a, PE_POUT, now, PAL_TUG_MS);
           palsEmote(st, b, PE_POUT, now, PAL_TUG_MS);
           st.until = now + PAL_TUG_MS;
@@ -784,28 +817,28 @@ inline void palsSceneStep(PalsState &st, YardWorld &w, const uint8_t *walk, uint
       if (tug && st.phase == 1) {
         if (!due) return;
         // las paces (enseguida, dentro de PAL_MAKEUP_S) y luego por turnos
-        palsEmote(st, a, PE_HEART, now, 1500);
-        palsEmote(st, b, PE_HEART, now, 1500);
-        palsStill(pa, now, 2000);
-        palsStill(pb, now, 2000);
+        palsEmote(st, a, PE_HEART, now, PAL_EMOTE_MS);
+        palsEmote(st, b, PE_HEART, now, PAL_EMOTE_MS);
+        palsStill(pa, now, PAL_POUT_MS);
+        palsStill(pb, now, PAL_POUT_MS);
         st.phase = 2;
         st.leg = 0;
-        st.until = now + 600;
+        st.until = now + PAL_TUG_PAUSE_MS;
         st.t0 = now;
         return;
       }
       // turnos: uno juega (salta o patea) y el otro mira; con el pase, PAL_TOY_MS en total
-      uint32_t turn = tug ? PAL_TURN_MS : 1000;
-      uint8_t legs = tug ? 2 : (uint8_t)(PAL_TOY_MS / 1000);
+      uint32_t turn = tug ? PAL_TURN_MS : PAL_TOY_TURN_MS;
+      uint8_t legs = tug ? 2 : (uint8_t)(PAL_TOY_MS / PAL_TOY_TURN_MS);
       if (!due) return;
       if (st.leg >= legs) {
         palsEnd(st, w, now, out, true);
         return;
       }
       int who = (st.leg & 1) ? b : a, oth = who ^ 1;
-      palsAct(w.p[who], c.s[who].actHop, !tug ? false : true, now, turn + 300);
+      palsAct(w.p[who], c.s[who].actHop, !tug ? false : true, now, turn + PAL_TOY_ACT_PAD_MS);
       palsFace(w.p[who], st.tx);
-      palsStill(w.p[oth], now, turn + 500);
+      palsStill(w.p[oth], now, turn + PAL_SETTLE_MS);
       palsFace(w.p[oth], st.tx);
       if (!tug) palsEmote(st, who, PE_NOTE, now, (uint16_t)turn);
       st.leg++;
@@ -822,13 +855,13 @@ inline void palsSceneStep(PalsState &st, YardWorld &w, const uint8_t *walk, uint
         if (palsArrived(w, a, tx, ty, maxD)) {
           palsFace(pa, tx);
           if (st.scene == PS_BUMP) {  // el toque; el otro, nube gris un momento, y sigue durmiendo
-            palsAct(pa, sa.actBump, false, now, 900);
+            palsAct(pa, sa.actBump, false, now, PAL_DOTS_MS);
             palsEmote(st, b, PE_GRUMPY, now, PAL_BUMP_MS);
             st.until = now + PAL_BUMP_MS;
           } else {
             uint32_t ms = st.scene == PS_EGGSIT ? PAL_EGGSIT_MS : PAL_SIT_MS;
-            palsAct(pa, sa.actSit, true, now, ms + 500);
-            palsEmote(st, a, PE_HEART, now, 1500);
+            palsAct(pa, sa.actSit, true, now, ms + PAL_SETTLE_MS);
+            palsEmote(st, a, PE_HEART, now, PAL_EMOTE_MS);
             st.until = now + ms;
           }
           st.phase = 1;
@@ -838,17 +871,17 @@ inline void palsSceneStep(PalsState &st, YardWorld &w, const uint8_t *walk, uint
         return;
       }
       if (st.scene == PS_BUMP && st.phase == 1 && due) {  // "..." y las paces
-        palsStill(pa, now, 2000);
-        palsEmote(st, a, PE_DOTS, now, 900);
+        palsStill(pa, now, PAL_POUT_MS);
+        palsEmote(st, a, PE_DOTS, now, PAL_DOTS_MS);
         st.phase = 2;
-        st.until = now + 900;
+        st.until = now + PAL_DOTS_MS;
         return;
       }
       if (st.scene == PS_BUMP && st.phase == 2 && due) {
-        palsEmote(st, a, PE_HEART, now, 1400);
-        palsEmote(st, b, PE_HEART, now, 1400);
+        palsEmote(st, a, PE_HEART, now, PAL_MAKEUP_MS);
+        palsEmote(st, b, PE_HEART, now, PAL_MAKEUP_MS);
         st.phase = 3;
-        st.until = now + 1400;
+        st.until = now + PAL_MAKEUP_MS;
         return;
       }
       if (due) palsEnd(st, w, now, out, true);
@@ -859,7 +892,7 @@ inline void palsSceneStep(PalsState &st, YardWorld &w, const uint8_t *walk, uint
       out.holdFree[b] = true;  // el que se acaba de dormir aun anda (dormido: solo se ve)
       if (pb.mode != YM_WALK || due) {
         palsFace(pb, pa.x);
-        palsEmote(st, b, PE_HEART, now, 1500);
+        palsEmote(st, b, PE_HEART, now, PAL_EMOTE_MS);
         out.holdFree[b] = false;
         palsEnd(st, w, now, out, true);
       }
@@ -869,19 +902,28 @@ inline void palsSceneStep(PalsState &st, YardWorld &w, const uint8_t *walk, uint
     case PS_BERRY: {
       bool berry = st.scene == PS_BERRY;
       bool food = sb.food != YF_NONE;
+      // la comida del menu empieza esperando (YF_QUEUED, a los pies del otro) y se pone en el suelo despues (YF_EAT,
+      // delante de el): hasta que se la come, el que viene va a donde esta de verdad (y si ya esperaba, vuelve a ir)
+      if (st.phase <= 1 && sb.food == YF_EAT && (st.tx != sb.foodX || st.ty != sb.foodY)) {
+        st.tx = sb.foodX;
+        st.ty = sb.foodY;
+        if (palsGoBeside(w, walk, a, st.tx, st.ty, now, -1, berry ? PAL_CLOSE_PX : PAL_SIDE_PX) < 0) palsFace(pa, st.tx);
+        walking = pa.mode == YM_WALK;
+        if (walking) st.phase = 0;  // (el tiempo para llegar sigue siendo el de antes)
+      }
       if (st.phase == 0) {  // va hacia la comida (o junto al pequeno)
         if (!food && !st.leg) {  // ya se la comio: llega como mucho a tiempo para las paces (PAL_MAKEUP_S)
           st.leg = 1;
-          uint32_t cap = now + PAL_MAKEUP_S * 1000u - 1600;
+          uint32_t cap = now + PAL_MAKEUP_S * 1000u - PAL_MAKEUP_LEAD_MS;
           if ((int32_t)(cap - st.until) < 0) st.until = cap;
           due = palsReached(now, st.until);
         }
         if (walking && !due) return;
-        if (walking) palsStill(pa, now, 1000);
+        if (walking) palsStill(pa, now, PAL_HOLD_MS);
         palsFace(pa, berry ? st.tx : pb.x);
         if (berry && food) {  // llego a tiempo: se miran enfurrunados
-          palsEmote(st, a, PE_POUT, now, 2000);
-          palsEmote(st, b, PE_POUT, now, 2000);
+          palsEmote(st, a, PE_POUT, now, PAL_POUT_MS);
+          palsEmote(st, b, PE_POUT, now, PAL_POUT_MS);
         }
         st.phase = 1;
         st.until = food ? now + PAL_APPROACH_MS : now;
@@ -891,22 +933,22 @@ inline void palsSceneStep(PalsState &st, YardWorld &w, const uint8_t *walk, uint
         waitFor(a, berry ? st.tx : pb.x);
         if (food && !due) return;
         if (berry) {
-          palsEmote(st, a, PE_DOTS, now, 1000);
+          palsEmote(st, a, PE_DOTS, now, PAL_BERRY_DOTS_MS);
           st.emo[b] = PalsEmote{};
         } else {
-          palsEmote(st, a, PE_NOTE, now, 1200);
+          palsEmote(st, a, PE_NOTE, now, PAL_CUE_MS);
         }
-        palsStill(pa, now, 2500);
+        palsStill(pa, now, PAL_BERRY_HOLD_MS);
         st.phase = 2;
-        st.until = now + (berry ? 1000 : 1200);
+        st.until = now + (berry ? PAL_BERRY_DOTS_MS : PAL_CUE_MS);
         return;
       }
       if (st.phase == 2 && due) {
         if (berry) {  // las paces
-          palsEmote(st, a, PE_HEART, now, 1400);
-          palsEmote(st, b, PE_HEART, now, 1400);
+          palsEmote(st, a, PE_HEART, now, PAL_MAKEUP_MS);
+          palsEmote(st, b, PE_HEART, now, PAL_MAKEUP_MS);
           st.phase = 3;
-          st.until = now + 1400;
+          st.until = now + PAL_MAKEUP_MS;
         } else {
           palsEnd(st, w, now, out, true);
         }
@@ -940,7 +982,7 @@ inline void palsStep(PalsState &st, YardWorld &w, const uint8_t *walk, uint32_t 
     st.watch = 0;
     st.playAt = palsGap(w.rng, PAL_SCENE_GAP_MIN_S, PAL_SCENE_GAP_MAX_S);
     st.squabbleAt = palsGap(w.rng, PAL_SQUABBLE_GAP_S, PAL_SQUABBLE_GAP_S * 3 / 2);
-    st.greetAt = st.restAt = 0;
+    st.greetAt = st.restAt = st.squabbleTry = 0;
     st.rollAt = PAL_ROLL_EVERY_S * 1000u;
   }
   if (w.bedSnap) {  // el patio se acaba de abrir (o vuelve de otra pantalla): nada a medias
@@ -1056,14 +1098,17 @@ inline void palsStep(PalsState &st, YardWorld &w, const uint8_t *walk, uint32_t 
       st.playAt = st.watch + palsGap(w.rng, PAL_SCENE_GAP_MIN_S, PAL_SCENE_GAP_MAX_S);
       return;
     }
+    st.playAt = st.watch + PAL_RETRY_S * 1000u;  // ninguna pudo: se vuelve a probar dentro de un rato (no en cada frame)
   }
-  // una rina (la de la siesta o la del juguete)
-  if (palsReached(st.watch, st.squabbleAt) && !palsBlocked(c)) {
+  // una rina (la de la siesta o la del juguete). Si ninguna puede, se vuelve a probar dentro de PAL_RETRY_S
+  // (squabbleTry: squabbleAt sigue cumplido, asi la de la baya aun puede salir con la proxima comida)
+  if (palsReached(st.watch, st.squabbleAt) && palsReached(st.watch, st.squabbleTry) && !palsBlocked(c)) {
     uint8_t first = w.rng.below(2) ? PS_BUMP : PS_TUG, second = first == PS_BUMP ? PS_TUG : PS_BUMP;
     if (!palsStart(st, w, walk, now, c, first, out) || !palsStart(st, w, walk, now, c, second, out)) {
       st.squabbleAt = st.watch + palsGap(w.rng, PAL_SQUABBLE_GAP_S, PAL_SQUABBLE_GAP_S * 3 / 2);
       return;
     }
+    st.squabbleTry = st.watch + PAL_RETRY_S * 1000u;
   }
   // el saludo: se cruzan andando
   if (palsReached(st.watch, st.greetAt) && palsBothOn(c, w) && palsCanStart(c, w, 0) && palsCanStart(c, w, 1) &&

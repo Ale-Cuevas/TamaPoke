@@ -709,6 +709,8 @@ private:
   bool pmReady = false;
   bool pmMigrated = false;
   bool pmKeyBad = false;            // habia "pm" pero no se pudo cargar: se recuenta sin pagar
+  bool pmV1Have = false;            // v3.22: era un "pm" de la v1 valido; sus tramos pagados se conservan
+  uint8_t pmV1Tier[PM_V1_MEDALS] = { 0 };
   MedalNews medalNewsQ[MEDAL_COUNT] = {};
   uint8_t medalNewsN = 0;
   // lo que medalsUpdate puede cambiar, para deshacerlo con el bicho cuando "hm1" no llega (store / wake)

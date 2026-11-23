@@ -811,13 +811,19 @@ void Pet::medalsMigrate() {
     // habia un "pm" pero no se pudo leer (danado o de otra version): se recuenta, pero lo ya alcanzado se da por
     // pagado (sin monedas ni banners). Solo una partida sin "pm" (la de antes de la v3.4) cobra lo atrasado
     for (uint8_t i = 0; i < MEDAL_COUNT; i++) pm.tier[i] = medalTierOf(i, medalValue(i));
-    Serial.println("medals: pm danado, recontado sin pagar");
+    // v3.22: de un "pm" de la v1, los tramos que ya cobro se quedan aunque sus contadores de evento vuelvan a 0
+    // (asi no se pagan otra vez al volver a alcanzarlos). Companeros de juego (nueva) empieza en 0
+    if (pmV1Have)
+      for (uint8_t i = 0; i < PM_V1_MEDALS; i++)
+        if (pmV1Tier[i] > pm.tier[i]) pm.tier[i] = pmV1Tier[i];
+    Serial.println(pmV1Have ? "medals: pm de la v1, recontado sin pagar" : "medals: pm danado, recontado sin pagar");
   }
   Serial.printf("medals: migracion, %u bichos de caja apuntados\n", pm.legN);
   save();  // medalsUpdate paga (sin "pm" antes); "pm" antes que "cn"
   // con "pm" ya escrito, las claves de las medallas de cada bicho (hasta la v3.3) sobran: se borran una vez
   if (pmHave) {
     pmKeyBad = false;
+    pmV1Have = false;
     if (prefs.isKey("medal")) prefs.remove("medal");
     if (prefs.isKey("tmedal")) prefs.remove("tmedal");
   }
@@ -2889,11 +2895,22 @@ void Pet::load() {
   pmReady = pmHave = false;
   pmClear(pm);
   pmKeyBad = false;
+  pmV1Have = false;
+  memset(pmV1Tier, 0, sizeof(pmV1Tier));
   if (prefs.isKey("pm")) {
     pmKeyBad = true;  // (hasta ver que se puede cargar)
     PlayerMedals m;
     memset(&m, 0, sizeof(m));
-    if (prefs.getBytes("pm", &m, sizeof(m)) == sizeof(m) && pmValid(m)) {
+    if (prefs.getBytesLength("pm") == PM_V1_SIZE) {
+      // v3.22: un "pm" de la v1 (19 medallas). Se recuenta, pero con sus tramos ya pagados (medalsMigrate)
+      uint8_t v1[PM_V1_SIZE];
+      if (prefs.getBytes("pm", v1, sizeof(v1)) == sizeof(v1) && pmV1Tiers(v1, sizeof(v1), pmV1Tier)) {
+        pmV1Have = true;
+        Serial.println("pm: de la v1, se recuenta conservando sus tramos");
+      } else {
+        Serial.println("pm: danado, se vuelven a contar las medallas");
+      }
+    } else if (prefs.getBytes("pm", &m, sizeof(m)) == sizeof(m) && pmValid(m)) {
       pm = m;
       pmSaved = m;
       pmReady = pmHave = true;
