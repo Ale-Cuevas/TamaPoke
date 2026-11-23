@@ -1814,6 +1814,20 @@ bool Pet::takeHomeEvt(HomeEvt &e) {
   return homeEvts.pop(e);
 }
 
+// ---------- los dos bichos juntos (v3.22) ----------
+// CONTRATO: version minima para que el patio compile; la tarea de logica (P1) pone los topes, la NVS y la medalla
+uint8_t Pet::palPlayPerk(uint8_t slot) {
+  (void)slot;
+  return 0;
+}
+
+uint8_t Pet::palCheerPerk(uint8_t slot) {
+  (void)slot;
+  return 0;
+}
+
+void Pet::palSceneSeen() {}
+
 void Pet::dbgSetUpgTier(uint8_t line, uint8_t tier) {
   if (line >= UPG_LINES) return;
   upgTiers[line] = tier > UPG_TIERS ? UPG_TIERS : tier;

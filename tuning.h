@@ -411,6 +411,24 @@ static const uint8_t TOY_DAY_MAX[UPG_TIERS + 1] = { 0, 3, 5, 7 };      // veces 
 #define HOME_VISIT_WAIT_MS 8000   // si el gimnasio o el juguete estan ocupados por el otro, espera hasta esto
 
 // --------------------------------------------------------------------------------------------
+// Los dos bichos juntos (v3.22, docs/HOME_AND_PALS.md, tarea PALS): escenas solas en el patio, solo con el patio
+// en pantalla. Las riñas nunca cambian nada del bicho.
+// --------------------------------------------------------------------------------------------
+#define PAL_GREET_DIST 90         // px: a esta distancia se saludan (pies a pies)
+#define PAL_GREET_COOLDOWN_S 180  // s entre dos saludos de la pareja
+#define PAL_SCENE_GAP_MIN_S 720   // s de patio en pantalla entre dos escenas de juego (al azar entre min y max:
+#define PAL_SCENE_GAP_MAX_S 1680  //   ~3 por hora)
+#define PAL_PLAY_JOY 3            // JOY a cada uno tras una escena de juego
+#define PAL_PLAY_PAY_DAY 4        // escenas que pagan al dia por bicho (las demas se ven igual, sin premio)
+#define PAL_CHEER_BELOW 25        // animar: el triste tiene JOY < esto
+#define PAL_CHEER_FROM 50         //   y el contento JOY >= esto
+#define PAL_CHEER_JOY 8           // JOY para el triste
+#define PAL_CHEER_DAY 2           // veces que paga al dia por bicho
+#define PAL_BIG_LEVEL_GAP 20      // "grande y pequeno": una etapa de evolucion mas, o esta diferencia de nivel
+#define PAL_SQUABBLE_GAP_S 3600   // s de patio en pantalla entre dos riñas (como mucho 1 por hora)
+#define PAL_MAKEUP_S 3            // s hasta el corazon de las paces tras una riña
+
+// --------------------------------------------------------------------------------------------
 // Viajes (travel.h): 1, 3 u 8 h de tiempo real
 // --------------------------------------------------------------------------------------------
 #define TRV_TIERS 3               // (estructura)

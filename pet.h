@@ -345,6 +345,12 @@ public:
   // v3.20 mejoras de casa (upgrade.h, docs/HOME_AND_PALS.md): contrato que usan el patio y la tienda
   uint8_t upgTier(uint8_t line) const { return line < UPG_LINES ? upgTiers[line] : 0; }  // 0..UPG_TIERS
   bool buyUpgrade(uint8_t line);  // el siguiente nivel; false si upgCheck no da UB_OK (no toca nada); guarda
+  // v3.22 los dos bichos juntos (docs/HOME_AND_PALS.md, PALS): el patio decide las escenas; aqui solo los premios,
+  // con su tope diario por bicho (uid + dia). Devuelven el JOY dado (0 si ya cobro hoy, sin reloj, o el hueco no
+  // es un bicho despierto).
+  uint8_t palPlayPerk(uint8_t slot);   // tras una escena de juego: PAL_PLAY_JOY, PAL_PLAY_PAY_DAY al dia
+  uint8_t palCheerPerk(uint8_t slot);  // al animado (el triste): PAL_CHEER_JOY, PAL_CHEER_DAY al dia
+  void palSceneSeen();                 // una escena de juego o un animo vistos: cuenta para la medalla Companeros
   bool takeHomeEvt(HomeEvt &e);   // saca el siguiente evento de casa para la UI; false si no hay
   void dbgSetUpgTier(uint8_t line, uint8_t tier);  // serie UPG
   uint8_t upgTiers[UPG_LINES] = {};  // nivel de cada linea (NVS "upg")
