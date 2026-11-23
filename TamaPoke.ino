@@ -4858,63 +4858,38 @@ void drawExclaim(int bx, int by) {
   printT("!");
 }
 
-// v3.22 (PALS): el icono de una escena de los dos centrado en (x, y), tMs ms despues de salir; tint = el color del
-// primer tipo del bicho (las chispas). TODO(P3 sprites): con SPR_ICON_NOTE/DOTS/POUT/GRUMPY/SPARK y los ayudantes
-// de pal_fx.h (palEmoteSprite, palParticleOf, palTypeTint, palFloat, palBurst) solo cambia el cuerpo de esta funcion
-void yardDrawPalEmote(PalEmote k, int x, int y, uint16_t tint, uint32_t tMs) {
-  y -= tMs < 400 ? (int)(tMs * 10 / 400) : 10;  // sale subiendo un poco
-  y += (int)(2 * sinf(tMs * 0.008f));
-  switch (k) {
-    case PE_HEART:
-      drawMap(SPR_HEART, 32, x - 16, y - 16, 1, false);
-      break;
-    case PE_EXCLAIM:
-      drawExclaim(x + 4, y);
-      break;
-    case PE_NOTE:  // una corchea del color de su tipo, con sombra
-      for (int sh = 1; sh >= 0; sh--) {
-        uint16_t c = sh ? Y_SHADOW : tint;
-        int o = sh * 2;
-        gfx->fillCircle(x - 4 + o, y + 8 + o, 6, c);
-        gfx->fillRect(x + 1 + o, y - 12 + o, 3, 20, c);
-        gfx->fillTriangle(x + 4 + o, y - 12 + o, x + 13 + o, y - 5 + o, x + 4 + o, y - 4 + o, c);
-      }
-      break;
-    case PE_DOTS: {  // "..." en un globo pequeno, punto a punto
-      gfx->fillRoundRect(x - 20 + 2, y - 10 + 2, 40, 20, 9, Y_SHADOW);
-      gfx->fillRoundRect(x - 20, y - 10, 40, 20, 9, UI_WHITE);
-      int n = 1 + (int)((tMs / 250) % 3);
-      for (int d = 0; d < n; d++) gfx->fillCircle(x - 10 + d * 10, y, 3, UI_INK);
-      break;
+// v3.22 (PALS): el icono de una escena de los dos centrado en (x, y), tMs ms despues de salir. dex = la especie del
+// bicho (-1 si no hay): las chispas salen con la forma y el color de su primer tipo (pal_fx.h).
+void yardDrawPalEmote(PalEmote k, int x, int y, int16_t dex, uint32_t tMs) {
+  if (k == PE_SPARKLE) {  // un estallido de particulas del tipo (llama, gota, hoja, rayo o estrella), tenidas
+    uint8_t ty = dex >= 1 && dex <= DEX_COUNT ? DEX_TBL[dex].type1 : (uint8_t)TY_NONE;
+    uint8_t pn = 0;
+    const char *const *ps = palParticleSprite(palParticleOf(ty), pn);
+    uint16_t tint = palTypeTint(dex);
+    const int N = 6, DUR = 1200;
+    int32_t t = (int32_t)(tMs % DUR);  // se repite mientras dure el icono
+    for (int i = 0; i < N; i++) {
+      int16_t dx, dy;
+      if (ps && palBurst(i, N, t, DUR, &dx, &dy)) drawMapTint(ps, pn, x + dx - pn, y + dy - pn, 2, tint);
     }
-    case PE_POUT:  // nubecita blanca con la marca de enfado
-    case PE_GRUMPY: {  // nube gris con un rayo
-      uint16_t c = k == PE_POUT ? UI_WHITE : C565(0x7a, 0x7e, 0x8a);
-      static const int8_t P[4][3] = { { -10, 2, 10 }, { 10, 2, 10 }, { 0, -5, 12 }, { 0, 5, 9 } };
-      for (auto &q : P) gfx->fillCircle(x + q[0] + 2, y + q[1] + 2, q[2], Y_SHADOW);
-      for (auto &q : P) gfx->fillCircle(x + q[0], y + q[1], q[2], c);
-      if (k == PE_POUT) {
-        drawAngerMark(x, y);
-      } else {
-        uint16_t bolt = C565(0xff, 0xd9, 0x4a);
-        gfx->fillTriangle(x + 2, y + 10, x - 6, y + 22, x + 1, y + 20, bolt);
-        gfx->fillTriangle(x + 1, y + 18, x + 6, y + 18, x - 4, y + 30, bolt);
-      }
-      break;
-    }
-    case PE_SPARKLE:  // chispas del color de su tipo que giran
-      for (int j = 0; j < 3; j++) {
-        float a = tMs * 0.004f + j * 2.094f;
-        int sx = x + (int)(16 * cosf(a)), sy = y + (int)(10 * sinf(a));
-        int sz = 3 + (int)((tMs / 90 + j * 2) % 4);
-        gfx->fillRect(sx - sz, sy - 1, 2 * sz + 1, 3, tint);
-        gfx->fillRect(sx - 1, sy - sz, 3, 2 * sz + 1, tint);
-        gfx->fillRect(sx - 1, sy - 1, 3, 3, UI_WHITE);
-      }
-      break;
-    default:
-      break;
+    return;
   }
+  int16_t dx = 0, dy = 0;
+  bool vis = true;
+  const int DUR = 2400;
+  palFloat((int32_t)(tMs % DUR), DUR, &dx, &dy, &vis, k == PE_NOTE);
+  if (!vis) return;
+  x += dx;
+  y += dy / 2;  // sube la mitad: el icono vive cerca de la cabeza
+  if (k == PE_EXCLAIM) {
+    drawExclaim(x + 4, y);
+    return;
+  }
+  uint8_t n = 0;
+  const char *const *spr = palEmoteSprite(k, n);
+  if (!spr) return;
+  int sc = n >= 32 ? 1 : 2;  // el corazon ya es de 32; los iconos de 16 van a escala 2
+  drawMap(spr, n, x - n * sc / 2, y - n * sc / 2, sc, false);
 }
 
 // efectos pequenos de la pantalla principal (la casa del patio)
@@ -9579,13 +9554,6 @@ void palsApply(const PalsOut &o, uint32_t now) {
   if (o.seen) pet.palSceneSeen();
 }
 
-// el color del primer tipo del bicho del hueco s (los de los huevos, v2.4): tine las chispas de sus escenas
-uint16_t palsTint(uint8_t s) {
-  const PetLife &l = pet.home(s);
-  uint8_t t = l.hatched() ? DEX_TBL[l.speciesId].type1 : (uint8_t)TY_NORMAL;
-  return TYPE_EGG_BASE[t < TY_COUNT ? t : TY_NORMAL];
-}
-
 // PAL: el director, sus esperas y lo que ve de cada uno
 void palsReport() {
   uint8_t hold[YARD_PETS_MAX] = { YH_NONE, YH_NONE, YH_NONE };
@@ -9809,7 +9777,7 @@ void yardDrawPalEmotes(uint32_t now) {
     if (pe.kind == PE_NONE || !p.on) continue;
     int w = yardBodyOf(s).w, side = (o.on && o.x > p.x) ? -1 : 1;
     int x = (int)p.x + palsRollDx(pals, yardW, s, now) + side * (w / 2 + 8);
-    yardDrawPalEmote((PalEmote)pe.kind, x, yardPetHeadY(s) + 14, palsTint(s), now - pe.t0);
+    yardDrawPalEmote((PalEmote)pe.kind, x, yardPetHeadY(s) + 14, pet.home(s).hatched() ? pet.home(s).speciesId : -1, now - pe.t0);
   }
 }
 
