@@ -5,9 +5,11 @@
 #include <stdint.h>
 #include <string.h>
 #include "box.h"     // crc16
+#include "upg_tiers.h"
 #include "tuning.h"
 
 enum UpgLine : uint8_t { UPG_BED = 0, UPG_GYM, UPG_TOY, UPG_LINES };
+static_assert(sizeof(UPG_PRICE[0]) / sizeof(UPG_PRICE[0][0]) == UPG_TIERS, "tuning.h: UPG_PRICE, un precio por nivel");
 static_assert(sizeof(UPG_PRICE) / sizeof(UPG_PRICE[0]) == UPG_LINES, "tuning.h: UPG_PRICE, una fila por linea");
 
 // precio del siguiente nivel cuando se tiene "tier" (0..UPG_TIERS): 0 si ya esta al maximo o la linea no existe

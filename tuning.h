@@ -20,6 +20,7 @@
 //   3. docs/GAME_LOGIC.md cita algunos valores: revisa la seccion del sistema que tocaste.
 // Las unidades van en cada comentario. "min" = minutos de juego (1 min de juego = 1 min real).
 #include <stdint.h>
+#include "upg_tiers.h"
 
 // --------------------------------------------------------------------------------------------
 // Tiempo de juego
@@ -384,7 +385,7 @@ static_assert(sizeof(ECO_MAP_PRICE) / sizeof(ECO_MAP_PRICE[0]) == YARD_MAPS, "EC
 // Mejoras de casa (v3.20, docs/HOME_AND_PALS.md, tarea HOME): camas, gimnasio y juguete, 3 niveles cada una.
 // Se compran una vez y son del jugador. Los arrays por nivel van de 0 (sin comprar) a UPG_TIERS.
 // --------------------------------------------------------------------------------------------
-#define UPG_TIERS 3               // (estructura: niveles por linea; "upg" guarda 0..UPG_TIERS)
+// UPG_TIERS (niveles por linea) dimensiona "upg": vive en upg_tiers.h, fuera de este fichero
 // precio de cada nivel [linea][nivel - 1]: camas, gimnasio, juguete (~una semana de monedas por nivel)
 static const uint16_t UPG_PRICE[3][UPG_TIERS] = { { 600, 1000, 1500 }, { 800, 1200, 1800 }, { 500, 800, 1200 } };
 // camas (FR-HOME.1): ENE por minuto dormido y JOY de buenos dias tras una noche entera

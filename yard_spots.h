@@ -71,3 +71,25 @@ inline void yardBlockObjects(uint8_t *walk, uint8_t map, bool bed, bool gym, boo
     walk[c >> 3] |= (uint8_t)(1 << (c & 7));
   }
 }
+
+// v3.20 (revision): los sprites de los muebles miden 64x64 (32 a 2x) y las celdas 38 px, asi que una caca o un
+// regalo en la celda de encima (o a los lados de la pareja de camas) se vería medio tapado. Para las COSAS (no
+// para el paseo de los bichos) se bloquean tambien: la celda de encima del gimnasio y del juguete, las dos de
+// encima de las camas y los vecinos de izquierda y derecha de la pareja (solo los que caen dentro de la rejilla)
+#define YARD_THINGS_MIN_FREE 12  // si con eso quedan menos celdas libres, las cosas usan la mascara de los muebles sola
+inline void yardBlockCell(uint8_t *walk, int cx, int cy) {
+  if (cx < 0 || cy < 0 || cx >= YBG_GRID || cy >= YBG_GRID) return;
+  int c = cy * YBG_GRID + cx;
+  walk[c >> 3] |= (uint8_t)(1 << (c & 7));
+}
+inline void yardBlockAboveObjects(uint8_t *walk, uint8_t map, bool bed, bool gym, bool toy) {
+  const YardSpots &s = yardSpotsOf(map);
+  if (bed) {
+    yardBlockCell(walk, s.bedX, s.bedY - 1);
+    yardBlockCell(walk, s.bedX + 1, s.bedY - 1);
+    yardBlockCell(walk, s.bedX - 1, s.bedY);
+    yardBlockCell(walk, s.bedX + 2, s.bedY);
+  }
+  if (gym) yardBlockCell(walk, s.gymX, s.gymY - 1);
+  if (toy) yardBlockCell(walk, s.toyX, s.toyY - 1);
+}

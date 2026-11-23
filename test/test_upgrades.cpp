@@ -450,6 +450,103 @@ TEST(upgrades, un_corte_de_luz_al_comprar_nunca_regala_un_nivel) {
   CHECK(sawLost);  // (la ventana entre "cn" y "upg" existe y la prueba la pisa)
 }
 
+// v3.20 (revision): si "upg" no se puede escribir, lo de despues (la mochila, los regalos...) se guarda igual y
+// se reintenta (pendingSave); antes abortaba todo el guardado para siempre
+TEST(upgrades, un_upg_que_no_se_escribe_no_corta_el_resto_del_guardado) {
+  Pet p;
+  uBorn(p, 10);
+  p.dbgSetUpgTier(UPG_BED, 1);  // "upg" cambiado: hay que escribirlo
+  p.items[IT_EGG] = 7;
+  mockNvsFailKey("upg");
+  uSave(p);
+  CHECK(p.savePending());  // el reintento
+  mockNvsFailKey(nullptr);
+  Pet q;
+  q.begin();
+  CHECK_EQ(q.items[IT_EGG], (uint8_t)7);  // la mochila si llego
+  CHECK_EQ(q.upgTier(UPG_BED), (uint8_t)0);  // y el nivel, no
+  uSave(p);  // ya se puede: se escribe
+  Pet r;
+  r.begin();
+  CHECK_EQ(r.upgTier(UPG_BED), (uint8_t)1);
+}
+
+// el gimnasio y el juguete del hueco 1: sus contadores, sus eventos (slot == 1); un hueco 1 vacio o con huevo
+// no recibe nada
+static void uTwoPets(Pet &p) {
+  uBorn(p, 10);
+  p.items[IT_EGG] = ITEM_MAX;
+  CHECK(p.store(0, 0));  // el bicho a la caja; en el 0, un huevo de la mochila
+  p.eggTap();
+  p.eggTap();
+  p.eggTap();
+  CHECK(p.wake(0, 1));  // el de la caja despierta en el hueco 1
+  CHECK(p.home(0).hatched());
+  CHECK(p.home(1).hatched());
+  p.setClock(uat(UDAY, 10));
+  mockForceRandom(0);  // el juguete siempre toca
+}
+
+TEST(upgrades, el_hueco_1_cuenta_gimnasio_y_juguete_en_sus_contadores) {
+  Pet p;
+  uTwoPets(p);
+  p.dbgSetUpgTier(UPG_GYM, UPG_TIERS);
+  p.dbgSetUpgTier(UPG_TOY, UPG_TIERS);
+  int gym[2] = { 0, 0 }, toy[2] = { 0, 0 };
+  for (int i = 0; i < GYM_EVERY_MIN[UPG_TIERS] * 2 + 2; i++) {
+    for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+      PetLife &l = const_cast<PetLife &>(p.home(s));
+      l.fullness = l.energy = 100;
+      l.joy = i % 3 == 0 ? 10 : 100;
+    }
+    p.lastSeenEpoch += 60;
+    mockAdvanceMillis(PET_TICK_MS);
+    p.update(millis());
+    HomeEvt e;
+    while (p.takeHomeEvt(e)) {
+      CHECK(e.slot < HOME_SLOTS);
+      if (e.kind == HE_GYM) gym[e.slot & 1]++;
+      if (e.kind == HE_TOY) toy[e.slot & 1]++;
+    }
+  }
+  CHECK(gym[1] > 0);
+  CHECK(toy[1] > 0);
+  CHECK_EQ((int)p.upgSlotOf(1).gymGains, gym[1]);
+  CHECK_EQ((int)p.upgSlotOf(1).toyPlays, toy[1]);
+  CHECK(p.upgSlotOf(1).uid != 0);
+  CHECK(p.upgSlotOf(1).uid != p.upgSlotOf(0).uid);
+  CHECK_EQ((int)p.upgSlotOf(0).gymGains, gym[0]);
+  CHECK_EQ((int)p.upgSlotOf(0).toyPlays, toy[0]);
+}
+
+TEST(upgrades, un_hueco_1_vacio_no_recibe_nada) {
+  Pet p;
+  uBorn(p, 10);  // solo el hueco 0 tiene bicho
+  CHECK(p.home(1).isVacant());
+  p.dbgSetUpgTier(UPG_GYM, UPG_TIERS);
+  p.dbgSetUpgTier(UPG_TOY, UPG_TIERS);
+  mockForceRandom(0);
+  int mine = 0;
+  for (int i = 0; i < GYM_EVERY_MIN[UPG_TIERS] + 3; i++) {
+    p.fullness = p.energy = 100;
+    p.joy = i % 2 ? 10 : 100;
+    p.lastSeenEpoch += 60;
+    mockAdvanceMillis(PET_TICK_MS);
+    p.update(millis());
+    HomeEvt e;
+    while (p.takeHomeEvt(e)) {
+      CHECK_EQ(e.slot, (uint8_t)0);
+      mine++;
+    }
+  }
+  CHECK(mine > 0);  // (el hueco 0 si juega y entrena: la prueba no es vacua)
+  const UpgSlot &u = p.upgSlotOf(1);
+  CHECK_EQ(u.uid, (uint32_t)0);
+  CHECK_EQ((int)u.gymGains, 0);
+  CHECK_EQ((int)u.toyPlays, 0);
+  CHECK_EQ((int)p.gymMinutes(1), 0);
+}
+
 // ------------------------------------------------------------------ "upg" en la NVS
 TEST(upgrades, upg_ida_y_vuelta) {
   Pet p;

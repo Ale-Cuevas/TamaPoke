@@ -129,3 +129,31 @@ TEST(yard_spots, mapas_de_verdad_con_cada_combinacion) {
     checkSpots((uint8_t)map, w, n);
   }
 }
+
+// v3.20 (revision): las cosas (cacas, regalos, huevo, encuentro) no caen en las celdas que tapan los sprites de
+// los muebles (64 px sobre celdas de 38): encima del gimnasio y del juguete, encima de las dos camas y a los
+// lados de la pareja; y sobre cada mapa de verdad siguen quedando celdas para ellas
+TEST(yard_spots, las_cosas_evitan_las_celdas_tapadas_por_los_muebles) {
+  for (uint8_t m = 0; m <= YARD_MAPS; m++) {
+    const YardSpots &s = yardSpotsOf(m);
+    uint8_t w[YBG_WALK_BYTES];
+    memset(w, 0, sizeof(w));
+    yardBlockAboveObjects(w, m, false, false, false);
+    bool any = false;
+    for (int i = 0; i < YBG_WALK_BYTES; i++) any |= w[i] != 0;
+    CHECK(!any);
+    yardBlockAboveObjects(w, m, true, true, true);
+    CHECK(yardCellBlocked(w, s.bedX, s.bedY - 1));
+    CHECK(yardCellBlocked(w, s.bedX + 1, s.bedY - 1));
+    CHECK(yardCellBlocked(w, s.bedX - 1, s.bedY));
+    CHECK(yardCellBlocked(w, s.bedX + 2, s.bedY));
+    CHECK(yardCellBlocked(w, s.gymX, s.gymY - 1));
+    CHECK(yardCellBlocked(w, s.toyX, s.toyY - 1));
+  }
+  // al borde de la rejilla no se sale de ella
+  uint8_t w[YBG_WALK_BYTES];
+  memset(w, 0, sizeof(w));
+  yardBlockCell(w, -1, 3);
+  yardBlockCell(w, 3, YBG_GRID);
+  for (int i = 0; i < YBG_WALK_BYTES; i++) CHECK_EQ(w[i], (uint8_t)0);
+}

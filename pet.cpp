@@ -2513,16 +2513,16 @@ void Pet::save() {
     cnTSaved = coinToday;
     cnHave = true;
   }
-  // v3.20: las mejoras de casa, justo despues de las monedas (comprar un nivel nunca sale gratis). Si no llega,
-  // tampoco lo de despues
-  if (!saveUpg()) {
-    Serial.println("save: upg no se pudo escribir");
-    pendingSave = true;
-    return;
-  }
   putPack();
   prefs.putUShort("ybgO", yardOwned);  // los mapas comprados (despues que "cn": un corte pierde el mapa, no las monedas)
   prefs.putUChar("ybg", yardChosen);
+  // v3.20: las mejoras de casa, despues de las monedas (comprar un nivel nunca sale gratis) y de la mochila (la
+  // ventana uid / "hm1" -> mochila no se alarga cada minuto de noche). Si no llega, se reintenta pero lo de
+  // despues se guarda igual
+  if (!saveUpg()) {
+    Serial.println("save: upg no se pudo escribir");
+    pendingSave = true;
+  }
   {  // regalos (v1.55), despues de la mochila: [cuantos, objetos...]
     uint8_t g[GIFT_MAX + 1] = { giftN };
     memcpy(g + 1, gifts, giftN);

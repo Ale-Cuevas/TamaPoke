@@ -114,6 +114,7 @@ uint8_t yardHeartSlot = 0;                         // el que se comio la comida 
 int yardFeedFront(uint8_t s, uint8_t kind);  // (en la seccion del patio) 1 come, 0 ya tiene una, -1 sin patio
 const uint8_t *yardWalkNow();         // la mascara de paso con el huevo (seccion del patio)
 const uint8_t *yardWalkObj();         // v3.20: la del mapa con los muebles de casa (seccion del patio)
+const uint8_t *yardWalkThings();      // v3.20: y la de las cosas (sin las celdas tapadas por los muebles)
 // v3.20: lo que hace cada bicho de casa con los muebles (pet.takeHomeEvt): la visita en curso (YV_*), la que espera
 // a que el otro deje libre el mueble y hasta cuando
 enum : uint8_t { YV_NONE = 0, YV_GYM, YV_TOY, YV_MORNING };
@@ -1074,14 +1075,6 @@ void handleSerial() {
     e.a = (uint8_t)a;
     wakeUI();
     yardHomeEvt(e, millis());
-    Serial.println("DONE");
-  } else if (line.startsWith("HTIER ")) {  // HTIER <linea> <nivel> (v3.20): pone un nivel de mejora (0 camas, 1 gimnasio, 2 juguete)
-    int ln = -1, t = 0;
-    sscanf(line.c_str() + 6, "%d %d", &ln, &t);
-    if (ln >= 0 && ln < UPG_LINES) pet.upgTiers[ln] = (uint8_t)(t < 0 ? 0 : t > UPG_TIERS ? UPG_TIERS : t);
-    wakeUI();
-    Serial.printf("htier bed=%u gym=%u toy=%u map=%u\n", pet.upgTier(UPG_BED), pet.upgTier(UPG_GYM), pet.upgTier(UPG_TOY),
-                  yardMapNow());
     Serial.println("DONE");
   } else if (line.startsWith("YARDFULL")) {  // YARDFULL 0|1: el patio a toda la pantalla (v2.5) o en su circulo negro
     if (line.length() > 9) gYardFull = line.substring(9).toInt() != 0;
@@ -5187,6 +5180,7 @@ static const uint8_t BAG_ORDER[] = { IT_GOLDEN, IT_CAKE, IT_RARECANDY, IT_PROTEI
 // v3.20 HOME: la Tienda tiene una pagina mas, Casa (SHOP_PAGES de shop.h); la mochila sigue con 2
 static int bagPages() { return bagTab == 1 ? SHOP_PAGES : BAG_PAGES; }
 #define SHOP_UPG_ASK 100  // shopBuyId > 100: "comprar mejora?" de la linea shopBuyId - 101 (los objetos van de 1 a IT_COUNT)
+static_assert(IT_COUNT < SHOP_UPG_ASK, "SHOP_UPG_ASK: los ids de objeto (1..IT_COUNT) no pueden llegar a los de las mejoras");
 #define BAG_PAGER_X (CX + 104)  // el "1/2" a la derecha de las monedas
 #define BAG_PAGER_Y (BAG_COIN_Y + 2)
 static_assert(BAG_SLOTS == IT_COUNT, "cada objeto tiene su casilla en la mochila");
@@ -9214,6 +9208,17 @@ const uint8_t *yardWalkObj() {
   return w;
 }
 
+// v3.20: la mascara para las COSAS (cacas, regalos, huevo, encuentro): la de los muebles y ademas las celdas de
+// encima / a los lados de sus sprites (yardBlockAboveObjects). Si con eso quedan muy pocas celdas libres, la de
+// los muebles sola
+const uint8_t *yardWalkThings() {
+  static uint8_t w[YBG_WALK_BYTES];
+  memcpy(w, yardWalkObj(), sizeof(w));
+  yardBlockAboveObjects(w, yardMapNow(), pet.upgTier(UPG_BED) > 0, pet.upgTier(UPG_GYM) > 0, pet.upgTier(UPG_TOY) > 0);
+  if (yardFreeCount(w) < YARD_THINGS_MIN_FREE) return yardWalkObj();
+  return w;
+}
+
 // quien esta en el patio: los dos de casa (los nacidos) y el que vuelve de viaje (cargando su sprite si cambio)
 void yardSyncPets() {
   yardW.n = 3;
@@ -9719,20 +9724,28 @@ void yardDrawPets(uint32_t now) {
     else hatchAtSlot(s, CX, PET_CY, 5);
     hatching[s] = drawHatchFxSlot(s, now);  // el huevo aun se rompe: su bicho no se ve
   }
+  // lo del suelo (huevos, comida, muebles), por y entre ellos y con los bichos (no por k)
   bool objDone[YARD_OBJS];
   int32_t objY[YARD_OBJS];
   for (int k = 0; k < YARD_OBJS; k++) {
     objY[k] = yardObjY(k);
     objDone[k] = objY[k] == INT32_MAX;
   }
+  // dibuja lo que queda con y < lim, el de menos y primero (empates: por k)
+  auto flushObjs = [&](float lim) {
+    for (;;) {
+      int best = -1;
+      for (int k = 0; k < YARD_OBJS; k++)
+        if (!objDone[k] && (float)objY[k] < lim && (best < 0 || objY[k] < objY[best])) best = k;
+      if (best < 0) break;
+      yardDrawObj(best, now);
+      objDone[best] = true;
+    }
+  };
   bool encDone = yardEncX < 0;  // v2.2: lo que se mueve tambien se ordena con los bichos
   for (int j = 0; j < n; j++) {
     int i = order[j];
-    for (int k = 0; k < YARD_OBJS; k++)
-      if (!objDone[k] && yardW.p[i].y > objY[k]) {  // lo del suelo que queda detras de este bicho
-        yardDrawObj(k, now);
-        objDone[k] = true;
-      }
+    flushObjs(yardW.p[i].y);  // lo que queda detras de este bicho
     if (!encDone && yardW.p[i].y > yardEncY) {
       yardDrawEnc(now);
       encDone = true;
@@ -9740,8 +9753,7 @@ void yardDrawPets(uint32_t now) {
     if (i < HOME_SLOTS && (hatching[i] || pet.home(i).evolving())) continue;
     yardDrawPet(i, now);
   }
-  for (int k = 0; k < YARD_OBJS; k++)
-    if (!objDone[k]) yardDrawObj(k, now);
+  flushObjs(3.0e9f);
   if (!encDone) yardDrawEnc(now);
   if (pet.evolving()) drawEvolveFX(now);  // la evolucion (siempre la del foco), grande en el centro como siempre
 }
@@ -9792,7 +9804,7 @@ static int yardThings(int16_t *ox, int16_t *oy, int skip) {
 
 void yardSyncThings() {
   int16_t ox[YARD_THINGS_MAX + HOME_SLOTS], oy[YARD_THINGS_MAX + HOME_SLOTS];
-  const uint8_t *yardWalk = yardWalkObj();  // v3.20: nada cae sobre un mueble de casa (tapa la del mapa aqui)
+  const uint8_t *yardWalk = yardWalkThings();  // v3.20: nada cae sobre un mueble de casa, ni tapado por su sprite (tapa la del mapa aqui)
   for (uint8_t s = 0; s < HOME_SLOTS; s++) {
     uint8_t m = pet.home(s).poopSlots();
     for (int i = 0; i < POOP_MAX; i++) {
