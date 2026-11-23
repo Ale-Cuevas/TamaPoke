@@ -478,4 +478,5 @@ static const uint32_t MEDAL_T[][3] = {
   { 1, 5, 15 },             // Cazador: capturas
   { 3, 15, 50 },            // Trotamundos: viajes completados
   { 5, 20, 45 },            // Coleccionista: recuerdos (el Oro, todos: SOUV_COUNT)
+  { 10, 50, 200 },          // Companeros de juego: escenas de juego y animos vistos (v3.22; de evento)
 };

@@ -53,7 +53,7 @@ To tune the game, change it there (see §17, "Tuning").
 | I want to change… | Look at |
 |---|---|
 | **The two home pets** (which one an action hits, focus, slot 1 save) | §4 "Two home pets"; `Pet::focus` `pet.cpp:10`, `FocusGuard` `:19`, `uiFocus` `TamaPoke.ino:548`, `homeFocusTick` `:559`; `petlife.h`, `homerec.h` |
-| **Player medals** (19 × Bronze/Silver/Gold, coins) | `medals.h` (table, tiers, `pm` blob); `Pet::medalValue` `pet.cpp:709`, `medalsUpdate` `:750`, `medalsMigrate` `:789`; thresholds `MEDAL_T` and coins `MEDAL_COINS` in `tuning.h` |
+| **Player medals** (20 × Bronze/Silver/Gold, coins) | `medals.h` (table, tiers, `pm` blob); `Pet::medalValue` `pet.cpp:709`, `medalsUpdate` `:750`, `medalsMigrate` `:789`; thresholds `MEDAL_T` and coins `MEDAL_COINS` in `tuning.h` |
 | **Any balance number** (a rate, timer, probability, reward or price) | **`tuning.h`**, grouped by system. Not there: the level curve (`growth.h`), minigame physics (`ballgame.h`, `zengame.h`, `dashgame.h`), the 8 stages (`stage.h`) |
 | How fast needs drain, poops, slip-ups, neglect | `Pet::tick` `pet.cpp:448`, `sleepMinute` `pet.cpp:1161`, numbers in `tuning.h` |
 | Level curve / growth | `growth.h` (`levelCost`, `levelFor`, `addLevels`); `growMin` in `Pet` |
@@ -507,13 +507,13 @@ In the yard, food is not applied when tapped. It **drops, the pet walks to it an
 
 ### Player medals (v3.4)
 
-Per-pet medals are gone. 19 player medals (`medals.h`), each with Bronze / Silver / Gold at the thresholds in
+Per-pet medals are gone. 20 player medals (`medals.h`), each with Bronze / Silver / Gold at the thresholds in
 `MEDAL_T` (`tuning.h`), paying `MEDAL_COINS` 25 / 75 / 200 with `addCoins(n, false)` (outside the daily cap).
 
 - **Sources.** *Pet* medals (0-6: pets to Lv 10/25/50, bond 100, final form, in shape, favourite found) count each
   pet once: the pet carries `counted` bits (`pmc` for slot 0, `PetRecord.medals` with `REC_V3` for slot 1 and the
   Box), so Box moves never count it twice; a pet that grows in the Box counts when woken. *Event* medals
-  (evolutions, farewells, 10 000-step days, wild wins, captures, trips) bump a counter at the event; wild wins and
+  (evolutions, farewells, 10 000-step days, wild wins, captures, trips, Playmates) bump a counter at the event; wild wins and
   captures remember the encounter id so a replay after a power cut doesn't count again. *Derived* medals (species,
   shinies, best streak, total steps, badges, souvenirs) read live state.
 - **`medalsUpdate()`** (`pet.cpp:738`) runs at the end of `tick` and `addSteps` and at the start of `save()`. It never
@@ -524,7 +524,20 @@ Per-pet medals are gone. 19 player medals (`medals.h`), each with Bronze / Silve
 - **Migration** (`medalsMigrate` `:789`, in `begin()`): with **no** `pm` key, count both home pets and every Box
   record once, pay every reached tier in full and queue the banners, then remove the old `medal`/`tmedal` keys. An
   **existing but unreadable** `pm` is recounted without paying (tiers set to those reached). Any `PM_VER` bump needs a
-  real migration.
+  real migration. `PM_VER` is 2 since v3.22 (the 20th medal, Playmates): an old v1 `pm` (19 medals) is "unreadable",
+  so it is recounted without paying, keeps the tiers already reached and resets the event counters (test
+  `un_pm_v1_se_recuenta_sin_pagar`).
+- **Playmates (v3.22, `MD_PLAYMATES`, event).** `palSceneSeen()` bumps it once per play scene or cheer-up seen in the
+  yard (perk paid or not); thresholds `{10, 50, 200}`.
+
+### Pals perks (v3.22, `docs/HOME_AND_PALS.md` FR-PALS.3/.4/.9)
+
+`palPlayPerk(slot)` (after a play scene, `PAL_PLAY_JOY`, `PAL_PLAY_PAY_DAY` a day per pet) and `palCheerPerk(slot)`
+(the cheered-up sad one, `PAL_CHEER_JOY`, `PAL_CHEER_DAY` a day) add JOY (clamp 100) to that slot's pet and return
+the JOY actually added; 0 if the slot is vacant/an egg/asleep/ending, there is no clock, or the daily cap is used
+(a full JOY still counts as paid). No bond, care, streak or coins. They act through `slotRef(slot)`, never moving the
+focus. The counters are `PalSlot {uid, day, playsPaid, cheersPaid}` (`pal_perks.h`), reset when the uid or day
+changes (`palRoll`); stored in NVS `pal`. Tests: `test/test_pal_perks.cpp`.
 
 ### Growth and level
 
@@ -666,7 +679,7 @@ last among its keys), the atomic `hm1` blob for slot 1. At worst a pet exists tw
 
 `save()` order (v3.4): `medalsUpdate()` in RAM → slot-0 keys (incl. `pcd`, `pmc`) → player keys → `uid` → `hm1`
 (only if changed) → `pm` (only if changed) → `cn`/`cnD`/`cnT` (only if changed) → `bpack`/`bpk2`/`bpk3` → `ybgO`/`ybg` →
-`upg` (only if changed) → `gifts` → `eggH` → `cegg` → `ecap` → `enc` → `trvR`. If the `hm1`, `pm` or coin write fails, `save()` stops there and
+`upg` (only if changed) → `pal` (only if changed) → `gifts` → `eggH` → `cegg` → `ecap` → `enc` → `trvR`. If the `hm1`, `pm` or coin write fails, `save()` stops there and
 keeps `pendingSave`; coins are cached as saved only when all three coin keys were written, so a purchase is never
 free.
 
@@ -1102,6 +1115,10 @@ stateDiagram-v2
   - Favourite berry known: `fk` for slot 0 (v3.2; the old `bk` is ignored); `REC_FAV6` in the record for slot 1 and the Box.
   - Progress: `dexreg`, `bdg`.
   - Coins and yard: `cn`, `ybg`, `ybgO`.
+  - Pals perks (v3.22): `pal`, one `PalSave` blob (`pal_perks.h`, 23 B: `ver`, per home slot
+    `{uid u32, day u32, playsPaid u8, cheersPaid u8}`, CRC-16), written right after `upg`, only when it changed
+    (`savePal`, copy in `palSaved`; an all-zero state with nothing written yet is not written either). A failed write
+    sets `pendingSave` and the save carries on. Missing, another version or bad CRC = nothing paid today (no migration).
   - Home upgrades (v3.20): `upg`, one `UpgSave` blob (`upgrade.h`, 30 B: `ver`, 3 tiers, per home slot
     `{uid u32, day u32, gymGains u8, toyPlays u8, sleptMin u16}`, CRC-16). Written after `cn`, the backpack and `ybgO`/`ybg` (so a purchase is never free), only when
     it changed (`saveUpg`, copy in `upgSaved`); a failed write sets `pendingSave` and the save carries on (the next one retries).
@@ -1257,6 +1274,7 @@ to test on the board: `~/.platformio/penv/bin/python tools/board.py cmd STATS ..
 | Battles | `BATTLE`, `STAGE n`, `STAGEDAY` (re-arm today's boss rewards), `BADGES mask` |
 | Encounters | `ENC?`, `ENC [dex]`, `ENCEND`, `BALLS n`, `LURE` (use one and open the encounter), `LURE n` (set the count) |
 | Home upgrades (v3.20) | `UPG` (the 3 tiers and each slot's counters: uid, day, gym, toy, slept, gymMin), `UPG <line> <tier>` (0 bed, 1 gym, 2 toy; sets the tier, saved with the next flush) |
+| Pals perks (v3.22) | `PALC` (each slot's uid, day, plays and cheers paid out of the daily caps, and the Playmates count), `PALC seen` (calls `palSceneSeen()`, +1 Playmates) |
 | Economy and travel | `COINS [n]`, `SHOP`, `BUY id`, `BUYMAP n`, `GIFTS`, `GIFT item`, `TRAVEL [slot map tier]`, `TRAVELT m`, `TRAVELEND`, `SOUV [mask]` (64-bit mask, `0x..` or decimal; printed as `%llX`) |
 | Steps and IMU | `STEPS n`, `IMU`, `IMULOG s`, `SHAKE`, `FACEDOWN [0]` |
 | Pet menu (v3.3) | `MENU s` (open the menu for slot s; `MENU` prints the rows with their tap points), `PICK s` (choose in the pet picker); actions print `MENU s food\|care\|…`, `FOOD front …`, `PLAY <game> slot=s`, `ITEM <id> slot=s` |

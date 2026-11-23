@@ -109,11 +109,11 @@ TEST(medals, los_tramos_salen_de_tuning) {
 
 // la tabla del plan: 19 medallas, 7 de bichos, 6 de evento y 6 derivadas (pinta la promesa a proposito)
 TEST(medals, las_fuentes_de_cada_medalla) {
-  CHECK_EQ((int)MEDAL_COUNT, 19);
+  CHECK_EQ((int)MEDAL_COUNT, 20);
   int n[3] = { 0, 0, 0 };
   for (uint8_t i = 0; i < MEDAL_COUNT; i++) n[medalSource(i)]++;
   CHECK_EQ(n[MSRC_PET], 7);
-  CHECK_EQ(n[MSRC_EVENT], 6);
+  CHECK_EQ(n[MSRC_EVENT], 7);
   CHECK_EQ(n[MSRC_DERIVED], 6);
   for (uint8_t i = 0; i < PMB_COUNT; i++) CHECK_EQ(medalSource(i), (uint8_t)MSRC_PET);
 }
@@ -512,6 +512,59 @@ TEST(medals, uno_de_la_caja_de_antes_no_cuenta_dos_veces_al_despertar) {
   CHECK(w.store(2, 1));
   CHECK(w.wake(2, 1));
   CHECK_EQ(w.medalValue(MD_LV10), v[MD_LV10] + 1);
+}
+
+// v3.22: un "pm" de la v1 (19 medallas, 109 bytes) ya no se carga (PM_VER 2): se recuenta SIN pagar. Se mantienen
+// los tramos alcanzados, los contadores de evento vuelven a 0 y Companeros de juego empieza a 0
+TEST(medals, un_pm_v1_se_recuenta_sin_pagar) {
+  struct __attribute__((packed)) PmV1 {
+    uint8_t ver;
+    uint8_t tier[19];
+    uint16_t cnt[19];
+    uint32_t wildId, catchId;
+    uint8_t legN;
+    uint32_t legUid[PM_LEGACY_MAX];
+    uint8_t legBits[PM_LEGACY_MAX];
+    uint16_t crc;
+  };
+  static_assert(sizeof(PmV1) == 109, "el pm de la v1");
+  static_assert(MEDAL_COUNT == 20 && MD_PLAYMATES == 19, "Companeros de juego va al final");
+  mLegacySave();
+  Pet a;
+  a.begin();
+  uint32_t lv10 = a.medalValue(MD_LV10);
+  uint16_t coins = a.coins;
+  CHECK(lv10 > 0);
+  {
+    Preferences x;
+    x.begin("tamapoke", false);
+    PlayerMedals m;
+    CHECK_EQ(x.getBytes("pm", &m, sizeof(m)), sizeof(m));
+    PmV1 o;
+    memset(&o, 0, sizeof(o));
+    o.ver = 1;
+    memcpy(o.tier, m.tier, 19);
+    memcpy(o.cnt, m.cnt, sizeof(o.cnt));
+    o.cnt[MD_WILD] = 50;  // un contador de evento que no debe sobrevivir
+    o.legN = m.legN;
+    memcpy(o.legUid, m.legUid, sizeof(o.legUid));
+    memcpy(o.legBits, m.legBits, sizeof(o.legBits));
+    o.crc = crc16((const uint8_t *)&o, offsetof(PmV1, crc));
+    x.putBytes("pm", &o, sizeof(o));
+  }
+  Pet b;
+  b.begin();
+  CHECK(b.medalsMigratedNow());
+  CHECK_EQ(b.coins, coins);  // sin pagar
+  CHECK_EQ(b.medalNewsPending(), (uint8_t)0);
+  CHECK_EQ(b.medalValue(MD_LV10), lv10);  // lo de los bichos se recuenta
+  CHECK_EQ(b.medalValue(MD_WILD), (uint32_t)0);
+  CHECK_EQ(b.medalValue(MD_PLAYMATES), (uint32_t)0);
+  for (uint8_t i = 0; i < MEDAL_COUNT; i++) CHECK_EQ(b.medalTierPaid(i), medalTierOf(i, b.medalValue(i)));
+  Pet c;
+  c.begin();
+  CHECK(!c.medalsMigratedNow());
+  CHECK_EQ(c.coins, coins);
 }
 
 // un "pm" danado (CRC, version, tamano): se vuelve a contar como una migracion, sin romper nada
