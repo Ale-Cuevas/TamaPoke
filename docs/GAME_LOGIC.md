@@ -1227,6 +1227,12 @@ flowchart LR
   `WILD_BUSH/ROCK/SAND` and (v3.20) the home furniture `BED1-3` (straw, cushion, royal), `GYM1-3` (log weights,
   dumbbell + punching bag, full gym) and `TOY1-3` (rubber ball, ball + tug rope, swing set), drawn at scale 2 in the
   yard (§7). Their palette chars `h H a j J x X e` were added for them.
+  - **PALS emotes (v3.22).** 16×16 icons `ICON_NOTE`, `ICON_DOTS`, `ICON_POUT`, `ICON_GRUMPY`, `ICON_SPARK` (with
+    `SPR_HEART` and the drawn "!" they are the `PalEmote` set) and 8×8 white type particles `PART_FLAME`,
+    `PART_DROP`, `PART_LEAF`, `PART_BOLT`, `PART_STAR` (palette char `z`, light grey) that the yard tints with
+    `drawMapTint`. `pal_fx.h` (pure, tests `test_pal_fx.cpp`) maps emote to sprite (`palEmoteSprite`), type to
+    particle (`palParticleOf`, `palParticleSprite`), species to tint (`palTypeTint`, first type colour from
+    `eggcolor.h`) and holds the motion (`palFloat` rise + blink-out, `palBurst` fan); `species.h` is host-safe.
 - **i18n.** `i18n.h` has `enum Lang` (ES, EN, FR, DE, IT, PT, JA, KO) and `enum StrId`; `i18n.cpp` has
   `STRINGS[LANG_COUNT][STR_COUNT]`, with one block per language in the same order.
   - **To add a string:** add an `S_xxx` before `STR_COUNT`, add an entry at the same position in all 8 rows, then

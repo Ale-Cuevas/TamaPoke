@@ -55,6 +55,8 @@ PALETTE = {
     'x': '#8a4cc0',  # purpura real (colchon)
     'X': '#5a2c88',  # purpura sombra
     'e': '#4a4e5a',  # hierro (pesas)
+    # v3.22: sombra gris claro de las particulas de tipo (PART_*), que el patio tinta
+    'z': '#d4d9e2',
 }
 
 W = H = 32
@@ -770,6 +772,129 @@ def icon_sun():
     return g.rows()
 
 
+# ---- v3.22 PALS: iconos que flotan sobre los bichos (16x16) y particulas de tipo (8x8, blancas, se tintan)
+
+def icon_note():
+    # corchea rosa
+    g = G(16)
+    g.disk(5.5, 11.5, 3.2, 2.7, 'p', 'P')
+    g.rect(7, 2, 9, 11, 'p')
+    g.rect(9, 2, 13, 4, 'p'); g.rect(11, 4, 13, 7, 'p')
+    g.px(13, 8, 'p')
+    g.outline()
+    g.px(4, 10, 'w'); g.px(3, 11, 'w')
+    return g.rows()
+
+
+def icon_dots():
+    # globo de dialogo con "..."
+    g = G(16)
+    g.disk(7.5, 6.5, 7.0, 5.0, 'w', 's')
+    g.rect(3, 10, 5, 13, 'w'); g.rect(3, 13, 3, 14, 'w')
+    g.outline()
+    for x in (4, 7, 10):
+        g.rect(x, 6, x + 1, 7, 'S')
+    return g.rows()
+
+
+def icon_pout():
+    # nubecita de vapor con la marca roja de enfado
+    g = G(16)
+    g.disk(4.5, 9.5, 3.6, 3.6, 'w', 's')
+    g.disk(9.0, 7.0, 4.4, 4.4, 'w', 's')
+    g.disk(11.5, 10.5, 3.2, 3.2, 'w', 's')
+    g.rect(4, 10, 12, 13, 'w')
+    g.outline()
+    # marca de enfado: cuatro trazos en cruz
+    for x, y in ((7, 5), (8, 5), (6, 6), (9, 6), (6, 8), (9, 8), (7, 9), (8, 9)):
+        g.px(x, y, 'r')
+    g.px(7, 7, 'R'); g.px(8, 7, 'R')
+    return g.rows()
+
+
+def icon_grumpy():
+    # nube gris oscura con un rayo
+    g = G(16)
+    g.disk(4.5, 7.5, 3.6, 3.6, 's', 'S')
+    g.disk(9.0, 5.5, 4.6, 4.2, 's', 'S')
+    g.disk(11.5, 8.0, 3.2, 3.2, 's', 'S')
+    g.rect(4, 8, 12, 10, 'S')
+    g.outline()
+    for x, y in ((9, 10), (8, 10), (7, 11), (8, 11), (6, 12), (7, 12), (8, 12), (9, 12),
+                 (8, 13), (7, 13), (7, 14), (6, 15)):
+        g.px(x, y, 'f')
+    g.px(9, 11, 'k'); g.px(10, 11, 'k'); g.px(10, 12, 'k'); g.px(9, 13, 'k'); g.px(8, 14, 'k'); g.px(7, 15, 'k')
+    return g.rows()
+
+
+def icon_spark():
+    # chispa de cuatro puntas
+    g = G(16)
+    for i in range(1, 8):
+        w = max(0, (8 - i) // 3)
+        g.rect(7 - w, 7 - i, 8 + w, 7 - i, 'f')
+        g.rect(7 - w, 8 + i, 8 + w, 8 + i, 'f')
+        g.rect(7 - i, 7 - w, 7 - i, 8 + w, 'f')
+        g.rect(8 + i, 7 - w, 8 + i, 8 + w, 'f')
+    g.rect(5, 5, 10, 10, 'f')
+    g.rect(6, 6, 9, 9, 'w')
+    g.outline()
+    return g.rows()
+
+
+# particulas de tipo: 8x8, solo 'w' y 'z' (sin contorno) para teñirlas de un color liso
+PART_FLAME = [
+    "...w....",
+    "..ww....",
+    "..www.w.",
+    ".wwwwww.",
+    ".wwwwww.",
+    ".wwzwww.",
+    "..wzzw..",
+    "...ww...",
+]
+PART_DROP = [
+    "...ww...",
+    "...ww...",
+    "..wwww..",
+    "..wwww..",
+    ".wwwwww.",
+    ".wwwwzz.",
+    "..wzzz..",
+    "...zz...",
+]
+PART_LEAF = [
+    "......ww",
+    "....wwww",
+    "..wwwwww",
+    ".wwwwwww",
+    ".wwwwwwz",
+    ".wwwwzz.",
+    "wwzzz...",
+    "w.......",
+]
+PART_BOLT = [
+    "....www.",
+    "...www..",
+    "..www...",
+    ".wwwwww.",
+    "...wwz..",
+    "..wwz...",
+    "..wz....",
+    ".wz.....",
+]
+PART_STAR = [
+    "...ww...",
+    "...ww...",
+    "...ww...",
+    "wwwwwwww",
+    "wwwwwwzz",
+    "...zz...",
+    "...zz...",
+    "...zz...",
+]
+
+
 def icon_cake():
     # tarta: nata blanca con goterones, capa rosa, bizcocho crema y una cereza
     g = G(16)
@@ -1339,6 +1464,16 @@ SPRITES = {
     "ICON_ZEN": icon_zen(),
     "ICON_BAG": icon_bag(),
     "ICON_SUN": icon_sun(),
+    "ICON_NOTE": icon_note(),
+    "ICON_DOTS": icon_dots(),
+    "ICON_POUT": icon_pout(),
+    "ICON_GRUMPY": icon_grumpy(),
+    "ICON_SPARK": icon_spark(),
+    "PART_FLAME": PART_FLAME,
+    "PART_DROP": PART_DROP,
+    "PART_LEAF": PART_LEAF,
+    "PART_BOLT": PART_BOLT,
+    "PART_STAR": PART_STAR,
     "ICON_CAKE": icon_cake(),
     "ICON_REVIVE": icon_revive(),
     "ICON_PET": icon_pet(),

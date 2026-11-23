@@ -90,6 +90,7 @@ static inline uint16_t spriteColor(char ch) {
     case 'x': return 0x8A78;  // #8a4cc0
     case 'X': return 0x5971;  // #5a2c88
     case 'e': return 0x4A6B;  // #4a4e5a
+    case 'z': return 0xD6DC;  // #d4d9e2
     default: return 0;
   }
 }
@@ -845,6 +846,156 @@ static const char* const SPR_ICON_SUN[16] = {  // 16x16
   "...k..kook..k...",
   "......kook......",
   ".......kk.......",
+};
+
+static const char* const SPR_ICON_NOTE[16] = {  // 16x16
+  "................",
+  "................",
+  ".......kkkkkkk..",
+  ".......kpppppk..",
+  ".......kppkppk..",
+  ".......kpk.kpk..",
+  ".......kpk.kpk..",
+  ".......kpk.kkk..",
+  ".......kpk...k..",
+  ".....kkppk......",
+  "...kwppppk......",
+  "...wpppppk......",
+  "...kppppk.......",
+  "...kkppkk.......",
+  ".....kk.........",
+  "................",
+};
+
+static const char* const SPR_ICON_DOTS[16] = {  // 16x16
+  "................",
+  "................",
+  ".....kkkkkk.....",
+  "...kkwwwwwwkk...",
+  "..kwwwwwwwwwwk..",
+  ".kwwwwwwwwwwwsk.",
+  ".kwwSSwSSwSSwsk.",
+  ".kwwSSwSSwSSwsk.",
+  ".kwwwwwwwwwwssk.",
+  "..kwwwwwwwwssk..",
+  "...kwwssssskk...",
+  "...kwwkkkkk.....",
+  "...kwk..........",
+  "...kkk..........",
+  "...k............",
+  "................",
+};
+
+static const char* const SPR_ICON_POUT[16] = {  // 16x16
+  "................",
+  "................",
+  "................",
+  "........kkk.....",
+  "......kkwwwkk...",
+  "......krrwwwk...",
+  "....kkrwwrwwsk..",
+  "..kkwwwRRwwwsk..",
+  "..kwwwrwwrwwwk..",
+  ".kwwwwwrrwwwwwk.",
+  ".kwwwwwwwwwwwwk.",
+  "..kwwwwwwwwwwwk.",
+  "..kkwwwwwwwwwwk.",
+  "....kkkkkkkkkk..",
+  "................",
+  "................",
+};
+
+static const char* const SPR_ICON_GRUMPY[16] = {  // 16x16
+  "................",
+  "................",
+  ".......kkkkk....",
+  "......ksssssk...",
+  "....kksssssssk..",
+  "..kksssssssssk..",
+  "..kssssssssssk..",
+  ".kssssssssssssk.",
+  ".kssSSSSSSSSSsk.",
+  "..ksSSSSSSSSSsk.",
+  "..kkSSkkffkSSk..",
+  "....kk.ffkkkk...",
+  "......ffffk.....",
+  ".......ffk......",
+  ".......fk.......",
+  "......fk........",
+};
+
+static const char* const SPR_ICON_SPARK[16] = {  // 16x16
+  ".......kk.......",
+  ".......kk.......",
+  "......kffk......",
+  "......kffk......",
+  "......kffk......",
+  ".....kffffk.....",
+  "..kkkfwwwwfkkk..",
+  "kkffffwwwwffffkk",
+  "kkffffwwwwffffkk",
+  "..kkkfwwwwfkkk..",
+  ".....kffffk.....",
+  "......kffk......",
+  "......kffk......",
+  "......kffk......",
+  ".......kk.......",
+  ".......kk.......",
+};
+
+static const char* const SPR_PART_FLAME[8] = {  // 8x8
+  "...w....",
+  "..ww....",
+  "..www.w.",
+  ".wwwwww.",
+  ".wwwwww.",
+  ".wwzwww.",
+  "..wzzw..",
+  "...ww...",
+};
+
+static const char* const SPR_PART_DROP[8] = {  // 8x8
+  "...ww...",
+  "...ww...",
+  "..wwww..",
+  "..wwww..",
+  ".wwwwww.",
+  ".wwwwzz.",
+  "..wzzz..",
+  "...zz...",
+};
+
+static const char* const SPR_PART_LEAF[8] = {  // 8x8
+  "......ww",
+  "....wwww",
+  "..wwwwww",
+  ".wwwwwww",
+  ".wwwwwwz",
+  ".wwwwzz.",
+  "wwzzz...",
+  "w.......",
+};
+
+static const char* const SPR_PART_BOLT[8] = {  // 8x8
+  "....www.",
+  "...www..",
+  "..www...",
+  ".wwwwww.",
+  "...wwz..",
+  "..wwz...",
+  "..wz....",
+  ".wz.....",
+};
+
+static const char* const SPR_PART_STAR[8] = {  // 8x8
+  "...ww...",
+  "...ww...",
+  "...ww...",
+  "wwwwwwww",
+  "wwwwwwzz",
+  "...zz...",
+  "...zz...",
+  "...zz...",
 };
 
 static const char* const SPR_ICON_CAKE[16] = {  // 16x16
