@@ -46,6 +46,15 @@ PALETTE = {
     'Q': '#80296c',  # magenta sombra
     'i': '#4f5bc2',  # indigo (insignia dragon)
     'I': '#2f3586',  # indigo sombra
+    # v3.20: los muebles de casa (camas, gimnasio, juguete)
+    'h': '#e8c860',  # paja / cuerda
+    'H': '#b08c38',  # paja sombra
+    'a': '#dcac72',  # madera clara (cortes de tronco, asiento)
+    'j': '#f2c230',  # oro (cama real)
+    'J': '#b8860b',  # oro sombra
+    'x': '#8a4cc0',  # purpura real (colchon)
+    'X': '#5a2c88',  # purpura sombra
+    'e': '#4a4e5a',  # hierro (pesas)
 }
 
 W = H = 32
@@ -1129,6 +1138,174 @@ def badge_dragon():
     ]
 
 
+# ---------------------------------------------------------------- muebles de casa (v3.20, FR-HOME)
+# 32x32 a escala 2 en el patio, con los pies (la fila 26) en el centro de su celda; las camas, con el
+# colchon en las filas 14-28 para que el bicho tumbado quede encima. Tres niveles por linea.
+
+def bed1():
+    # cama de paja: un nido de paja con briznas sueltas y una almohada de paja mas clara
+    g = G()
+    g.disk(16, 21, 14.5, 7.5, 'h', 'H')
+    g.disk(9, 16, 5.5, 3.2, 'h', 'H')
+    g.outline()
+    for x, y in ((6, 21), (7, 22), (12, 24), (13, 25), (19, 19), (20, 20), (24, 23), (25, 24), (16, 26),
+                 (22, 17), (27, 20), (4, 23), (10, 19), (18, 23)):
+        g.px(x, y, 'H')
+    for x, y in ((8, 15), (9, 15), (15, 17), (21, 22), (11, 21)):
+        g.px(x, y, 'w')
+    g.px(1, 18, 'h'); g.px(30, 24, 'h'); g.px(29, 16, 'H')  # briznas que se salen
+    return g.rows()
+
+
+def bed2():
+    # cama de cojin: marco de madera con cabecero, colchon rosa y almohada blanca
+    g = G()
+    g.rect(2, 9, 29, 14, 'c')            # cabecero
+    g.rect(2, 14, 29, 29, 'c')           # marco
+    g.rect(26, 14, 29, 29, 'C')
+    g.rect(4, 15, 27, 27, 'p')           # colchon
+    g.rect(22, 15, 27, 27, 'P')
+    g.disk(10, 16.5, 5, 2.8, 'w', 's')    # almohada
+    g.rect(4, 22, 27, 23, 'P')           # pliegue de la manta
+    g.outline()
+    g.rect(3, 10, 28, 10, 'C')           # veta del cabecero
+    g.px(2, 29, 'C'); g.px(29, 29, 'C')
+    return g.rows()
+
+
+def bed3():
+    # cama real: marco de oro con postes y pomos, colchon purpura, almohada roja y una corona en el cabecero
+    g = G()
+    g.rect(2, 9, 29, 14, 'j')            # cabecero
+    g.rect(2, 14, 29, 29, 'j')           # marco
+    g.rect(26, 9, 29, 29, 'J')
+    g.disk(3, 6, 2.2, 2.2, 'j', 'J')     # pomos
+    g.disk(28, 6, 2.2, 2.2, 'j', 'J')
+    g.rect(13, 4, 18, 8, 'j')            # corona
+    g.px(13, 3, 'j'); g.px(15, 2, 'j'); g.px(16, 2, 'j'); g.px(18, 3, 'j')
+    g.rect(4, 15, 27, 27, 'x')           # colchon
+    g.rect(22, 15, 27, 27, 'X')
+    g.disk(10, 16.5, 5, 2.8, 'r', 'R')    # almohada
+    g.rect(4, 22, 27, 23, 'X')           # borde de la colcha
+    g.outline()
+    g.px(15, 6, 'r'); g.px(16, 6, 'r')   # la joya de la corona
+    for x in range(5, 27, 4):
+        g.px(x, 23, 'j')                 # flecos de oro
+    g.px(8, 15, 'w'); g.px(9, 15, 'w')
+    return g.rows()
+
+
+def gym1():
+    # pesas de tronco: dos rodajas de tronco de pie unidas por un palo
+    g = G()
+    g.rect(9, 17, 22, 20, 'C')           # el palo
+    for cx in (6, 25):
+        g.rect(cx - 4, 13, cx + 4, 26, 'c')
+        g.rect(cx + 3, 13, cx + 4, 26, 'C')
+        g.disk(cx, 26, 4.6, 2.4, 'c', 'C')
+        g.disk(cx, 13, 4.6, 2.4, 'a')    # el corte de arriba
+    g.outline()
+    for cx in (6, 25):
+        g.px(cx - 2, 13, 'c'); g.px(cx + 2, 13, 'c'); g.px(cx, 12, 'c'); g.px(cx, 14, 'c')  # el anillo
+        g.px(cx - 2, 19, 'C'); g.px(cx - 1, 22, 'C')                                       # corteza
+    g.rect(10, 17, 21, 17, 'c')          # brillo del palo
+    return g.rows()
+
+
+def gym2():
+    # mancuernas y saco de boxeo: un poste con brazo del que cuelga el saco rojo, y una mancuerna en el suelo
+    g = G()
+    g.rect(26, 2, 28, 29, 's')           # poste
+    g.rect(28, 2, 28, 29, 'S')
+    g.rect(14, 2, 28, 4, 's')            # brazo
+    g.rect(23, 28, 31, 30, 'S')          # pie
+    g.disk(16, 14, 5.5, 8.5, 'r', 'R')   # saco
+    g.rect(11, 8, 21, 8, 'R')
+    g.rect(15, 5, 16, 6, 'S')            # cadena
+    g.rect(2, 26, 14, 27, 'S')           # mancuerna
+    g.rect(2, 23, 5, 30, 'e')
+    g.rect(11, 23, 14, 30, 'e')
+    g.outline()
+    g.rect(12, 11, 13, 16, 'w')          # brillo del saco
+    g.px(3, 24, 's'); g.px(12, 24, 's')
+    return g.rows()
+
+
+def gym3():
+    # gimnasio completo: banco con barra de discos grandes, saco colgado y una colchoneta azul debajo
+    g = G()
+    g.rect(0, 24, 31, 30, 'b')           # colchoneta
+    g.rect(0, 29, 31, 30, 'B')
+    g.rect(1, 2, 2, 27, 's')             # el marco: dos postes y la barra de arriba
+    g.rect(29, 2, 30, 27, 'S')
+    g.rect(1, 2, 30, 3, 's')
+    g.disk(23, 12, 4.5, 7.5, 'r', 'R')   # saco
+    g.rect(23, 4, 23, 5, 'S')
+    g.rect(5, 18, 18, 21, 'c')           # banco
+    g.rect(6, 22, 7, 26, 'C'); g.rect(16, 22, 17, 26, 'C')
+    g.rect(3, 14, 20, 15, 'S')           # barra con discos
+    g.rect(3, 9, 5, 20, 'e')
+    g.rect(18, 9, 20, 20, 'e')
+    g.outline()
+    g.rect(21, 9, 21, 13, 'w')           # brillo del saco
+    g.px(4, 10, 's'); g.px(19, 10, 's')
+    for x in range(3, 30, 6):
+        g.px(x, 27, 'B')                 # costuras de la colchoneta
+    return g.rows()
+
+
+def toy1():
+    # pelota de goma: roja y blanca, con brillo
+    g = G()
+    g.disk(16, 18, 8.5, 8.5, 'r', 'R')
+    g.rect(7, 17, 25, 19, 'w')           # franja blanca
+    g.outline()
+    g.rect(8, 18, 24, 18, 's')
+    g.px(12, 12, 'w'); g.px(13, 11, 'w'); g.px(12, 13, 'w')
+    return g.rows()
+
+
+def toy2():
+    # pelota y cuerda de tirar: la pelota a la izquierda y una cuerda con nudos enroscada a la derecha
+    g = G()
+    g.disk(10, 20, 7, 7, 'r', 'R')
+    g.rect(3, 19, 17, 21, 'w')
+    g.disk(23, 24, 7.5, 4.5, 'h', 'H')   # el rollo de cuerda
+    g.erase(23, 24, 3.6, 1.8)
+    g.disk(28, 17, 2.4, 2.4, 'h', 'H')   # un nudo que se sale
+    g.rect(27, 19, 28, 21, 'h')
+    g.outline()
+    g.rect(3, 20, 17, 20, 's')
+    g.px(7, 15, 'w'); g.px(8, 14, 'w')
+    for x, y in ((18, 23), (21, 21), (25, 21), (28, 24), (24, 27), (19, 26)):
+        g.px(x, y, 'H')
+    return g.rows()
+
+
+def toy3():
+    # columpio: la barra de arriba sobre dos patas en A, dos cuerdas y el asiento
+    g = G()
+
+    def leg(x0, y0, x1, y1, ch):
+        n = max(abs(x1 - x0), abs(y1 - y0))
+        for i in range(n + 1):
+            x = round(x0 + (x1 - x0) * i / n)
+            y = round(y0 + (y1 - y0) * i / n)
+            g.rect(x, y, x + 2, y, ch)
+
+    leg(4, 4, 1, 29, 'c'); leg(4, 4, 8, 29, 'C')
+    leg(26, 4, 22, 29, 'c'); leg(26, 4, 29, 29, 'C')
+    g.rect(2, 3, 29, 5, 'c')             # la barra de arriba
+    g.rect(2, 5, 29, 5, 'C')
+    g.rect(11, 6, 11, 21, 'H')           # cuerdas
+    g.rect(20, 6, 20, 21, 'H')
+    g.rect(9, 21, 22, 23, 'a')           # asiento
+    g.rect(9, 23, 22, 23, 'C')
+    g.outline()
+    g.rect(3, 4, 28, 4, 'a')
+    return g.rows()
+
+
 SPRITES = {
     "CHARMANDER": charmander(),
     "CHARMELEON": charmeleon(),
@@ -1185,6 +1362,15 @@ SPRITES = {
     "WILD_BUSH": wild_bush(),
     "WILD_ROCK": wild_rock(),
     "WILD_SAND": wild_sand(),
+    "BED1": bed1(),
+    "BED2": bed2(),
+    "BED3": bed3(),
+    "GYM1": gym1(),
+    "GYM2": gym2(),
+    "GYM3": gym3(),
+    "TOY1": toy1(),
+    "TOY2": toy2(),
+    "TOY3": toy3(),
 }
 
 # comentario a medida en la declaracion C (por defecto "NxN") y linea de
@@ -1197,6 +1383,15 @@ SPR_NOTE = {
     "ICON_CARD": "16x16: ficha, Estado en el menu del bicho (v3.3)",
     "ICON_LETTER": "16x16: carta, Despedirse en el menu del bicho (v3.3)",
     "ICON_LURE": "16x16: pez de cebo con sedal y anzuelo, el Cebo de la mochila (v3.14)",
+    "BED1": "32x32: cama de paja (v3.20, mejoras de casa nivel 1)",
+    "BED2": "32x32: cama de cojin (v3.20, nivel 2)",
+    "BED3": "32x32: cama real (v3.20, nivel 3)",
+    "GYM1": "32x32: pesas de tronco (v3.20, gimnasio nivel 1)",
+    "GYM2": "32x32: mancuerna y saco de boxeo (v3.20, nivel 2)",
+    "GYM3": "32x32: gimnasio completo (v3.20, nivel 3)",
+    "TOY1": "32x32: pelota de goma (v3.20, juguete nivel 1)",
+    "TOY2": "32x32: pelota y cuerda de tirar (v3.20, nivel 2)",
+    "TOY3": "32x32: columpio (v3.20, nivel 3)",
 }
 SPR_PRELUDE = {
     "ICON_EGG": "// huevo de la mochila (v1.39): el de la pantalla principal (SPR_EGG) en pequeno",

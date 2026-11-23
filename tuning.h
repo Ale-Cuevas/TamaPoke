@@ -403,6 +403,11 @@ static const uint8_t GYM_DAY_MAX[UPG_TIERS + 1] = { 0, 4, 6, 8 };     // puntos 
 #define TOY_PLAY_CHANCE 2         // % por minuto despierto
 static const uint8_t TOY_JOY[UPG_TIERS + 1] = { 0, 3, 4, 5 };
 static const uint8_t TOY_DAY_MAX[UPG_TIERS + 1] = { 0, 3, 5, 7 };      // veces al dia por bicho
+// lo que se ve en el patio (solo con el patio en pantalla; la logica ya lo aplico)
+#define HOME_WORKOUT_MS 3000      // el ejercicio junto al gimnasio (su gesto, en bucle)
+#define HOME_TOY_PLAY_MS 3000     // el juego junto al juguete
+#define HOME_MORNING_MIN_MS 1500  // el estiron de buenos dias al salir de la cama, como poco
+#define HOME_VISIT_WAIT_MS 8000   // si el gimnasio o el juguete estan ocupados por el otro, espera hasta esto
 
 // --------------------------------------------------------------------------------------------
 // Viajes (travel.h): 1, 3 u 8 h de tiempo real

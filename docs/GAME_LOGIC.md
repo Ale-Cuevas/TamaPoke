@@ -52,7 +52,7 @@ To tune the game, change it there (see §17, "Tuning").
 
 | I want to change… | Look at |
 |---|---|
-| **The two home pets** (which one an action hits, focus, slot 1 save) | §4 "Two home pets"; `Pet::focus` `pet.cpp:10`, `FocusGuard` `:19`, `uiFocus` `TamaPoke.ino:539`, `homeFocusTick` `:550`; `petlife.h`, `homerec.h` |
+| **The two home pets** (which one an action hits, focus, slot 1 save) | §4 "Two home pets"; `Pet::focus` `pet.cpp:10`, `FocusGuard` `:19`, `uiFocus` `TamaPoke.ino:547`, `homeFocusTick` `:558`; `petlife.h`, `homerec.h` |
 | **Player medals** (19 × Bronze/Silver/Gold, coins) | `medals.h` (table, tiers, `pm` blob); `Pet::medalValue` `pet.cpp:700`, `medalsUpdate` `:741`, `medalsMigrate` `:780`; thresholds `MEDAL_T` and coins `MEDAL_COINS` in `tuning.h` |
 | **Any balance number** (a rate, timer, probability, reward or price) | **`tuning.h`**, grouped by system. Not there: the level curve (`growth.h`), minigame physics (`ballgame.h`, `zengame.h`, `dashgame.h`), the 8 stages (`stage.h`) |
 | How fast needs drain, poops, slip-ups, neglect | `Pet::tick` `pet.cpp:448`, `sleepMinute` `pet.cpp:1161`, numbers in `tuning.h` |
@@ -73,8 +73,9 @@ To tune the game, change it there (see §17, "Tuning").
 | Items, Backpack, gifts | `IT_*` enum `pet.h:61`, `useItem` `pet.cpp:1558`, `giveGift` `:1432`, `openGift` `:1475` |
 | Steps and walk rewards | `steps.h` (counter), `Pet::addSteps` `pet.cpp:1287`, `goalReward` `:1380` |
 | Travel and souvenirs | `travel.h` (`travelRoll` `:83`), `Pet::startTravel` `pet.cpp:1840`, `travelComplete` `:1874` |
-| Yard movement, food walking | `yard.h` (`yardStep` `:420`, BFS paths, food phases); `renderYardHome` `TamaPoke.ino:9984` |
-| Yard maps / backgrounds | `yardbg.h` (TPY1), `yardEnsureMap` `TamaPoke.ino:8958`, `tools/pack_yard.py` |
+| Yard movement, food walking | `yard.h` (`yardStep` `:614`, BFS paths, food phases); `renderYardHome` `TamaPoke.ino:10055` |
+| Yard maps / backgrounds | `yardbg.h` (TPY1), `yardEnsureMap` `TamaPoke.ino:8866`, `tools/pack_yard.py` |
+| Yard furniture (beds, gym, toy) | `yard_spots.h` (spots per map), `yardDrawFurniture` / `yardHomeEvt` `TamaPoke.ino`, sleep in bed and visits in `yard.h` (§7) |
 | A screen's drawing or taps | §3 table; everything UI is in `TamaPoke.ino` |
 | A string / translation | `i18n.h` (`StrId`), `i18n.cpp` (8 rows), `tools/test_i18n_formats.py` |
 | Species data | `tools/dex_data.py` + `tools/gen_dex.py` → `dex.h` (generated) |
@@ -163,7 +164,8 @@ flowchart TB
 | `ballgame.h` / `zengame.h` / `dashgame.h` | 87 / 160 / 251 | Ball (SPD), waterfall (DEF) and sled (SPD) logic and physics |
 | `economy.h` / `shop.h` | 57 / 52 | Coin formulas and price lookups (values in `tuning.h`); shop checks, map picker |
 | `travel.h` / `travel_ui.h` | 248 / 198 | Trips and souvenirs; travel screen geometry, Collection pages, Bag tabs |
-| `yard.h` / `yardbg.h` / `yard_ui.h` / `yard_panels.h` | 700 / 131 / 133 / 71 | Yard walk planner, food in front, menu step-aside; TPY1 maps; HUD and dock kit; Play panel, pet menu, food list and pet picker geometry |
+| `yard.h` / `yardbg.h` / `yard_ui.h` / `yard_panels.h` | 950 / 131 / 133 / 71 | Yard walk planner, food in front, menu step-aside, sleep in bed and furniture visits (v3.20); TPY1 maps; HUD and dock kit; Play panel, pet menu, food list and pet picker geometry |
+| `yard_spots.h` | 70 | Home furniture spots per yard map (v3.20), the cells they block |
 | `fx.h` | 348 | Celebration queue, "+N" overlays, change watchers |
 | `power.h` / `burnin.h` | 133 / 69 | Dim, saver, frame pacing, light sleep; AMOLED orbit and saver path |
 | `steps.h` / `motion.h` / `imu.h` / `imu.cpp` | 101 / 292 / 42 / 250 | Software step counter; shake, face-down, tilt; IMU reader |
@@ -349,9 +351,9 @@ press), and an idle ladder: dim at 90 s, saver at 120 s.
 - **PWR short.** `pwrPress` (`:~724`) cycles game → saver → off. Entering saver or off abandons a battle, an
   encounter, the waterfall and the sled. **PWR long (4 s)** is a hardware power-off; the RTC keeps time.
 - **IMU.** In `imuTick`:
-  - Shake → `onShake` (`:761`): wakes the screen; with the screen on, the pet wakes grumpy or gets dizzy, and the
+  - Shake → `onShake` (`:769`): wakes the screen; with the screen on, the pet wakes grumpy or gets dizzy, and the
     yard egg wobbles and loses 5 min.
-  - Face-down for 3 s → `onFaceDown` (`:775`): the pet goes to bed if the hour is 20–06, and the screen goes dark.
+  - Face-down for 3 s → `onFaceDown` (`:783`): the pet goes to bed if the hour is 20–06, and the screen goes dark.
   - Tilt drives the yard walk and the sled.
 
 ---
@@ -386,8 +388,8 @@ slot** (`pet.focusSlot`). The other slot is `pet.other`.
   UI actions on a given pet (poop tap, food). A nested guard for the other slot is refused (its body is skipped,
   `focusErrors++`; on the host it aborts).
 - `save()`/`load()` never depend on focus: slot 0 uses the old keys, slot 1 the `hm1` blob (§13).
-- The UI changes focus only with `uiFocus(s)` (`TamaPoke.ino:539`), refused while a game, battle, card, keyboard,
-  dialog, gallery, Box screen, dying screen or ceremony is open (`uiModalOpen`). `homeFocusTick` (`:550`) moves the
+- The UI changes focus only with `uiFocus(s)` (`TamaPoke.ino:547`), refused while a game, battle, card, keyboard,
+  dialog, gallery, Box screen, dying screen or ceremony is open (`uiModalOpen`). `homeFocusTick` (`:558`) moves the
   focus to a dying pet and away from a vacant slot.
 - **Player-wide, not per pet:** the streak (`registerCare` gives each pet its own first-care bond through
   `careDay`, NVS `pcd` for slot 0), `lastEnd`, `starterPick`, steps, items, gifts, coins, Pokédex, badges, team,
@@ -702,16 +704,47 @@ bubble, food fx → `yardDrawHud` (`:8589`)
   take turns when the pets are close), fx overlays and level-up banners. Food is tied to the pet's uid and dropped
   if it changes. Tapping a pet focuses it (`uiFocus`) and opens its menu (v3.3); long press releases the pet under
   the finger. The dock is enabled if either pet can use it; games and Backpack items ask which pet when both can.
-- **Movement.** `yardStep` (`yard.h:420`) decides between idle, walk and gesture. Targets are random free cells
+- **Movement.** `yardStep` (`yard.h:614`) decides between idle, walk and gesture. Targets are random free cells
   reached by a BFS path over the walk mask, at 30 px/s, keeping 64 px between pets. Tilting the board makes the
   pet walk or slide downhill.
-- **Walk mask.** The map's 15×15 grid of cells (38.4 px since v3.5; `yardWalk`, `:7640`) keeps only the largest
+- **Walk mask.** The map's 15×15 grid of cells (38.4 px since v3.5; `yardWalk`, `:8833`) keeps only the largest
   connected region. On load, `yardMaskFrame` (`yard.h`) re-blocks cells outside the circle or under the clock/dock
   with the current map scale, so `.bin` masks made for another scale stay safe. Cells 0 and 14 are off-canvas.
-  `yardWalkNow()` (`:9211`) also blocks the egg and the wild-encounter cells.
+  `yardWalkObj()` (`:9064`, v3.20) adds the owned furniture cells; `yardWalkNow()` (`:9129`) starts from it and also
+  blocks the egg and the wild-encounter cells. `yardSyncThings` and the pet spawn use `yardWalkObj()`, so poops,
+  gifts, the egg and the encounter never land on furniture.
+- **Home furniture (v3.20, `docs/HOME_AND_PALS.md` FR-HOME.5).** Beds, gym and toy (`pet.upgTier(UPG_*)`, 0-3) are
+  drawn at fixed spots per map from `yard_spots.h`: `YARD_SPOTS[map]` (index 0 = the plain fallback floor) gives in
+  cells the bed pair (left = slot 0, right = slot 1), the gym and the toy. `yardBlockObjects` blocks the owned ones;
+  `yardObjFoot` gives the feet point (each bed is pushed `YARD_BED_DX` 14 px outward, so two sleepers are 66 px
+  apart). `test/test_yard_spots.cpp` checks every map (the real `.bin` files from `tools/yard/out` or
+  `TAMAPOKE_YARD_OUT`, skipped when missing, plus the fallback) with every combination of furniture: one walkable
+  region, at least 30 free cells, a free neighbour for each object. `python3 tools/pack_yard.py --spots` draws the
+  spots over the built `.bin` files (`NN-name_spots.png`); the packer's `_debug.png` shows them too.
+  - Drawing: `yardDrawFurniture` (`:9523`) draws the owned tier's sprite (`SPR_BED1..3`, `SPR_GYM1..3`,
+    `SPR_TOY1..3`, 32×32 at scale 2, feet at the cell centre) tinted by the hour like the map
+    (`drawMapYardTint` + `yardTint565`), y-sorted with the pets through `YARD_OBJS` (a bed sorts 1 px above its
+    feet, so its sleeper draws on top). The ball bounces while someone plays with it.
+  - **Sleep in bed** (`yard.h`, `YardWorld.bed[]`, tasks `YT_*`): with a bed, a pet that falls asleep with the yard
+    on screen walks to it (`yardSleepStep`, `yard.h:493`) when the path takes at most `BED_WALK_MAX_MS`, else it
+    appears in it at once; a pet already asleep when the yard opens (`bedSnap`: first frame or back from another
+    screen) is drawn in its bed. It lies there (`PMD_SLEEP`) glued to the bed point. On waking it walks out to the
+    nearest free cell (`yardLeaveBed` `:532`; with an emote or a tilt it appears there). `yardAdvance` lets two pets
+    in bed tasks pass closer than `YARD_MIN_DIST`. Without a bed nothing changes, and the logic sleep is never
+    delayed (all of it is cosmetic).
+  - **Visits.** `fxCollect` drains `pet.takeHomeEvt` every loop into `yardHomeEvt` (`:9222`). Only with the yard on
+    screen (`yardOnScreen`) and the pet free (`yardPetFree`: no menu, food, emote, sad pose, sleep or other visit):
+    `HE_GYM` walks to the gym (`yardVisit` `yard.h:580`, the free side cell nearest the object) and loops a workout
+    gesture (Attack, else Hop/Pose/Nod) for `HOME_WORKOUT_MS` with a sweat drop; the "ATK +1" popup comes from
+    `fxTrainW` as before (`fxPoseSlot` doesn't cut the visit). `HE_TOY` shows a JOY "+N" (`FXO_STAT`) and plays at
+    the toy (Hop, else Pose/Nod/Breath) for `HOME_TOY_PLAY_MS`. `HE_MORNING` shows a JOY "+N", and the pet stretches
+    (Pose, else Breath/Nod, at least `HOME_MORNING_MIN_MS`) with a sun once it is out of bed (`yardAfterBed`). If the
+    other pet is using the same object, the visit waits up to `HOME_VISIT_WAIT_MS` (`yardVisitTick`); anything else
+    drops it. Serial (UI side, for testing): `HEVT <kind> <slot> <a>` feeds an event, `HTIER <line> <tier>` sets a
+    tier.
 - **Pet menu (v3.3).** Tapping a hatched pet opens a column on the right (`openPetMenu`): Sleep/Wake, Food, Care
   (heart), Status (card), plus Evolve or Farewell when ready. The pet steps out from under the column and holds
-  still (`yardMenuHold` `yard.h:718`, retried from geometry; it wins over the sad pose); `avoidX` keeps walks and
+  still (`yardMenuHold` `yard.h:946`, retried from geometry; it wins over the sad pose); `avoidX` keeps walks and
   tilt out of the column. Tapping the other pet switches the menu, anything else closes it; it closes after 30 s.
   Above the column (v3.8, `pmName`): the name, then (v3.9) a box the colour of the rows with the 3 needs, each a
   size-2 label (v3.10) and a 64 px bar (FOOD, JOY, ENE; the card's colours via `needBarColor`). Placed by
@@ -721,7 +754,7 @@ bubble, food fx → `yardDrawHud` (`:8589`)
   (Evolve/Farewell, `PM_MAX` 5) the name goes left of the box (`petMenuNameBeside`) and the column starts at
   `PM_TOP` (122) with a 3 px gap. The food list (`FOOD_PER_PAGE` 3 since v3.10) never passes 4 rows.
 - **Food (v3.3).** The Food list (plain berry + owned foods, 3 per page since v3.10) calls `yardFeedFront(slot, kind)`: the
-  food is placed in front of the pet (`yardFoodFront` `yard.h:653`, else the other side, else at its feet) and goes
+  food is placed in front of the pet (`yardFoodFront` `yard.h:881`, else the other side, else at its feet) and goes
   straight to `YF_EAT`, or waits until the step-aside ends. One food per slot (`yardFood[slot]`, tagged with the
   pet's uid); a chosen food not yet eaten is reserved, so the other pet can't be served the last one.
   `yardFoodEaten` (`:9229`) applies `onSlot(owner, feedFood)`, the only place the item is spent. The food waits while
@@ -1184,7 +1217,13 @@ flowchart LR
   - `PmdMon` is the TPK2 multi-action sprite (`PMD_IDLE, WALKL, WALKR, SLEEP, EAT, HURT, ATTACK, POSE, HOP, NOD,
     BREATH, SIT, WALKU, WALKD`; ids are append-only).
   - `SdThumbs` holds the 40×40 thumbnails.
-  - `ensureMon()` (`TamaPoke.ino:567`) reloads the sprite when the species, the shiny flag or the SD contents change.
+  - `ensureMon()` (`TamaPoke.ino:575`) reloads the sprite when the species, the shiny flag or the SD contents change.
+- **Sprites drawn in code** (`tools/sprites.py` → `species.h`, `python3 tools/sprites.py emit`). One global
+  single-char `PALETTE`; `validate()` rejects unknown chars and non-square sprites. Besides the 9 fallback species,
+  they are the 16×16 icons (`ICON_*`, `BADGE_*`, gift, star) and the 32×32 yard things: `EGG`, `POOP`, `HEART`,
+  `WILD_BUSH/ROCK/SAND` and (v3.20) the home furniture `BED1-3` (straw, cushion, royal), `GYM1-3` (log weights,
+  dumbbell + punching bag, full gym) and `TOY1-3` (rubber ball, ball + tug rope, swing set), drawn at scale 2 in the
+  yard (§7). Their palette chars `h H a j J x X e` were added for them.
 - **i18n.** `i18n.h` has `enum Lang` (ES, EN, FR, DE, IT, PT, JA, KO) and `enum StrId`; `i18n.cpp` has
   `STRINGS[LANG_COUNT][STR_COUNT]`, with one block per language in the same order.
   - **To add a string:** add an `S_xxx` before `STR_COUNT`, add an entry at the same position in all 8 rows, then
@@ -1197,7 +1236,7 @@ flowchart LR
 
 ## 16. Serial debug commands
 
-These are typed at 115200 baud and handled by `handleSerial()` (`TamaPoke.ino:910`). `sdSerialCommand`
+These are typed at 115200 baud and handled by `handleSerial()` (`TamaPoke.ino:918`). `sdSerialCommand`
 (`sdmon.cpp:260`) is tried first for `PUT`, `LS` and `SDINFO`. Every command answers `DONE`. They are the fastest way
 to test on the board: `~/.platformio/penv/bin/python tools/board.py cmd STATS ...` sends them without restarting it
 (skill `tamapoke-board-test`).
@@ -1218,7 +1257,7 @@ to test on the board: `~/.platformio/penv/bin/python tools/board.py cmd STATS ..
 | Economy and travel | `COINS [n]`, `SHOP`, `BUY id`, `BUYMAP n`, `GIFTS`, `GIFT item`, `TRAVEL [slot map tier]`, `TRAVELT m`, `TRAVELEND`, `SOUV [mask]` (64-bit mask, `0x..` or decimal; printed as `%llX`) |
 | Steps and IMU | `STEPS n`, `IMU`, `IMULOG s`, `SHAKE`, `FACEDOWN [0]` |
 | Pet menu (v3.3) | `MENU s` (open the menu for slot s; `MENU` prints the rows with their tap points), `PICK s` (choose in the pet picker); actions print `MENU s food\|care\|…`, `FOOD front …`, `PLAY <game> slot=s`, `ITEM <id> slot=s` |
-| Screen and UI | `TAP x y` (simulated touch, mode-aware), `BACK`, `PWR`, `SAVER`, `GAL`, `BRIGHT [n]`, `ORBIT [n]`, `BIOME [n]`, `YARDBG [n]`, `YARDFULL 0\|1`, `YARDUI [p]`, `FX name`, `PERF` |
+| Screen and UI | `TAP x y` (simulated touch, mode-aware), `BACK`, `PWR`, `SAVER`, `GAL`, `BRIGHT [n]`, `ORBIT [n]`, `BIOME [n]`, `YARDBG [n]`, `YARDFULL 0\|1`, `YARDUI [p]`, `HEVT k s a` and `HTIER line tier` (v3.20 yard furniture, §7), `FX name`, `PERF` |
 | System | `HEALTH`, `VOL [n]`, `BEEP`, `WIPE` (factory reset + restart) |
 | SD | `PUT path size`, `LS`, `SDINFO` |
 
@@ -1248,7 +1287,7 @@ to test on the board: `~/.platformio/penv/bin/python tools/board.py cmd STATS ..
 - **CI jobs:** arduino-cli build, PlatformIO build, render, generated-files diff, `ruff check tools/`, host tests
   with ASan, and i18n.
 - **Release bump** (skill `tamapoke-release`; `tools/release.py bump X.Y` / `row` / `pointers --fix` / `check` do the
-  mechanical parts): `FW_VERSION` (`TamaPoke.ino:62`), `web/manifest.json`, `CHANGELOG.md`, and
+  mechanical parts): `FW_VERSION` (`TamaPoke.ino:63`), `web/manifest.json`, `CHANGELOG.md`, and
   `bash tools/build_web.sh` for `web/firmware/tamapoke.bin`. **Also update the version and commit line at the top of
   this guide.**
 - **Board checks:** `docs/PENDING_TESTS.md` (numbered open checks) and `docs/DEVICE_TESTS.md` (procedures). EN and

@@ -260,6 +260,9 @@ static void resetUi() {
   yardEncX = -1;
   pet.encClear();
   pet.setBagEggs(0);
+  // v3.20: sin muebles de casa ni visitas
+  for (uint8_t &t : pet.upgTiers) t = 0;
+  for (int s = 0; s < HOME_SLOTS; s++) yardVisitKind[s] = yardVisitWait[s] = YV_NONE;
   if (gLang != LANG_EN) { setLang(LANG_EN); applyLangFont(); }
 }
 
@@ -816,6 +819,31 @@ static void bagTapItem(uint8_t it) {
   }
 }
 
+// v3.20: the home upgrades in the yard. All three lines at `tier` on `map` (two pets awake, at noon)
+static void furniture(uint8_t map, uint8_t tier, int hour = 12) {
+  pokemon(25, hour);
+  yardForceMap(map);
+  secondPet(7, 14);
+  for (uint8_t &t : pet.upgTiers) t = tier;
+}
+// an event from the house (as Pet::takeHomeEvt would hand it) with the yard on screen
+static void homeEvt(uint8_t kind, uint8_t slot, uint8_t a) {
+  HomeEvt e;
+  e.kind = kind;
+  e.slot = slot;
+  e.a = a;
+  yardHomeEvt(e, millis());
+}
+// a gym point for slot `slot`: the training watch sees it (the "ATK +1" popup) and the pet walks to the gym
+static void gymVisit(uint8_t map, uint8_t tier, uint8_t slot) {
+  furniture(map, tier);
+  render();
+  fxArmWatches();
+  pet.slotRef(slot).trAtk += 1;
+  homeEvt(HE_GYM, slot, 0);
+  fxCollect(millis());
+}
+
 struct Scene {
   const char *name;
   std::function<void()> setup;
@@ -854,6 +882,47 @@ static const std::vector<Scene> &scenes() {
     { "yard-pet-and-vacant", [] { pokemon(7, 13); yardForceMap(1); }, 20 },
     { "yard-two-poops", [] { pokemon(1, 10); yardForceMap(1); secondPet(7, 9); pet.dbgSetPoops(2); pet.slotRef(1).dbgSetPoops(2); }, 20 },
     { "yard-two-asleep", [] { pokemon(25, 23); pet.sleeping = true; yardForceMap(1); secondPet(133, 20); pet.slotRef(1).sleeping = true; } },
+    // v3.20: home upgrades (beds, gym, toy) at each tier on the meadow, the beach and the sky tower, tier 3 on the rest
+    { "yard-furn-t1-m1", [] { furniture(1, 1); }, 3 },
+    { "yard-furn-t2-m1", [] { furniture(1, 2); }, 3 },
+    { "yard-furn-t3-m1", [] { furniture(1, 3); }, 3 },
+    { "yard-furn-t1-m4", [] { furniture(4, 1); }, 3 },
+    { "yard-furn-t2-m4", [] { furniture(4, 2); }, 3 },
+    { "yard-furn-t3-m4", [] { furniture(4, 3); }, 3 },
+    { "yard-furn-t1-m8", [] { furniture(8, 1); }, 3 },
+    { "yard-furn-t2-m8", [] { furniture(8, 2); }, 3 },
+    { "yard-furn-t3-m8", [] { furniture(8, 3); }, 3 },
+    { "yard-furn-t3-m2", [] { furniture(2, 3); }, 3 },
+    { "yard-furn-t3-m3", [] { furniture(3, 3); }, 3 },
+    { "yard-furn-t3-m5", [] { furniture(5, 3); }, 3 },
+    { "yard-furn-t3-m6", [] { furniture(6, 3); }, 3 },
+    { "yard-furn-t3-m7", [] { furniture(7, 3); }, 3 },
+    { "yard-furn-t3-m9", [] { furniture(9, 3); }, 3 },
+    { "yard-furn-t2-fallback", [] { furniture(YARD_MAP_NONE, 2); }, 3 },
+    { "yard-furn-t2-dusk", [] { furniture(1, 2, 19); }, 3 },
+    // both pets asleep in their beds (the yard opens on them: no walk), and the same at tier 3 on the forest
+    { "yard-beds-two-asleep", [] { furniture(1, 2, 23); pet.sleeping = true; pet.slotRef(1).sleeping = true; }, 3 },
+    { "yard-beds-two-asleep-royal", [] { furniture(3, 3, 23); pet.sleeping = true; pet.slotRef(1).sleeping = true; }, 3 },
+    { "yard-beds-straw-es", [] { furniture(4, 1, 23); pet.sleeping = true; pet.slotRef(1).sleeping = true; es(); }, 3 },
+    // falling asleep two cells from the bed: half way there (it sleepwalks), then lying in it
+    { "yard-bed-walk", [] { furniture(1, 2, 21); render(); yardW.p[0].x = yardCellCenter(8); yardW.p[0].y = yardCellCenter(8);
+                            yardW.p[1].x = yardCellCenter(5); yardW.p[1].y = yardCellCenter(9);
+                            yardW.p[0].mode = YM_IDLE; yardW.p[0].until = millis() + 60000; pet.sleeping = true; }, 12 },
+    { "yard-bed-walk-end", [] { furniture(1, 2, 21); render(); yardW.p[0].x = yardCellCenter(8); yardW.p[0].y = yardCellCenter(8);
+                            yardW.p[1].x = yardCellCenter(5); yardW.p[1].y = yardCellCenter(9);
+                                yardW.p[0].mode = YM_IDLE; yardW.p[0].until = millis() + 60000; pet.sleeping = true; }, 45 },
+    // the good morning: out of bed, a stretch, a sun and "+10" JOY
+    { "yard-bed-morning-pop", [] { furniture(1, 2, 9); pet.sleeping = true; render(); pet.sleeping = false;
+                                   homeEvt(HE_MORNING, 0, 10); }, 5 },
+    { "yard-bed-morning", [] { furniture(1, 2, 9); pet.sleeping = true; render(); pet.sleeping = false;
+                               homeEvt(HE_MORNING, 0, 10); }, 16 },
+    // a gym point: the pet walks to the gym ("ATK +1"), then works out (with a sweat drop)
+    { "yard-gym-walk", [] { gymVisit(1, 2, 0); }, 8 },
+    { "yard-gym-workout", [] { gymVisit(1, 2, 0); }, 70 },
+    { "yard-gym-workout-t3-m4", [] { gymVisit(4, 3, 1); }, 70 },
+    // toy play (slot 1): "+4" JOY, the ball bounces
+    { "yard-toy-play", [] { furniture(1, 1); render(); homeEvt(HE_TOY, 1, 4); }, 60 },
+    { "yard-toy-swing-m8", [] { furniture(8, 3); render(); homeEvt(HE_TOY, 0, 5); }, 60 },
     { "yard-tap-pet2", [] { pokemon(25, 13); yardForceMap(1); secondPet(4, 14); render(); tapPet(1); } },
     { "yard-home-poop", [] { pokemon(1, 10); pet.dbgSetPoops(3); } },
     { "yard-poop-tap", [] { pokemon(1, 10); pet.dbgSetPoops(3); render();
