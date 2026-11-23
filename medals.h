@@ -7,7 +7,7 @@
 #include "tuning.h"  // MEDAL_T (umbrales) y MEDAL_COINS (lo que paga cada tramo)
 
 // Medallas del jugador (v3.4). Logica pura, sin hardware, probada en el PC (test/test_medals.cpp).
-// Sustituyen a las medallas de cada bicho (v1.x - v3.3, MED_*): ahora son 19 medallas del jugador, cada una
+// Sustituyen a las medallas de cada bicho (v1.x - v3.3, MED_*): ahora son 20 medallas del jugador, cada una
 // con tres tramos (Bronce, Plata, Oro) que pagan sus monedas una sola vez, fuera del tope diario.
 //
 // Cada medalla mide una cosa, de una de tres fuentes:
@@ -21,11 +21,12 @@
 // "pm" (NVS) guarda en una sola entrada (version + CRC) el tramo pagado de cada medalla, los contadores y,
 // para los registros de la caja de antes de la v3.4 (sin REC_V3), los bits con que se contaron al migrar.
 
-// las 19 medallas. El ORDEN es del guardado ("pm" guarda por posicion): una nueva va al final
+// las 20 medallas. El ORDEN es del guardado ("pm" guarda por posicion): una nueva va al final
 enum : uint8_t {
   MD_LV10 = 0, MD_LV25, MD_LV50, MD_BOND, MD_FINAL, MD_FIT, MD_FAV,  // de bichos (bit i de counted)
   MD_EVOLVE, MD_FAREWELL, MD_DEX, MD_SHINY, MD_STREAK, MD_WALKER, MD_MARATHON,
   MD_STAGES, MD_WILD, MD_CATCH, MD_TRIPS, MD_SOUV,
+  MD_PLAYMATES,  // v3.22: escenas de juego y animos vistos en el patio (evento)
   MEDAL_COUNT
 };
 static_assert(sizeof(MEDAL_T) / sizeof(MEDAL_T[0]) == MEDAL_COUNT, "tuning.h: un umbral por medalla");
@@ -50,7 +51,7 @@ struct MedalDef {
 inline uint8_t medalSource(uint8_t i) {
   if (i < PMB_COUNT) return MSRC_PET;
   switch (i) {
-    case MD_EVOLVE: case MD_FAREWELL: case MD_MARATHON: case MD_WILD: case MD_CATCH: case MD_TRIPS: return MSRC_EVENT;
+    case MD_EVOLVE: case MD_FAREWELL: case MD_MARATHON: case MD_WILD: case MD_CATCH: case MD_TRIPS: case MD_PLAYMATES: return MSRC_EVENT;
     default: return MSRC_DERIVED;
   }
 }
@@ -128,7 +129,7 @@ inline uint8_t medalPetBits(uint16_t level, uint8_t bond, bool finalForm, uint8_
 // ---------- "pm": lo que se guarda ----------
 // version del formato. Un "pm" con otra version (o danado) se recuenta SIN pagar (pmValid falla): subirla exige
 // una migracion de verdad que lea el formato anterior, o los jugadores perderian sus contadores de evento
-#define PM_VER 1
+#define PM_VER 2  // v3.22: 20 medallas (Companeros de juego); un "pm" de la 1 se recuenta sin pagar
 #define PM_LEGACY_MAX 8    // registros de antes de la v3.4 que se apuntan al migrar (la caja tiene 6)
 
 struct __attribute__((packed)) PlayerMedals {

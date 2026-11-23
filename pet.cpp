@@ -1815,18 +1815,47 @@ bool Pet::takeHomeEvt(HomeEvt &e) {
 }
 
 // ---------- los dos bichos juntos (v3.22) ----------
-// CONTRATO: version minima para que el patio compile; la tarea de logica (P1) pone los topes, la NVS y la medalla
-uint8_t Pet::palPlayPerk(uint8_t slot) {
-  (void)slot;
-  return 0;
+// Premios sin bono de vinculo, ni cuidado, ni monedas: solo JOY, con tope diario por bicho (uid + dia). Se actua
+// sobre el hueco con slotRef (sin mover el foco: nunca anida un FocusGuard)
+uint8_t Pet::palPerk(uint8_t slot, uint8_t joyGain, uint8_t dayMax, bool cheer) {
+  uint32_t day = today();
+  PetLife &l = slotRef(slot);
+  if (!day || l.vacant || !l.uid || l.isEgg() || l.sleeping || l.busyEnding()) return 0;
+  PalSlot &c = palSlots[slot & 1];
+  palRoll(c, l.uid, day);
+  uint8_t &paid = cheer ? c.cheersPaid : c.playsPaid;
+  if (paid >= dayMax) return 0;
+  uint8_t before = l.joy;
+  l.joy = clamp100(l.joy + joyGain);
+  if (paid < 255) paid++;
+  pendingSave = true;
+  return (uint8_t)(l.joy - before);
 }
 
-uint8_t Pet::palCheerPerk(uint8_t slot) {
-  (void)slot;
-  return 0;
+uint8_t Pet::palPlayPerk(uint8_t slot) { return palPerk(slot, PAL_PLAY_JOY, PAL_PLAY_PAY_DAY, false); }
+
+uint8_t Pet::palCheerPerk(uint8_t slot) { return palPerk(slot, PAL_CHEER_JOY, PAL_CHEER_DAY, true); }
+
+// una escena de juego o un animo vistos (cuenten o no para el premio): la medalla Companeros de juego
+void Pet::palSceneSeen() {
+  pmBump(pm, MD_PLAYMATES);
+  pendingSave = true;
 }
 
-void Pet::palSceneSeen() {}
+// "pal" si cambio (los contadores diarios de cada hueco)
+bool Pet::savePal() {
+  PalSave u;
+  memset(&u, 0, sizeof(u));
+  memcpy(u.slot, palSlots, sizeof(u.slot));
+  palSeal(u);
+  if (palHave && memcmp(&u, &palSaved, sizeof(u)) == 0) return true;
+  static const PalSlot zero[PAL_SLOTS] = {};
+  if (!palHave && !memcmp(u.slot, zero, sizeof(zero))) return true;  // nada que contar y nada escrito
+  if (prefs.putBytes("pal", &u, sizeof(u)) != sizeof(u)) return false;
+  palSaved = u;
+  palHave = true;
+  return true;
+}
 
 void Pet::dbgSetUpgTier(uint8_t line, uint8_t tier) {
   if (line >= UPG_LINES) return;
@@ -2537,6 +2566,11 @@ void Pet::save() {
     Serial.println("save: upg no se pudo escribir");
     pendingSave = true;
   }
+  // v3.22: los contadores diarios de los premios de la pareja, como "upg": si no llega, se reintenta
+  if (!savePal()) {
+    Serial.println("save: pal no se pudo escribir");
+    pendingSave = true;
+  }
   {  // regalos (v1.55), despues de la mochila: [cuantos, objetos...]
     uint8_t g[GIFT_MAX + 1] = { giftN };
     memcpy(g + 1, gifts, giftN);
@@ -2769,6 +2803,20 @@ void Pet::load() {
       upgHave = true;
     } else {
       Serial.println("upg: danado, sin mejoras de casa");
+    }
+  }
+  // v3.22: los contadores diarios de los premios de la pareja. Sin "pal", o danado: nada cobrado hoy
+  memset(palSlots, 0, sizeof(palSlots));
+  palHave = false;
+  if (prefs.isKey("pal")) {
+    PalSave u;
+    memset(&u, 0, sizeof(u));
+    if (prefs.getBytes("pal", &u, sizeof(u)) == sizeof(u) && palValid(u)) {
+      memcpy(palSlots, u.slot, sizeof(palSlots));
+      palSaved = u;
+      palHave = true;
+    } else {
+      Serial.println("pal: danado, nada cobrado hoy");
     }
   }
   // la coleccion. v3.15 (migracion): sin "souv2" se lee la vieja "souv" (u32, los 25 primeros) en los bits bajos;

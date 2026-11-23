@@ -1407,6 +1407,15 @@ void handleSerial() {
     Serial.printf("lure=%u block=%u\n", pet.items[IT_LURE], pet.lureBlock());
     encReport();
     Serial.println("DONE");
+  } else if (line == "PALC" || line == "PALC seen") {  // v3.22: los contadores de premios de la pareja; "seen" cuenta una escena
+    if (line.length() > 4) pet.palSceneSeen();
+    for (uint8_t s = 0; s < HOME_SLOTS; s++) {
+      const PalSlot &c = pet.palSlotOf(s);
+      Serial.printf("pal slot%u uid=%08lx day=%lu plays=%u/%u cheers=%u/%u\n", s, (unsigned long)c.uid, (unsigned long)c.day,
+                    c.playsPaid, PAL_PLAY_PAY_DAY, c.cheersPaid, PAL_CHEER_DAY);
+    }
+    Serial.printf("playmates=%u\n", (unsigned)pet.medalValue(MD_PLAYMATES));
+    Serial.println("DONE");
   } else if (line == "UPG" || line.startsWith("UPG ")) {  // v3.20: UPG <linea 0-2> <nivel 0-3> fija una mejora de casa
     if (line.length() > 4) {
       String a = line.substring(4);
@@ -5972,7 +5981,7 @@ void renderCard() {
 // 4 paginas (USERP_*) que se pasan deslizando a los lados, con sus puntos: las medallas del jugador (medals.h),
 // el paseo (era la ultima pagina de la ficha), las insignias de los estadios (eran la 2.a pagina de la caja) y la
 // coleccion de recuerdos (era una pestana de la mochila). USER, el boton de volver o deslizar a la derecha desde
-// la primera vuelven al patio. Las medallas son 19: van en sub-paginas de USER_MEDAL_ROWS filas, que se pasan
+// la primera vuelven al patio. Las medallas son 20: van en sub-paginas de USER_MEDAL_ROWS filas, que se pasan
 // tocando el "1/4" o deslizando arriba / abajo; tocar una fila abre su tarjeta (que mide y sus tres tramos).
 #define USER_DOTS_Y 384
 #define UMED_Y0 98        // primera fila de medallas
