@@ -1224,16 +1224,18 @@ stateDiagram-v2
   starts (pet and clock on a Lissajous path). Face-down drops the brightness to 8, with no saver.
 - **Brightness** (`brightnessFor` `:85`): the user level (4 levels, BOOT key) is the ceiling. On battery it is
   capped at 100 below 20 % and at 60 below 10 %.
-- **Frame interval** (`frameIntervalMs` `:101`):
+- **Frame interval** (`frameIntervalMs` `:101`), checked top to bottom, first match wins:
 
   | State | Interval |
   |---|---|
   | Screen off | 0 (no frames) |
-  | A game or battle open | 85 ms |
+  | A game or battle open | 85 ms (never doubled) |
+  | Saver, idle 2 min (`DIM_OFF`, `POWER_DIM2_MS`) | 1000 ms |
+  | Pet asleep and idle 60 s (`POWER_CALM_MS`) | 500 ms |
+  | Dimmed, idle 90 s (`DIM_LOW`, `POWER_DIM1_MS`) | 250 ms |
+  | Idle 60 s (`POWER_CALM_MS`) | 150 ms |
   | Default | 100 ms |
-  | Idle 60 s | 150 ms |
-  | Pet asleep | 500 ms |
-  | Low battery | doubled |
+  | Low battery | the above doubled (not in a game) |
 
 - **Sleep.** Light sleep for 200 ms only when off USB with the screen off or in the saver (woken by the touch INT,
   USER or BOOT). There is **no deep sleep**.
