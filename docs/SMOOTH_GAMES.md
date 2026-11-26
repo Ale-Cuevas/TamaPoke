@@ -118,3 +118,41 @@ Measured only; the game interval and physics are untouched (still 85 ms).
 To check by eye (cannot be seen from serial): no tearing / shifted rows / colour swaps in any screen; round mask and
 the full-yard border (`TP_FULL_YARD`) intact; brightness toast; burn-in orbit moves (the border is repainted after
 a move); saver screen.
+
+## Step 2 results (built 2026-11-25, branch `feature/smooth-games-dt`)
+
+Game interval 85 ms -> **60 ms** (`GAME_FRAME_MS` in `tuning.h`, read by `frameIntervalMs`; `GAME_PHYS_REF_MS` 85 is the
+reference the physics was tuned at). Low battery still does not double it.
+
+What was "per frame" and how it was converted (everything else already ran on real time):
+
+| Part | Before | Now |
+|---|---|---|
+| Ball fall, speed ramp, wall | `ballStepK(dt, score)`: steps of 85 ms, `<= 3` per frame | unchanged (`BALL_STEP_MS` = `GAME_PHYS_REF_MS`); parabola exact at any step |
+| Ball: pet following it | `gamePetX += clamp(0.12 d, 7) * k` per frame | `ballPetFollow`: `1-(1-f)^r` of the gap, cap `7*speed*r`, `r = dt/85` (identical at 85 ms) |
+| Bag: shake decay | `sackShake *= 0.84` per frame | `*= 0.84^(dt/85)` (`gameDecay`, dt clamped to 2 steps) |
+| Sled (`dashTick`), waterfall (`zenTick`) | fixed 10 ms steps from every loop pass | unchanged; render only draws |
+| Battle, encounter, Box light | `millis()` schedules | unchanged |
+| Hit tests | taps are events (ball radius test at tap time); sled/waterfall are 10 ms steps | no change, no tunnelling change |
+
+No random per-frame chance exists in any game (spawns are `random` once, rows use a seeded RNG per 10 ms step).
+Known tiny difference: the ball's wall bounce is evaluated once per frame, so a frame length changes the exact moment
+of a bounce by under one step (position differs by a few px after a bounce, exit velocity equal within 0.4).
+
+Tests: `test/test_gametime.cpp` (power test now reads `GAME_FRAME_MS`).
+
+Measured on the board at 60 ms (`PERF` `frame game`, averages; max in brackets), v3.22 + this change:
+
+| Game | period | render | prep | send |
+|---|---|---|---|---|
+| Ball | 60.0 ms (max 60) | 42.5-43.7 (45.6) | 4.0 | 25.0-25.5 |
+| Sled | 60.9-61.1 (max 97 on first frames, 65) | 54.6-57.2 (59.0) | 4.1 | 25.4-25.5 |
+| Waterfall | 60.0-60.1 (63) | 54.3-54.6 (59.3) | 4.1 | 25.5 |
+| Battle | 60.3-61.0 (173 / 105: sprite loads from the SD) | 50.3-51.7 (54.3, 105 on a load) | 4.1 | 25.5 |
+
+The sled is the tight one: render 57 ms for a 60 ms slot, so its period drifts up to ~61 ms; the physics does not care.
+
+Real time checks over serial: waterfall `ZEN?` t advanced 1800 ms per 1.8 s of wall clock and reached the 45000 ms
+end 47.2 s after `ZEN` (1.5 s intro + 45 s); sled `DASH?` race ms per wall ms = 1.004 over 5.5 s.
+
+What the user should replay: see the report of this step (ball, bag, sled, waterfall, battle feel).

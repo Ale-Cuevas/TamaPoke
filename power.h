@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include "tuning.h"  // GAME_FRAME_MS
 
 // Politica de consumo. Todo lo que decide cuanto trabaja la placa vive aqui como
 // funciones puras (sin hardware), para poder probarlas en el PC (test/test_power.cpp).
@@ -32,7 +33,7 @@ struct PowerCtx {
   uint32_t idleMs;    // ms sin interaccion
   bool screenOff;     // apagada con el boton PWR
   bool sleeping;      // el bicho duerme
-  bool gameOpen;      // minijuego o saco: la fisica esta afinada a 85 ms por frame
+  bool gameOpen;      // minijuego o saco: la fisica va por tiempo real; el ritmo es GAME_FRAME_MS
   bool usb;           // alimentacion externa
   bool charging;
   int batPct;         // 0-100, -1 si no hay bateria
@@ -100,7 +101,7 @@ inline uint8_t brightnessFor(const PowerCtx &c) {
 // completo y el volcado del lienzo por QSPI, y el panel solo cambia si se redibuja.
 inline uint32_t frameIntervalMs(const PowerCtx &c) {
   if (c.screenOff) return 0;
-  if (c.gameOpen) return 85;  // el juego manda: su fisica esta afinada a este periodo
+  if (c.gameOpen) return GAME_FRAME_MS;  // el juego manda; su fisica va por tiempo real (gametime.h), ya no por frame
   uint32_t ms;
   uint8_t stage = dimStageFor(c.idleMs);
   if (stage == DIM_OFF) ms = 1000;

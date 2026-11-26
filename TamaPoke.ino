@@ -45,6 +45,7 @@
 #include "wind.h"   // viento del paisaje: hierba, flores y copas que se mecen (logica pura)
 #include "burnin.h" // contra el quemado del AMOLED: orbita de la imagen y salvapantallas (logica pura)
 #include "fx.h"     // efectos de respuesta: celebraciones en cola, "+N", botones, eclosion (logica pura)
+#include "gametime.h" // fisica por tiempo real (v3.23): escalas por dt
 #include "ballgame.h" // minijuego de la pokeball: velocidad segun la puntuacion y la fisica (logica pura)
 #include "zengame.h"  // cascada (v1.43): la barra de concentracion, la franja y los golpes de agua (logica pura)
 #include "dashgame.h" // carrera en trineo (v1.44): direccion, velocidad, filas de obstaculos y choques (logica pura)
@@ -296,6 +297,7 @@ bool sackOpen = false;
 uint32_t sackUntil = 0, sackOverUntil = 0;
 uint16_t sackHits = 0;
 float sackShake = 0;
+uint32_t sackLastFrame = 0;  // ultimo frame del saco, para que la sacudida decaiga por tiempo real
 uint8_t sackGain = 0;
 bool sackNewHi = false;
 
@@ -3099,12 +3101,13 @@ void gameTap(int16_t x, int16_t y) {
 
 void stepGame() {
   uint32_t now = millis();
-  // pasos de 85 ms, el periodo de frame con el que se afinaron las constantes (ver el
-  // planificador de render en loop()): sin esto la fisica avanzaba "un paso por frame" y el
+  // pasos de GAME_PHYS_REF_MS (85 ms), el periodo de frame con el que se afinaron las constantes (el
+  // render va ahora a GAME_FRAME_MS, ver loop()): sin esto la fisica avanzaba "un paso por frame" y el
   // juego iba mas rapido o mas lento segun lo que tardara en dibujarse el frame anterior, que
   // depende del tamano del sprite cargado. Por encima, el factor de velocidad de la
   // puntuacion (ballgame.h, v1.33): 1x con 1 punto, 2x con 80.
-  float k = lastGameStep ? ballStepK(now - lastGameStep, gameScore) : ballSpeed(gameScore);
+  uint32_t dtStep = lastGameStep ? now - lastGameStep : (uint32_t)GAME_PHYS_REF_MS;
+  float k = lastGameStep ? ballStepK(dtStep, gameScore) : ballSpeed(gameScore);
   lastGameStep = now;
 
   ballStep(ball, k);  // gravedad, movimiento y rebote en la pared circular
@@ -3132,10 +3135,7 @@ void stepGame() {
     }
   }
   // el bicho la sigue por abajo (a la velocidad del juego: k ya la lleva)
-  float chase = (ball.x - gamePetX) * 0.12f;
-  if (chase > 7) chase = 7;
-  if (chase < -7) chase = -7;
-  gamePetX += chase * k;
+  gamePetX = ballPetFollow(gamePetX, ball.x, dtStep, gameScore);
 }
 
 // ---------- saco de entrenamiento (entrena la fuerza) ----------
@@ -3147,6 +3147,7 @@ void startSack() {
   sackOverUntil = 0;
   sackHits = 0;
   sackShake = 0;
+  sackLastFrame = 0;
   sackNewHi = false;
 }
 
@@ -3213,7 +3214,9 @@ void renderSack() {
   }
 
   // aporreo activo
-  sackShake *= 0.84f;
+  // 0,84 por cada 85 ms de reloj (v3.23: el frame ya no dura 85 ms); la 1a vez, un paso de referencia
+  sackShake *= gameDecay(0.84f, sackLastFrame ? now - sackLastFrame : (uint32_t)GAME_PHYS_REF_MS);
+  sackLastFrame = now;
   int off = (int)(sackShake * sinf(now * 0.05f));
   int sx = CX + off, top = 86, sy = 150;
   gfx->fillRect(CX - 3, 56, 6, top - 56, ink);          // gancho/cuerda

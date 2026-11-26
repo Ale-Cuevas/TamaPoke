@@ -1,6 +1,8 @@
 #pragma once
 #include <math.h>
 #include <stdint.h>
+#include "tuning.h"    // GAME_PHYS_REF_MS
+#include "gametime.h"
 
 // Minijuego "toques" con la pokeball (v1.33). Logica pura, con tests en test/test_ballgame.cpp.
 //
@@ -13,7 +15,7 @@
 // (al principio era lenta y aburrida). v3.17: sube en linea recta de 1,5x con 1 punto a 3,5x con
 // 100 puntos, y 3,5x es el tope.
 
-#define BALL_STEP_MS 85.0f        // un paso de fisica: el periodo de frame con el que se afino
+#define BALL_STEP_MS ((float)GAME_PHYS_REF_MS)  // un paso de fisica: el periodo de frame con el que se afino (tuning.h)
 #define BALL_LATE_MAX 3.0f        // frame anormalmente tardio: como mucho 3 pasos de golpe
 #define BALL_GRAV 0.413f          // gravedad por paso (la de 1 punto hasta la v1.32)
 #define BALL_LIFT 6.82f           // impulso hacia arriba de cada toque (idem)
@@ -26,6 +28,8 @@
 #define BALL_WALL_DAMP 0.85f      // energia que conserva al rebotar
 #define BALL_SPAWN_Y 96.0f
 #define BALL_FLOOR_Y 384.0f       // por debajo: al suelo (fallo)
+#define BALL_PET_CHASE 0.12f      // el bicho se acerca esta parte de lo que le falta por paso (x velocidad)
+#define BALL_PET_MAX 7.0f         // px por paso como mucho (x velocidad)
 #define BALL_SPEED_START 1.5f     // v3.16: velocidad con 0 o 1 punto (antes 1x)
 #define BALL_SPEED_TOP_AT 100     // v3.17: puntuacion con la que llega al tope (sube en linea recta desde 1 punto)
 #define BALL_SPEED_MAX 3.5f       // tope de velocidad (con 100 puntos)
@@ -85,6 +89,19 @@ inline void ballStep(BallState &b, float k) {
     b.x = BALL_CX + nx * BALL_WALL_R;
     b.y = BALL_CY + ny * BALL_WALL_R;
   }
+}
+
+// donde queda el bicho que sigue a la bola tras dtMs: cada paso de referencia (BALL_STEP_MS) se acerca
+// BALL_PET_CHASE x speed de lo que le falta, con un tope de BALL_PET_MAX x speed px; a otro ritmo de frame
+// el mismo acercamiento por segundo (1-(1-f)^r en vez de f x r) y el mismo tope por segundo
+inline float ballPetFollow(float petX, float ballX, uint32_t dtMs, uint16_t score) {
+  float r = gameDtScale(dtMs, BALL_LATE_MAX), sp = ballSpeed(score);
+  float f = BALL_PET_CHASE * sp;
+  float move = (ballX - petX) * (1.0f - powf(1.0f - f, r));
+  float cap = BALL_PET_MAX * sp * r;
+  if (move > cap) move = cap;
+  if (move < -cap) move = -cap;
+  return petX + move;
 }
 
 inline bool ballOnFloor(const BallState &b) { return b.y > BALL_FLOOR_Y; }
