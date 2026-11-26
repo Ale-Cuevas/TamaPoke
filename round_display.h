@@ -9,6 +9,11 @@
 // and why it is what it is: ui_frame.h. Since v2.5 the yard fills the whole
 // panel around that round frame (showUnder, TP_FULL_YARD).
 
+// Frame timing (PERF serial command): microseconds spent in flush() before the
+// panel transfer (burn-in move, overlay, round mask, border) and in the transfer
+// itself, summed since the sketch loop last read and zeroed them.
+inline uint32_t gFlushPrepUs = 0, gFlushSendUs = 0;
+
 // Arduino_Canvas that applies the round frame right before each frame goes to
 // the panel. Drawing code is unchanged: it still calls gfx->flush().
 class RoundCanvas : public Arduino_Canvas {
@@ -64,6 +69,7 @@ class RoundCanvas : public Arduino_Canvas {
   void (*overlay)() = nullptr;
 
   void flush(bool force_flush = false) override {
+    const uint32_t t0 = micros();
     if (wantX_ != _output_x || wantY_ != _output_y) moveTo(wantX_, wantY_);
     if (overlay) overlay();
 #if TP_FULL_YARD
@@ -86,7 +92,10 @@ class RoundCanvas : public Arduino_Canvas {
       }
       borderKey_ = want;
     }
+    const uint32_t t1 = micros();
     Arduino_Canvas::flush(force_flush);
+    gFlushPrepUs += t1 - t0;
+    gFlushSendUs += micros() - t1;
   }
 
  private:

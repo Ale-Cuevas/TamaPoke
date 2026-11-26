@@ -25,6 +25,15 @@
 // --------------------------------------------------------------------------------------------
 // Tiempo de juego
 // --------------------------------------------------------------------------------------------
+// Ritmo de dibujo de los minijuegos, el saco, el combate, el encuentro y la luz de la caja (power.h,
+// frameIntervalMs). Lo que cabe es lo que tarda un render: ~43 ms la pelota, ~56 ms el trineo (v3.23, medido
+// con el volcado rapido). Bajarlo de lo que tarda el frame mas lento no sube los fps, solo deja el bucle sin
+// respiro. La fisica no depende de este valor: va por tiempo real (gametime.h).
+#define GAME_FRAME_MS 60
+// Periodo de frame con el que se afinaron a mano los pasos de la fisica por frame (pelota, saco): todo lo que
+// iba "por frame" se escala por dt / GAME_PHYS_REF_MS. No lo cambies sin retocar esas constantes.
+#define GAME_PHYS_REF_MS 85
+
 // 1 tick = 1 minuto de juego. Baja este valor para probar mas rapido
 // (p. ej. 5000UL = las estadisticas caen 12x mas rapido).
 #define PET_TICK_MS 60000UL

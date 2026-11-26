@@ -87,9 +87,9 @@ TEST(power, el_periodo_de_frame_crece_con_la_inactividad_y_nunca_es_cero_con_pan
 TEST(power, el_juego_y_la_pantalla_apagada_mandan_sobre_el_resto) {
   PowerCtx g = ctx(200000);
   g.gameOpen = true;
-  CHECK_EQ((int)frameIntervalMs(g), 85);               // la fisica esta afinada a 85 ms
+  CHECK_EQ((int)frameIntervalMs(g), GAME_FRAME_MS);    // v3.23: la fisica va por tiempo real, el ritmo es el de tuning.h
   g.batPct = 5;
-  CHECK_EQ((int)frameIntervalMs(g), 85);
+  CHECK_EQ((int)frameIntervalMs(g), GAME_FRAME_MS);    // la bateria baja no lo duplica
   PowerCtx off = ctx(0);
   off.screenOff = true;
   CHECK_EQ((int)frameIntervalMs(off), 0);

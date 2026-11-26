@@ -17,7 +17,7 @@
 
 #include <Arduino.h>
 #include <Wire.h>
-#include "Arduino_GFX_Library.h"
+#include "qspi_fast.h"  // Arduino_GFX_Library.h + the faster panel bus (docs/SMOOTH_GAMES.md)
 #include "TouchDrvCSTXXX.hpp"
 #include <U8g2lib.h>  // fuentes CJK (japones); ver applyLangFont()
 #include <esp_sleep.h>
@@ -45,6 +45,7 @@
 #include "wind.h"   // viento del paisaje: hierba, flores y copas que se mecen (logica pura)
 #include "burnin.h" // contra el quemado del AMOLED: orbita de la imagen y salvapantallas (logica pura)
 #include "fx.h"     // efectos de respuesta: celebraciones en cola, "+N", botones, eclosion (logica pura)
+#include "gametime.h" // fisica por tiempo real (v3.23): escalas por dt
 #include "ballgame.h" // minijuego de la pokeball: velocidad segun la puntuacion y la fisica (logica pura)
 #include "zengame.h"  // cascada (v1.43): la barra de concentracion, la franja y los golpes de agua (logica pura)
 #include "dashgame.h" // carrera en trineo (v1.44): direccion, velocidad, filas de obstaculos y choques (logica pura)
@@ -61,9 +62,9 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "3.22"
+#define FW_VERSION "3.23"
 
-Arduino_DataBus *bus = new Arduino_ESP32QSPI(
+Arduino_DataBus *bus = new TpQspi(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
 Arduino_CO5300 *panel = new Arduino_CO5300(
   bus, BOARD_LCD_RESET, 0 /*rotation*/, BOARD_LCD_WIDTH, BOARD_LCD_HEIGHT,
@@ -296,6 +297,7 @@ bool sackOpen = false;
 uint32_t sackUntil = 0, sackOverUntil = 0;
 uint16_t sackHits = 0;
 float sackShake = 0;
+uint32_t sackLastFrame = 0;  // ultimo frame del saco, para que la sacudida decaiga por tiempo real
 uint8_t sackGain = 0;
 bool sackNewHi = false;
 
@@ -398,6 +400,30 @@ uint32_t briToastUntil = 0;  // aviso del nivel en pantalla
 #define BRI_TOAST_MS 1500
 // tiempo de dibujo del paisaje (comando serie PERF): el ultimo y el peor desde el ultimo PERF
 uint32_t gSceneUs = 0, gSceneMaxUs = 0;
+// PERF: frame timing since the last PERF, for frames drawn with a minigame open and for all frames
+// (period = time since the previous frame, render = the whole render(), prep/send = see round_display.h)
+struct FrameStat {
+  uint32_t n, periodSum, periodMax, renderSum, renderMax, prepSum, sendSum, sendMax;
+  void add(uint32_t period, uint32_t render, uint32_t prep, uint32_t send) {
+    n++;
+    periodSum += period;
+    renderSum += render;
+    prepSum += prep;
+    sendSum += send;
+    if (period > periodMax) periodMax = period;
+    if (render > renderMax) renderMax = render;
+    if (send > sendMax) sendMax = send;
+  }
+  void print(const char *name) {
+    uint32_t d = n ? n : 1;
+    Serial.printf("frame %s n=%lu period=%luus max=%luus render=%luus max=%luus prep=%luus send=%luus max=%luus\n", name,
+                  (unsigned long)n, (unsigned long)(periodSum / d), (unsigned long)periodMax,
+                  (unsigned long)(renderSum / d), (unsigned long)renderMax, (unsigned long)(prepSum / d),
+                  (unsigned long)(sendSum / d), (unsigned long)sendMax);
+    *this = FrameStat();
+  }
+};
+FrameStat gFrameGame, gFrameAll;
 // BIOME <n> (serie): muestra otro paisaje sin tocar el bicho ni el guardado; -1 = el suyo
 int8_t gBiomeOverride = -1;
 // contra el quemado (burnin.h, v1.28): paso de la orbita en uso (ORBIT <n> lo fija por serie),
@@ -721,8 +747,9 @@ void loop() {
   }
 
   // Ritmo de dibujo (power.h): 10 fps con el bicho en uso, menos cuanto mas rato sin tocar,
-  // 85 ms en juego/saco (margen seguro para que el redibujado no pise el envio DMA del frame
-  // anterior: a 40-65 ms solapaba y causaba flashes negros).
+  // GAME_FRAME_MS en juego/saco (60 ms desde la v3.23). Los flashes negros de antes (a 40-65 ms el
+  // redibujado pisaba un envio DMA aun en curso) ya no pueden darse: el envio (qspi_fast.h) termina
+  // antes de que flush() vuelva, asi que el siguiente frame nunca dibuja sobre uno a medio enviar.
   // Con la pantalla apagada no se dibuja: a brillo 0 no se ve nada, pero el redibujado y el
   // flush DMA del framebuffer del lienzo seguian corriendo a 10 fps, y medido son 70 ms de
   // trabajo por cada 100 (46 de ellos solo el volcado). Cada render repinta la escena
@@ -739,8 +766,17 @@ void loop() {
   uint32_t interval = frameIntervalMs(pc);
   bool drewFrame = false;
   if (interval && now - lastRender >= interval) {
+    uint32_t period = now - lastRender;
     lastRender = now;
+    gFlushPrepUs = gFlushSendUs = 0;
+    uint32_t t0 = micros();
     drewFrame = render();
+    uint32_t renderUs = micros() - t0;
+    // a period over a second is the first frame after the screen was off, not a frame rate
+    if (drewFrame && period < 1000) {
+      gFrameAll.add(period * 1000, renderUs, gFlushPrepUs, gFlushSendUs);
+      if (pc.gameOpen) gFrameGame.add(period * 1000, renderUs, gFlushPrepUs, gFlushSendUs);
+    }
   }
   // cede la CPU en los pases que no dibujan: sin esto el loop gira a pleno rendimiento
   // entre frames; 1 ms no se nota en el tactil (se lee cada 20 ms) y el frame no se retrasa
@@ -800,7 +836,7 @@ PowerCtx powerCtx(uint32_t now) {
   c.idleMs = idleSince(now, lastInteract);
   c.screenOff = screenOff;
   c.sleeping = pet.homeAsleep();  // v3.0: los dos de casa
-  c.gameOpen = gameOpen || sackOpen || zenOpen || dashOpen || battleOpen() || boxMove || encOpen();  // combate, luz de la caja y encuentro (v2.2), a 85 ms
+  c.gameOpen = gameOpen || sackOpen || zenOpen || dashOpen || battleOpen() || boxMove || encOpen();  // combate, luz de la caja y encuentro (v2.2), a GAME_FRAME_MS
   c.usb = usbPresent();
   c.charging = batCharging();
   c.batPct = batPercent();
@@ -1126,6 +1162,8 @@ void handleSerial() {
     gYardPetsMaxUs = 0;
     gSceneMaxUs = 0;
     gFxMaxUs = 0;
+    gFrameGame.print("game");
+    gFrameAll.print("all");
     Serial.println("DONE");
   } else if (line.startsWith("FX")) {  // FX <efecto>: lanza un efecto de respuesta para verlo en la placa
     String k = line.length() > 3 ? line.substring(3) : String("");
@@ -3064,12 +3102,13 @@ void gameTap(int16_t x, int16_t y) {
 
 void stepGame() {
   uint32_t now = millis();
-  // pasos de 85 ms, el periodo de frame con el que se afinaron las constantes (ver el
-  // planificador de render en loop()): sin esto la fisica avanzaba "un paso por frame" y el
+  // pasos de GAME_PHYS_REF_MS (85 ms), el periodo de frame con el que se afinaron las constantes (el
+  // render va ahora a GAME_FRAME_MS, ver loop()): sin esto la fisica avanzaba "un paso por frame" y el
   // juego iba mas rapido o mas lento segun lo que tardara en dibujarse el frame anterior, que
   // depende del tamano del sprite cargado. Por encima, el factor de velocidad de la
   // puntuacion (ballgame.h, v1.33): 1x con 1 punto, 2x con 80.
-  float k = lastGameStep ? ballStepK(now - lastGameStep, gameScore) : ballSpeed(gameScore);
+  uint32_t dtStep = lastGameStep ? now - lastGameStep : (uint32_t)GAME_PHYS_REF_MS;
+  float k = lastGameStep ? ballStepK(dtStep, gameScore) : ballSpeed(gameScore);
   lastGameStep = now;
 
   ballStep(ball, k);  // gravedad, movimiento y rebote en la pared circular
@@ -3097,10 +3136,7 @@ void stepGame() {
     }
   }
   // el bicho la sigue por abajo (a la velocidad del juego: k ya la lleva)
-  float chase = (ball.x - gamePetX) * 0.12f;
-  if (chase > 7) chase = 7;
-  if (chase < -7) chase = -7;
-  gamePetX += chase * k;
+  gamePetX = ballPetFollow(gamePetX, ball.x, dtStep, gameScore);
 }
 
 // ---------- saco de entrenamiento (entrena la fuerza) ----------
@@ -3112,6 +3148,7 @@ void startSack() {
   sackOverUntil = 0;
   sackHits = 0;
   sackShake = 0;
+  sackLastFrame = 0;
   sackNewHi = false;
 }
 
@@ -3178,7 +3215,9 @@ void renderSack() {
   }
 
   // aporreo activo
-  sackShake *= 0.84f;
+  // 0,84 por cada 85 ms de reloj (v3.23: el frame ya no dura 85 ms); la 1a vez, un paso de referencia
+  sackShake *= gameDecay(0.84f, sackLastFrame ? now - sackLastFrame : (uint32_t)GAME_PHYS_REF_MS);
+  sackLastFrame = now;
   int off = (int)(sackShake * sinf(now * 0.05f));
   int sx = CX + off, top = 86, sy = 150;
   gfx->fillRect(CX - 3, 56, 6, top - 56, ink);          // gancho/cuerda
@@ -3275,7 +3314,7 @@ void finishZen(uint32_t now) {
 }
 
 // fisica de la cascada en cada vuelta del loop (no solo en cada frame): asi un toque corto entre
-// dos frames de 85 ms tambien cuenta. Mientras dura, la pantalla no se atenua (nadie da toques nuevos).
+// dos frames de juego tambien cuenta. Mientras dura, la pantalla no se atenua (nadie da toques nuevos).
 void zenTick(uint32_t now) {
   if (!zenOpen || zenOverUntil) return;
   lastInteract = now;  // FR-G.5: sin atenuar ni salvapantallas a mitad de sesion
@@ -11648,7 +11687,7 @@ void drawTeamPips(int x, int y, uint32_t now) {
 }
 
 // fondo del panel del combate en una sola pasada (yPanelBg pinta negro y luego el disco: el doble de
-// pixeles en cada frame de 85 ms). Fuera del disco no se ve: el marco redondo lo tapa.
+// pixeles en cada frame de juego). Fuera del disco no se ve: el marco redondo lo tapa.
 void btPanelBg() {
   gfx->fillScreen(Y_PANEL_BG);
 }

@@ -13,14 +13,14 @@ BUILD    := build
 BIN      := $(BUILD)/tamapoke_tests
 
 SOURCES := main.cpp shim/shim.cpp test_pet.cpp test_dex.cpp test_i18n.cpp test_blit.cpp test_batcurve.cpp test_power.cpp test_roundmask.cpp test_button.cpp \
-           test_steps.cpp test_motion.cpp test_battle.cpp test_wind.cpp test_burnin.cpp test_fx.cpp test_ballgame.cpp test_zengame.cpp test_dashgame.cpp test_growth.cpp test_box.cpp test_eggs.cpp test_volume.cpp test_gifts.cpp test_stagereward.cpp test_stage.cpp test_yard_ui.cpp test_yard_bg.cpp test_yard_panels.cpp test_yard.cpp test_yard_spots.cpp test_eggtimer.cpp test_economy.cpp test_shop.cpp test_travel.cpp test_travel_ui.cpp test_encounter.cpp test_eggcolor.cpp test_home2.cpp test_food.cpp test_medals.cpp test_lure.cpp test_upgrades.cpp test_pal_perks.cpp test_pal_fx.cpp test_pals.cpp \
+           test_steps.cpp test_motion.cpp test_battle.cpp test_wind.cpp test_burnin.cpp test_fx.cpp test_ballgame.cpp test_gametime.cpp test_zengame.cpp test_dashgame.cpp test_growth.cpp test_box.cpp test_eggs.cpp test_volume.cpp test_gifts.cpp test_stagereward.cpp test_stage.cpp test_yard_ui.cpp test_yard_bg.cpp test_yard_panels.cpp test_yard.cpp test_yard_spots.cpp test_eggtimer.cpp test_economy.cpp test_shop.cpp test_travel.cpp test_travel_ui.cpp test_encounter.cpp test_eggcolor.cpp test_home2.cpp test_food.cpp test_medals.cpp test_lure.cpp test_upgrades.cpp test_pal_perks.cpp test_pal_fx.cpp test_pals.cpp \
            $(SRC_DIR)/pet.cpp $(SRC_DIR)/i18n.cpp
 
 .PHONY: all run clean asan
 all: run
 
 $(BIN): $(SOURCES) framework.h shim/Arduino.h shim/Preferences.h ../roundmask.h ../ui_frame.h ../board_amoled_216.h ../button.h \
-        ../steps.h ../motion.h imu_data.h ../battle.h ../stage.h ../dex.h ../wind.h ../burnin.h ../fx.h ../ballgame.h ../zengame.h ../dashgame.h ../growth.h ../box.h ../volume.h ../yard_ui.h ../yard_panels.h ../yardbg.h ../yard.h ../yard_spots.h ../eggtimer.h ../economy.h ../shop.h ../travel.h ../travel_ui.h ../encounter.h ../eggcolor.h ../pet.h ../petlife.h ../homerec.h ../food.h ../medals.h ../upgrade.h ../pal_perks.h ../upg_tiers.h ../tuning.h ../pal_fx.h ../pals.h
+        ../steps.h ../motion.h imu_data.h ../battle.h ../stage.h ../dex.h ../wind.h ../burnin.h ../fx.h ../ballgame.h ../gametime.h ../zengame.h ../dashgame.h ../growth.h ../box.h ../volume.h ../yard_ui.h ../yard_panels.h ../yardbg.h ../yard.h ../yard_spots.h ../eggtimer.h ../economy.h ../shop.h ../travel.h ../travel_ui.h ../encounter.h ../eggcolor.h ../pet.h ../petlife.h ../homerec.h ../food.h ../medals.h ../upgrade.h ../pal_perks.h ../upg_tiers.h ../tuning.h ../pal_fx.h ../pals.h
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) -I shim -o $@ $(SOURCES) $(LDFLAGS)
 
