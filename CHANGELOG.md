@@ -6,6 +6,19 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the web installer (`web/`) **without** ticking "Erase device"
 keeps your Pokémon.
 
+## [3.23] - 2026-11-25
+
+### Changed
+
+- **Smoother minigames: about 17 fps instead of 11-12.** The ball, punching bag, sled, waterfall and battle now draw a
+  frame every 60 ms instead of every 85 ms, and play at exactly the same speed as before: the pet following the ball
+  and the bag's shake now run on the clock instead of per frame. The sled, waterfall and battle also no longer run a
+  few percent slow, which they did when a frame took longer than 85 ms.
+- **Faster screen updates everywhere.** Each frame now reaches the panel in about 25 ms instead of 57 (the next piece
+  of the image is prepared while the previous one is being sent), so the yard and menus spend half the time on it.
+- **`PERF` shows frame timing.** Two new lines, `frame game` and `frame all`: frame period, whole draw, prep and panel
+  send (average and max since the last `PERF`).
+
 ## [3.22] - 2026-11-23
 
 ### Added
