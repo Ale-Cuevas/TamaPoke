@@ -46,6 +46,7 @@ class TpQspi : public Arduino_ESP32QSPI {
 
   bool begin(int32_t speed = GFX_NOT_DEFINED, int8_t dataMode = GFX_NOT_DEFINED) override {
     if (!Arduino_ESP32QSPI::begin(speed, dataMode)) return false;
+    if (pp_[0]) return true;  // begin() again: keep the buffers we already have
     for (uint8_t i = 0; i < 2; i++)
       pp_[i] = (uint32_t *)heap_caps_aligned_alloc(16, TP_QSPI_CHUNK_PX * 2, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
     if (pp_[0] && pp_[1]) {
