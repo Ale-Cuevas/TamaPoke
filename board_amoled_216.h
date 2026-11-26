@@ -44,9 +44,9 @@
 // gfx->begin() with no speed, i.e. the library's ESP32QSPI_FREQUENCY) [demo].
 // On the 1.75" board TamaPoke ran the same CO5300 controller at 80 MHz: the
 // frame flush went from ~56 to ~46 ms (most of it is fixed overhead, not the
-// transfer) and the frame from ~84 to ~69 ms. The game's frame pacing (85 ms
-// in the minigame) was tuned at 40 MHz. 80000000 is worth trying once the
-// 2.16" panel is shown to be clean at it (docs/DEVICE_TESTS.md).
+// transfer) and the frame from ~84 to ~69 ms. Since v3.23 the ping-pong send
+// (qspi_fast.h) is limited by reading the PSRAM framebuffer, not the bus: 80 MHz
+// measured no faster on the 2.16" (docs/SMOOTH_GAMES.md), so 40 MHz stays.
 #define BOARD_LCD_QSPI_HZ 40000000
 
 // --- Shared I2C bus: touch, PMIC, IMU, RTC, audio codecs --------------------

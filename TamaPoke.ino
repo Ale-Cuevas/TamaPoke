@@ -747,8 +747,9 @@ void loop() {
   }
 
   // Ritmo de dibujo (power.h): 10 fps con el bicho en uso, menos cuanto mas rato sin tocar,
-  // 85 ms en juego/saco (margen seguro para que el redibujado no pise el envio DMA del frame
-  // anterior: a 40-65 ms solapaba y causaba flashes negros).
+  // GAME_FRAME_MS en juego/saco (60 ms desde la v3.23). Los flashes negros de antes (a 40-65 ms el
+  // redibujado pisaba un envio DMA aun en curso) ya no pueden darse: el envio (qspi_fast.h) termina
+  // antes de que flush() vuelva, asi que el siguiente frame nunca dibuja sobre uno a medio enviar.
   // Con la pantalla apagada no se dibuja: a brillo 0 no se ve nada, pero el redibujado y el
   // flush DMA del framebuffer del lienzo seguian corriendo a 10 fps, y medido son 70 ms de
   // trabajo por cada 100 (46 de ellos solo el volcado). Cada render repinta la escena
@@ -835,7 +836,7 @@ PowerCtx powerCtx(uint32_t now) {
   c.idleMs = idleSince(now, lastInteract);
   c.screenOff = screenOff;
   c.sleeping = pet.homeAsleep();  // v3.0: los dos de casa
-  c.gameOpen = gameOpen || sackOpen || zenOpen || dashOpen || battleOpen() || boxMove || encOpen();  // combate, luz de la caja y encuentro (v2.2), a 85 ms
+  c.gameOpen = gameOpen || sackOpen || zenOpen || dashOpen || battleOpen() || boxMove || encOpen();  // combate, luz de la caja y encuentro (v2.2), a GAME_FRAME_MS
   c.usb = usbPresent();
   c.charging = batCharging();
   c.batPct = batPercent();
@@ -3313,7 +3314,7 @@ void finishZen(uint32_t now) {
 }
 
 // fisica de la cascada en cada vuelta del loop (no solo en cada frame): asi un toque corto entre
-// dos frames de 85 ms tambien cuenta. Mientras dura, la pantalla no se atenua (nadie da toques nuevos).
+// dos frames de juego tambien cuenta. Mientras dura, la pantalla no se atenua (nadie da toques nuevos).
 void zenTick(uint32_t now) {
   if (!zenOpen || zenOverUntil) return;
   lastInteract = now;  // FR-G.5: sin atenuar ni salvapantallas a mitad de sesion
@@ -11686,7 +11687,7 @@ void drawTeamPips(int x, int y, uint32_t now) {
 }
 
 // fondo del panel del combate en una sola pasada (yPanelBg pinta negro y luego el disco: el doble de
-// pixeles en cada frame de 85 ms). Fuera del disco no se ve: el marco redondo lo tapa.
+// pixeles en cada frame de juego). Fuera del disco no se ve: el marco redondo lo tapa.
 void btPanelBg() {
   gfx->fillScreen(Y_PANEL_BG);
 }
