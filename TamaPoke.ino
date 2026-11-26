@@ -17,7 +17,7 @@
 
 #include <Arduino.h>
 #include <Wire.h>
-#include "Arduino_GFX_Library.h"
+#include "qspi_fast.h"  // Arduino_GFX_Library.h + the faster panel bus (docs/SMOOTH_GAMES.md)
 #include "TouchDrvCSTXXX.hpp"
 #include <U8g2lib.h>  // fuentes CJK (japones); ver applyLangFont()
 #include <esp_sleep.h>
@@ -63,7 +63,7 @@
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
 #define FW_VERSION "3.22"
 
-Arduino_DataBus *bus = new Arduino_ESP32QSPI(
+Arduino_DataBus *bus = new TpQspi(
   BOARD_LCD_CS, BOARD_LCD_SCLK, BOARD_LCD_SDIO0, BOARD_LCD_SDIO1, BOARD_LCD_SDIO2, BOARD_LCD_SDIO3);
 Arduino_CO5300 *panel = new Arduino_CO5300(
   bus, BOARD_LCD_RESET, 0 /*rotation*/, BOARD_LCD_WIDTH, BOARD_LCD_HEIGHT,
@@ -398,6 +398,30 @@ uint32_t briToastUntil = 0;  // aviso del nivel en pantalla
 #define BRI_TOAST_MS 1500
 // tiempo de dibujo del paisaje (comando serie PERF): el ultimo y el peor desde el ultimo PERF
 uint32_t gSceneUs = 0, gSceneMaxUs = 0;
+// PERF: frame timing since the last PERF, for frames drawn with a minigame open and for all frames
+// (period = time since the previous frame, render = the whole render(), prep/send = see round_display.h)
+struct FrameStat {
+  uint32_t n, periodSum, periodMax, renderSum, renderMax, prepSum, sendSum, sendMax;
+  void add(uint32_t period, uint32_t render, uint32_t prep, uint32_t send) {
+    n++;
+    periodSum += period;
+    renderSum += render;
+    prepSum += prep;
+    sendSum += send;
+    if (period > periodMax) periodMax = period;
+    if (render > renderMax) renderMax = render;
+    if (send > sendMax) sendMax = send;
+  }
+  void print(const char *name) {
+    uint32_t d = n ? n : 1;
+    Serial.printf("frame %s n=%lu period=%luus max=%luus render=%luus max=%luus prep=%luus send=%luus max=%luus\n", name,
+                  (unsigned long)n, (unsigned long)(periodSum / d), (unsigned long)periodMax,
+                  (unsigned long)(renderSum / d), (unsigned long)renderMax, (unsigned long)(prepSum / d),
+                  (unsigned long)(sendSum / d), (unsigned long)sendMax);
+    *this = FrameStat();
+  }
+};
+FrameStat gFrameGame, gFrameAll;
 // BIOME <n> (serie): muestra otro paisaje sin tocar el bicho ni el guardado; -1 = el suyo
 int8_t gBiomeOverride = -1;
 // contra el quemado (burnin.h, v1.28): paso de la orbita en uso (ORBIT <n> lo fija por serie),
@@ -739,8 +763,17 @@ void loop() {
   uint32_t interval = frameIntervalMs(pc);
   bool drewFrame = false;
   if (interval && now - lastRender >= interval) {
+    uint32_t period = now - lastRender;
     lastRender = now;
+    gFlushPrepUs = gFlushSendUs = 0;
+    uint32_t t0 = micros();
     drewFrame = render();
+    uint32_t renderUs = micros() - t0;
+    // a period over a second is the first frame after the screen was off, not a frame rate
+    if (drewFrame && period < 1000) {
+      gFrameAll.add(period * 1000, renderUs, gFlushPrepUs, gFlushSendUs);
+      if (pc.gameOpen) gFrameGame.add(period * 1000, renderUs, gFlushPrepUs, gFlushSendUs);
+    }
   }
   // cede la CPU en los pases que no dibujan: sin esto el loop gira a pleno rendimiento
   // entre frames; 1 ms no se nota en el tactil (se lee cada 20 ms) y el frame no se retrasa
@@ -1126,6 +1159,8 @@ void handleSerial() {
     gYardPetsMaxUs = 0;
     gSceneMaxUs = 0;
     gFxMaxUs = 0;
+    gFrameGame.print("game");
+    gFrameAll.print("all");
     Serial.println("DONE");
   } else if (line.startsWith("FX")) {  // FX <efecto>: lanza un efecto de respuesta para verlo en la placa
     String k = line.length() > 3 ? line.substring(3) : String("");
